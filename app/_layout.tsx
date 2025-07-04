@@ -9,11 +9,15 @@ import "../global.css";
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
-  const [loaded] = useFonts({
-    SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
-  });
+  const [fontsLoaded] = useFonts({
+  'Montserrat': require('../assets/fonts/Montserrat-Regular.ttf'),
+  'Montserrat-Light': require('../assets/fonts/Montserrat-Light.ttf'),
+  'Montserrat-Medium': require('../assets/fonts/Montserrat-Medium.ttf'),
+  'Montserrat-SemiBold': require('../assets/fonts/Montserrat-SemiBold.ttf'),
+  'Montserrat-Bold': require('../assets/fonts/Montserrat-Bold.ttf'),
+});
 
-  if (!loaded) {
+  if (!fontsLoaded) {
     // Async font loading only occurs in development.
     return null;
   }

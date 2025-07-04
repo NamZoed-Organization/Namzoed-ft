@@ -1,0 +1,39 @@
+// app/landing.tsx
+import { useRouter } from 'expo-router';
+import { useEffect } from 'react';
+import { Image, StyleSheet, View } from 'react-native';
+
+export default function Landing() {
+  const router = useRouter();
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      router.replace('./getstarted'); // Change to your actual next route
+    }, 2000); // 2 seconds
+
+    return () => clearTimeout(timeout);
+  }, []);
+
+  return (
+    <View style={styles.container}>
+      <Image
+        source={require('../assets/images/react-logo.png')} // Add this image
+        style={styles.logo}
+        resizeMode="contain"
+      />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  logo: {
+    width: 150,
+    height: 150,
+  },
+});

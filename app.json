@@ -7,10 +7,13 @@
     "icon": "./assets/images/icon.png",
     "scheme": "namzoed",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": false,
+    
     "ios": {
       "bundleIdentifier": "com.anonymous.Namzoed",
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -35,10 +38,17 @@
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
         }
-      ]
+      ],
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "713fdf5d-51e5-4851-b15b-426a1dcf750f"
+      }
     }
   }
 }
