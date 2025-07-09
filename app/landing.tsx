@@ -1,4 +1,5 @@
 // app/landing.tsx
+// animation here
 import { useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { Image, StyleSheet, View } from 'react-native';
@@ -9,7 +10,7 @@ export default function Landing() {
   useEffect(() => {
     const timeout = setTimeout(() => {
       router.replace('./getstarted'); // Change to your actual next route
-    }, 2000); // 2 seconds
+    }, 1500); // 2 seconds
 
     return () => clearTimeout(timeout);
   }, []);
