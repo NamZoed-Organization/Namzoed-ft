@@ -15,7 +15,7 @@ module.exports = {
         semibold: ["Montserrat-SemiBold", "System"],
         mbold: ["Montserrat-Bold", "System"],
         mblack: ["Montserrat-ExtraBold", "System"],
-        light: ["Montserrat-Light", "System"],
+        mlight: ["Montserrat-Light", "System"],
       },
     },
   },
