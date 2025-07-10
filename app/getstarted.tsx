@@ -149,7 +149,7 @@ export default function GetStarted() {
         >
           <Animated.Text
             style={{ color: prevColor }}
-            className="text-lg font-semibold"
+            className="text-lg font-medium"
           >
             Prev
           </Animated.Text>

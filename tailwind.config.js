@@ -1,4 +1,3 @@
-// tailwind.config.js
 module.exports = {
   content: [
     "./app/**/*.{js,jsx,ts,tsx}",
@@ -7,27 +6,19 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        primary: '#094569',
-        secondary: '#F2F2F2',
+        primary: "#094569",
+        secondary: "#EDC06D",
       },
       fontFamily: {
-        sans: ['Montserrat','System'],
-        extrabold: ['Montserrat-ExtraBold','System'],
-        bold: ['Montserrat-Bold','System'],
-        medium: ['Montserrat-Medium','System'],
-        semibold: ['Montserrat-SemiBold','System'],
-        light: ['Montserrat-Light','System'],
+        regular: ["Montserrat-Regular", "System"],
+        medium: ["Montserrat-Medium", "System"],
+        semibold: ["Montserrat-SemiBold", "System"],
+        mbold: ["Montserrat-Bold", "System"],
+        mblack: ["Montserrat-ExtraBold", "System"],
+        light: ["Montserrat-Light", "System"],
       },
-      screens:{
-        'xs': '480px',
-        'sm': '640px',
-        'md': '768px',
-        'lg': '1024px',
-        'xl': '1280px',
-        '2xl': '1536px',
-      }
     },
   },
-  presets: [require('nativewind/preset')],
+  presets: [require("nativewind/preset")],
   plugins: [],
 };
