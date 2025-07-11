@@ -3,6 +3,7 @@ import { FontAwesome5, Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { Link, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   BackHandler,
   Image,
   Keyboard,
@@ -24,6 +25,13 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
   const roles = ["Buyer", "Seller"];
+  const [loading, setLoading] = useState(false);
+
+  const isValidBhutanesePhone = (input: string) => {
+    return (
+      (input.startsWith("17") || input.startsWith("77")) && input.length === 8
+    );
+  };
 
   useEffect(() => {
     const handleBackPress = () => {
@@ -43,7 +51,15 @@ export default function Login() {
   }, [showRoleModal]);
 
   const handleLogin = () => {
-    router.replace("/signup");
+    if (!isValidBhutanesePhone(phone)) return;
+   
+
+    setLoading(true);
+    setTimeout(() => {
+      setPhone("");
+      setLoading(false);
+      router.replace("/(tabs)/explore");
+    }, 2000);
   };
 
   return (
@@ -144,6 +160,7 @@ export default function Login() {
                 placeholder="Phone Number"
                 keyboardType="phone-pad"
                 className="flex-1 font-regular text-base"
+                maxLength={8}
                 onFocus={() => setShowRoleModal(false)}
               />
             </View>
@@ -175,7 +192,7 @@ export default function Login() {
           </View>
 
           {/* Forgot Password */}
-          <Text className="text-right text-sm mb-6">
+          <Text className="text-right text-sm mb-6 font-regular">
             <Link href="/forgot" className="text-red-400 font-regular">
               Forgot Password?
             </Link>
@@ -183,17 +200,28 @@ export default function Login() {
 
           {/* Login Button */}
           <TouchableOpacity
+            disabled={
+              !isValidBhutanesePhone(phone) || password.length === 0 || loading
+            }
             onPress={handleLogin}
-            className="bg-primary py-5 rounded-md my-10"
+            className={`py-5 rounded-md items-center my-10 ${
+              isValidBhutanesePhone(phone) && password.length > 0 && !loading
+                ? "bg-primary"
+                : "bg-primary/50"
+            }`}
           >
-            <Text className="text-secondary text-center font-semibold text-lg">
-              Login
-            </Text>
+            {loading ? (
+              <ActivityIndicator color="#EDC06D" />
+            ) : (
+              <Text className="text-secondary text-center font-semibold text-lg">
+                Login
+              </Text>
+            )}
           </TouchableOpacity>
 
           {/* Guest Option */}
-          <Text className="text-center text-gray-500 text-xs mb-2">
-            - OR Continue As -
+          <Text className="text-center font-regular text-gray-500 text-sm mb-2">
+            - or continue as -
           </Text>
 
           <TouchableOpacity
@@ -212,7 +240,7 @@ export default function Login() {
           </TouchableOpacity>
 
           {/* Signup Link */}
-          <Text className="text-center text-gray-500 font-regular">
+          <Text className="text-center text-gray-500 font-regular text-sm">
             Create an account{" "}
             <Link href="/signup" className="text-red-400 font-medium underline">
               Sign up
