@@ -38,7 +38,7 @@ export default function Forgot() {
         {/* Back Button */}
         <TouchableOpacity
           onPress={() => router.back()}
-          className="absolute top-[5%] left-6 z-50 p-2"
+          className="absolute top-[5%] left-[3%] z-50 p-2"
           activeOpacity={0.6}
         >
           <Entypo name={"chevron-thin-left"} size={24} color="#094569" />

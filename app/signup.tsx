@@ -1,58 +1,17 @@
-import { Link } from "expo-router";
+import SignupTab1 from "@/components/SignupTab1";
+import SignupTab2 from "@/components/SignupTab2";
 import { useState } from "react";
-import {
-    KeyboardAvoidingView,
-    Platform,
-    Text,
-    TextInput,
-    TouchableOpacity
-} from "react-native";
 
 export default function Signup() {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [step, setStep] = useState<1 | 2>(1);
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      className="flex-1 justify-center px-6 bg-white"
-    >
-      <Text className="text-3xl font-extrabold text-primary mb-2">Create Account</Text>
-      <Text className="text-base text-gray-500 mb-8">Sign up to get started</Text>
-
-      <TextInput
-        value={name}
-        onChangeText={setName}
-        placeholder="Name"
-        className="border border-gray-300 rounded-lg px-4 py-3 mb-4 text-base"
-      />
-
-      <TextInput
-        value={email}
-        onChangeText={setEmail}
-        placeholder="Email"
-        keyboardType="email-address"
-        autoCapitalize="none"
-        className="border border-gray-300 rounded-lg px-4 py-3 mb-4 text-base"
-      />
-
-      <TextInput
-        value={password}
-        onChangeText={setPassword}
-        placeholder="Password"
-        secureTextEntry
-        className="border border-gray-300 rounded-lg px-4 py-3 mb-6 text-base"
-      />
-
-      <TouchableOpacity className="bg-primary py-3 rounded-lg mb-4">
-        <Text className="text-white text-center font-semibold text-base">Sign Up</Text>
-      </TouchableOpacity>
-
-      <Text className="text-center text-gray-500">
-        Already have an account?{" "}
-        <Link href="/login" className="text-primary font-semibold">Login</Link>
-      </Text>
-    </KeyboardAvoidingView>
+    <>
+      {step === 1 ? (
+        <SignupTab1 onNext={() => setStep(2)} />
+      ) : (
+        <SignupTab2 onPrev={()=>setStep(1)} />
+      )}
+    </>
   );
 }

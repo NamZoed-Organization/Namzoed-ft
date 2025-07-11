@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
-    Animated,
-    Easing,
-    Pressable,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
+  Animated,
+  Easing,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
 } from "react-native";
 
 type Props = {
@@ -51,7 +52,6 @@ export default function AnimatedDropdown({ roles, onSelect, onClose }: Props) {
         useNativeDriver: true,
       }),
     ]).start(() => {
-      // ensure dropdown unmounts *after* animation finishes
       onClose();
     });
   };
@@ -61,26 +61,42 @@ export default function AnimatedDropdown({ roles, onSelect, onClose }: Props) {
       {/* Fullscreen tap catcher */}
       <Pressable onPress={handleClose} style={styles.overlay} />
 
-      {/* Animated dropdown list */}
-      <Animated.View style={[styles.dropdown, { opacity, transform: [{ scale }] }]}>
-        {roles.map((item, index) => (
-          <TouchableOpacity
-            key={item}
-            activeOpacity={1}
-            onPressIn={() => setActiveIndex(index)}
-            onPressOut={() => setActiveIndex(null)}
-            onPress={() => {
-              onSelect(item);
-              handleClose();
-            }}
-            style={[
-              styles.item,
-              activeIndex === index && styles.itemActive, // rounded bg on hold
-            ]}
-          >
-            <Text style={styles.text}>{item}</Text>
-          </TouchableOpacity>
-        ))}
+      {/* Dropdown */}
+      <Animated.View
+        style={[
+          styles.dropdown,
+          {
+            opacity,
+            transform: [{ scale }],
+          },
+        ]}
+      >
+        <ScrollView
+          style={{ flexGrow: 0 }}
+          contentContainerStyle={{ flexGrow: 1 }}
+          nestedScrollEnabled={true}
+          showsVerticalScrollIndicator={true}
+          keyboardShouldPersistTaps="handled"
+        >
+          {roles.map((item, index) => (
+            <TouchableOpacity
+              key={item}
+              activeOpacity={1}
+              onPressIn={() => setActiveIndex(index)}
+              onPressOut={() => setActiveIndex(null)}
+              onPress={() => {
+                onSelect(item);
+                handleClose();
+              }}
+              style={[
+                styles.item,
+                activeIndex === index && styles.itemActive,
+              ]}
+            >
+              <Text style={styles.text}>{item}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
       </Animated.View>
     </>
   );
@@ -101,6 +117,7 @@ const styles = StyleSheet.create({
     top: 0,
     left: "10%",
     width: "40%",
+    maxHeight: 200, // scroll enabled if content exceeds this
     backgroundColor: "#fff",
     borderRadius: 8,
     borderColor: "#D1D5DB",
