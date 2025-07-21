@@ -8,6 +8,7 @@ module.exports = {
       colors: {
         primary: "#094569",
         secondary: "#EDC06D",
+        background : "#faf6f6"
       },
       fontFamily: {
         regular: ["Montserrat-Regular", "System"],

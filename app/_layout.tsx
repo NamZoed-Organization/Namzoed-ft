@@ -1,3 +1,4 @@
+import CustomFlashMessage from "@/components/CustomFlashMessage";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import {
   DarkTheme,
@@ -8,7 +9,8 @@ import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
-import { Text } from "react-native";
+import { Text, View } from "react-native";
+import FlashMessage from "react-native-flash-message";
 import "react-native-reanimated";
 import "../global.css";
 
@@ -24,7 +26,6 @@ export default function RootLayout() {
     "Montserrat-ExtraBold": require("../assets/fonts/Montserrat-ExtraBold.ttf"),
   });
 
-  // Set default font globally (optional fallback for <Text>)
   useEffect(() => {
     if (fontsLoaded) {
       (Text as any).defaultProps = (Text as any).defaultProps || {};
@@ -41,8 +42,14 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-      <Stack screenOptions={{ headerShown: false }} />
-      <StatusBar style="auto" />
+      <View className="flex-1 bg-background">
+        <Stack screenOptions={{ headerShown: false }} />
+        <StatusBar style="auto" />
+        <FlashMessage
+          position="top"
+          renderCustomContent={(msg) => <CustomFlashMessage message={msg} />}
+        />
+      </View>
     </ThemeProvider>
   );
 }

@@ -71,7 +71,7 @@ export default function Login() {
     >
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
-        className="flex-1 bg-white"
+        className="flex-1 bg-background"
       >
         <View className="flex-1 px-[10%] justify-center">
           {/* Header */}

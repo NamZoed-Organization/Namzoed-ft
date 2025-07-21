@@ -22,9 +22,26 @@ import {
 } from "react-native";
 
 const dzongkhags = [
-  "Bumthang", "Chukha", "Dagana", "Gasa", "Haa", "Lhuntse", "Mongar", "Paro",
-  "Pemagatshel", "Punakha", "Samdrup Jongkhar", "Samtse", "Sarpang", "Thimphu",
-  "Trashigang", "Trashiyangtse", "Trongsa", "Tsirang", "Wangdue Phodrang", "Zhemgang",
+  "Bumthang",
+  "Chukha",
+  "Dagana",
+  "Gasa",
+  "Haa",
+  "Lhuntse",
+  "Mongar",
+  "Paro",
+  "Pemagatshel",
+  "Punakha",
+  "Samdrup Jongkhar",
+  "Samtse",
+  "Sarpang",
+  "Thimphu",
+  "Trashigang",
+  "Trashiyangtse",
+  "Trongsa",
+  "Tsirang",
+  "Wangdue Phodrang",
+  "Zhemgang",
 ];
 
 export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
@@ -105,6 +122,19 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
     setDzongkhag(item);
     closeDropdown();
   };
+  const isValidBhutanesePhone = (input: string) =>
+    (input.startsWith("17") || input.startsWith("77")) && input.length === 8;
+
+  const isValidEmail = (input: string) =>
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input);
+
+  const isFormValid =
+    name.trim().length > 0 &&
+    isValidEmail(email) &&
+    isValidBhutanesePhone(phone) &&
+    dzongkhag !== "" &&
+    password.length >= 6 &&
+    confirmPassword === password;
 
   return (
     <TouchableWithoutFeedback
@@ -117,14 +147,14 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         className="flex-1 bg-white"
       >
-          {/* Back */}
-          <TouchableOpacity
-            onPress={onPrev}
-            className="absolute top-[5%] left-[3%] z-50 p-2"
-            activeOpacity={0.7}
-          >
-            <Entypo name="chevron-thin-left" size={24} color="#094569" />
-          </TouchableOpacity>
+        {/* Back */}
+        <TouchableOpacity
+          onPress={onPrev}
+          className="absolute top-[5%] left-[3%] z-50 p-2"
+          activeOpacity={0.7}
+        >
+          <Entypo name="chevron-thin-left" size={24} color="#094569" />
+        </TouchableOpacity>
         <ScrollView
           className="flex-1 px-[10%]"
           keyboardShouldPersistTaps="handled"
@@ -132,16 +162,18 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
             flexGrow: 1,
             justifyContent: "center",
             paddingVertical: 40,
-            rowGap: 30,
+            rowGap: 15,
           }}
         >
-        
-
           {/* Header */}
-          <View className="flex-row justify-between items-center">
+          <View className="flex-row justify-between items-center mb-6">
             <View>
-              <Text className="text-4xl font-mblack text-primary/90 mb-2">Create an</Text>
-              <Text className="text-4xl font-mbold text-secondary/90">Account</Text>
+              <Text className="text-4xl font-mblack text-primary/90 mb-2">
+                Create an
+              </Text>
+              <Text className="text-4xl font-mbold text-secondary/90">
+                Account
+              </Text>
             </View>
             <Image
               source={require("../assets/images/logo.png")}
@@ -195,7 +227,7 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
               name="map-marker-alt"
               size={18}
               color="#999"
-              style={{ position: "absolute", left: 16, top: 14, zIndex: 1000 }}
+              style={{ position: "absolute", left: 16, top: "30%", zIndex: 1000 }}
             />
             <Animated.View style={{ transform: [{ scale: scaleAnimation }] }}>
               <TouchableOpacity
@@ -208,7 +240,7 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
                   borderWidth: 1,
                   borderColor: showDropdown ? "#6B7280" : "#D1D5DB",
                   borderRadius: 8,
-                  paddingVertical: 12,
+                  paddingVertical: 18,
                   paddingHorizontal: 16,
                   paddingLeft: 46,
                   backgroundColor: "#fff",
@@ -222,15 +254,21 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
                 </Text>
                 <Animated.View
                   style={{
-                    transform: [{
-                      rotate: dropdownAnimation.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: ["0deg", "180deg"],
-                      }),
-                    }],
+                    transform: [
+                      {
+                        rotate: dropdownAnimation.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: ["0deg", "180deg"],
+                        }),
+                      },
+                    ],
                   }}
                 >
-                  <MaterialIcons name="keyboard-arrow-down" size={24} color="#999" />
+                  <MaterialIcons
+                    name="keyboard-arrow-down"
+                    size={24}
+                    color="#999"
+                  />
                 </Animated.View>
               </TouchableOpacity>
             </Animated.View>
@@ -283,7 +321,8 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
                       style={{
                         paddingVertical: 12,
                         paddingHorizontal: 16,
-                        borderBottomWidth: index !== dzongkhags.length - 1 ? 0.5 : 0,
+                        borderBottomWidth:
+                          index !== dzongkhags.length - 1 ? 0.5 : 0,
                         borderBottomColor: "#E5E7EB",
                         alignItems: "center",
                       }}
@@ -314,7 +353,11 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
               onFocus={closeDropdown}
             />
             <Pressable onPress={() => setShowPassword(!showPassword)}>
-              <Ionicons name={showPassword ? "eye" : "eye-off"} size={20} color="#999" />
+              <Ionicons
+                name={showPassword ? "eye" : "eye-off"}
+                size={20}
+                color="#999"
+              />
             </Pressable>
           </View>
 
@@ -329,7 +372,9 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
               onChangeText={setConfirmPassword}
               onFocus={closeDropdown}
             />
-            <Pressable onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
+            <Pressable
+              onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+            >
               <Ionicons
                 name={showConfirmPassword ? "eye" : "eye-off"}
                 size={20}
@@ -340,29 +385,35 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
 
           {/* Terms */}
           <Text className="text-sm font-mlight text-center text-gray-500">
-            By clicking the <Text className="text-red-600">Register</Text> button,
-            you agree to the public offer
+            By clicking the <Text className="text-red-600">Register</Text>{" "}
+            button, you agree to the public offer
           </Text>
 
           {/* Register Button */}
           <TouchableOpacity
-            onPress={() =>
-              console.log({
-                name,
-                email,
-                phone,
-                password,
-                confirmPassword,
-                dzongkhag,
-              })
-            }
-            className="bg-primary py-4 rounded-lg"
-            activeOpacity={0.8}
-          >
-            <Text className="text-secondary text-center font-semibold text-base">
-              Create Account
-            </Text>
-          </TouchableOpacity>
+  onPress={() => {
+    console.log({
+      name,
+      email,
+      phone,
+      password,
+      confirmPassword,
+      dzongkhag,
+    });
+    router.replace("/(users)/notif_counter");
+  }}
+  className="py-4 rounded-lg"
+  activeOpacity={0.8}
+  disabled={!isFormValid}
+  style={{
+    backgroundColor: isFormValid ? "#094569" : "#09456980", // 50% opacity
+  }}
+>
+  <Text className="text-secondary text-center font-semibold text-base">
+    Create Account
+  </Text>
+</TouchableOpacity>
+
 
           {/* Already have account */}
           <Text className="text-center text-gray-500 font-regular">
