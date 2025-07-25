@@ -11,6 +11,7 @@ import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import { Text, View } from "react-native";
 import FlashMessage from "react-native-flash-message";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 import "../global.css";
 
@@ -41,15 +42,17 @@ export default function RootLayout() {
   if (!fontsLoaded) return null;
 
   return (
-    <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-      <View className="flex-1 bg-background">
-        <Stack screenOptions={{ headerShown: false }} />
-        <StatusBar style="auto" />
-        <FlashMessage
-          position="top"
-          renderCustomContent={(msg) => <CustomFlashMessage message={msg} />}
-        />
-      </View>
-    </ThemeProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
+        <View className="flex-1 bg-background">
+          <Stack screenOptions={{ headerShown: false }} />
+          <StatusBar style="dark" />
+          <FlashMessage
+            position="top"
+            renderCustomContent={(msg) => <CustomFlashMessage message={msg} />}
+          />
+        </View>
+      </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }
