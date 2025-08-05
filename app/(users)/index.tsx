@@ -10,7 +10,7 @@ export default function HomeScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("foryou");
   const [isLoaded, setIsLoaded] = useState(false);
-
+  console.log(" home screen" )
   // Force re-render after initial mount
   useEffect(() => {
     const timer = setTimeout(() => {
