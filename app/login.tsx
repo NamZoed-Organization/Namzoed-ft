@@ -58,7 +58,7 @@ export default function Login() {
     setTimeout(() => {
       setPhone("");
       setLoading(false);
-      router.replace("/(tabs)/explore");
+      router.replace("/(users)");
     }, 2000);
   };
 

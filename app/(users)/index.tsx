@@ -3,18 +3,66 @@ import Banner from "@/components/Banner";
 import ForYou from "@/components/ForYou";
 import SearchBar from "@/components/SearchBar";
 import TopNavbar from "@/components/ui/TopNavbar";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Image, ScrollView, Text, TouchableOpacity, View } from "react-native";
 
 export default function HomeScreen() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeTab, setActiveTab] = useState<"foryou" | "featured" | "live">(
-    "foryou"
-  );
+  const [activeTab, setActiveTab] = useState("foryou");
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  // Force re-render after initial mount
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsLoaded(true);
+    }, 100);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const renderTabContent = () => {
+    if (!isLoaded && activeTab === "foryou") {
+      return (
+        <View className="h-96 justify-center items-center">
+          <Text className="text-gray-500">Loading...</Text>
+        </View>
+      );
+    }
+
+    switch (activeTab) {
+      case "foryou":
+        return (
+          <View className="min-h-96">
+            <ForYou key="foryou-content" />
+          </View>
+        );
+      case "featured":
+        return (
+          <View className="mt-6 min-h-96">
+            <Text className="text-base font-semibold text-primary mb-2">
+              Featured Sellers (Coming Soon)
+            </Text>
+          </View>
+        );
+      case "live":
+        return (
+          <View className="mt-6 min-h-96">
+            <Text className="text-base font-semibold text-primary mb-2">
+              Live Products (Coming Soon)
+            </Text>
+          </View>
+        );
+      default:
+        return (
+          <View className="min-h-96">
+            <ForYou key="foryou-default" />
+          </View>
+        );
+    }
+  };
 
   return (
     <ScrollView
-      className="flex-1 bg-background  mb-20"
+      className="flex-1 bg-background mb-20"
       showsVerticalScrollIndicator={false}
       scrollEventThrottle={16}
     >
@@ -22,41 +70,68 @@ export default function HomeScreen() {
         <TopNavbar />
         <SearchBar value={searchQuery} onChangeText={setSearchQuery} />
         <Banner />
-
-        <View className="flex-row justify-between items-center w-[90%] mx-auto mt-2">
-          {[
-            { label: "For You", key: "foryou" },
-            { label: "Featured Sellers", key: "featured" },
-            { label: "Live", key: "live" },
-          ].map((item) => (
-            <TouchableOpacity
-              key={item.key}
-              onPress={() => setActiveTab(item.key as typeof activeTab)}
-              className={`px-5 py-3 rounded-lg ${
-                activeTab === item.key
-                  ? "bg-primary"
-                  : "bg-white border border-primary"
+        
+        {/* Tab Navigation */}
+        <View className="flex-row items-center w-[90%] mx-auto mt-2 gap-4">
+          <TouchableOpacity
+            onPress={() => setActiveTab("foryou")}
+            className={`flex-1 items-center px-2 py-3 rounded-lg ${
+              activeTab === "foryou"
+                ? "bg-primary"
+                : "bg-white border border-primary"
+            }`}
+          >
+            <Text
+              className={`text-sm font-medium ${
+                activeTab === "foryou" ? "text-white" : "text-primary"
               }`}
             >
-              <Text
-                className={`text-sm font-medium ${
-                  activeTab === item.key ? "text-white" : "text-primary"
-                }`}
-              >
-                {item.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
+              For You
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => setActiveTab("featured")}
+            className={`flex-3 items-center px-4 py-3 rounded-lg mx-2 ${
+              activeTab === "featured"
+                ? "bg-primary"
+                : "bg-white border border-primary"
+            }`}
+          >
+            <Text
+              className={`text-sm font-medium ${
+                activeTab === "featured" ? "text-white" : "text-primary"
+              }`}
+            >
+              Featured Sellers
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => setActiveTab("live")}
+            className={`flex-1 items-center px-2 py-3 rounded-lg ${
+              activeTab === "live"
+                ? "bg-primary"
+                : "bg-white border border-primary"
+            }`}
+          >
+            <Text
+              className={`text-sm font-medium ${
+                activeTab === "live" ? "text-white" : "text-primary"
+              }`}
+            >
+              Live
+            </Text>
+          </TouchableOpacity>
         </View>
 
-        {/* Content based on tab */}
-        <View className="mt-2">
-          {activeTab === "foryou" && <ForYou />}
-          {activeTab === "featured" && <ForYou />}
-          {activeTab === "live" && <ForYou />}
+        {/* Tab Content */}
+        <View className="mt-2 flex-1" style={{ minHeight: 400 }}>
+          {renderTabContent()}
         </View>
+
         {/* Offer Header Card */}
-        <View className="bg-white rounded-xl p-4 flex-row items-center gap-4">
+        <View className="bg-white rounded-xl p-4 flex-row items-center gap-4 mt-6">
           <Image
             source={allImage}
             className="w-14 h-14 rounded-md"

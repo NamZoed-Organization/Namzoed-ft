@@ -1,3 +1,5 @@
+// app/_layout.tsx
+
 import CustomFlashMessage from "@/components/CustomFlashMessage";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import {
@@ -14,6 +16,9 @@ import FlashMessage from "react-native-flash-message";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 import "../global.css";
+
+// 1. import your Dzongkhag provider
+import { DzongkhagProvider } from "@/context/DzongkhagContext";
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -44,14 +49,17 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-        <View className="flex-1 bg-background">
-          <Stack screenOptions={{ headerShown: false }} />
-          <StatusBar style="dark" />
-          <FlashMessage
-            position="top"
-            renderCustomContent={(msg) => <CustomFlashMessage message={msg} />}
-          />
-        </View>
+        {/* 2. wrap your entire app in the provider */}
+        <DzongkhagProvider>
+          <View className="flex-1 bg-background">
+            <Stack screenOptions={{ headerShown: false }} />
+               <StatusBar style="dark" />
+            <FlashMessage
+              position="top"
+              renderCustomContent={(msg) => <CustomFlashMessage message={msg} />}
+            />
+          </View>
+        </DzongkhagProvider>
       </ThemeProvider>
     </GestureHandlerRootView>
   );
