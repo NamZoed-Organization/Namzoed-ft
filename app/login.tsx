@@ -15,7 +15,11 @@ import {
   TouchableOpacity,
   TouchableWithoutFeedback,
   View,
+  Alert,
 } from "react-native";
+import users from "@/data/UserData";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useUser } from "@/contexts/UserContext";
 
 export default function Login() {
   const [role, setRole] = useState("Buyer");
@@ -26,6 +30,7 @@ export default function Login() {
   const router = useRouter();
   const roles = ["Buyer", "Seller"];
   const [loading, setLoading] = useState(false);
+  const { setCurrentUser } = useUser();
 
   const isValidBhutanesePhone = (input: string) => {
     return (
@@ -50,16 +55,37 @@ export default function Login() {
     return () => backHandler.remove();
   }, [showRoleModal]);
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!isValidBhutanesePhone(phone)) return;
-   
-
+    
     setLoading(true);
-    setTimeout(() => {
-      setPhone("");
+    
+    // Find user with matching phone number and password
+    const userFound = Object.values(users).find(user => 
+      user.phone_number === phone && user.password === password
+    );
+    
+    if (userFound) {
+      try {
+        // Store user data in AsyncStorage
+        await AsyncStorage.setItem('currentUser', JSON.stringify(userFound));
+        // Update context immediately
+        setCurrentUser(userFound);
+        console.log("User logged in:", userFound);
+        setTimeout(() => {
+          setPhone("");
+          setPassword("");
+          setLoading(false);
+          router.replace("/(users)");
+        }, 2000);
+      } catch (error) {
+        setLoading(false);
+        Alert.alert("Error", "Failed to save user data");
+      }
+    } else {
       setLoading(false);
-      router.replace("/(users)");
-    }, 2000);
+      Alert.alert("Login Failed", "Invalid phone number or password");
+    }
   };
 
   return (

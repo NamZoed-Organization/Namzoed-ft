@@ -1,6 +1,6 @@
 // components/DetectDzongkhag.tsx
 
-import { useDzongkhag } from "@/context/DzongkhagContext";
+import { useDzongkhag } from "@/contexts/DzongkhagContext";
 import { MapPin } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
 import { Text, TouchableOpacity, View } from "react-native";

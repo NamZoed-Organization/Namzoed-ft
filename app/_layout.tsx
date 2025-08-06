@@ -18,7 +18,8 @@ import "react-native-reanimated";
 import "../global.css";
 
 // 1. import your Dzongkhag provider
-import { DzongkhagProvider } from "@/context/DzongkhagContext";
+import { DzongkhagProvider } from "@/contexts/DzongkhagContext";
+import { UserProvider } from "@/contexts/UserContext";
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -50,16 +51,18 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
         {/* 2. wrap your entire app in the provider */}
-        <DzongkhagProvider>
-          <View className="flex-1 bg-background">
-            <Stack screenOptions={{ headerShown: false }} />
-               <StatusBar style="dark" />
-            <FlashMessage
-              position="top"
-              renderCustomContent={(msg) => <CustomFlashMessage message={msg} />}
-            />
-          </View>
-        </DzongkhagProvider>
+        <UserProvider>
+          <DzongkhagProvider>
+            <View className="flex-1 bg-background">
+              <Stack screenOptions={{ headerShown: false }} />
+                 <StatusBar style="dark" />
+              <FlashMessage
+                position="top"
+                renderCustomContent={(msg) => <CustomFlashMessage message={msg} />}
+              />
+            </View>
+          </DzongkhagProvider>
+        </UserProvider>
       </ThemeProvider>
     </GestureHandlerRootView>
   );

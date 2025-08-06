@@ -1,11 +1,12 @@
 import { CategoriesIcon, ChatIcon, HomeIcon } from "@/components/icons/index";
 import TabBarButton from "@/components/ui/TabBarButton";
-import { Tabs, useRouter } from "expo-router";
+import { Tabs, usePathname, useRouter } from "expo-router";
 import { ShoppingCart, Wrench } from "lucide-react-native";
 import { View } from "react-native";
 
 export default function TabLayout() {
   const router = useRouter();
+  const pathname = usePathname();
 
   return (
     <View className="flex-1 bg-background">
@@ -35,7 +36,7 @@ export default function TabLayout() {
           options={{
             title: "Categories",
             tabBarButton: (props) => <TabBarButton {...props} android_ripple={null} />,
-            tabBarIcon: ({ focused }) => <CategoriesIcon focused={focused} />,
+            tabBarIcon: ({ focused }) => <CategoriesIcon focused={focused || pathname.includes('/categories/')} />,
           }}
         />
         <Tabs.Screen
@@ -59,7 +60,7 @@ export default function TabLayout() {
           options={{
             title: "Messages",
             tabBarButton: (props) => <TabBarButton {...props} android_ripple={null} />,
-            tabBarIcon: ({ focused }) => <ChatIcon focused={focused} />,
+            tabBarIcon: ({ focused }) => <ChatIcon focused={focused || pathname.includes('/chat/') || pathname.includes('/mongoose-chat/')} />,
           }}
         />
         <Tabs.Screen
@@ -68,18 +69,37 @@ export default function TabLayout() {
             title: "Services",
             tabBarButton: (props) => <TabBarButton {...props} android_ripple={null} />,
             tabBarIcon: ({ focused }) => (
-              <Wrench size={22} stroke={focused ? "#094569" : "#9ca3af"} strokeWidth={2} />
+              <Wrench size={22} stroke={focused  || pathname.includes('/servicedetail/') || pathname.includes('/providerdetail/')? "#094569" : "#9ca3af"} strokeWidth={2} />
             ),
           }}
         />
-        <Tabs.Screen
-          name="notif_counter"
+ 
+           <Tabs.Screen
+          name="chat/[id]"
+          options={{
+            href: null,
+          }}
+        />
+           <Tabs.Screen
+          name="mongoose-chat/[name]"
           options={{
             href: null,
           }}
         />
         <Tabs.Screen
           name="product/[id]"
+          options={{
+            href: null,
+          }}
+        />
+          <Tabs.Screen
+          name="providerdetail/[id]"
+          options={{
+            href: null,
+          }}
+        />
+           <Tabs.Screen
+          name="servicedetail/[slug]"
           options={{
             href: null,
           }}
