@@ -1,16 +1,21 @@
+// Path: app/(users)/index.tsx
+
 import allImage from "@/assets/images/all.png";
 import Banner from "@/components/Banner";
+import FeaturedSellers from "@/components/FeaturedSellers";
 import ForYou from "@/components/ForYou";
 import SearchBar from "@/components/SearchBar";
 import TopNavbar from "@/components/ui/TopNavbar";
 import React, { useEffect, useState } from "react";
-import { Image, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { Image, Modal, ScrollView, Text, TouchableOpacity, View } from "react-native";
 
 export default function HomeScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("foryou");
   const [isLoaded, setIsLoaded] = useState(false);
+  const [showFeaturedSellers, setShowFeaturedSellers] = useState(false);
   console.log(" home screen" )
+  
   // Force re-render after initial mount
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -18,6 +23,14 @@ export default function HomeScreen() {
     }, 100);
     return () => clearTimeout(timer);
   }, []);
+
+  const handleFeaturedSellersPress = () => {
+    setShowFeaturedSellers(true);
+  };
+
+  const handleCloseFeaturedSellers = () => {
+    setShowFeaturedSellers(false);
+  };
 
   const renderTabContent = () => {
     if (!isLoaded && activeTab === "foryou") {
@@ -61,112 +74,130 @@ export default function HomeScreen() {
   };
 
   return (
-    <ScrollView
-      className="flex-1 bg-background mb-20"
-      showsVerticalScrollIndicator={false}
-      scrollEventThrottle={16}
-    >
-      <View className="px-4 gap-2 mb-10">
-        <TopNavbar />
-        <SearchBar value={searchQuery} onChangeText={setSearchQuery} />
-        <Banner />
-        
-        {/* Tab Navigation */}
-        <View className="flex-row items-center w-[90%] mx-auto mt-2 gap-4">
-          <TouchableOpacity
-            onPress={() => setActiveTab("foryou")}
-            className={`flex-1 items-center px-2 py-3 rounded-lg ${
-              activeTab === "foryou"
-                ? "bg-primary"
-                : "bg-white border border-primary"
-            }`}
-          >
-            <Text
-              className={`text-sm font-medium ${
-                activeTab === "foryou" ? "text-white" : "text-primary"
+    <>
+      <ScrollView
+        className="flex-1 bg-background mb-20"
+        showsVerticalScrollIndicator={false}
+        scrollEventThrottle={16}
+      >
+        <View className="px-4 gap-2 mb-10">
+          <TopNavbar />
+          <SearchBar value={searchQuery} onChangeText={setSearchQuery} />
+          <Banner />
+          
+          {/* Tab Navigation */}
+          <View className="flex-row items-center w-[90%] mx-auto mt-2 gap-4">
+            <TouchableOpacity
+              onPress={() => setActiveTab("foryou")}
+              className={`flex-1 items-center px-2 py-3 rounded-lg ${
+                activeTab === "foryou"
+                  ? "bg-primary"
+                  : "bg-white border border-primary"
               }`}
             >
-              For You
-            </Text>
-          </TouchableOpacity>
+              <Text
+                className={`text-sm font-medium ${
+                  activeTab === "foryou" ? "text-white" : "text-primary"
+                }`}
+              >
+                For You
+              </Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            onPress={() => setActiveTab("featured")}
-            className={`flex-3 items-center px-4 py-3 rounded-lg mx-2 ${
-              activeTab === "featured"
-                ? "bg-primary"
-                : "bg-white border border-primary"
-            }`}
-          >
-            <Text
-              className={`text-sm font-medium ${
-                activeTab === "featured" ? "text-white" : "text-primary"
+            <TouchableOpacity
+              onPress={handleFeaturedSellersPress}
+              className="flex-3 items-center px-4 py-3 rounded-lg mx-2 bg-white border border-primary"
+            >
+              <Text className="text-sm font-medium text-primary">
+                Featured Sellers
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => setActiveTab("live")}
+              className={`flex-1 items-center px-2 py-3 rounded-lg ${
+                activeTab === "live"
+                  ? "bg-primary"
+                  : "bg-white border border-primary"
               }`}
             >
-              Featured Sellers
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => setActiveTab("live")}
-            className={`flex-1 items-center px-2 py-3 rounded-lg ${
-              activeTab === "live"
-                ? "bg-primary"
-                : "bg-white border border-primary"
-            }`}
-          >
-            <Text
-              className={`text-sm font-medium ${
-                activeTab === "live" ? "text-white" : "text-primary"
-              }`}
-            >
-              Live
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Tab Content */}
-        <View className="mt-2 flex-1" style={{ minHeight: 400 }}>
-          {renderTabContent()}
-        </View>
-
-        {/* Offer Header Card */}
-        <View className="bg-white rounded-xl p-4 flex-row items-center gap-4 mt-6">
-          <Image
-            source={allImage}
-            className="w-14 h-14 rounded-md"
-            resizeMode="contain"
-          />
-          <View className="flex-1">
-            <Text className="text-base font-semibold text-gray-900">
-              Special Offers 😱
-            </Text>
-            <Text className="text-sm text-gray-500">
-              We make sure you get the offer you need at best prices
-            </Text>
-          </View>
-        </View>
-
-        {/* Destination Promo Card (Side-by-side) */}
-        <View className="flex-row bg-white rounded-xl overflow-hidden mt-3">
-          {/* Left: Image */}
-          <Image source={allImage} className="w-36 h-36" resizeMode="cover" />
-
-          {/* Right: Content */}
-          <View className="flex-1 justify-center p-4">
-            <Text className="text-base font-semibold text-gray-800">
-              Six Senses Bhutan
-            </Text>
-            <Text className="text-sm text-gray-500 mb-3">
-              Stand a chance to get rewarded
-            </Text>
-            <TouchableOpacity className="self-start px-4 py-2 bg-primary rounded-full flex-row items-center">
-              <Text className="text-white text-sm font-medium">Visit now</Text>
-              <Text className="ml-1 text-white text-lg">→</Text>
+              <Text
+                className={`text-sm font-medium ${
+                  activeTab === "live" ? "text-white" : "text-primary"
+                }`}
+              >
+                Live
+              </Text>
             </TouchableOpacity>
           </View>
+
+          {/* Tab Content */}
+          <View className="mt-2 flex-1" style={{ minHeight: 400 }}>
+            {renderTabContent()}
+          </View>
+
+          {/* Offer Header Card */}
+          <View className="bg-white rounded-xl p-4 flex-row items-center gap-4 mt-6">
+            <Image
+              source={allImage}
+              className="w-14 h-14 rounded-md"
+              resizeMode="contain"
+            />
+            <View className="flex-1">
+              <Text className="text-base font-semibold text-gray-900">
+                Special Offers 😱
+              </Text>
+              <Text className="text-sm text-gray-500">
+                We make sure you get the offer you need at best prices
+              </Text>
+            </View>
+          </View>
+
+          {/* Destination Promo Card (Side-by-side) */}
+          <View className="flex-row bg-white rounded-xl overflow-hidden mt-3">
+            {/* Left: Image */}
+            <Image source={allImage} className="w-36 h-36" resizeMode="cover" />
+
+            {/* Right: Content */}
+            <View className="flex-1 justify-center p-4">
+              <Text className="text-base font-semibold text-gray-800">
+                Six Senses Bhutan
+              </Text>
+              <Text className="text-sm text-gray-500 mb-3">
+                Stand a chance to get rewarded
+              </Text>
+              <TouchableOpacity className="self-start px-4 py-2 bg-primary rounded-full flex-row items-center">
+                <Text className="text-white text-sm font-medium">Visit now</Text>
+                <Text className="ml-1 text-white text-lg">→</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
-      </View>
-    </ScrollView>
+      </ScrollView>
+
+      {/* Featured Sellers Overlay */}
+      <Modal
+        visible={showFeaturedSellers}
+        animationType="slide"
+        presentationStyle="fullScreen"
+      >
+        <View className="flex-1 bg-background">
+          {/* Custom Header with Close Button */}
+          <View className="flex-row items-center px-4 py-3 bg-white border-b border-gray-100">
+            <TouchableOpacity
+              onPress={handleCloseFeaturedSellers}
+              className="w-10 h-10 items-center justify-center rounded-full bg-gray-100 mr-3"
+              activeOpacity={0.7}
+            >
+              <Text className="text-gray-700 font-bold text-lg">×</Text>
+            </TouchableOpacity>
+            <Text className="text-lg font-msemibold text-gray-900">Featured Sellers</Text>
+          </View>
+          
+          {/* Featured Sellers Component */}
+          <FeaturedSellers />
+        </View>
+      </Modal>
+    </>
   );
 }

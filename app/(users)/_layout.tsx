@@ -80,6 +80,13 @@ export default function TabLayout() {
             href: null,
           }}
         />
+        
+           <Tabs.Screen
+          name="profile/[phone]"
+          options={{
+            href: null,
+          }}
+        />
            <Tabs.Screen
           name="mongoose-chat/[name]"
           options={{
@@ -111,7 +118,7 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
-          name="profile"
+          name="profile/index"
           options={{
             href: null,
           }}
