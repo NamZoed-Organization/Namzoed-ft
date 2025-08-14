@@ -7,7 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "namzoed",
     "userInterfaceStyle": "automatic",
-    
+
     "ios": {
       "bundleIdentifier": "com.anonymous.Namzoed",
       "supportsTablet": true,
