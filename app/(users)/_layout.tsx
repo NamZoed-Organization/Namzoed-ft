@@ -1,4 +1,9 @@
-import { CategoriesIcon, ChatIcon, HomeIcon } from "@/components/icons/index";
+import {
+  CategoriesIcon,
+  ChatIcon,
+  HomeIcon,
+  LiveIcon,
+} from "@/components/icons/index";
 import TabBarButton from "@/components/ui/TabBarButton";
 import { Tabs, usePathname, useRouter } from "expo-router";
 import { ShoppingCart, Wrench } from "lucide-react-native";
@@ -10,7 +15,6 @@ export default function TabLayout() {
 
   return (
     <View className="flex-1 bg-background">
-
       <Tabs
         screenOptions={{
           headerShown: false,
@@ -27,7 +31,9 @@ export default function TabLayout() {
           name="index"
           options={{
             title: "Home",
-            tabBarButton: (props) => <TabBarButton {...props} android_ripple={null} />,
+            tabBarButton: (props) => (
+              <TabBarButton {...props} android_ripple={null} />
+            ),
             tabBarIcon: ({ focused }) => <HomeIcon focused={focused} />,
           }}
         />
@@ -35,15 +41,23 @@ export default function TabLayout() {
           name="categories/index"
           options={{
             title: "Categories",
-            tabBarButton: (props) => <TabBarButton {...props} android_ripple={null} />,
-            tabBarIcon: ({ focused }) => <CategoriesIcon focused={focused || pathname.includes('/categories/')} />,
+            tabBarButton: (props) => (
+              <TabBarButton {...props} android_ripple={null} />
+            ),
+            tabBarIcon: ({ focused }) => (
+              <CategoriesIcon
+                focused={focused || pathname.includes("/categories/")}
+              />
+            ),
           }}
         />
         <Tabs.Screen
           name="cart"
           options={{
             title: "Cart",
-            tabBarButton: (props) => <TabBarButton {...props} android_ripple={null} />,
+            tabBarButton: (props) => (
+              <TabBarButton {...props} android_ripple={null} />
+            ),
             tabBarIcon: ({ focused }) => (
               <View className="w-16 h-16 rounded-full bg-white items-center justify-center -top-6 shadow-md shadow-black/20">
                 <ShoppingCart
@@ -56,38 +70,70 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
+          name="live"
+          options={{
+            title: "Live",
+            tabBarButton: (props) => (
+              <TabBarButton {...props} android_ripple={null} />
+            ),
+            tabBarIcon: ({ focused }) => <LiveIcon focused={focused} />,
+          }}
+        />
+        <Tabs.Screen
           name="messages"
           options={{
             title: "Messages",
-            tabBarButton: (props) => <TabBarButton {...props} android_ripple={null} />,
-            tabBarIcon: ({ focused }) => <ChatIcon focused={focused || pathname.includes('/chat/') || pathname.includes('/mongoose-chat/')} />,
+            tabBarButton: (props) => (
+              <TabBarButton {...props} android_ripple={null} />
+            ),
+            tabBarIcon: ({ focused }) => (
+              <ChatIcon
+                focused={
+                  focused ||
+                  pathname.includes("/chat/") ||
+                  pathname.includes("/mongoose-chat/")
+                }
+              />
+            ),
           }}
         />
         <Tabs.Screen
           name="services"
           options={{
             title: "Services",
-            tabBarButton: (props) => <TabBarButton {...props} android_ripple={null} />,
+            tabBarButton: (props) => (
+              <TabBarButton {...props} android_ripple={null} />
+            ),
             tabBarIcon: ({ focused }) => (
-              <Wrench size={22} stroke={focused  || pathname.includes('/servicedetail/') || pathname.includes('/providerdetail/')? "#094569" : "#9ca3af"} strokeWidth={2} />
+              <Wrench
+                size={22}
+                stroke={
+                  focused ||
+                  pathname.includes("/servicedetail/") ||
+                  pathname.includes("/providerdetail/")
+                    ? "#094569"
+                    : "#9ca3af"
+                }
+                strokeWidth={2}
+              />
             ),
           }}
         />
- 
-           <Tabs.Screen
+
+        <Tabs.Screen
           name="chat/[id]"
           options={{
             href: null,
           }}
         />
-        
-           <Tabs.Screen
+
+        <Tabs.Screen
           name="profile/[phone]"
           options={{
             href: null,
           }}
         />
-           <Tabs.Screen
+        <Tabs.Screen
           name="mongoose-chat/[name]"
           options={{
             href: null,
@@ -99,19 +145,19 @@ export default function TabLayout() {
             href: null,
           }}
         />
-          <Tabs.Screen
+        <Tabs.Screen
           name="providerdetail/[id]"
           options={{
             href: null,
           }}
         />
-           <Tabs.Screen
+        <Tabs.Screen
           name="servicedetail/[slug]"
           options={{
             href: null,
           }}
         />
-         <Tabs.Screen
+        <Tabs.Screen
           name="categories/[slug]"
           options={{
             href: null,
@@ -119,6 +165,24 @@ export default function TabLayout() {
         />
         <Tabs.Screen
           name="profile/index"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="live-viewer"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="getstream-live-fallback"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="getstream-live"
           options={{
             href: null,
           }}

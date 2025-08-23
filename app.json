@@ -12,7 +12,11 @@
       "bundleIdentifier": "com.anonymous.Namzoed",
       "supportsTablet": true,
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "This app uses the camera to enable live streaming and video recording features for content creation and sharing.",
+        "NSMicrophoneUsageDescription": "This app uses the microphone to capture audio for live streams and video recordings.",
+        "NSLocationWhenInUseUsageDescription": "This app uses your location to show nearby services and sellers in your area.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "This app uses your location to show nearby services and sellers in your area."
       }
     },
     "android": {
@@ -21,7 +25,14 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.anonymous.Namzoed"
+      "package": "com.anonymous.Namzoed",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -39,7 +50,21 @@
           "backgroundColor": "#ffffff"
         }
       ],
-      "expo-font"
+      "expo-font",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera to enable live streaming and video recording features.",
+          "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone to capture audio for live streams and videos.",
+          "recordAudioAndroid": true
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location to show nearby services and sellers in your area."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

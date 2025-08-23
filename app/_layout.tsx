@@ -55,10 +55,12 @@ export default function RootLayout() {
           <DzongkhagProvider>
             <View className="flex-1 bg-background">
               <Stack screenOptions={{ headerShown: false }} />
-                 <StatusBar style="dark" />
+              <StatusBar style="dark" />
               <FlashMessage
                 position="top"
-                renderCustomContent={(msg) => <CustomFlashMessage message={msg} />}
+                renderCustomContent={(msg) => (
+                  <CustomFlashMessage message={msg} />
+                )}
               />
             </View>
           </DzongkhagProvider>
