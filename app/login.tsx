@@ -1,6 +1,6 @@
 import AnimatedDropdown from "@/components/AnimationDropdown";
 import { useUser } from "@/contexts/UserContext";
-import users from "@/data/UserData";
+import { supabase } from "@/lib/supabase";
 import { FontAwesome5, Ionicons, MaterialIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Link, useRouter } from "expo-router";
@@ -24,7 +24,7 @@ import {
 export default function Login() {
   const [role, setRole] = useState("Buyer");
   const [showRoleModal, setShowRoleModal] = useState(false);
-  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
@@ -32,10 +32,8 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const { setCurrentUser } = useUser();
 
-  const isValidBhutanesePhone = (input: string) => {
-    return (
-      (input.startsWith("17") || input.startsWith("77")) && input.length === 8
-    );
+  const isValidEmail = (input: string) => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input);
   };
 
   useEffect(() => {
@@ -56,35 +54,118 @@ export default function Login() {
   }, [showRoleModal]);
 
   const handleLogin = async () => {
-    if (!isValidBhutanesePhone(phone)) return;
+    if (!isValidEmail(email)) {
+      console.error("Invalid email:", email);
+      Alert.alert("Error", "Please enter a valid email address");
+      return;
+    }
     
-    setLoading(true);
-    
-    // Find user with matching phone number and password
-    const userFound = Object.values(users).find(user => 
-      user.phone_number === phone && user.password === password
-    );
-    
-    if (userFound) {
-      try {
-        // Store user data in AsyncStorage
-        await AsyncStorage.setItem('currentUser', JSON.stringify(userFound));
-        // Update context immediately
-        setCurrentUser(userFound);
-        console.log("User logged in:", userFound);
-        setTimeout(() => {
-          setPhone("");
-          setPassword("");
-          setLoading(false);
-          router.replace("/(users)");
-        }, 2000);
-      } catch (error) {
-        setLoading(false);
-        Alert.alert("Error", "Failed to save user data");
+    try {
+      setLoading(true);
+      
+      // Debug: Check if user exists in auth
+      const { data: authCheck } = await supabase.auth.getUser();
+      console.log("Current auth state:", authCheck);
+
+      // Debug: Check if user exists in profiles
+      const { data: profileCheck } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('email', email)
+        .single();
+      
+      console.log("Profile check:", profileCheck);
+
+      console.log("Attempting login with:", { 
+        email,
+        passwordLength: password.length 
+      });
+
+      // Attempt to sign in
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+
+      if (error) {
+        console.error("Login Error:", {
+          message: error.message,
+          status: error.status,
+          name: error.name
+        });
+        Alert.alert("Login Failed", error.message);
+        return;
       }
-    } else {
+
+      console.log("Auth successful:", data.user?.id);
+
+      if (data?.user) {
+        try {
+          // Get user profile from profiles table
+          const { data: profileData, error: profileError } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', data.user.id)
+            .single();
+
+          if (profileError) {
+            console.error("Profile fetch error:", {
+              message: profileError.message,
+              code: profileError.code,
+              details: profileError.details
+            });
+            Alert.alert("Error", "Failed to fetch user profile");
+            return;
+          }
+
+          console.log("Profile data fetched:", profileData);
+
+          // Combine auth and profile data
+          const userData = {
+            ...data.user,
+            ...profileData
+          };
+          console.log("Combined user data:", userData);
+
+          try {
+            // Store user data in AsyncStorage
+            await AsyncStorage.setItem('currentUser', JSON.stringify(userData));
+            console.log("User data stored in AsyncStorage");
+            
+            // Update context
+            setCurrentUser(userData);
+            console.log("Context updated with user data");
+            
+            // Clear form and redirect
+            setEmail("");
+            setPassword("");
+            console.log("Redirecting to user area");
+            router.replace("/(users)");
+          } catch (storageError: any) {
+            console.error("Storage/Context Error:", {
+              message: storageError.message,
+              stack: storageError.stack
+            });
+            Alert.alert("Error", "Failed to save login state");
+          }
+          
+        } catch (error: any) {
+          console.error("Profile processing error:", {
+            message: error.message,
+            stack: error.stack
+          });
+          Alert.alert("Error", "Failed to complete login");
+        }
+      }
+    } catch (error: any) {
+      console.error("Main login error:", {
+        message: error.message,
+        stack: error.stack
+      });
+      Alert.alert("Error", error.message);
+    } finally {
       setLoading(false);
-      Alert.alert("Login Failed", "Invalid phone number or password");
+      console.log("Login process completed");
     }
   };
 
@@ -172,21 +253,21 @@ export default function Login() {
               )}
             </View>
 
-            {/* Phone Input */}
+            {/* Email Input */}
             <View className="border border-gray-300 rounded-lg px-4 py-2 mb-4 flex-row items-center">
               <MaterialIcons
-                name="phone"
+                name="email"
                 size={20}
                 color="#999"
                 className="mr-2"
               />
               <TextInput
-                value={phone}
-                onChangeText={setPhone}
-                placeholder="Phone Number"
-                keyboardType="phone-pad"
+                value={email}
+                onChangeText={setEmail}
+                placeholder="Email Address"
+                keyboardType="email-address"
+                autoCapitalize="none"
                 className="flex-1 font-regular text-base"
-                maxLength={8}
                 onFocus={() => setShowRoleModal(false)}
               />
             </View>
@@ -227,11 +308,11 @@ export default function Login() {
           {/* Login Button */}
           <TouchableOpacity
             disabled={
-              !isValidBhutanesePhone(phone) || password.length === 0 || loading
+              !isValidEmail(email) || password.length === 0 || loading
             }
             onPress={handleLogin}
             className={`py-5 rounded-md items-center my-10 ${
-              isValidBhutanesePhone(phone) && password.length > 0 && !loading
+              isValidEmail(email) && password.length > 0 && !loading
                 ? "bg-primary"
                 : "bg-primary/50"
             }`}
