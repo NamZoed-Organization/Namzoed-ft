@@ -1,9 +1,13 @@
 import AnimatedDropdown from "@/components/AnimationDropdown";
+import { useUser } from "@/contexts/UserContext";
+import users from "@/data/UserData";
 import { FontAwesome5, Ionicons, MaterialIcons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Link, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   BackHandler,
   Image,
   Keyboard,
@@ -15,11 +19,7 @@ import {
   TouchableOpacity,
   TouchableWithoutFeedback,
   View,
-  Alert,
 } from "react-native";
-import users from "@/data/UserData";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useUser } from "@/contexts/UserContext";
 
 export default function Login() {
   const [role, setRole] = useState("Buyer");

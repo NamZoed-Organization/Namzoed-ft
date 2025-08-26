@@ -20,6 +20,7 @@ import {
   TouchableWithoutFeedback,
   View,
 } from "react-native";
+import { supabase } from '../lib/supabase';
 
 const dzongkhags = [
   "Bumthang",
@@ -48,8 +49,8 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
   const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
+  const [phone, setPhone] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [dzongkhag, setDzongkhag] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
@@ -59,6 +60,81 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
 
   const dropdownAnimation = useRef(new Animated.Value(0)).current;
   const scaleAnimation = useRef(new Animated.Value(1)).current;
+
+
+  // loading states
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // handle signup
+  const handleSignup = async () => {
+    if (!isFormValid) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Sign up with Supabase
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            name,
+            phone,
+            dzongkhag,
+            role: "user",
+          },
+        }
+      });
+
+      if (signUpError) {
+        console.error("Signup error:", signUpError);
+        setError(signUpError.message);
+        setLoading(false);
+        return;
+      }
+
+      if (data?.user) {
+        try {
+          // Create profile data
+          const profileData = {
+            id: data.user.id,
+            name,
+            phone,
+            dzongkhag,
+            email,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          };
+
+          // Clear form fields
+          setName("");
+          setEmail("");
+          setPassword("");
+          setPhone("");
+          setConfirmPassword("");
+          setDzongkhag("");
+
+          // Show success message and navigate
+          alert("Signup successful! Please check your email to verify your account.");
+          router.replace("/login");
+        } catch (profileErr) {
+          console.error("Profile creation error:", profileErr);
+          // Still navigate to login even if profile creation fails
+          alert("Account created but profile setup failed. You can still proceed to login.");
+          router.replace("/login");
+        }
+      }
+    } catch (err: any) {
+      console.error("Signup error:", err);
+      setError(err?.message || "An error occurred during signup");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     const keyboardDidShow = Keyboard.addListener("keyboardDidShow", () => {
@@ -391,26 +467,16 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
 
           {/* Register Button */}
           <TouchableOpacity
-  onPress={() => {
-    console.log({
-      name,
-      email,
-      phone,
-      password,
-      confirmPassword,
-      dzongkhag,
-    });
-    router.replace("/(users)/notif_counter");
-  }}
+  onPress={handleSignup}
   className="py-4 rounded-lg"
   activeOpacity={0.8}
-  disabled={!isFormValid}
+  disabled={!isFormValid || loading}
   style={{
-    backgroundColor: isFormValid ? "#094569" : "#09456980", // 50% opacity
+    backgroundColor: isFormValid && !loading ? "#094569" : "#09456980",
   }}
 >
   <Text className="text-secondary text-center font-semibold text-base">
-    Create Account
+    {loading ? "Creating Account..." : "Create Account"}
   </Text>
 </TouchableOpacity>
 
