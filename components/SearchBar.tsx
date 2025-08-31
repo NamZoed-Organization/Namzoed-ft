@@ -169,9 +169,10 @@ export default function SearchBar({
   return (
     <>
       <TouchableOpacity
-        className="flex-row items-center bg-white rounded-lg px-5 py-1 mx-4"
+        className="flex-row items-center bg-white rounded-lg px-5 py-1 mx-4 -mt-2"
         activeOpacity={0.9}
         onPress={() => setIsFocused(true)}
+
       >
         <Ionicons name="search" size={20} color="#888" className="mr-2" />
         <TextInput

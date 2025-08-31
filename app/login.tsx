@@ -1,14 +1,12 @@
-import AnimatedDropdown from "@/components/AnimationDropdown";
 import { useUser } from "@/contexts/UserContext";
 import { supabase } from "@/lib/supabase";
-import { FontAwesome5, Ionicons, MaterialIcons } from "@expo/vector-icons";
+import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Link, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  BackHandler,
   Image,
   Keyboard,
   KeyboardAvoidingView,
@@ -18,17 +16,14 @@ import {
   TextInput,
   TouchableOpacity,
   TouchableWithoutFeedback,
-  View,
+  View
 } from "react-native";
 
 export default function Login() {
-  const [role, setRole] = useState("Buyer");
-  const [showRoleModal, setShowRoleModal] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
-  const roles = ["Buyer", "Seller"];
   const [loading, setLoading] = useState(false);
   const { setCurrentUser } = useUser();
 
@@ -36,22 +31,6 @@ export default function Login() {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input);
   };
 
-  useEffect(() => {
-    const handleBackPress = () => {
-      if (showRoleModal) {
-        setShowRoleModal(false);
-        return true;
-      }
-      return false;
-    };
-
-    const backHandler = BackHandler.addEventListener(
-      "hardwareBackPress",
-      handleBackPress
-    );
-
-    return () => backHandler.remove();
-  }, [showRoleModal]);
 
   const handleLogin = async () => {
     if (!isValidEmail(email)) {
@@ -173,7 +152,7 @@ export default function Login() {
     <TouchableWithoutFeedback
       onPress={() => {
         Keyboard.dismiss();
-        setShowRoleModal(false);
+        
       }}
     >
       <KeyboardAvoidingView
@@ -200,58 +179,7 @@ export default function Login() {
 
           {/* Fields */}
           <View className="gap-3 flex-2">
-            {/* Role Dropdown */}
-            <View
-              className="mb-4 relative self-end"
-              style={{ width: "100%", zIndex: 99 }}
-            >
-              <View className="absolute left-3 top-[33%] z-10 pointer-events-none">
-                <FontAwesome5 name="user-tag" size={18} color="#999" />
-              </View>
-
-              <TouchableOpacity
-                className="border border-gray-300 rounded-lg h-[60px] justify-center pl-10 pr-10 bg-white shadow-sm"
-                onPress={() => {
-                  Keyboard.dismiss();
-                  setShowRoleModal(true);
-                }}
-                activeOpacity={0.8}
-              >
-                <Text className="font-regular text-gray-700 pl-[5%]">
-                  {role}
-                </Text>
-                <Ionicons
-                  name={showRoleModal ? "chevron-up" : "chevron-down"}
-                  size={18}
-                  color="#999"
-                  style={{ position: "absolute", right: 12, top: "38%" }}
-                />
-              </TouchableOpacity>
-
-              {showRoleModal && (
-                <>
-                  {/* Tap catcher */}
-                  <Pressable
-                    onPress={() => setShowRoleModal(false)}
-                    style={{
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      backgroundColor: "transparent",
-                      zIndex: 90,
-                    }}
-                  />
-
-                  <AnimatedDropdown
-                    roles={roles}
-                    onSelect={(item) => setRole(item)}
-                    onClose={() => setShowRoleModal(false)}
-                  />
-                </>
-              )}
-            </View>
+       
 
             {/* Email Input */}
             <View className="border border-gray-300 rounded-lg px-4 py-2 mb-4 flex-row items-center">
@@ -268,7 +196,7 @@ export default function Login() {
                 keyboardType="email-address"
                 autoCapitalize="none"
                 className="flex-1 font-regular text-base"
-                onFocus={() => setShowRoleModal(false)}
+                
               />
             </View>
 
@@ -286,7 +214,7 @@ export default function Login() {
                 placeholder="Password"
                 secureTextEntry={!showPassword}
                 className="flex-1 font-regular text-base"
-                onFocus={() => setShowRoleModal(false)}
+               
               />
               <Pressable onPress={() => setShowPassword(!showPassword)}>
                 <Ionicons

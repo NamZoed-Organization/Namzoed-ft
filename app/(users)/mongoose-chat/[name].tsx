@@ -129,7 +129,7 @@ export default function MongooseChatScreen() {
 
   // Get original messages and mongoose data
   const { originalMessages, chatPartnerName } = useMemo(() => {
-    if (!mongooseName || !currentUser?.phone_number) {
+    if (!mongooseName) {
       return { originalMessages: [], chatPartnerName: 'Unknown Mongoose' };
     }
 
@@ -138,18 +138,22 @@ export default function MongooseChatScreen() {
     console.log('Available mongooses:', Object.keys(mongooses));
 
     const mongooseData = mongooses[mongooseName as keyof typeof mongooses];
-    const userPhone = `+975${currentUser.phone_number}`;
+    // For demo, always use 17123456 phone number
+    const demoPhone = '+97517123456';
     
     // Debug log to check if mongoose data exists
     console.log('Mongoose data found:', !!mongooseData);
-    console.log('User phone:', userPhone);
+    console.log('Demo phone:', demoPhone);
     
     if (mongooseData) {
       console.log('Client chats available:', Object.keys((mongooseData.clientChats as any) || {}));
     }
     
+    const messages = (mongooseData?.clientChats as any)?.[demoPhone] || [];
+    console.log('Found messages:', messages.length, 'for mongoose', mongooseName);
+    
     return {
-      originalMessages: (mongooseData?.clientChats as any)?.[userPhone] || [],
+      originalMessages: messages,
       chatPartnerName: mongooseData ? `${mongooseData.name} (Mongoose)` : `${mongooseName} (Mongoose)`
     };
   }, [mongooseName, currentUser?.phone_number]);
@@ -314,7 +318,10 @@ export default function MongooseChatScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-background">
+    <View className="flex-1 bg-background">
+      {/* Status Bar Space */}
+      <View className="h-12 bg-white" />
+      
       {/* Fixed Header */}
       <View className="flex-row items-center p-4 border-b border-gray-200 bg-white">
         <TouchableOpacity onPress={() => router.back()} className="mr-3">
@@ -392,6 +399,6 @@ export default function MongooseChatScreen() {
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 }

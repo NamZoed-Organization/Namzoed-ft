@@ -41,22 +41,15 @@ interface IUserData {
 
 // Get user data based on phone number
 const getUserData = (phoneNumber: string): IUserData | null => {
-  switch (phoneNumber) {
+  // Clean phone number - remove +975 prefix if exists
+  const cleanPhone = phoneNumber?.replace('+975', '').replace(/\D/g, '');
+  
+  switch (cleanPhone) {
     case "17123456":
       return userData17123456;
     default:
-      return {
-        messages: {},
-        following: [],
-        followers: [],
-        requests: [],
-        userProfile: {
-          phoneNumber: `+975${phoneNumber}`,
-          followingCount: 0,
-          followersCount: 0,
-          requestsCount: 0
-        }
-      };
+      // For demo purposes, always return the 17123456 data so messages show
+      return userData17123456;
   }
 };
 
@@ -69,13 +62,16 @@ export default function MessageScreen() {
 
   if (!currentUser) {
     return (
-      <SafeAreaView className="flex-1 bg-background">
+      <View className="flex-1 bg-background">
+        {/* Status Bar Space */}
+        <View className="h-12 bg-white" />
+        
         <View className="flex-1 items-center justify-center px-4">
           <Text className="text-base font-regular text-gray-500 text-center">
             Please login to view messages
           </Text>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
@@ -83,13 +79,16 @@ export default function MessageScreen() {
   
   if (!userData) {
     return (
-      <SafeAreaView className="flex-1 bg-background">
+      <View className="flex-1 bg-background">
+        {/* Status Bar Space */}
+        <View className="h-12 bg-white" />
+        
         <View className="flex-1 items-center justify-center px-4">
           <Text className="text-base font-regular text-gray-500 text-center">
             No user data found
           </Text>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
@@ -183,7 +182,10 @@ export default function MessageScreen() {
   // If showing follow requests, render the FollowRequests component
   if (showFollowRequests) {
     return (
-      <SafeAreaView className="flex-1 bg-background">
+      <View className="flex-1 bg-background">
+        {/* Status Bar Space */}
+        <View className="h-12 bg-white" />
+        
         {/* Fixed Header */}
         <View className="bg-white px-4 py-6 border-b border-gray-200">
           <View className="flex-row items-center">
@@ -210,14 +212,17 @@ export default function MessageScreen() {
           onFollowBack={handleFollowBack}
           onReject={handleReject}
         />
-      </SafeAreaView>
+      </View>
     );
   }
 
   const tabs = ['Messages', 'Mongoose', 'Requests'];
 
   return (
-    <SafeAreaView className="flex-1 bg-background">
+    <View className="flex-1 bg-background">
+      {/* Status Bar Space */}
+      <View className="h-12 bg-white" />
+      
       {/* Fixed Header with spacing */}
       <View className="bg-white px-4 py-6 border-b border-gray-200">
         <View className="flex-row items-center justify-between">
@@ -307,6 +312,6 @@ export default function MessageScreen() {
           )}
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }

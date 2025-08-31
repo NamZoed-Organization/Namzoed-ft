@@ -21,12 +21,12 @@ export default function MongooseMessages({ mongooseChats }: MongooseMessagesProp
 
   // Get existing messages for current user with mongoose
   const getExistingMessages = (mongooseName: string) => {
-    if (!currentUser?.phone_number) return [];
-    
     const mongooseData = mongooses[mongooseName as keyof typeof mongooses];
-    const userPhone = `+975${currentUser.phone_number}`;
     
-    return (mongooseData?.clientChats as any)?.[userPhone] || [];
+    // For demo purposes, always show messages for 17123456
+    const demoPhone = '+97517123456';
+    
+    return (mongooseData?.clientChats as any)?.[demoPhone] || [];
   };
 
   const renderMongooseItem = ({ item: mongooseName }: { item: string }) => {

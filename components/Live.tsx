@@ -24,11 +24,15 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import GetStreamLive from "./getstream-live";
+import GetStreamLive from "../app/(users)/getstream-live";
 
 const { width, height } = Dimensions.get("window");
 
-export default function LiveScreen() {
+interface LiveScreenProps {
+  onClose?: () => void;
+}
+
+export default function LiveScreen({ onClose }: LiveScreenProps) {
   const [permission, requestPermission] = useCameraPermissions();
   const [cameraType, setCameraType] = useState<CameraType>("front");
   const [isStreaming, setIsStreaming] = useState(false);
@@ -150,7 +154,7 @@ export default function LiveScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={() => onClose ? onClose() : router.back()}
           style={styles.backButton}
         >
           <ArrowLeft size={24} color="white" />
@@ -209,9 +213,9 @@ export default function LiveScreen() {
             style={styles.camera}
             facing={cameraType}
             mode="video"
-          >
-            {/* Overlay UI */}
-            <View style={styles.overlay}>
+          />
+          {/* Overlay UI */}
+          <View style={styles.overlay}>
               {/* Top Stats */}
               <View style={styles.topStats}>
                 <View style={styles.statItem}>
@@ -321,7 +325,6 @@ export default function LiveScreen() {
                 </View>
               )}
             </View>
-          </CameraView>
         </View>
       )}
 
@@ -477,7 +480,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   overlay: {
-    flex: 1,
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     justifyContent: "space-between",
   },
   topStats: {

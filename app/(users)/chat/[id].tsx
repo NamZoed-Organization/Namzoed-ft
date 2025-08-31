@@ -18,7 +18,8 @@ import {
 } from "react-native";
 
 const getUserData = (phoneNumber: string) => {
-  return phoneNumber === "17123456" ? userData17123456 : null;
+  // For demo purposes, always return the 17123456 data so chats show
+  return userData17123456;
 };
 
 // Typing indicator component
@@ -130,22 +131,36 @@ export default function ChatScreen() {
       };
     }
 
-    if (isMongooseChat && mongooseName && currentUser.phone_number) {
+    if (isMongooseChat && mongooseName) {
       const mongooseData = mongooses[mongooseName as keyof typeof mongooses];
-      const userPhone = `+975${currentUser.phone_number}`;
+      // For demo, always use 17123456 phone number
+      const demoPhone = '+97517123456';
+      const messages = (mongooseData?.clientChats as any)?.[demoPhone] || [];
+      console.log('Mongoose chat messages:', messages.length, 'for', mongooseName);
       return {
-        messages: (mongooseData?.clientChats as any)?.[userPhone] || [],
+        messages: messages,
         chatPartnerName: `${mongooseName} (Mongoose)`
       };
     }
 
     const userData = getUserData(currentUser.phone_number || "");
     const phoneNumber = `+975${id}`;
-    const user = Object.values(users).find(u => u.phone_number === id);
+    const user = Object.values(users).find(u => u.phone_number === id || u.phone_number === id.replace('+975', ''));
     const messagesObj = userData?.messages as Record<string, any[]>;
     
+    // The messages in data use full phone numbers like +97517234567
+    const messages = messagesObj?.[phoneNumber] || [];
+    console.log('=== CHAT DEBUG ===');
+    console.log('ID from route:', id);
+    console.log('Full phone number:', phoneNumber);
+    console.log('UserData exists:', !!userData);
+    console.log('Messages object exists:', !!messagesObj);
+    console.log('Available message keys:', Object.keys(messagesObj || {}));
+    console.log('Messages found:', messages.length);
+    console.log('First message:', messages[0]);
+    
     return {
-      messages: messagesObj?.[phoneNumber] || [],
+      messages: messages,
       chatPartnerName: user?.username || phoneNumber
     };
   }, [id, isMongooseChat, mongooseName, currentUser]);
@@ -217,9 +232,12 @@ export default function ChatScreen() {
   };
 
   const renderMessage = (message: any, index: number) => {
+    const currentUserPhone = `+975${currentUser.phone_number || ""}`;
     const isCurrentUser = isMongooseChat 
       ? message.sender === 'client'
-      : message.sender === `+975${currentUser.phone_number || ""}`;
+      : message.sender === '+97517123456'; // For demo, current user is always 17123456
+    
+    console.log('Message sender:', message.sender, 'Current user:', currentUserPhone, 'Is current user:', isCurrentUser);
     
     return (
       <View key={index} className={`mb-3 ${isCurrentUser ? 'items-end' : 'items-start'}`}>
@@ -242,6 +260,9 @@ export default function ChatScreen() {
 
   return (
     <View className="flex-1 bg-background">
+      {/* Status Bar Space */}
+      <View className="h-12 bg-white" />
+      
       {/* Fixed Header */}
       <View className="flex-row items-center p-4 border-b border-gray-200 bg-white">
         <TouchableOpacity onPress={() => router.back()} className="mr-3">
