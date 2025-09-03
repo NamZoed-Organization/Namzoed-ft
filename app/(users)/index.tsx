@@ -7,13 +7,13 @@ import ForYou from "@/components/ForYou";
 import SearchBar from "@/components/SearchBar";
 import TopNavbar from "@/components/ui/TopNavbar";
 import React, { useEffect, useState } from "react";
-import { Image, Modal, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { Image, Text, TouchableOpacity, View, FlatList } from "react-native";
+import { Heart, Users, Radio, Coins, Plus } from "lucide-react-native";
 
 export default function HomeScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("foryou");
   const [isLoaded, setIsLoaded] = useState(false);
-  const [showFeaturedSellers, setShowFeaturedSellers] = useState(false);
   console.log(" home screen" )
   
   // Force re-render after initial mount
@@ -24,13 +24,6 @@ export default function HomeScreen() {
     return () => clearTimeout(timer);
   }, []);
 
-  const handleFeaturedSellersPress = () => {
-    setShowFeaturedSellers(true);
-  };
-
-  const handleCloseFeaturedSellers = () => {
-    setShowFeaturedSellers(false);
-  };
 
   const renderTabContent = () => {
     if (!isLoaded && activeTab === "foryou") {
@@ -51,9 +44,7 @@ export default function HomeScreen() {
       case "featured":
         return (
           <View className="mt-6 min-h-96">
-            <Text className="text-base font-semibold text-primary mb-2">
-              Featured Sellers (Coming Soon)
-            </Text>
+            <FeaturedSellers />
           </View>
         );
       case "live":
@@ -61,6 +52,22 @@ export default function HomeScreen() {
           <View className="mt-6 min-h-96">
             <Text className="text-base font-semibold text-primary mb-2">
               Live Products (Coming Soon)
+            </Text>
+          </View>
+        );
+      case "bidding":
+        return (
+          <View className="mt-6 min-h-96">
+            <Text className="text-base font-semibold text-primary mb-2">
+              Bidding (Coming Soon)
+            </Text>
+          </View>
+        );
+      case "placeholder":
+        return (
+          <View className="mt-6 min-h-96">
+            <Text className="text-base font-semibold text-primary mb-2">
+              More Features (Coming Soon)
             </Text>
           </View>
         );
@@ -73,69 +80,108 @@ export default function HomeScreen() {
     }
   };
 
-  return (
-    <>
-      <ScrollView
-        className="flex-1 bg-background mb-20"
-        showsVerticalScrollIndicator={false}
-        scrollEventThrottle={16}
-      >
-        <View className="px-4 gap-2 mb-10">
+  const headerData = [
+    { key: 'header', component: 'header' },
+    { key: 'content', component: 'content' },
+    { key: 'footer', component: 'footer' }
+  ];
+
+  const renderItem = ({ item }) => {
+    if (item.component === 'header') {
+      return (
+        <View className="px-4 gap-2">
           <TopNavbar />
           <SearchBar value={searchQuery} onChangeText={setSearchQuery} />
           <Banner />
           
           {/* Tab Navigation */}
-          <View className="flex-row items-center w-[90%] mx-auto mt-2 gap-4">
+          <View className="flex-row items-center w-full mx-auto mt-2 gap-2">
             <TouchableOpacity
               onPress={() => setActiveTab("foryou")}
-              className={`flex-1 items-center px-2 py-3 rounded-lg ${
+              className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm bg-white ${
                 activeTab === "foryou"
-                  ? "bg-primary"
-                  : "bg-white border border-primary"
+                  ? "border-2 border-black"
+                  : ""
               }`}
             >
-              <Text
-                className={`text-sm font-medium ${
-                  activeTab === "foryou" ? "text-white" : "text-primary"
-                }`}
-              >
-                For You
-              </Text>
+              <Heart 
+                size={20} 
+                color="black"
+                fill="none"
+              />
             </TouchableOpacity>
 
             <TouchableOpacity
-              onPress={handleFeaturedSellersPress}
-              className="flex-3 items-center px-4 py-3 rounded-lg mx-2 bg-white border border-primary"
+              onPress={() => setActiveTab("featured")}
+              className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm bg-white ${
+                activeTab === "featured"
+                  ? "border-2 border-black"
+                  : ""
+              }`}
             >
-              <Text className="text-sm font-medium text-primary">
-                Featured Sellers
-              </Text>
+              <Users 
+                size={20} 
+                color="black"
+              />
             </TouchableOpacity>
 
             <TouchableOpacity
               onPress={() => setActiveTab("live")}
-              className={`flex-1 items-center px-2 py-3 rounded-lg ${
+              className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm bg-white ${
                 activeTab === "live"
-                  ? "bg-primary"
-                  : "bg-white border border-primary"
+                  ? "border-2 border-black"
+                  : ""
               }`}
             >
-              <Text
-                className={`text-sm font-medium ${
-                  activeTab === "live" ? "text-white" : "text-primary"
-                }`}
-              >
-                Live
-              </Text>
+              <Radio 
+                size={20} 
+                color="black"
+              />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => setActiveTab("bidding")}
+              className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm bg-white ${
+                activeTab === "bidding"
+                  ? "border-2 border-black"
+                  : ""
+              }`}
+            >
+              <Coins 
+                size={20} 
+                color="black"
+              />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => setActiveTab("placeholder")}
+              className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm bg-white ${
+                activeTab === "placeholder"
+                  ? "border-2 border-black"
+                  : ""
+              }`}
+            >
+              <Plus 
+                size={20} 
+                color="black"
+              />
             </TouchableOpacity>
           </View>
-
-          {/* Tab Content */}
-          <View className="mt-2 flex-1" style={{ minHeight: 400 }}>
-            {renderTabContent()}
-          </View>
-
+        </View>
+      );
+    }
+    
+    if (item.component === 'content') {
+      return (
+        <View className="px-4 mt-2 flex-1" style={{ minHeight: 400 }}>
+          {renderTabContent()}
+        </View>
+      );
+    }
+    
+    if (item.component === 'footer') {
+      return (
+        <View className="px-4 gap-2 mb-10">
           {/* Offer Header Card */}
           <View className="bg-white rounded-xl p-4 flex-row items-center gap-4 mt-6">
             <Image
@@ -173,31 +219,18 @@ export default function HomeScreen() {
             </View>
           </View>
         </View>
-      </ScrollView>
+      );
+    }
+  };
 
-      {/* Featured Sellers Overlay */}
-      <Modal
-        visible={showFeaturedSellers}
-        animationType="slide"
-        presentationStyle="fullScreen"
-      >
-        <View className="flex-1 bg-background">
-          {/* Custom Header with Close Button */}
-          <View className="flex-row items-center px-4 py-3 bg-white border-b border-gray-100">
-            <TouchableOpacity
-              onPress={handleCloseFeaturedSellers}
-              className="w-10 h-10 items-center justify-center rounded-full bg-gray-100 mr-3"
-              activeOpacity={0.7}
-            >
-              <Text className="text-gray-700 font-bold text-lg">×</Text>
-            </TouchableOpacity>
-            <Text className="text-lg font-msemibold text-gray-900">Featured Sellers</Text>
-          </View>
-          
-          {/* Featured Sellers Component */}
-          <FeaturedSellers />
-        </View>
-      </Modal>
-    </>
+  return (
+    <FlatList
+      data={headerData}
+      renderItem={renderItem}
+      keyExtractor={(item) => item.key}
+      className="flex-1 bg-background mb-20"
+      showsVerticalScrollIndicator={false}
+      scrollEventThrottle={16}
+    />
   );
 }

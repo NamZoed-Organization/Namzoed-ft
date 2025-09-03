@@ -15,7 +15,7 @@ export const serviceCategories: ServiceCategory[] = [
     name: 'Taxi Services',
     description: 'Professional taxi and transportation services',
     icon: 'taxi',
-    image: '/images/all.png',
+    image: 'https://picsum.photos/300/200?random=301',
     slug: 'taxi-services'
   },
   {
@@ -23,7 +23,7 @@ export const serviceCategories: ServiceCategory[] = [
     name: 'Home Services',
     description: 'Residential maintenance and home improvement services',
     icon: 'home',
-    image: '/images/all.png',
+    image: 'https://picsum.photos/300/200?random=302',
     slug: 'home-services'
   },
   {
@@ -31,7 +31,7 @@ export const serviceCategories: ServiceCategory[] = [
     name: 'Hotel Services',
     description: 'Hospitality and accommodation services',
     icon: 'hotel',
-    image: '/images/all.png',
+    image: 'https://picsum.photos/300/200?random=303',
     slug: 'hotel-services'
   },
   {
@@ -39,7 +39,7 @@ export const serviceCategories: ServiceCategory[] = [
     name: 'Beauty & Wellness',
     description: 'Beauty treatments and wellness services',
     icon: 'spa',
-    image: '/images/all.png',
+    image: 'https://picsum.photos/300/200?random=304',
     slug: 'beauty-wellness'
   },
   {
@@ -47,7 +47,7 @@ export const serviceCategories: ServiceCategory[] = [
     name: 'Repair & Maintenance',
     description: 'Technical repair and maintenance solutions',
     icon: 'tools',
-    image: '/images/all.png',
+    image: 'https://picsum.photos/300/200?random=305',
     slug: 'repair-maintenance'
   },
   {
@@ -55,7 +55,7 @@ export const serviceCategories: ServiceCategory[] = [
     name: 'Education & Coaching',
     description: 'Educational services and professional coaching',
     icon: 'graduation-cap',
-    image: '/images/all.png',
+    image: 'https://picsum.photos/300/200?random=306',
     slug: 'education-coaching'
   },
   {
@@ -63,7 +63,7 @@ export const serviceCategories: ServiceCategory[] = [
     name: 'Creative & Media',
     description: 'Creative design and media production services',
     icon: 'palette',
-    image: '/images/all.png',
+    image: 'https://picsum.photos/300/200?random=307',
     slug: 'creative-media'
   },
   {
@@ -71,7 +71,7 @@ export const serviceCategories: ServiceCategory[] = [
     name: 'Business Services',
     description: 'Professional business and consulting services',
     icon: 'briefcase',
-    image: '/images/all.png',
+    image: 'https://picsum.photos/300/200?random=308',
     slug: 'business-services'
   },
   {
@@ -79,7 +79,7 @@ export const serviceCategories: ServiceCategory[] = [
     name: 'Travel & Leisure',
     description: 'Travel planning and leisure activity services',
     icon: 'map-pin',
-    image: '/images/all.png',
+    image: 'https://picsum.photos/300/200?random=309',
     slug: 'travel-leisure'
   },
   {
@@ -87,7 +87,7 @@ export const serviceCategories: ServiceCategory[] = [
     name: 'Pet Services',
     description: 'Pet care and veterinary services',
     icon: 'heart',
-    image: '/images/all.png',
+    image: 'https://picsum.photos/300/200?random=310',
     slug: 'pet-services'
   },
   {
@@ -95,7 +95,7 @@ export const serviceCategories: ServiceCategory[] = [
     name: 'Health & Medical',
     description: 'Healthcare and medical consultation services',
     icon: 'activity',
-    image: '/images/all.png',
+    image: 'https://picsum.photos/300/200?random=311',
     slug: 'health-medical'
   },
   {
@@ -103,7 +103,7 @@ export const serviceCategories: ServiceCategory[] = [
     name: 'Events & Entertainment',
     description: 'Event planning and entertainment services',
     icon: 'calendar',
-    image: '/images/all.png',
+    image: 'https://picsum.photos/300/200?random=312',
     slug: 'events-entertainment'
   },
   {
@@ -111,7 +111,7 @@ export const serviceCategories: ServiceCategory[] = [
     name: 'Government Services',
     description: 'Official government and public services',
     icon: 'shield',
-    image: '/images/all.png',
+    image: 'https://picsum.photos/300/200?random=313',
     slug: 'government-services'
   },
   {
@@ -119,7 +119,7 @@ export const serviceCategories: ServiceCategory[] = [
     name: 'Travel Services',
     description: 'Comprehensive travel and booking services',
     icon: 'plane',
-    image: '/images/all.png',
+    image: 'https://picsum.photos/300/200?random=314',
     slug: 'travel-services'
   }
 ];

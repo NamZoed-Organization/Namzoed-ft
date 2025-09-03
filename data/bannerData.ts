@@ -19,7 +19,7 @@ export const bannerData: BannerItem[] = [
     header: "50-40% OFF",
     body: "Now in (product)\nAll colours",
     link: "/shop",
-    image: require("@/assets/images/all.png"),
+    image: { uri: "https://picsum.photos/400/200?random=101" },
     cta: "Shop Now",
   },
   {
@@ -28,7 +28,7 @@ export const bannerData: BannerItem[] = [
     header: "Live Cooking Show",
     body: "Chef Kinley is Live\nWatch now!",
     link: "/live",
-    image: require("@/assets/images/all.png"),
+    image: { uri: "https://picsum.photos/400/200?random=102" },
     cta: "Watch Now",},
   {
     id: "3",
@@ -36,7 +36,7 @@ export const bannerData: BannerItem[] = [
     header: "New Flavour Drop",
     body: "Introducing Peach Blast\nTry today",
     link: "/peach",
-    image: require("@/assets/images/all.png"),
+    image: { uri: "https://picsum.photos/400/200?random=103" },
     cta: "Shop Now"
   },
   {
@@ -45,7 +45,7 @@ export const bannerData: BannerItem[] = [
     header: "Event Streaming",
     body: "Farmers' Day - Live\nAll Bhutan Organic",
     link: "/events",
-    image: require("@/assets/images/all.png"),
+    image: { uri: "https://picsum.photos/400/200?random=104" },
     cta: "Watch Now"
   },
   {
@@ -54,7 +54,7 @@ export const bannerData: BannerItem[] = [
     header: "Limited Time Only",
     body: "Exclusive Pack Offer\nWhile stocks last",
     link: "/offers",
-    image: require("@/assets/images/all.png"),
+    image: { uri: "https://picsum.photos/400/200?random=105" },
     cta: "Shop Now"
   },
 ];

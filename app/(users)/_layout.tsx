@@ -1,12 +1,11 @@
 import {
   CategoriesIcon,
-  ChatIcon,
   HomeIcon
 } from "@/components/icons/index";
 import FeedTabButton from "@/components/ui/FeedTabButton";
 import TabBarButton from "@/components/ui/TabBarButton";
 import { Tabs, usePathname, useRouter } from "expo-router";
-import { Plus, Wrench } from "lucide-react-native";
+import { Plus, Store, Wrench } from "lucide-react-native";
 import { View } from "react-native";
 
 export default function TabLayout() {
@@ -81,7 +80,7 @@ export default function TabLayout() {
             tabBarIcon: ({ focused }) => <LiveIcon focused={focused} />,
           }}
         /> */}
-        <Tabs.Screen
+        {/* <Tabs.Screen
           name="messages"
           options={{
             title: "Messages",
@@ -98,8 +97,30 @@ export default function TabLayout() {
               />
             ),
           }}
-        />
+        /> */}
         <Tabs.Screen
+          name="marketplace"
+          options={{
+            title: "Marketplace",
+            tabBarButton: (props) => (
+              <TabBarButton {...props} android_ripple={null} />
+            ),
+            tabBarIcon: ({ focused }) => (
+              <Store
+                size={22}
+                stroke={
+                  focused ||
+                  pathname.includes("/servicedetail/") ||
+                  pathname.includes("/providerdetail/")
+                    ? "#094569"
+                    : "#9ca3af"
+                }
+                strokeWidth={2}
+              />
+            ),
+          }}
+        />
+            <Tabs.Screen
           name="services"
           options={{
             title: "Services",
@@ -181,6 +202,12 @@ export default function TabLayout() {
         />
         <Tabs.Screen
           name="getstream-live"
+          options={{
+            href: null,
+          }}
+        />
+           <Tabs.Screen
+          name="messages"
           options={{
             href: null,
           }}

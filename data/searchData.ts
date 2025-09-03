@@ -1,14 +1,14 @@
 const searchData = [
-  { image: require("@/assets/images/all.png"), title: "Wooden Cup", type: "Handmade" },
-  { image: require("@/assets/images/all.png"), title: "Bamboo Basket", type: "Craft" },
-  { image: require("@/assets/images/all.png"), title: "Yak Wool Shawl", type: "Clothing" },
-  { image: require("@/assets/images/all.png"), title: "Honey Jar", type: "Food" },
-  { image: require("@/assets/images/all.png"), title: "Ceramic Vase", type: "Decor" },
-  { image: require("@/assets/images/all.png"), title: "Carved Table", type: "Furniture" },
-  { image: require("@/assets/images/all.png"), title: "Leather Wallet", type: "Accessory" },
-  { image: require("@/assets/images/all.png"), title: "Organic Soap", type: "Wellness" },
-  { image: require("@/assets/images/all.png"), title: "Knitted Hat", type: "Wearable" },
-  { image: require("@/assets/images/all.png"), title: "Prayer Beads", type: "Spiritual" },
+  { image: { uri: "https://picsum.photos/200/200?random=201" }, title: "Wooden Cup", type: "Handmade" },
+  { image: { uri: "https://picsum.photos/200/200?random=202" }, title: "Bamboo Basket", type: "Craft" },
+  { image: { uri: "https://picsum.photos/200/200?random=203" }, title: "Yak Wool Shawl", type: "Clothing" },
+  { image: { uri: "https://picsum.photos/200/200?random=204" }, title: "Honey Jar", type: "Food" },
+  { image: { uri: "https://picsum.photos/200/200?random=205" }, title: "Ceramic Vase", type: "Decor" },
+  { image: { uri: "https://picsum.photos/200/200?random=206" }, title: "Carved Table", type: "Furniture" },
+  { image: { uri: "https://picsum.photos/200/200?random=207" }, title: "Leather Wallet", type: "Accessory" },
+  { image: { uri: "https://picsum.photos/200/200?random=208" }, title: "Organic Soap", type: "Wellness" },
+  { image: { uri: "https://picsum.photos/200/200?random=209" }, title: "Knitted Hat", type: "Wearable" },
+  { image: { uri: "https://picsum.photos/200/200?random=210" }, title: "Prayer Beads", type: "Spiritual" },
 ];
 
 export default searchData;

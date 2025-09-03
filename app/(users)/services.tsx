@@ -3,37 +3,69 @@
 import TopNavbar from "@/components/ui/TopNavbar";
 import { serviceCategories } from "@/data/servicecategory";
 import { router } from "expo-router";
-import { FlatList, Image, Text, TouchableOpacity, View } from "react-native";
+import { FlatList, Text, TouchableOpacity, View } from "react-native";
+import { 
+  Car, 
+  Home, 
+  Building2, 
+  Sparkles, 
+  Wrench, 
+  GraduationCap, 
+  Palette, 
+  Briefcase, 
+  MapPin, 
+  Heart, 
+  Activity, 
+  Calendar, 
+  Shield, 
+  Plane 
+} from "lucide-react-native";
 
 export default function ServiceScreen() {
   const handleCategoryPress = (category: any) => {
     router.push(`/(users)/servicedetail/${category.slug}`);
   };
 
-  const renderCategoryItem = ({ item }: { item: any }) => (
+  const getIconComponent = (iconName: string) => {
+    const iconMap = {
+      'taxi': Car,
+      'home': Home,
+      'hotel': Building2,
+      'spa': Sparkles,
+      'tools': Wrench,
+      'graduation-cap': GraduationCap,
+      'palette': Palette,
+      'briefcase': Briefcase,
+      'map-pin': MapPin,
+      'heart': Heart,
+      'activity': Activity,
+      'calendar': Calendar,
+      'shield': Shield,
+      'plane': Plane,
+    };
+    
+    const IconComponent = iconMap[iconName] || Home;
+    return <IconComponent size={32} color="black" />;
+  };
+
+  const renderCategoryItem = ({ item, index }: { item: any, index: number }) => (
     <TouchableOpacity
-      className="bg-white rounded-xl shadow-sm border border-gray-100 m-2 p-4 flex-row items-center"
+      className="bg-white rounded-xl shadow-sm border border-gray-100 items-center justify-center mb-6"
+      style={{ 
+        width: 100, 
+        height: 100,
+        marginLeft: index % 3 === 0 ? 0 : 20,
+        marginRight: index % 3 === 2 ? 0 : 0
+      }}
       onPress={() => handleCategoryPress(item)}
       activeOpacity={0.7}
     >
-      <View className="w-16 h-16 bg-primary/10 rounded-full items-center justify-center mr-4">
-        <Image
-          source={{ uri: item.image }}
-          className="w-8 h-8"
-          resizeMode="contain"
-        />
+      <View className="items-center justify-center mb-2">
+        {getIconComponent(item.icon)}
       </View>
-      <View className="flex-1">
-        <Text className="text-lg font-msemibold text-gray-900 mb-1">
-          {item.name}
-        </Text>
-        <Text className="text-sm font-regular text-gray-500" numberOfLines={2}>
-          {item.description}
-        </Text>
-      </View>
-      <View className="w-6 h-6 bg-primary/20 rounded-full items-center justify-center">
-        <Text className="text-primary font-bold">›</Text>
-      </View>
+      <Text className="text-xs font-medium text-gray-900 text-center px-1" numberOfLines={2}>
+        {item.name}
+      </Text>
     </TouchableOpacity>
   );
 
@@ -57,9 +89,19 @@ export default function ServiceScreen() {
           data={serviceCategories}
           renderItem={renderCategoryItem}
           keyExtractor={(item) => item.id}
-          numColumns={1}
+          numColumns={3}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 20 }}
+          contentContainerStyle={{ 
+            paddingBottom: 30,
+            paddingTop: 20,
+            paddingHorizontal: 16
+          }}
+          columnWrapperStyle={{ 
+            justifyContent: 'flex-start',
+            alignItems: 'flex-start',
+            flexDirection: 'row'
+          }}
+          key={3} // Force re-render to maintain 3 columns
         />
       </View>
     </View>
