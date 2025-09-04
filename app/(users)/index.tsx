@@ -142,7 +142,7 @@ export default function HomeScreen() {
             <TouchableOpacity
               onPress={() => setActiveTab("norbu")}
               className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm bg-white ${
-                activeTab === "bidding"
+                activeTab === "norbu"
                   ? "border-2 border-black"
                   : ""
               }`}
@@ -156,7 +156,7 @@ export default function HomeScreen() {
             <TouchableOpacity
               onPress={() => setActiveTab("bidding")}
               className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm bg-white ${
-                activeTab === "placeholder"
+                activeTab === "bidding"
                   ? "border-2 border-black"
                   : ""
               }`}
