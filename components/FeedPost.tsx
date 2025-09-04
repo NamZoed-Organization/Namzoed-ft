@@ -1,8 +1,10 @@
 import React, { useState } from "react";
-import { Image, Text, TouchableOpacity, View } from "react-native";
+import { Image, Text, TouchableOpacity, View, Animated } from "react-native";
 import { Heart, MessageCircle, Bookmark, MoreHorizontal } from "lucide-react-native";
 import { PostData } from "@/data/postdata";
 import ImageViewer from "@/components/ImageViewer";
+
+export { default as PostSkeleton } from "@/components/ui/PostSkeleton";
 
 interface FeedPostProps {
   post: PostData;
@@ -25,19 +27,76 @@ const formatDate = (date: Date): string => {
   }
 };
 
+const ImageSkeleton = ({ width, height }: { width: string; height: string }) => {
+  const shimmerOpacity = React.useRef(new Animated.Value(0.3)).current;
+
+  React.useEffect(() => {
+    const shimmerAnimation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmerOpacity, {
+          toValue: 0.7,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+        Animated.timing(shimmerOpacity, {
+          toValue: 0.3,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    shimmerAnimation.start();
+    return () => shimmerAnimation.stop();
+  }, [shimmerOpacity]);
+
+  return (
+    <Animated.View
+      className="bg-gray-300 absolute inset-0 rounded-lg"
+      style={{ opacity: shimmerOpacity }}
+    />
+  );
+};
+
+const PostImage = ({ 
+  imageUri, 
+  onPress, 
+  className, 
+  style 
+}: { 
+  imageUri: string; 
+  onPress: () => void; 
+  className?: string; 
+  style?: any; 
+}) => {
+  const [imageLoading, setImageLoading] = useState(true);
+
+  return (
+    <TouchableOpacity onPress={onPress} activeOpacity={0.9} className={className} style={style}>
+      <View className="relative">
+        {imageLoading && <ImageSkeleton width="100%" height="100%" />}
+        <Image
+          source={{ uri: imageUri }}
+          className="w-full h-full"
+          resizeMode="cover"
+          onLoad={() => setImageLoading(false)}
+          onError={() => setImageLoading(false)}
+        />
+      </View>
+    </TouchableOpacity>
+  );
+};
+
 const renderImages = (images: string[], onImagePress: (index: number) => void) => {
   if (images.length === 0) return null;
   
   if (images.length === 1) {
     return (
       <View className="mt-3 rounded-lg overflow-hidden">
-        <TouchableOpacity onPress={() => onImagePress(0)} activeOpacity={0.9}>
-          <Image
-            source={require('@/assets/images/all.png')}
-            className="w-full h-64"
-            resizeMode="cover"
-          />
-        </TouchableOpacity>
+        <PostImage
+          imageUri={images[0]}
+          onPress={() => onImagePress(0)}
+          className="w-full h-64"
+        />
       </View>
     );
   }
@@ -45,20 +104,16 @@ const renderImages = (images: string[], onImagePress: (index: number) => void) =
   if (images.length === 2) {
     return (
       <View className="mt-3 flex-row gap-1 rounded-lg overflow-hidden">
-        <TouchableOpacity onPress={() => onImagePress(0)} activeOpacity={0.9} className="flex-1">
-          <Image
-            source={require('@/assets/images/all.png')}
-            className="w-full h-48"
-            resizeMode="cover"
-          />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => onImagePress(1)} activeOpacity={0.9} className="flex-1">
-          <Image
-            source={require('@/assets/images/all.png')}
-            className="w-full h-48"
-            resizeMode="cover"
-          />
-        </TouchableOpacity>
+        <PostImage
+          imageUri={images[0]}
+          onPress={() => onImagePress(0)}
+          className="flex-1 h-48"
+        />
+        <PostImage
+          imageUri={images[1]}
+          onPress={() => onImagePress(1)}
+          className="flex-1 h-48"
+        />
       </View>
     );
   }
@@ -69,39 +124,35 @@ const renderImages = (images: string[], onImagePress: (index: number) => void) =
   return (
     <View className="mt-3 gap-1 rounded-lg overflow-hidden">
       {/* First row - single large image */}
-      <TouchableOpacity onPress={() => onImagePress(0)} activeOpacity={0.9}>
-        <Image
-          source={require('@/assets/images/all.png')}
-          className="w-full h-48"
-          resizeMode="cover"
-        />
-      </TouchableOpacity>
+      <PostImage
+        imageUri={images[0]}
+        onPress={() => onImagePress(0)}
+        className="w-full h-48"
+      />
       
       {/* Second row - two smaller images */}
       <View className="flex-row gap-1">
-        <TouchableOpacity onPress={() => onImagePress(1)} activeOpacity={0.9} className="flex-1">
-          <Image
-            source={require('@/assets/images/all.png')}
-            className="w-full h-32"
-            resizeMode="cover"
-          />
-        </TouchableOpacity>
+        <PostImage
+          imageUri={images[1]}
+          onPress={() => onImagePress(1)}
+          className="flex-1 h-32"
+        />
         
         {/* Third image with overlay if more exist */}
-        <TouchableOpacity onPress={() => onImagePress(2)} activeOpacity={0.9} className="flex-1 relative">
-          <Image
-            source={require('@/assets/images/all.png')}
+        <View className="flex-1 relative">
+          <PostImage
+            imageUri={images[2]}
+            onPress={() => onImagePress(2)}
             className="w-full h-32"
-            resizeMode="cover"
           />
           {remainingCount > 0 && (
-            <View className="absolute inset-0 bg-black/60 items-center justify-center">
+            <View className="absolute inset-0 bg-black/60 items-center justify-center z-10">
               <Text className="text-white font-bold text-xl">
                 +{remainingCount}
               </Text>
             </View>
           )}
-        </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -113,6 +164,7 @@ export default function FeedPost({ post }: FeedPostProps) {
   const [likesCount, setLikesCount] = useState(post.likes);
   const [showImageViewer, setShowImageViewer] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [profilePicLoading, setProfilePicLoading] = useState(true);
 
   const handleLike = () => {
     if (isLiked) {
@@ -139,10 +191,23 @@ export default function FeedPost({ post }: FeedPostProps) {
       <View className="flex-row items-center justify-between p-4">
         <View className="flex-row items-center flex-1">
           {/* Profile Picture */}
-          <View className="w-10 h-10 rounded-full bg-gray-300 items-center justify-center mr-3">
-            <Text className="text-gray-600 font-semibold">
-              {post.username.charAt(0).toUpperCase()}
-            </Text>
+          <View className="w-10 h-10 rounded-full bg-gray-300 items-center justify-center mr-3 overflow-hidden relative">
+            {post.profilePic ? (
+              <>
+                {profilePicLoading && <ImageSkeleton width="40" height="40" />}
+                <Image
+                  source={{ uri: post.profilePic }}
+                  className="w-full h-full"
+                  resizeMode="cover"
+                  onLoad={() => setProfilePicLoading(false)}
+                  onError={() => setProfilePicLoading(false)}
+                />
+              </>
+            ) : (
+              <Text className="text-gray-600 font-semibold">
+                {post.username.charAt(0).toUpperCase()}
+              </Text>
+            )}
           </View>
           
           {/* User Info */}

@@ -1,11 +1,27 @@
 import { products } from "@/data/products";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams } from "expo-router";
-import { Image, ScrollView, Text, View } from "react-native";
+import { Image, ScrollView, Text, View, TouchableOpacity, Alert } from "react-native";
 
 export default function ProductDetail() {
   const { id } = useLocalSearchParams();
   const product = products.find((p) => p.id === id);
+
+  const handleMessageSeller = () => {
+    Alert.alert(
+      "Message Seller",
+      `Send a message about "${product?.name}" to the seller?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Send Message", 
+          onPress: () => {
+            Alert.alert("Success", "Message sent to seller!");
+          }
+        }
+      ]
+    );
+  };
 
   if (!product) {
     return (
@@ -48,6 +64,17 @@ export default function ProductDetail() {
         </View>
 
         <Text className="text-base text-gray-700 mt-4">{product.description}</Text>
+
+        <TouchableOpacity
+          className="bg-blue-600 rounded-lg py-3 px-4 flex-row items-center justify-center mt-6"
+          onPress={handleMessageSeller}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="chatbubble-outline" size={20} color="white" />
+          <Text className="text-white font-semibold text-base ml-2">
+            Message Seller
+          </Text>
+        </TouchableOpacity>
       </View>
     </ScrollView>
   );
