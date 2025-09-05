@@ -195,8 +195,15 @@ export default function Login() {
                 placeholder="Email Address"
                 keyboardType="email-address"
                 autoCapitalize="none"
-                className="flex-1 font-regular text-base"
-                
+                style={{
+                  flex: 1,
+                  fontSize: 16,
+                  fontWeight: '400',
+                  color: '#000000',
+                  marginLeft: 8,
+                  paddingVertical: 12,
+                }}
+                placeholderTextColor="#999999"
               />
             </View>
 
@@ -213,8 +220,15 @@ export default function Login() {
                 onChangeText={setPassword}
                 placeholder="Password"
                 secureTextEntry={!showPassword}
-                className="flex-1 font-regular text-base"
-               
+                style={{
+                  flex: 1,
+                  fontSize: 16,
+                  fontWeight: '400',
+                  color: '#000000',
+                  marginLeft: 8,
+                  paddingVertical: 12,
+                }}
+                placeholderTextColor="#999999"
               />
               <Pressable onPress={() => setShowPassword(!showPassword)}>
                 <Ionicons

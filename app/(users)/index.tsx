@@ -6,9 +6,9 @@ import FeaturedSellers from "@/components/FeaturedSellers";
 import ForYou from "@/components/ForYou";
 import SearchBar from "@/components/SearchBar";
 import TopNavbar from "@/components/ui/TopNavbar";
+import { Coins, Heart, Radio, Ticket, Users } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
-import { Image, Text, TouchableOpacity, View, FlatList } from "react-native";
-import { Heart, Users, Radio, Coins, Plus } from "lucide-react-native";
+import { FlatList, Image, Text, TouchableOpacity, View } from "react-native";
 
 export default function HomeScreen() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -51,7 +51,7 @@ export default function HomeScreen() {
         return (
           <View className="mt-6 min-h-96">
             <Text className="text-base font-semibold text-primary mb-2">
-              Live Products (Coming Soon)
+              No live events at the moment.
             </Text>
           </View>
         );
@@ -63,11 +63,11 @@ export default function HomeScreen() {
             </Text>
           </View>
         );
-      case "placeholder":
+      case "norbu":
         return (
           <View className="mt-6 min-h-96">
             <Text className="text-base font-semibold text-primary mb-2">
-              More Features (Coming Soon)
+              Norbu Coin (Coming Soon)
             </Text>
           </View>
         );
@@ -140,9 +140,9 @@ export default function HomeScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              onPress={() => setActiveTab("bidding")}
+              onPress={() => setActiveTab("norbu")}
               className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm bg-white ${
-                activeTab === "bidding"
+                activeTab === "norbu"
                   ? "border-2 border-black"
                   : ""
               }`}
@@ -154,14 +154,14 @@ export default function HomeScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              onPress={() => setActiveTab("placeholder")}
+              onPress={() => setActiveTab("bidding")}
               className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm bg-white ${
-                activeTab === "placeholder"
+                activeTab === "bidding"
                   ? "border-2 border-black"
                   : ""
               }`}
             >
-              <Plus 
+              <Ticket 
                 size={20} 
                 color="black"
               />

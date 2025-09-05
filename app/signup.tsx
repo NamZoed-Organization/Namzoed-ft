@@ -255,7 +255,15 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
             <MaterialIcons name="person" size={20} color="#999" />
             <TextInput
               placeholder="Full Name"
-              className="flex-1 font-regular text-base ml-2"
+              style={{
+                flex: 1,
+                fontSize: 16,
+                fontWeight: '400',
+                color: '#000000',
+                marginLeft: 8,
+                paddingVertical: 12,
+              }}
+              placeholderTextColor="#999999"
               value={name}
               onChangeText={setName}
               onFocus={closeDropdown}
@@ -267,7 +275,15 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
             <MaterialIcons name="email" size={20} color="#999" />
             <TextInput
               placeholder="E-mail"
-              className="flex-1 font-regular text-base ml-2"
+              style={{
+                flex: 1,
+                fontSize: 16,
+                fontWeight: '400',
+                color: '#000000',
+                marginLeft: 8,
+                paddingVertical: 12,
+              }}
+              placeholderTextColor="#999999"
               value={email}
               onChangeText={setEmail}
               keyboardType="email-address"
@@ -281,7 +297,15 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
             <MaterialIcons name="phone" size={20} color="#999" />
             <TextInput
               placeholder="Phone Number"
-              className="flex-1 font-regular text-base ml-2"
+              style={{
+                flex: 1,
+                fontSize: 16,
+                fontWeight: '400',
+                color: '#000000',
+                marginLeft: 8,
+                paddingVertical: 12,
+              }}
+              placeholderTextColor="#999999"
               keyboardType="phone-pad"
               value={phone}
               onChangeText={setPhone}
@@ -414,7 +438,15 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
             <MaterialIcons name="lock" size={20} color="#999" />
             <TextInput
               placeholder="Password"
-              className="flex-1 font-regular text-base ml-2"
+              style={{
+                flex: 1,
+                fontSize: 16,
+                fontWeight: '400',
+                color: '#000000',
+                marginLeft: 8,
+                paddingVertical: 12,
+              }}
+              placeholderTextColor="#999999"
               secureTextEntry={!showPassword}
               value={password}
               onChangeText={setPassword}
@@ -434,7 +466,15 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
             <MaterialIcons name="lock-outline" size={20} color="#999" />
             <TextInput
               placeholder="Confirm Password"
-              className="flex-1 font-regular text-base ml-2"
+              style={{
+                flex: 1,
+                fontSize: 16,
+                fontWeight: '400',
+                color: '#000000',
+                marginLeft: 8,
+                paddingVertical: 12,
+              }}
+              placeholderTextColor="#999999"
               secureTextEntry={!showConfirmPassword}
               value={confirmPassword}
               onChangeText={setConfirmPassword}

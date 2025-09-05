@@ -6,9 +6,9 @@ import {
   Modal,
   Dimensions,
   ScrollView,
+  Image,
 } from "react-native";
 import { X } from "lucide-react-native";
-import { Image } from "react-native";
 
 interface ImageViewerProps {
   visible: boolean;
@@ -70,7 +70,7 @@ export default function ImageViewer({
           className="flex-1 bg-black"
           style={{ backgroundColor: '#000000' }}
         >
-          {images.map((_, index) => (
+          {images.map((imageUri, index) => (
             <View
               key={index}
               className="items-center justify-center bg-black"
@@ -81,7 +81,7 @@ export default function ImageViewer({
               }}
             >
               <Image
-                source={require('@/assets/images/all.png')}
+                source={{ uri: imageUri }}
                 className="w-full h-full"
                 resizeMode="contain"
               />
