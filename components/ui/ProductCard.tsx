@@ -1,7 +1,7 @@
 import { Product } from "@/data/products";
 import { Ionicons } from "@expo/vector-icons";
 import { Link } from "expo-router";
-import { Image, Text, TouchableOpacity, View, ViewStyle } from "react-native";
+import { Image, Text, TouchableOpacity, View, ViewStyle, Alert } from "react-native";
 
 export default function ProductCard({
   product,
@@ -12,6 +12,24 @@ export default function ProductCard({
 }) {
   const oldPrice = product.price + 80;
   const discount = Math.round(((oldPrice - product.price) / oldPrice) * 100);
+
+  const handleMessagePress = (e: any) => {
+    e.preventDefault();
+    e.stopPropagation();
+    Alert.alert(
+      "Message Seller",
+      `Send a message about "${product.name}" to the seller?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Send Message", 
+          onPress: () => {
+            Alert.alert("Success", "Message sent to seller!");
+          }
+        }
+      ]
+    );
+  };
 
   return (
     <Link
@@ -62,6 +80,17 @@ export default function ProductCard({
             <Ionicons name="star" size={12} color="#facc15" />
             <Text className="text-xs text-gray-600">4.5 (24)</Text>
           </View>
+
+          <TouchableOpacity
+            className="bg-blue-100 rounded-md py-2 px-3 flex-row items-center justify-center mt-3"
+            onPress={handleMessagePress}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="chatbubble-outline" size={12} color="#2563eb" />
+            <Text className="text-blue-600 font-medium text-xs ml-1">
+              Message
+            </Text>
+          </TouchableOpacity>
         </View>
       </TouchableOpacity>
     </Link>
