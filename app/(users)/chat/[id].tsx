@@ -1,8 +1,8 @@
 // app/(users)/chat/[id].tsx
 import { useUser } from "@/contexts/UserContext";
 import userData17123456 from "@/data/17123456";
-import mongooses from "@/data/mongoose";
 import users from "@/data/UserData";
+import { supabase } from "@/lib/supabase";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -115,55 +115,102 @@ export default function ChatScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
   const [messageText, setMessageText] = useState("");
+  const [messages, setMessages] = useState<any[]>([]);
   const [localMessages, setLocalMessages] = useState<any[]>([]);
   const [isTyping, setIsTyping] = useState(false);
-  const [messageCounter, setMessageCounter] = useState(1);
+  const [currentUserUUID, setCurrentUserUUID] = useState<string | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
 
   const isMongooseChat = typeof id === 'string' && id.startsWith('mongoose-');
   const mongooseName = isMongooseChat ? id.replace('mongoose-', '') : null;
+  const chatPartnerId = Array.isArray(id) ? id[0] : id;
 
-  const { messages, chatPartnerName } = useMemo(() => {
+  // Fetch initial messages and subscribe to real-time updates
+  useEffect(() => {
+    const userPhone = currentUser?.phone_number || (currentUser as any)?.phone || (currentUser as any)?.phoneNumber || (currentUser as any)?.mobile;
+    const userId = (currentUser as any)?.id || (currentUser as any)?.user_id || userPhone;
+    
+    console.log('=== FETCH MESSAGES DEBUG ===');
+    console.log('currentUser:', currentUser);
+    console.log('Available currentUser properties:', currentUser ? Object.keys(currentUser) : 'No currentUser');
+    console.log('userPhone detected:', userPhone);
+    console.log('userId detected:', userId);
+    console.log('chatPartnerId:', chatPartnerId);
+    
+    if (!userId || !chatPartnerId) {
+      console.log('Missing userId or chatPartnerId');
+      return;
+    }
+
+    const fetchInitialMessages = async () => {
+      try {
+        // Try to get the user's UUID from profiles table first
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('phone', userPhone)
+          .single();
+
+        if (profileError) {
+          console.error('Error fetching user profile:', profileError);
+          return;
+        }
+
+        const userUUID = profileData?.id;
+        console.log('User UUID from profiles:', userUUID);
+        setCurrentUserUUID(userUUID); // Store the UUID for message rendering
+
+        if (!userUUID) {
+          console.error('No UUID found for user phone:', userPhone);
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from('messages')
+          .select('*')
+          .or(`and(sender_id.eq.${userUUID},receiver_id.eq.${chatPartnerId}),and(sender_id.eq.${chatPartnerId},receiver_id.eq.${userUUID})`)
+          .order('created_at', { ascending: true });
+
+        if (error) {
+          console.error('Error fetching messages:', error);
+        } else {
+          console.log('Messages fetched:', data?.length || 0);
+          setMessages(data || []);
+        }
+      } catch (e) {
+        console.error('An exception occurred:', e);
+      }
+    };
+
+    fetchInitialMessages();
+
+    const channel = supabase
+      .channel('messages')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, (payload) => {
+        fetchInitialMessages();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentUser, chatPartnerId]);
+
+  const chatPartnerName = useMemo(() => {
     if (!currentUser) {
-      return {
-        messages: [],
-        chatPartnerName: 'Unknown'
-      };
+      return 'Unknown';
     }
 
     if (isMongooseChat && mongooseName) {
-      const mongooseData = mongooses[mongooseName as keyof typeof mongooses];
-      // For demo, always use 17123456 phone number
-      const demoPhone = '+97517123456';
-      const messages = (mongooseData?.clientChats as any)?.[demoPhone] || [];
-      console.log('Mongoose chat messages:', messages.length, 'for', mongooseName);
-      return {
-        messages: messages,
-        chatPartnerName: `${mongooseName} (Mongoose)`
-      };
+      return `${mongooseName} (Mongoose)`;
     }
 
-    const userData = getUserData(currentUser.phone_number || "");
-    const phoneNumber = `+975${id}`;
-    const user = Object.values(users).find(u => u.phone_number === id || u.phone_number === id.replace('+975', ''));
-    const messagesObj = userData?.messages as Record<string, any[]>;
-    
-    // The messages in data use full phone numbers like +97517234567
-    const messages = messagesObj?.[phoneNumber] || [];
-    console.log('=== CHAT DEBUG ===');
-    console.log('ID from route:', id);
-    console.log('Full phone number:', phoneNumber);
-    console.log('UserData exists:', !!userData);
-    console.log('Messages object exists:', !!messagesObj);
-    console.log('Available message keys:', Object.keys(messagesObj || {}));
-    console.log('Messages found:', messages.length);
-    console.log('First message:', messages[0]);
-    
-    return {
-      messages: messages,
-      chatPartnerName: user?.username || phoneNumber
-    };
-  }, [id, isMongooseChat, mongooseName, currentUser]);
+    const user = Object.values(users).find(u => 
+      u.phone_number === chatPartnerId || 
+      u.phone_number === (typeof chatPartnerId === 'string' ? chatPartnerId.replace('+975', '') : chatPartnerId)
+    );
+    return user?.username || chatPartnerId;
+  }, [chatPartnerId, isMongooseChat, mongooseName, currentUser]);
 
   // Combine original messages with local messages
   const allMessages = useMemo(() => {
@@ -190,6 +237,28 @@ export default function ChatScreen() {
     }
   }, [allMessages.length]);
 
+  // Mark messages as read when new messages arrive
+  useEffect(() => {
+    const markAsRead = async () => {
+      if (!currentUserUUID || !chatPartnerId) return;
+      
+      try {
+        const { data, error } = await supabase.rpc('mark_messages_as_read', {
+          sender_user_id: chatPartnerId,
+          receiver_user_id: currentUserUUID
+        });
+        
+        if (error) {
+          console.error('Error marking messages as read:', error);
+        }
+      } catch (e) {
+        console.error('An exception occurred:', e);
+      }
+    };
+
+    markAsRead();
+  }, [messages, currentUserUUID, chatPartnerId]);
+
   if (!currentUser) {
     return (
       <View className="flex-1 items-center justify-center bg-background">
@@ -198,46 +267,73 @@ export default function ChatScreen() {
     );
   }
 
-  const simulateReply = (counter: number) => {
-    setIsTyping(true);
+  const handleSendMessage = async () => {
+    console.log('=== SEND MESSAGE DEBUG ===');
+    console.log('messageText:', messageText?.trim());
+    console.log('currentUser object:', currentUser);
+    console.log('currentUser.phone_number:', currentUser?.phone_number);
+    console.log('Available currentUser properties:', currentUser ? Object.keys(currentUser) : 'No currentUser');
+    console.log('chatPartnerId:', chatPartnerId);
     
-    setTimeout(() => {
-      setIsTyping(false);
-      const replyMessage = {
-        sender: isMongooseChat ? 'mongoose' : `+975${id}`,
-        content: counter.toString(),
-        timestamp: new Date().toISOString()
-      };
-      
-      setLocalMessages(prev => [...prev, replyMessage]);
-    }, 5000); // 5 seconds delay
-  };
+    // Try different possible phone number properties
+    const userPhone = currentUser?.phone_number || (currentUser as any)?.phone || (currentUser as any)?.phoneNumber || (currentUser as any)?.mobile;
+    console.log('Detected userPhone:', userPhone);
+    
+    if (!messageText.trim() || !userPhone || !chatPartnerId) {
+      console.log('Missing required fields for sending message');
+      console.log('messageText exists:', !!messageText.trim());
+      console.log('userPhone exists:', !!userPhone);
+      console.log('chatPartnerId exists:', !!chatPartnerId);
+      return;
+    }
 
-  const handleSendMessage = () => {
-    if (messageText.trim()) {
-      // Add user message immediately
-      const userMessage = {
-        sender: isMongooseChat ? 'client' : `+975${currentUser.phone_number || ""}`,
+    console.log('Attempting to send message...');
+    try {
+      // Get the user's UUID from profiles table
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('phone', userPhone)
+        .single();
+
+      if (profileError) {
+        console.error('Error fetching user profile for sending:', profileError);
+        return;
+      }
+
+      const userUUID = profileData?.id;
+      console.log('Sender UUID from profiles:', userUUID);
+
+      if (!userUUID) {
+        console.error('No UUID found for sender phone:', userPhone);
+        return;
+      }
+
+      const messageData = {
+        sender_id: userUUID,
+        receiver_id: chatPartnerId, // This should already be a UUID from the search
         content: messageText.trim(),
-        timestamp: new Date().toISOString()
+        is_read: false,
       };
       
-      setLocalMessages(prev => [...prev, userMessage]);
-      setMessageText("");
+      console.log('Message data:', messageData);
       
-      // Simulate reply after 5 seconds with typing indicator
-      simulateReply(messageCounter);
-      setMessageCounter(prev => prev + 1);
+      const { data, error } = await supabase.from('messages').insert([messageData]);
+
+      if (error) {
+        console.error('Error sending message:', error);
+        console.error('Error details:', JSON.stringify(error, null, 2));
+      } else {
+        console.log('Message sent successfully:', data);
+        setMessageText("");
+      }
+    } catch (e) {
+      console.error('An exception occurred:', e);
     }
   };
 
   const renderMessage = (message: any, index: number) => {
-    const currentUserPhone = `+975${currentUser.phone_number || ""}`;
-    const isCurrentUser = isMongooseChat 
-      ? message.sender === 'client'
-      : message.sender === '+97517123456'; // For demo, current user is always 17123456
-    
-    console.log('Message sender:', message.sender, 'Current user:', currentUserPhone, 'Is current user:', isCurrentUser);
+    const isCurrentUser = currentUserUUID && message.sender_id === currentUserUUID;
     
     return (
       <View key={index} className={`mb-3 ${isCurrentUser ? 'items-end' : 'items-start'}`}>
@@ -249,7 +345,10 @@ export default function ChatScreen() {
           </Text>
         </View>
         <Text className="text-xs text-gray-500 mt-1 mx-2">
-          {new Date(message.timestamp).toLocaleTimeString([], {
+          {message.created_at ? new Date(message.created_at).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit'
+          }) : new Date().toLocaleTimeString([], {
             hour: '2-digit',
             minute: '2-digit'
           })}
@@ -324,7 +423,10 @@ export default function ChatScreen() {
             textAlignVertical="center"
           />
           <TouchableOpacity
-            onPress={handleSendMessage}
+            onPress={() => {
+              console.log('Send button pressed!');
+              handleSendMessage();
+            }}
             className={`w-10 h-10 rounded-full items-center justify-center ${
               messageText.trim() ? 'bg-primary' : 'bg-gray-300'
             }`}
