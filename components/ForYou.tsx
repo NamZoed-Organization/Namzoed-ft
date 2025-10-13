@@ -1,4 +1,5 @@
 import ProductCard from "@/components/ui/ProductCard";
+import LazyProductCard from "@/components/ui/LazyProductCard";
 import { products } from "@/data/products";
 import { useRouter } from "expo-router";
 import { ArrowRight } from "lucide-react-native";
@@ -18,11 +19,13 @@ import {
 const filters = ["all", "beauty", "fashion", "kids", "mens", "womens", "toys"];
 const CARD_WIDTH = 170;
 const CARD_SPACING = 16;
+const BUFFER_SIZE = 5; // Number of items to buffer outside viewport
 
 export default function ForYou() {
   const router = useRouter();
   const screenWidth = Dimensions.get("window").width;
   const [activeFilter, setActiveFilter] = useState<string>("all");
+  const [visibleIndices, setVisibleIndices] = useState<{[key: string]: {start: number, end: number}}>({});
 
   const getFilteredProducts = useCallback(
     (sectionKey: string) => {
@@ -183,18 +186,40 @@ export default function ForYou() {
             ? Animated.divide(scrollX, maxScrollX)
             : new Animated.Value(0);
 
+        // Calculate visible items based on scroll position
+        const updateVisibleItems = (offsetX: number) => {
+          const cardsPerScreen = Math.ceil(screenWidth / (CARD_WIDTH + CARD_SPACING));
+          const firstVisibleIndex = Math.floor(offsetX / (CARD_WIDTH + CARD_SPACING));
+          const start = Math.max(0, firstVisibleIndex - BUFFER_SIZE);
+          const end = Math.min(displayProducts.length - 1, firstVisibleIndex + cardsPerScreen + BUFFER_SIZE);
+
+          setVisibleIndices(prev => ({
+            ...prev,
+            [section.key]: { start, end }
+          }));
+        };
+
         const handleScroll = Animated.event(
           [{ nativeEvent: { contentOffset: { x: scrollX } } }],
           {
             useNativeDriver: false,
             listener: (event: NativeSyntheticEvent<NativeScrollEvent>) => {
               const offsetX = event.nativeEvent.contentOffset.x;
+              updateVisibleItems(offsetX);
+
               if (offsetX > maxScrollX && scrollRef.current) {
                 scrollRef.current.scrollTo({ x: maxScrollX, animated: false });
               }
             },
           }
         );
+
+        // Initialize visible range
+        React.useEffect(() => {
+          if (!visibleIndices[section.key]) {
+            updateVisibleItems(0);
+          }
+        }, [section.key]);
 
         return (
           <View key={section.key} className="mb-10">
@@ -223,13 +248,21 @@ export default function ForYou() {
                 gap: CARD_SPACING,
               }}
             >
-              {displayProducts.map((product, index) => (
-                <ProductCard
-                  key={`${product.id}-${section.key}-${index}`}
-                  product={product}
-                  style={{ width: CARD_WIDTH }}
-                />
-              ))}
+              {displayProducts.map((product, index) => {
+                const isVisible = visibleIndices[section.key] ?
+                  (index >= visibleIndices[section.key].start && index <= visibleIndices[section.key].end) :
+                  index < 5; // Default to first 5 items visible
+
+                return (
+                  <LazyProductCard
+                    key={`${product.id}-${section.key}-${index}`}
+                    product={product}
+                    index={index}
+                    isVisible={isVisible}
+                    estimatedHeight={280}
+                  />
+                );
+              })}
 
               {displayProducts.length > 0 && (
                 <TouchableOpacity

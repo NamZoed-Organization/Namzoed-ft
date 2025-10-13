@@ -9,6 +9,7 @@ import {
   Modal,
   FlatList,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import {
   ArrowLeft,
@@ -26,6 +27,7 @@ import { useUser } from "@/contexts/UserContext";
 import { categories } from "@/data/categories";
 import PostPreview from "@/components/PostPreview";
 import * as ImagePicker from 'expo-image-picker';
+import { createPost, uploadImages } from "@/lib/postsService";
 
 const LOCATIONS = [
   "My Location",
@@ -81,6 +83,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
   const [showImagePicker, setShowImagePickerModal] = useState(false);
   const [showVideoPicker, setShowVideoPickerModal] = useState(false);
   const [pickerContext, setPickerContext] = useState<{ isForSell: boolean }>({ isForSell: false });
+  const [isUploading, setIsUploading] = useState(false);
 
   // Debug logging for state changes
   useEffect(() => {
@@ -346,6 +349,103 @@ export default function CreatePost({ onClose }: CreatePostProps) {
     setShowCategoryModal(false);
   };
 
+  const handleSharePost = async () => {
+    // Validate user is logged in
+    if (!currentUser) {
+      Alert.alert('Error', 'You must be logged in to create a post');
+      return;
+    }
+
+    // Get username from either username or name field
+    const userName = (currentUser as any).username || (currentUser as any).name || (currentUser as any).email;
+    const userId = (currentUser as any).id || (currentUser as any).username || (currentUser as any).name;
+
+    // Validate user has username/name
+    if (!userName) {
+      Alert.alert('Error', 'User information is incomplete. Please log in again.');
+      return;
+    }
+
+    // Validate at least one field is filled
+    if (!postText.trim() && postMedia.length === 0) {
+      Alert.alert('Error', 'Please add some text or media to your post');
+      return;
+    }
+
+    try {
+      setIsUploading(true);
+
+      console.log('=== Starting Post Creation ===');
+      console.log('Current user:', currentUser);
+      console.log('User Name:', userName);
+      console.log('User ID:', userId);
+      console.log('Post text:', postText);
+      console.log('Post media:', postMedia);
+
+      // Upload images to Supabase storage
+      const imageUris = postMedia
+        .filter(item => item.type === 'image')
+        .map(item => item.uri);
+
+      let uploadedImageUrls: string[] = [];
+      if (imageUris.length > 0) {
+        console.log('Uploading images to Supabase...', imageUris);
+        try {
+          uploadedImageUrls = await uploadImages(imageUris);
+          console.log('Images uploaded successfully:', uploadedImageUrls);
+        } catch (uploadError) {
+          console.error('Image upload error:', uploadError);
+          Alert.alert('Error', `Failed to upload images: ${uploadError.message || uploadError}`);
+          return;
+        }
+      }
+
+      // Create post in Supabase
+      console.log('Creating post with data:', {
+        content: postText.trim(),
+        images: uploadedImageUrls,
+        userId: userId,
+        username: userName,
+        profilePic: (currentUser as any).profileImg || (currentUser as any).avatar || undefined,
+      });
+
+      try {
+        const newPost = await createPost({
+          content: postText.trim(),
+          images: uploadedImageUrls,
+          userId: userId,
+          username: userName,
+          profilePic: (currentUser as any).profileImg || (currentUser as any).avatar || undefined,
+        });
+
+        console.log('Post created successfully:', newPost);
+
+        // Show success message briefly
+        Alert.alert('Success', 'Your post has been published!', [
+          {
+            text: 'OK',
+            onPress: () => {
+              // Reset form
+              setPostText('');
+              setPostMedia([]);
+
+              // Close modal and go back to feed
+              onClose?.();
+            }
+          }
+        ]);
+      } catch (postError) {
+        console.error('Post creation error:', postError);
+        Alert.alert('Error', `Failed to create post: ${postError.message || postError}`);
+      }
+    } catch (error) {
+      console.error('Unexpected error:', error);
+      Alert.alert('Error', `An unexpected error occurred: ${error.message || error}`);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   const renderLocationModal = () => (
     <Modal
       visible={showLocationModal}
@@ -511,11 +611,11 @@ export default function CreatePost({ onClose }: CreatePostProps) {
         <View className="flex-row items-center mb-4">
           <View className="w-12 h-12 bg-primary rounded-full items-center justify-center mr-3">
             <Text className="text-white font-bold text-lg">
-              {currentUser?.username?.charAt(0).toUpperCase() || "U"}
+              {((currentUser as any)?.username || (currentUser as any)?.name || "U").charAt(0).toUpperCase()}
             </Text>
           </View>
           <Text className="text-lg font-semibold text-gray-800">
-            {currentUser?.username || "User"}
+            {(currentUser as any)?.username || (currentUser as any)?.name || "User"}
           </Text>
         </View>
 
@@ -558,7 +658,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
         <PostPreview
           text={postText}
           media={postMedia}
-          userProfile={{ username: currentUser?.username || "User" }}
+          userProfile={{ username: (currentUser as any)?.username || (currentUser as any)?.name || "User" }}
         />
       )}
     </ScrollView>
@@ -571,11 +671,11 @@ export default function CreatePost({ onClose }: CreatePostProps) {
         <View className="flex-row items-center mb-4">
           <View className="w-12 h-12 bg-primary rounded-full items-center justify-center mr-3">
             <Text className="text-white font-bold text-lg">
-              {currentUser?.username?.charAt(0).toUpperCase() || "U"}
+              {((currentUser as any)?.username || (currentUser as any)?.name || "U").charAt(0).toUpperCase()}
             </Text>
           </View>
           <Text className="text-lg font-semibold text-gray-800">
-            {currentUser?.username || "User"}
+            {(currentUser as any)?.username || (currentUser as any)?.name || "User"}
           </Text>
         </View>
 
@@ -684,7 +784,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
         <PostPreview
           text={sellForm.description}
           media={sellMedia}
-          userProfile={{ username: currentUser?.username || "User" }}
+          userProfile={{ username: (currentUser as any)?.username || (currentUser as any)?.name || "User" }}
           isSellingPost={true}
           sellData={{
             title: sellForm.title,
@@ -705,13 +805,28 @@ export default function CreatePost({ onClose }: CreatePostProps) {
       {/* Header */}
       <View className="flex-row items-center justify-between px-4 py-3 border-b border-gray-200">
         <View className="flex-row items-center">
-          <TouchableOpacity onPress={() => onClose ? onClose() : router.back()} className="mr-4">
-            <ArrowLeft size={24} color="#000" />
+          <TouchableOpacity
+            onPress={() => onClose ? onClose() : router.back()}
+            className="mr-4"
+            disabled={isUploading}
+          >
+            <ArrowLeft size={24} color={isUploading ? "#ccc" : "#000"} />
           </TouchableOpacity>
           <Text className="text-xl font-semibold">Post</Text>
         </View>
-        <TouchableOpacity className="bg-primary px-4 py-2 rounded-lg">
-          <Text className="text-white font-medium">Share</Text>
+        <TouchableOpacity
+          className="bg-primary px-4 py-2 rounded-lg flex-row items-center"
+          onPress={handleSharePost}
+          disabled={isUploading || (activeTab === 'post' && !postText.trim() && postMedia.length === 0)}
+        >
+          {isUploading ? (
+            <>
+              <ActivityIndicator size="small" color="#fff" />
+              <Text className="text-white font-medium ml-2">Posting...</Text>
+            </>
+          ) : (
+            <Text className="text-white font-medium">Share</Text>
+          )}
         </TouchableOpacity>
       </View>
 

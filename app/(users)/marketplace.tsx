@@ -44,6 +44,7 @@ export default function MarketplaceScreen() {
     free: { category: "" }
   });
 
+
   // Handle initial load
   useEffect(() => {
     // Simulate initial loading time
@@ -58,10 +59,10 @@ export default function MarketplaceScreen() {
   const handleTabChange = (newTab: string) => {
     if (newTab === activeTab) return;
     if (isInitialLoad) return; // Prevent tab changes during initial load
-    
+
     setIsLoading(true);
     setActiveTab(newTab);
-    
+
     // Simulate loading delay
     setTimeout(() => {
       setIsLoading(false);
@@ -172,7 +173,7 @@ export default function MarketplaceScreen() {
   const renderTabContent = () => {
     let data = [];
     let title = "";
-    
+
     switch (activeTab) {
       case "rent":
         data = filterData(rentItems);

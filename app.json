@@ -7,7 +7,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "namzoed",
     "userInterfaceStyle": "automatic",
-
     "ios": {
       "bundleIdentifier": "com.anonymous.Namzoed",
       "supportsTablet": true,
@@ -64,7 +63,8 @@
         {
           "locationWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location to show nearby services and sellers in your area."
         }
-      ]
+      ],
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true

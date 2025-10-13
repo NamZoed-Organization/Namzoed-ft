@@ -14,7 +14,6 @@ import { useEffect } from "react";
 import { Text, View } from "react-native";
 import FlashMessage from "react-native-flash-message";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import "react-native-reanimated";
 import "../global.css";
 
 // 1. import your Dzongkhag provider

@@ -1,13 +1,17 @@
 import React, { useMemo, useRef, useEffect, useState } from "react";
-import { FlatList, Text, TouchableOpacity, View, RefreshControl, Modal } from "react-native";
+import { FlatList, Text, TouchableOpacity, View, RefreshControl, Modal, ActivityIndicator } from "react-native";
 import { Plus, Radio } from "lucide-react-native";
-import FeedPost from "@/components/FeedPost";
+import FeedPost, { PostSkeleton } from "@/components/FeedPost";
+import VirtualizedFeedPost from "@/components/ui/VirtualizedFeedPost";
 import CreatePost from "@/components/CreatePost";
 import LiveScreen from "@/components/Live";
 import { posts, PostData } from "@/data/postdata";
 import { useUser } from "@/contexts/UserContext";
 import { useRouter } from "expo-router";
 import { feedEvents } from "@/utils/feedEvents";
+import { useFeedPagination } from "@/hooks/usePagination";
+import { useVirtualizedList } from "@/hooks/useVirtualizedList";
+import { fetchPosts, Post } from "@/lib/postsService";
 
 // Wrapper component for Live with onClose prop
 function LiveWrapper({ onClose }: { onClose: () => void }) {
@@ -17,17 +21,90 @@ function LiveWrapper({ onClose }: { onClose: () => void }) {
 export default function FeedScreen() {
   const { currentUser } = useUser();
   const router = useRouter();
-  const flatListRef = useRef<FlatList>(null);
-  const [refreshing, setRefreshing] = useState(false);
   const [showCreatePost, setShowCreatePost] = useState(false);
   const [showLive, setShowLive] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [newPosts, setNewPosts] = useState<PostData[]>([]);
+  const [loadingNewPosts, setLoadingNewPosts] = useState(true);
+
+  // Convert Supabase post to PostData format
+  const convertToPostData = (post: Post): PostData => ({
+    id: post.id,
+    userId: post.user_id,
+    username: post.username,
+    profilePic: post.profile_pic,
+    content: post.content,
+    images: post.images,
+    date: new Date(post.created_at),
+    likes: post.likes,
+    comments: post.comments,
+    shares: post.shares,
+  });
+
+  // Load new posts from Supabase
+  const loadNewPosts = async () => {
+    try {
+      setLoadingNewPosts(true);
+
+      // Add a small delay to show skeleton
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      const { posts: fetchedPosts } = await fetchPosts(0, 50);
+      const convertedPosts = fetchedPosts.map(convertToPostData);
+
+      // Sort by date (newest first)
+      const sortedNewPosts = convertedPosts.sort((a, b) =>
+        new Date(b.date).getTime() - new Date(a.date).getTime()
+      );
+
+      setNewPosts(sortedNewPosts);
+    } catch (error) {
+      console.error('Error loading new posts:', error);
+    } finally {
+      setLoadingNewPosts(false);
+    }
+  };
+
+  // Load posts on mount
+  useEffect(() => {
+    loadNewPosts();
+  }, []);
+
+  // Sort static posts by date in descending order (latest first)
+  const sortedPosts = useMemo(() => {
+    return [...posts].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, []);
+
+  // Combine new posts from Supabase (first) and static posts (below)
+  const allPosts = useMemo(() => {
+    return [...newPosts, ...sortedPosts];
+  }, [sortedPosts, newPosts]);
+
+  // Use pagination for feed posts
+  const {
+    items: paginatedPosts,
+    loading: postsLoading,
+    hasMore,
+    loadMore,
+    refresh
+  } = useFeedPagination({ data: allPosts, pageSize: 10, bufferSize: 5 });
+
+  // Use virtualized list for performance
+  const {
+    flatListRef,
+    state: virtualState,
+    onLayout,
+    onScroll,
+    scrollToTop,
+    visibleRange
+  } = useVirtualizedList({ estimatedItemSize: 400, overscan: 3 });
 
   // Listen for double-tap events from the feed tab button
   useEffect(() => {
     const handleScrollToTop = () => {
-      flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+      scrollToTop(true);
       // Also trigger refresh
-      onRefresh();
+      handleRefresh();
     };
 
     feedEvents.on('scrollToTop', handleScrollToTop);
@@ -35,50 +112,86 @@ export default function FeedScreen() {
     return () => {
       feedEvents.off('scrollToTop', handleScrollToTop);
     };
-  }, []);
+  }, [scrollToTop]);
 
   // Handle pull to refresh
-  const onRefresh = () => {
+  const handleRefresh = async () => {
     setRefreshing(true);
-    // Simulate refresh delay
-    setTimeout(() => {
-      setRefreshing(false);
-      console.log('Feed refreshed!');
-    }, 1000);
+    await loadNewPosts(); // Reload posts from Supabase
+    await refresh();
+    setRefreshing(false);
+    console.log('Feed refreshed!');
   };
 
-  // Sort posts by date in descending order (latest first)
-  const sortedPosts = useMemo(() => {
-    return [...posts].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, []);
+  // Handle end of list reached
+  const handleEndReached = () => {
+    if (hasMore && !postsLoading) {
+      loadMore();
+    }
+  };
 
-  const renderPost = ({ item }: { item: PostData }) => {
-    return <FeedPost post={item} />;
+  const renderPost = ({ item, index }: { item: PostData; index: number }) => {
+    // Show skeleton while loading new posts for the first few items
+    if (loadingNewPosts && index < 3) {
+      return <PostSkeleton />;
+    }
+
+    const isVisible = index >= visibleRange.start && index <= visibleRange.end;
+    return (
+      <VirtualizedFeedPost
+        post={item}
+        index={index}
+        isVisible={isVisible}
+        estimatedHeight={400}
+      />
+    );
+  };
+
+  // Footer component for loading more posts
+  const renderFooter = () => {
+    if (!postsLoading) return null;
+    return (
+      <View className="py-4 items-center">
+        <ActivityIndicator size="small" color="#1877F2" />
+        <Text className="text-sm text-gray-500 mt-1">Loading more posts...</Text>
+      </View>
+    );
   };
 
   const renderHeader = () => (
-    <View className="bg-white border-b border-gray-200 p-4">
-      {/* Action Buttons */}
-      <View className="flex-row">
-        <TouchableOpacity 
-          className="flex-1 flex-row items-center justify-center py-3"
-          onPress={() => setShowCreatePost(true)}
-        >
-          <Plus size={20} color="#1877F2" strokeWidth={1.5} />
-          <Text className="ml-2 text-gray-700 font-medium">Create Post</Text>
-        </TouchableOpacity>
-        
-        <View className="w-px bg-gray-200 mx-2" />
-        
-        <TouchableOpacity 
-          className="flex-1 flex-row items-center justify-center py-3"
-          onPress={() => setShowLive(true)}
-        >
-          <Radio size={20} color="#DC2626" strokeWidth={1.5} />
-          <Text className="ml-2 text-gray-700 font-medium">Go Live</Text>
-        </TouchableOpacity>
+    <>
+      <View className="bg-white border-b border-gray-200 p-4">
+        {/* Action Buttons */}
+        <View className="flex-row">
+          <TouchableOpacity
+            className="flex-1 flex-row items-center justify-center py-3"
+            onPress={() => setShowCreatePost(true)}
+          >
+            <Plus size={20} color="#1877F2" strokeWidth={1.5} />
+            <Text className="ml-2 text-gray-700 font-medium">Create Post</Text>
+          </TouchableOpacity>
+
+          <View className="w-px bg-gray-200 mx-2" />
+
+          <TouchableOpacity
+            className="flex-1 flex-row items-center justify-center py-3"
+            onPress={() => setShowLive(true)}
+          >
+            <Radio size={20} color="#DC2626" strokeWidth={1.5} />
+            <Text className="ml-2 text-gray-700 font-medium">Go Live</Text>
+          </TouchableOpacity>
+        </View>
       </View>
-    </View>
+
+      {/* Show skeleton while loading initial posts */}
+      {loadingNewPosts && paginatedPosts.length === 0 && (
+        <>
+          <PostSkeleton />
+          <PostSkeleton />
+          <PostSkeleton />
+        </>
+      )}
+    </>
   );
 
   if (!currentUser) {
@@ -108,17 +221,32 @@ export default function FeedScreen() {
       {/* Feed Content */}
       <FlatList
         ref={flatListRef}
-        data={sortedPosts}
+        data={paginatedPosts}
         renderItem={renderPost}
         keyExtractor={(item) => item.id}
         ListHeaderComponent={renderHeader}
+        ListFooterComponent={renderFooter}
         showsVerticalScrollIndicator={false}
         className="flex-1"
         contentContainerStyle={{ paddingBottom: 80 }}
+        onLayout={onLayout}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        onEndReached={handleEndReached}
+        onEndReachedThreshold={0.5}
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={5}
+        windowSize={10}
+        initialNumToRender={5}
+        getItemLayout={(data, index) => ({
+          length: 400,
+          offset: 400 * index,
+          index,
+        })}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={onRefresh}
+            onRefresh={handleRefresh}
             tintColor="#1877F2"
             colors={["#1877F2"]}
           />
@@ -134,7 +262,11 @@ export default function FeedScreen() {
         onRequestClose={() => setShowCreatePost(false)}
       >
         <View className="flex-1 bg-white">
-          <CreatePost onClose={() => setShowCreatePost(false)} />
+          <CreatePost onClose={() => {
+            setShowCreatePost(false);
+            // Reload posts after creating a new one
+            loadNewPosts();
+          }} />
         </View>
       </Modal>
 

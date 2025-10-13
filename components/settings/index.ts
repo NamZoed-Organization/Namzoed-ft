@@ -1,0 +1,13 @@
+export { default as ChangePassword } from './ChangePassword';
+export { default as PrivacyPolicy } from './PrivacyPolicy';
+export { default as SellerPolicy } from './SellerPolicy';
+export { default as TermsOfService } from './TermsOfService';
+export { default as CommunityGuidelines } from './CommunityGuidelines';
+export { default as Notifications } from './Notifications';
+export { default as DataStorage } from './DataStorage';
+export { default as LanguageRegion } from './LanguageRegion';
+export { default as HelpCenter } from './HelpCenter';
+export { default as ContactUs } from './ContactUs';
+export { default as SendFeedback } from './SendFeedback';
+export { default as AppVersion } from './AppVersion';
+export { default as AboutApp } from './AboutApp';

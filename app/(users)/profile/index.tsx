@@ -148,19 +148,25 @@ export default function ProfileScreen() {
             </Text>
             
             {currentUser.email && (
-              <Text className="text-sm font-regular text-gray-500 mb-2">
-                <Mail size={16} className="text-gray-500 mr-1" /> {currentUser.email}
-              </Text>
+              <View className="flex-row items-center mb-2">
+                <Mail size={16} color="#6B7280" />
+                <Text className="text-sm font-regular text-gray-500 ml-1">
+                  {currentUser.email}
+                </Text>
+              </View>
             )}
-            
+
             {currentUser.phone_number && (
-              <Text className="text-sm font-regular text-gray-500 mb-6">
-                <Phone size={16} className="text-gray-500 mr-1" /> {currentUser.phone_number}
-              </Text>
+              <View className="flex-row items-center mb-6">
+                <Phone size={16} color="#6B7280" />
+                <Text className="text-sm font-regular text-gray-500 ml-1">
+                  {currentUser.phone_number}
+                </Text>
+              </View>
             )}
 
             {/* Stats */}
-            <View className="flex-row items-center space-x-8">
+            <View className="flex-row items-center space-x-6">
               <View className="items-center">
                 <Text className="text-xl font-mbold text-gray-900">
                   {currentUser.products?.length || 0}
@@ -169,6 +175,9 @@ export default function ProfileScreen() {
                   Products
                 </Text>
               </View>
+
+              <Text className="text-gray-300 text-xl font-light">|</Text>
+
               <View className="items-center">
                 <Text className="text-xl font-mbold text-gray-900">
                   {currentUser.followers || 0}
@@ -177,6 +186,9 @@ export default function ProfileScreen() {
                   Followers
                 </Text>
               </View>
+
+              <Text className="text-gray-300 text-xl font-light">|</Text>
+
               <View className="items-center">
                 <Text className="text-xl font-mbold text-gray-900">
                   {currentUser.following || 0}

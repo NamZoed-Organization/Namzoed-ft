@@ -1,7 +1,23 @@
 // Path: components/ProfileSettings.tsx
 import { useRouter } from "expo-router";
 import { Bell, FileText, Globe, HardDrive, HelpCircle, Info, Key, LogOut, MessageSquare, Phone, ScrollText, Shield, Smartphone, Users, X } from 'lucide-react-native';
-import { ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { ScrollView, Text, TouchableOpacity, View, Modal } from "react-native";
+import { useState } from "react";
+import {
+  ChangePassword,
+  PrivacyPolicy,
+  SellerPolicy,
+  TermsOfService,
+  CommunityGuidelines,
+  Notifications,
+  DataStorage,
+  LanguageRegion,
+  HelpCenter,
+  ContactUs,
+  SendFeedback,
+  AppVersion,
+  AboutApp
+} from '@/components/settings';
 
 interface ProfileSettingsProps {
   onClose: () => void;
@@ -11,10 +27,14 @@ interface ProfileSettingsProps {
 
 export default function ProfileSettings({ onClose, currentUser, onLogout }: ProfileSettingsProps) {
   const router = useRouter();
+  const [activeModal, setActiveModal] = useState<string | null>(null);
 
-  const handleNavigation = (path: string) => {
-    onClose();
-    router.push(path);
+  const handleNavigation = (modalName: string) => {
+    setActiveModal(modalName);
+  };
+
+  const closeActiveModal = () => {
+    setActiveModal(null);
   };
 
   return (
@@ -50,7 +70,7 @@ export default function ProfileSettings({ onClose, currentUser, onLogout }: Prof
               <View className="bg-gray-50 rounded-xl">
                 <TouchableOpacity
                   className="flex-row items-center justify-between px-4 py-4 border-b border-gray-200"
-                  onPress={() => handleNavigation("/profile/change-password")}
+                  onPress={() => handleNavigation("changePassword")}
                   activeOpacity={0.7}
                 >
                   <View className="flex-row items-center">
@@ -84,7 +104,7 @@ export default function ProfileSettings({ onClose, currentUser, onLogout }: Prof
               <View className="bg-gray-50 rounded-xl">
                 <TouchableOpacity
                   className="flex-row items-center justify-between px-4 py-4 border-b border-gray-200"
-                  onPress={() => handleNavigation("/policies/privacy")}
+                  onPress={() => handleNavigation("privacyPolicy")}
                   activeOpacity={0.7}
                 >
                   <View className="flex-row items-center">
@@ -98,7 +118,7 @@ export default function ProfileSettings({ onClose, currentUser, onLogout }: Prof
 
                 <TouchableOpacity
                   className="flex-row items-center justify-between px-4 py-4 border-b border-gray-200"
-                  onPress={() => handleNavigation("/policies/seller")}
+                  onPress={() => handleNavigation("sellerPolicy")}
                   activeOpacity={0.7}
                 >
                   <View className="flex-row items-center">
@@ -112,7 +132,7 @@ export default function ProfileSettings({ onClose, currentUser, onLogout }: Prof
 
                 <TouchableOpacity
                   className="flex-row items-center justify-between px-4 py-4 border-b border-gray-200"
-                  onPress={() => handleNavigation("/policies/terms")}
+                  onPress={() => handleNavigation("termsOfService")}
                   activeOpacity={0.7}
                 >
                   <View className="flex-row items-center">
@@ -126,7 +146,7 @@ export default function ProfileSettings({ onClose, currentUser, onLogout }: Prof
 
                 <TouchableOpacity
                   className="flex-row items-center justify-between px-4 py-4"
-                  onPress={() => handleNavigation("/policies/community")}
+                  onPress={() => handleNavigation("communityGuidelines")}
                   activeOpacity={0.7}
                 >
                   <View className="flex-row items-center">
@@ -149,7 +169,7 @@ export default function ProfileSettings({ onClose, currentUser, onLogout }: Prof
               <View className="bg-gray-50 rounded-xl">
                 <TouchableOpacity
                   className="flex-row items-center justify-between px-4 py-4 border-b border-gray-200"
-                  onPress={() => handleNavigation("/profile/notifications")}
+                  onPress={() => handleNavigation("notifications")}
                   activeOpacity={0.7}
                 >
                   <View className="flex-row items-center">
@@ -163,7 +183,7 @@ export default function ProfileSettings({ onClose, currentUser, onLogout }: Prof
 
                 <TouchableOpacity
                   className="flex-row items-center justify-between px-4 py-4 border-b border-gray-200"
-                  onPress={() => handleNavigation("/profile/data")}
+                  onPress={() => handleNavigation("dataStorage")}
                   activeOpacity={0.7}
                 >
                   <View className="flex-row items-center">
@@ -177,7 +197,7 @@ export default function ProfileSettings({ onClose, currentUser, onLogout }: Prof
 
                 <TouchableOpacity
                   className="flex-row items-center justify-between px-4 py-4"
-                  onPress={() => handleNavigation("/profile/language")}
+                  onPress={() => handleNavigation("languageRegion")}
                   activeOpacity={0.7}
                 >
                   <View className="flex-row items-center">
@@ -200,7 +220,7 @@ export default function ProfileSettings({ onClose, currentUser, onLogout }: Prof
               <View className="bg-gray-50 rounded-xl">
                 <TouchableOpacity
                   className="flex-row items-center justify-between px-4 py-4 border-b border-gray-200"
-                  onPress={() => handleNavigation("/support/help")}
+                  onPress={() => handleNavigation("helpCenter")}
                   activeOpacity={0.7}
                 >
                   <View className="flex-row items-center">
@@ -214,7 +234,7 @@ export default function ProfileSettings({ onClose, currentUser, onLogout }: Prof
 
                 <TouchableOpacity
                   className="flex-row items-center justify-between px-4 py-4 border-b border-gray-200"
-                  onPress={() => handleNavigation("/support/contact")}
+                  onPress={() => handleNavigation("contactUs")}
                   activeOpacity={0.7}
                 >
                   <View className="flex-row items-center">
@@ -228,7 +248,7 @@ export default function ProfileSettings({ onClose, currentUser, onLogout }: Prof
 
                 <TouchableOpacity
                   className="flex-row items-center justify-between px-4 py-4"
-                  onPress={() => handleNavigation("/support/feedback")}
+                  onPress={() => handleNavigation("sendFeedback")}
                   activeOpacity={0.7}
                 >
                   <View className="flex-row items-center">
@@ -251,7 +271,7 @@ export default function ProfileSettings({ onClose, currentUser, onLogout }: Prof
               <View className="bg-gray-50 rounded-xl">
                 <TouchableOpacity
                   className="flex-row items-center justify-between px-4 py-4 border-b border-gray-200"
-                  onPress={() => handleNavigation("/about/version")}
+                  onPress={() => handleNavigation("appVersion")}
                   activeOpacity={0.7}
                 >
                   <View className="flex-row items-center">
@@ -265,7 +285,7 @@ export default function ProfileSettings({ onClose, currentUser, onLogout }: Prof
 
                 <TouchableOpacity
                   className="flex-row items-center justify-between px-4 py-4"
-                  onPress={() => handleNavigation("/about/credits")}
+                  onPress={() => handleNavigation("aboutApp")}
                   activeOpacity={0.7}
                 >
                   <View className="flex-row items-center">
@@ -283,6 +303,111 @@ export default function ProfileSettings({ onClose, currentUser, onLogout }: Prof
             <View className="h-4" />
           </ScrollView>
         </View>
+
+        {/* Modal Components */}
+        <Modal
+          visible={activeModal === 'changePassword'}
+          animationType="slide"
+          onRequestClose={closeActiveModal}
+        >
+          <ChangePassword />
+        </Modal>
+
+        <Modal
+          visible={activeModal === 'privacyPolicy'}
+          animationType="slide"
+          onRequestClose={closeActiveModal}
+        >
+          <PrivacyPolicy />
+        </Modal>
+
+        <Modal
+          visible={activeModal === 'sellerPolicy'}
+          animationType="slide"
+          onRequestClose={closeActiveModal}
+        >
+          <SellerPolicy />
+        </Modal>
+
+        <Modal
+          visible={activeModal === 'termsOfService'}
+          animationType="slide"
+          onRequestClose={closeActiveModal}
+        >
+          <TermsOfService />
+        </Modal>
+
+        <Modal
+          visible={activeModal === 'communityGuidelines'}
+          animationType="slide"
+          onRequestClose={closeActiveModal}
+        >
+          <CommunityGuidelines />
+        </Modal>
+
+        <Modal
+          visible={activeModal === 'notifications'}
+          animationType="slide"
+          onRequestClose={closeActiveModal}
+        >
+          <Notifications />
+        </Modal>
+
+        <Modal
+          visible={activeModal === 'dataStorage'}
+          animationType="slide"
+          onRequestClose={closeActiveModal}
+        >
+          <DataStorage />
+        </Modal>
+
+        <Modal
+          visible={activeModal === 'languageRegion'}
+          animationType="slide"
+          onRequestClose={closeActiveModal}
+        >
+          <LanguageRegion />
+        </Modal>
+
+        <Modal
+          visible={activeModal === 'helpCenter'}
+          animationType="slide"
+          onRequestClose={closeActiveModal}
+        >
+          <HelpCenter />
+        </Modal>
+
+        <Modal
+          visible={activeModal === 'contactUs'}
+          animationType="slide"
+          onRequestClose={closeActiveModal}
+        >
+          <ContactUs />
+        </Modal>
+
+        <Modal
+          visible={activeModal === 'sendFeedback'}
+          animationType="slide"
+          onRequestClose={closeActiveModal}
+        >
+          <SendFeedback />
+        </Modal>
+
+        <Modal
+          visible={activeModal === 'appVersion'}
+          animationType="slide"
+          onRequestClose={closeActiveModal}
+        >
+          <AppVersion />
+        </Modal>
+
+        <Modal
+          visible={activeModal === 'aboutApp'}
+          animationType="slide"
+          onRequestClose={closeActiveModal}
+        >
+          <AboutApp />
+        </Modal>
       </TouchableOpacity>
     </TouchableOpacity>
   );
