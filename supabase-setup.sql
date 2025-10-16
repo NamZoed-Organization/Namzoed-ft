@@ -2,8 +2,6 @@
 CREATE TABLE posts (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id TEXT NOT NULL,
-  username TEXT NOT NULL,
-  profile_pic TEXT,
   content TEXT NOT NULL,
   images TEXT[] DEFAULT '{}',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -34,3 +32,7 @@ CREATE POLICY "Anyone can update posts" ON posts
 -- Policy to allow anyone to delete posts (you can restrict this later)
 CREATE POLICY "Anyone can delete posts" ON posts
   FOR DELETE USING (true);
+
+-- Migration: Remove redundant columns if they exist (run this if you already have the table)
+-- ALTER TABLE posts DROP COLUMN IF EXISTS username;
+-- ALTER TABLE posts DROP COLUMN IF EXISTS profile_pic;

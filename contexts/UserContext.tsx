@@ -2,12 +2,15 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface User {
-  username: string;
+  id?: string;
+  username?: string;
+  name?: string;
+  email?: string;
   phone_number?: string;
   password?: string;
-  followers: number;
-  following: number;
-  profileImg: any;
+  followers?: number;
+  following?: number;
+  profileImg?: any;
   products?: Array<{
     name: string;
     productImg: any;

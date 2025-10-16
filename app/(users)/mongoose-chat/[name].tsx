@@ -4,7 +4,7 @@ import mongooses from "@/data/mongoose";
 import { Ionicons } from "@expo/vector-icons";
 import { Mic, Trash2, Play, Pause } from "lucide-react-native";
 import * as Location from 'expo-location';
-import { Audio } from 'expo-av';
+import { useAudioRecorder, useAudioPlayer } from 'expo-audio';
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
