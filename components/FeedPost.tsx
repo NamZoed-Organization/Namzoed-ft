@@ -1,9 +1,9 @@
-import React, { useState, useRef } from "react";
-import { Image, Text, TouchableOpacity, View, Animated } from "react-native";
-import { Heart, MessageCircle, Bookmark, MoreHorizontal, Play } from "lucide-react-native";
-import { PostData } from "@/types/post";
 import ImageViewer from "@/components/ImageViewer";
+import { PostData } from "@/types/post";
 import { VideoView, useVideoPlayer } from "expo-video";
+import { Bookmark, Heart, MessageCircle, MoreHorizontal } from "lucide-react-native";
+import React, { useState } from "react";
+import { Animated, Image, Text, TouchableOpacity, View } from "react-native";
 
 export { default as PostSkeleton } from "@/components/ui/PostSkeleton";
 
@@ -93,7 +93,6 @@ const PostImage = ({
     </TouchableOpacity>
   );
 };
-
 const PostVideo = ({
   videoUri,
   onPress,
@@ -106,40 +105,33 @@ const PostVideo = ({
   style?: any;
 }) => {
   const [videoLoading, setVideoLoading] = useState(true);
+  
   const player = useVideoPlayer(videoUri, player => {
     player.loop = true;
-    player.muted = true;
+    player.muted = false;
   });
 
-  // Monitor player status to hide skeleton when loaded
-  React.useEffect(() => {
-    const interval = setInterval(() => {
-      if (player.status === 'readyToPlay' || player.status === 'playing') {
-        setVideoLoading(false);
-      }
-    }, 100);
+ React.useEffect(() => {
+  const interval = setInterval(() => {
+    if (player.status === 'readyToPlay') {
+      setVideoLoading(false);
+    }
+  }, 100);
 
-    return () => clearInterval(interval);
-  }, [player]);
-
+  return () => clearInterval(interval);
+}, [player]);
   return (
-    <TouchableOpacity onPress={onPress} activeOpacity={0.9} className={className} style={style}>
+    <View className={className} style={style}>
       <View className="relative">
         {videoLoading && <ImageSkeleton width="100%" height="100%" />}
         <VideoView
           player={player}
           style={{ width: '100%', height: '100%' }}
-          nativeControls={false}
+          nativeControls={true}
           contentFit="cover"
         />
-        {/* Play icon overlay */}
-        <View className="absolute inset-0 items-center justify-center pointer-events-none">
-          <View className="bg-black/60 rounded-full p-3">
-            <Play size={24} color="white" fill="white" />
-          </View>
-        </View>
       </View>
-    </TouchableOpacity>
+    </View>
   );
 };
 
