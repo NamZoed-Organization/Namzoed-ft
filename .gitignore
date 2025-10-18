@@ -6,6 +6,10 @@ yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
 
+# Keystore files
+*.keystore
+*.jks
+
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
@@ -146,3 +150,5 @@ expo-env.d.ts
 # @end expo-cli
 
 .DS_Store
+# Keystore properties with secrets
+**/keystore.properties
