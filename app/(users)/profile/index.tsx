@@ -1,11 +1,12 @@
 // Path: app/(tabs)/profile.tsx
 import ProfileSettings from "@/components/ProfileSettings";
 import { useUser } from "@/contexts/UserContext";
+import { fetchUserPosts, Post } from "@/lib/postsService";
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from "expo-router";
-import { useState } from "react";
-import { Alert, Image, Modal, ScrollView, Text, TouchableOpacity, View } from "react-native";
-import { Settings, User, Edit3, Mail, Phone, Image as ImageLucide, ShoppingBag, Wrench, Camera, ImageIcon } from 'lucide-react-native';
+import { Camera, Edit3, ImageIcon, Image as ImageLucide, Mail, Phone, Settings, ShoppingBag, User, Wrench } from 'lucide-react-native';
+import { useEffect, useState } from "react";
+import { ActivityIndicator, Alert, Image, Modal, ScrollView, Text, TouchableOpacity, View } from "react-native";
 
 export default function ProfileScreen() {
   const { currentUser, logout } = useUser();
@@ -14,6 +15,41 @@ export default function ProfileScreen() {
   const [showImagePicker, setShowImagePicker] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [profileImage, setProfileImage] = useState(null);
+  const [userPosts, setUserPosts] = useState<Post[]>([]);
+  const [loadingPosts, setLoadingPosts] = useState(true);
+  const [userImages, setUserImages] = useState<string[]>([]);
+
+  // Fetch user posts when component mounts or user changes
+  useEffect(() => {
+    const loadUserPosts = async () => {
+      if (!currentUser?.id) {
+        setLoadingPosts(false);
+        return;
+      }
+
+      try {
+        setLoadingPosts(true);
+        const posts = await fetchUserPosts(currentUser.id);
+        setUserPosts(posts);
+
+        // Extract all images from posts
+        const allImages: string[] = [];
+        posts.forEach(post => {
+          if (post.images && post.images.length > 0) {
+            allImages.push(...post.images);
+          }
+        });
+        setUserImages(allImages);
+      } catch (error) {
+        console.error('Error loading user posts:', error);
+        Alert.alert('Error', 'Failed to load your posts');
+      } finally {
+        setLoadingPosts(false);
+      }
+    };
+
+    loadUserPosts();
+  }, [currentUser?.id]);
 
   const handleEditProfile = () => {
     setShowImagePicker(true);
@@ -142,11 +178,15 @@ export default function ProfileScreen() {
                 <Edit3 size={16} className="text-white" />
               </TouchableOpacity>
             </View>
-            
-            <Text className="text-2xl font-mbold text-gray-900 mb-1">
-              {currentUser.username}
-            </Text>
-            
+
+            {currentUser.name && (
+              <Text className="text-2xl font-mbold text-gray-900 mb-1">
+                {currentUser.name}
+              </Text>
+            )}
+
+    
+
             {currentUser.email && (
               <View className="flex-row items-center mb-2">
                 <Mail size={16} color="#6B7280" />
@@ -257,19 +297,40 @@ export default function ProfileScreen() {
         {/* Tab Content */}
         <View className="px-4 py-4">
           {activeTab === 'images' && (
-            <View className="flex-row flex-wrap">
-              {[1, 2, 3, 4].map((index) => (
-                <View key={index} className="w-[33.33%] aspect-square p-1">
-                  <View className="flex-1 bg-gray-200 rounded-lg overflow-hidden">
-                    <Image
-                      source={require('@/assets/images/all.png')}
-                      className="w-full h-full"
-                      resizeMode="cover"
-                    />
-                  </View>
+            <>
+              {loadingPosts ? (
+                <View className="items-center justify-center py-12">
+                  <ActivityIndicator size="large" color="#059669" />
+                  <Text className="text-sm font-regular text-gray-500 mt-4">
+                    Loading posts...
+                  </Text>
                 </View>
-              ))}
-            </View>
+              ) : userImages.length > 0 ? (
+                <View className="flex-row flex-wrap">
+                  {userImages.map((imageUrl, index) => (
+                    <View key={index} className="w-[33.33%] aspect-square p-1">
+                      <View className="flex-1 bg-gray-200 rounded-lg overflow-hidden">
+                        <Image
+                          source={{ uri: imageUrl }}
+                          className="w-full h-full"
+                          resizeMode="cover"
+                        />
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <View className="items-center justify-center py-12">
+                  <ImageLucide size={48} className="text-gray-400 mb-4" />
+                  <Text className="text-lg font-msemibold text-gray-700 mb-2">
+                    No Images Yet
+                  </Text>
+                  <Text className="text-sm font-regular text-gray-500 text-center">
+                    Create a post with images to see them here
+                  </Text>
+                </View>
+              )}
+            </>
           )}
           
           {activeTab === 'products' && (

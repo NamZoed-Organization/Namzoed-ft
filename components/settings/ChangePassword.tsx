@@ -1,32 +1,232 @@
-import React from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
-import { useRouter } from 'expo-router';
-import { ArrowLeft, Key } from 'lucide-react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, TouchableOpacity, TextInput, Alert, Animated } from 'react-native';
+import { ArrowLeft, Eye, EyeOff } from 'lucide-react-native';
+import { supabase } from '@/lib/supabase';
 
-export default function ChangePassword() {
-  const router = useRouter();
+interface ChangePasswordProps {
+  onClose?: () => void;
+}
+
+export default function ChangePassword({ onClose }: ChangePasswordProps) {
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(300)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      })
+    ]).start();
+  }, []);
+
+  const handleChangePassword = async () => {
+    if (!newPassword || !confirmPassword) {
+      Alert.alert('Error', 'Please fill in all fields');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      Alert.alert('Error', 'New passwords do not match');
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      Alert.alert('Error', 'Password must be at least 6 characters');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+
+      if (error) {
+        Alert.alert('Error', error.message);
+      } else {
+        Alert.alert('Success', 'Password changed successfully', [
+          { text: 'OK', onPress: () => onClose?.() }
+        ]);
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to change password');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleTestPassword = async () => {
+    if (!currentPassword) {
+      Alert.alert('Error', 'Please enter a test password');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user?.email) {
+        Alert.alert('Error', 'No user email found');
+        return;
+      }
+
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: currentPassword
+      });
+
+      if (error) {
+        Alert.alert('Test Failed', `Password does NOT match database\n\nError: ${error.message}`);
+      } else {
+        Alert.alert('Test Success', `Password MATCHES database\n\nUser ID: ${data.user?.id}`);
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Test failed');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <View className="flex-1 bg-background">
-      {/* Status Bar Space */}
-      <View className="h-12 bg-white" />
+    <View className="flex-1">
+      {/* Fading background overlay that covers status bar */}
+      <Animated.View
+        className="absolute top-0 left-0 right-0 bottom-0 bg-black/30"
+        style={{
+          opacity: fadeAnim,
+          marginTop: -100 // Extend upward to cover status bar
+        }}
+      />
 
-      {/* Header */}
-      <View className="flex-row items-center p-4 bg-white border-b border-gray-200">
-        <TouchableOpacity onPress={() => router.back()} className="mr-3">
-          <ArrowLeft size={24} color="#000" />
-        </TouchableOpacity>
-        <Text className="text-lg font-semibold text-gray-900">Change Password</Text>
-      </View>
+      {/* Top space to show underlying page */}
+      <View className="h-20" />
 
-      {/* Content */}
-      <View className="flex-1 items-center justify-center px-4">
-        <Key size={64} color="#94a3b8" />
-        <Text className="text-xl font-bold text-gray-700 mt-4 mb-2">Change Password</Text>
-        <Text className="text-gray-500 text-center">
-          Password change functionality will be implemented here
-        </Text>
-      </View>
+      {/* Sliding white content */}
+      <Animated.View
+        className="flex-1 bg-white rounded-t-3xl overflow-hidden"
+        style={{ transform: [{ translateY: slideAnim }] }}
+      >
+        <View className="flex-row items-center p-4 border-b border-gray-200">
+          <TouchableOpacity onPress={onClose} className="mr-3">
+            <ArrowLeft size={24} color="#000" />
+          </TouchableOpacity>
+          <Text className="text-lg font-semibold text-gray-900">Change Password</Text>
+        </View>
+
+        {/* Content */}
+        <View className="px-6 py-8">
+          {/* Current Password (for testing) */}
+          <View className="mb-6">
+            <Text className="text-sm font-medium text-gray-700 mb-2">Test Password</Text>
+            <View className="flex-row items-center bg-gray-100 rounded-lg px-4 py-3 border border-gray-300">
+              <TextInput
+                className="flex-1 text-base text-gray-900"
+                placeholder="Enter password to test"
+                value={currentPassword}
+                onChangeText={setCurrentPassword}
+                secureTextEntry={!showCurrent}
+                autoCapitalize="none"
+              />
+              <TouchableOpacity onPress={() => setShowCurrent(!showCurrent)}>
+                {showCurrent ? (
+                  <EyeOff size={20} color="#6b7280" />
+                ) : (
+                  <Eye size={20} color="#6b7280" />
+                )}
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity
+              onPress={handleTestPassword}
+              disabled={loading}
+              className="mt-2 bg-gray-600 rounded-lg py-2 px-4"
+            >
+              <Text className="text-white text-center font-medium">
+                {loading ? 'Testing...' : 'Test Password'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Divider */}
+          <View className="border-t border-gray-300 my-4" />
+
+          {/* New Password */}
+          <View className="mb-4">
+            <Text className="text-sm font-medium text-gray-700 mb-2">New Password</Text>
+            <View className="flex-row items-center bg-gray-100 rounded-lg px-4 py-3 border border-gray-300">
+              <TextInput
+                className="flex-1 text-base text-gray-900"
+                placeholder="Enter new password"
+                value={newPassword}
+                onChangeText={setNewPassword}
+                secureTextEntry={!showNew}
+                autoCapitalize="none"
+              />
+              <TouchableOpacity onPress={() => setShowNew(!showNew)}>
+                {showNew ? (
+                  <EyeOff size={20} color="#6b7280" />
+                ) : (
+                  <Eye size={20} color="#6b7280" />
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Confirm Password */}
+          <View className="mb-6">
+            <Text className="text-sm font-medium text-gray-700 mb-2">Confirm Password</Text>
+            <View className="flex-row items-center bg-gray-100 rounded-lg px-4 py-3 border border-gray-300">
+              <TextInput
+                className="flex-1 text-base text-gray-900"
+                placeholder="Confirm new password"
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secureTextEntry={!showConfirm}
+                autoCapitalize="none"
+              />
+              <TouchableOpacity onPress={() => setShowConfirm(!showConfirm)}>
+                {showConfirm ? (
+                  <EyeOff size={20} color="#6b7280" />
+                ) : (
+                  <Eye size={20} color="#6b7280" />
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Change Password Button */}
+          <TouchableOpacity
+            onPress={handleChangePassword}
+            disabled={loading}
+            className="bg-primary rounded-lg py-4 px-6"
+          >
+            <Text className="text-white text-center font-semibold text-base">
+              {loading ? 'Changing Password...' : 'Change Password'}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Info Text */}
+          <Text className="text-xs text-gray-500 text-center mt-4">
+            Password must be at least 6 characters long
+          </Text>
+        </View>
+      </Animated.View>
     </View>
   );
 }

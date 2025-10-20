@@ -5,13 +5,13 @@ import FeedPost, { PostSkeleton } from "@/components/FeedPost";
 import VirtualizedFeedPost from "@/components/ui/VirtualizedFeedPost";
 import CreatePost from "@/components/CreatePost";
 import LiveScreen from "@/components/Live";
-import { posts, PostData } from "@/data/postdata";
+import { PostData } from "@/types/post";
 import { useUser } from "@/contexts/UserContext";
 import { useRouter } from "expo-router";
 import { feedEvents } from "@/utils/feedEvents";
 import { useFeedPagination } from "@/hooks/usePagination";
 import { useVirtualizedList } from "@/hooks/useVirtualizedList";
-import { fetchPosts, Post } from "@/lib/postsService";
+import { fetchPosts, Post, PostWithUser } from "@/lib/postsService";
 
 // Wrapper component for Live with onClose prop
 function LiveWrapper({ onClose }: { onClose: () => void }) {
@@ -28,18 +28,25 @@ export default function FeedScreen() {
   const [loadingNewPosts, setLoadingNewPosts] = useState(true);
 
   // Convert Supabase post to PostData format
-  const convertToPostData = (post: Post): PostData => ({
-    id: post.id,
-    userId: post.user_id,
-    username: post.username,
-    profilePic: post.profile_pic,
-    content: post.content,
-    images: post.images,
-    date: new Date(post.created_at),
-    likes: post.likes,
-    comments: post.comments,
-    shares: post.shares,
-  });
+  const convertToPostData = (post: PostWithUser): PostData => {
+    // Extract username from profiles data (prefer name, then email prefix)
+    const username = post.profiles?.name ||
+                     post.profiles?.email?.split('@')[0] ||
+                     'Unknown User';
+
+    return {
+      id: post.id,
+      userId: post.user_id,
+      username: username,
+      profilePic: undefined, // We don't have profile pic in the database yet
+      content: post.content,
+      images: post.images,
+      date: new Date(post.created_at),
+      likes: post.likes,
+      comments: post.comments,
+      shares: post.shares,
+    };
+  };
 
   // Load new posts from Supabase
   const loadNewPosts = async () => {
@@ -70,24 +77,19 @@ export default function FeedScreen() {
     loadNewPosts();
   }, []);
 
-  // Sort static posts by date in descending order (latest first)
-  const sortedPosts = useMemo(() => {
-    return [...posts].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, []);
-
-  // Combine new posts from Supabase (first) and static posts (below)
+  // Use only Supabase posts
   const allPosts = useMemo(() => {
-    return [...newPosts, ...sortedPosts];
-  }, [sortedPosts, newPosts]);
+    return newPosts;
+  }, [newPosts]);
 
-  // Use pagination for feed posts
+  // Use pagination for feed posts - increased to 15 items per page
   const {
     items: paginatedPosts,
     loading: postsLoading,
     hasMore,
     loadMore,
     refresh
-  } = useFeedPagination({ data: allPosts, pageSize: 10, bufferSize: 5 });
+  } = useFeedPagination({ data: allPosts, pageSize: 15, bufferSize: 10 });
 
   // Use virtualized list for performance
   const {
@@ -136,14 +138,9 @@ export default function FeedScreen() {
       return <PostSkeleton />;
     }
 
-    const isVisible = index >= visibleRange.start && index <= visibleRange.end;
+    // Always render posts initially (disable virtualization to fix initial load)
     return (
-      <VirtualizedFeedPost
-        post={item}
-        index={index}
-        isVisible={isVisible}
-        estimatedHeight={400}
-      />
+      <FeedPost post={item} />
     );
   };
 
@@ -234,10 +231,10 @@ export default function FeedScreen() {
         scrollEventThrottle={16}
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
-        removeClippedSubviews={true}
-        maxToRenderPerBatch={5}
-        windowSize={10}
-        initialNumToRender={5}
+        removeClippedSubviews={false}
+        maxToRenderPerBatch={15}
+        windowSize={21}
+        initialNumToRender={15}
         getItemLayout={(data, index) => ({
           length: 400,
           offset: 400 * index,

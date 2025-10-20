@@ -10,6 +10,8 @@ import {
   FlatList,
   Alert,
   ActivityIndicator,
+  StatusBar,
+  Pressable,
 } from "react-native";
 import {
   ArrowLeft,
@@ -25,9 +27,8 @@ import {
 import { useRouter } from "expo-router";
 import { useUser } from "@/contexts/UserContext";
 import { categories } from "@/data/categories";
-import PostPreview from "@/components/PostPreview";
 import * as ImagePicker from 'expo-image-picker';
-import { createPost, uploadImages } from "@/lib/postsService";
+import { createPost, uploadImages, uploadVideos } from "@/lib/postsService";
 
 const LOCATIONS = [
   "My Location",
@@ -116,11 +117,9 @@ export default function CreatePost({ onClose }: CreatePostProps) {
     
     try {
       console.log('Available ImagePicker object:', Object.keys(ImagePicker));
-      console.log('MediaType object:', ImagePicker.MediaType);
-      console.log('MediaTypeOptions object:', ImagePicker.MediaTypeOptions);
-      
+
       const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions?.Images || 'Images',
+        mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [4, 3],
         quality: 1,
@@ -160,10 +159,11 @@ export default function CreatePost({ onClose }: CreatePostProps) {
 
   const pickImageFromGallery = async (isForSell: boolean = false) => {
     console.log('Starting gallery image picker, isForSell:', isForSell);
-    
+
+
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions?.Images || 'Images',
+        mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [4, 3],
         quality: 1,
@@ -203,10 +203,10 @@ export default function CreatePost({ onClose }: CreatePostProps) {
 
   const pickVideoFromCamera = async (isForSell: boolean = false) => {
     console.log('Starting camera video picker, isForSell:', isForSell);
-    
+
     try {
       const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions?.Videos || 'Videos',
+        mediaTypes: ['videos'],
         allowsEditing: true,
         videoMaxDuration: 60,
         quality: 1,
@@ -246,10 +246,10 @@ export default function CreatePost({ onClose }: CreatePostProps) {
 
   const pickVideoFromGallery = async (isForSell: boolean = false) => {
     console.log('Starting gallery video picker, isForSell:', isForSell);
-    
+
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions?.Videos || 'Videos',
+        mediaTypes: ['videos'],
         allowsEditing: true,
         videoMaxDuration: 60,
         quality: 1,
@@ -356,12 +356,11 @@ export default function CreatePost({ onClose }: CreatePostProps) {
       return;
     }
 
-    // Get username from either username or name field
-    const userName = (currentUser as any).username || (currentUser as any).name || (currentUser as any).email;
-    const userId = (currentUser as any).id || (currentUser as any).username || (currentUser as any).name;
+    // Get user ID
+    const userId = (currentUser as any).id;
 
-    // Validate user has username/name
-    if (!userName) {
+    // Validate user has ID
+    if (!userId) {
       Alert.alert('Error', 'User information is incomplete. Please log in again.');
       return;
     }
@@ -377,22 +376,28 @@ export default function CreatePost({ onClose }: CreatePostProps) {
 
       console.log('=== Starting Post Creation ===');
       console.log('Current user:', currentUser);
-      console.log('User Name:', userName);
       console.log('User ID:', userId);
       console.log('Post text:', postText);
       console.log('Post media:', postMedia);
 
-      // Upload images to Supabase storage
+      // Separate images and videos
       const imageUris = postMedia
         .filter(item => item.type === 'image')
         .map(item => item.uri);
 
-      let uploadedImageUrls: string[] = [];
+      const videoUris = postMedia
+        .filter(item => item.type === 'video')
+        .map(item => item.uri);
+
+      let uploadedMediaUrls: string[] = [];
+
+      // Upload images to Supabase storage
       if (imageUris.length > 0) {
         console.log('Uploading images to Supabase...', imageUris);
         try {
-          uploadedImageUrls = await uploadImages(imageUris);
+          const uploadedImageUrls = await uploadImages(imageUris);
           console.log('Images uploaded successfully:', uploadedImageUrls);
+          uploadedMediaUrls.push(...uploadedImageUrls);
         } catch (uploadError) {
           console.error('Image upload error:', uploadError);
           Alert.alert('Error', `Failed to upload images: ${uploadError.message || uploadError}`);
@@ -400,22 +405,32 @@ export default function CreatePost({ onClose }: CreatePostProps) {
         }
       }
 
+      // Upload videos to Supabase storage
+      if (videoUris.length > 0) {
+        console.log('Uploading videos to Supabase...', videoUris);
+        try {
+          const uploadedVideoUrls = await uploadVideos(videoUris);
+          console.log('Videos uploaded successfully:', uploadedVideoUrls);
+          uploadedMediaUrls.push(...uploadedVideoUrls);
+        } catch (uploadError) {
+          console.error('Video upload error:', uploadError);
+          Alert.alert('Error', `Failed to upload videos: ${uploadError.message || uploadError}`);
+          return;
+        }
+      }
+
       // Create post in Supabase
       console.log('Creating post with data:', {
         content: postText.trim(),
-        images: uploadedImageUrls,
+        images: uploadedMediaUrls,
         userId: userId,
-        username: userName,
-        profilePic: (currentUser as any).profileImg || (currentUser as any).avatar || undefined,
       });
 
       try {
         const newPost = await createPost({
           content: postText.trim(),
-          images: uploadedImageUrls,
+          images: uploadedMediaUrls, // This array now contains both image and video URLs
           userId: userId,
-          username: userName,
-          profilePic: (currentUser as any).profileImg || (currentUser as any).avatar || undefined,
         });
 
         console.log('Post created successfully:', newPost);
@@ -450,33 +465,41 @@ export default function CreatePost({ onClose }: CreatePostProps) {
     <Modal
       visible={showLocationModal}
       transparent
-      animationType="slide"
+      animationType="fade"
+      statusBarTranslucent
       onRequestClose={() => setShowLocationModal(false)}
     >
-      <View className="flex-1 bg-black/50 justify-end">
-        <View className="bg-white rounded-t-3xl max-h-[70%]">
-          <View className="flex-row items-center justify-between p-4 border-b border-gray-200">
-            <Text className="text-lg font-semibold">Select Location</Text>
-            <TouchableOpacity onPress={() => setShowLocationModal(false)}>
-              <X size={24} color="#666" />
-            </TouchableOpacity>
-          </View>
-          <FlatList
-            data={LOCATIONS}
-            keyExtractor={(item) => item}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                className="px-4 py-3 border-b border-gray-100"
-                onPress={() => handleLocationSelect(item)}
-              >
-                <Text className={`text-base ${item === sellForm.location ? 'text-blue-600 font-medium' : 'text-gray-800'}`}>
-                  {item}
-                </Text>
+      <StatusBar backgroundColor="rgba(0,0,0,0.5)" barStyle="light-content" />
+      <Pressable
+        className="flex-1 bg-black/50 justify-end"
+        onPress={() => setShowLocationModal(false)}
+        activeOpacity={1}
+      >
+        <Pressable onPress={(e) => e.stopPropagation()}>
+          <View className="bg-white rounded-t-3xl max-h-[70%]">
+            <View className="flex-row items-center justify-between p-4 border-b border-gray-200">
+              <Text className="text-lg font-semibold">Select Location</Text>
+              <TouchableOpacity onPress={() => setShowLocationModal(false)}>
+                <X size={24} color="#666" />
               </TouchableOpacity>
-            )}
-          />
-        </View>
-      </View>
+            </View>
+            <FlatList
+              data={LOCATIONS}
+              keyExtractor={(item) => item}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  className="px-4 py-3 border-b border-gray-100"
+                  onPress={() => handleLocationSelect(item)}
+                >
+                  <Text className={`text-base ${item === sellForm.location ? 'text-blue-600 font-medium' : 'text-gray-800'}`}>
+                    {item}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 
@@ -484,33 +507,41 @@ export default function CreatePost({ onClose }: CreatePostProps) {
     <Modal
       visible={showCategoryModal}
       transparent
-      animationType="slide"
+      animationType="fade"
+      statusBarTranslucent
       onRequestClose={() => setShowCategoryModal(false)}
     >
-      <View className="flex-1 bg-black/50 justify-end">
-        <View className="bg-white rounded-t-3xl max-h-[70%]">
-          <View className="flex-row items-center justify-between p-4 border-b border-gray-200">
-            <Text className="text-lg font-semibold">Select Category</Text>
-            <TouchableOpacity onPress={() => setShowCategoryModal(false)}>
-              <X size={24} color="#666" />
-            </TouchableOpacity>
-          </View>
-          <FlatList
-            data={Object.keys(categories)}
-            keyExtractor={(item) => item}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                className="px-4 py-3 border-b border-gray-100"
-                onPress={() => handleCategorySelect(item)}
-              >
-                <Text className={`text-base capitalize ${item === sellForm.category ? 'text-blue-600 font-medium' : 'text-gray-800'}`}>
-                  {item}
-                </Text>
+      <StatusBar backgroundColor="rgba(0,0,0,0.5)" barStyle="light-content" />
+      <Pressable
+        className="flex-1 bg-black/50 justify-end"
+        onPress={() => setShowCategoryModal(false)}
+        activeOpacity={1}
+      >
+        <Pressable onPress={(e) => e.stopPropagation()}>
+          <View className="bg-white rounded-t-3xl max-h-[70%]">
+            <View className="flex-row items-center justify-between p-4 border-b border-gray-200">
+              <Text className="text-lg font-semibold">Select Category</Text>
+              <TouchableOpacity onPress={() => setShowCategoryModal(false)}>
+                <X size={24} color="#666" />
               </TouchableOpacity>
-            )}
-          />
-        </View>
-      </View>
+            </View>
+            <FlatList
+              data={Object.keys(categories)}
+              keyExtractor={(item) => item}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  className="px-4 py-3 border-b border-gray-100"
+                  onPress={() => handleCategorySelect(item)}
+                >
+                  <Text className={`text-base capitalize ${item === sellForm.category ? 'text-blue-600 font-medium' : 'text-gray-800'}`}>
+                    {item}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 
@@ -518,44 +549,52 @@ export default function CreatePost({ onClose }: CreatePostProps) {
     <Modal
       visible={showImagePicker}
       transparent
-      animationType="slide"
+      animationType="fade"
+      statusBarTranslucent
       onRequestClose={() => setShowImagePickerModal(false)}
     >
-      <View className="flex-1 bg-black/50 justify-end">
-        <View className="bg-white rounded-t-3xl">
-          <View className="p-4 border-b border-gray-200">
-            <Text className="text-lg font-semibold text-center">Select Image</Text>
+      <StatusBar backgroundColor="rgba(0,0,0,0.5)" barStyle="light-content" />
+      <Pressable
+        className="flex-1 bg-black/50 justify-end"
+        onPress={() => setShowImagePickerModal(false)}
+        activeOpacity={1}
+      >
+        <Pressable onPress={(e) => e.stopPropagation()}>
+          <View className="bg-white rounded-t-3xl">
+            <View className="p-4 border-b border-gray-200">
+              <Text className="text-lg font-semibold text-center">Select Image</Text>
+            </View>
+            <View className="p-4">
+              <TouchableOpacity
+                className="flex-row items-center py-4 px-2"
+                onPress={() => {
+                  pickImageFromCamera(pickerContext.isForSell);
+                  setShowImagePickerModal(false);
+                }}
+              >
+                <Camera size={24} color="#666" />
+                <Text className="ml-4 text-base text-gray-800">Take Photo</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                className="flex-row items-center py-4 px-2 border-t border-gray-100"
+                onPress={() => {
+                  pickImageFromGallery(pickerContext.isForSell);
+                  setShowImagePickerModal(false);
+                }}
+              >
+                <ImageIcon size={24} color="#666" />
+                <Text className="ml-4 text-base text-gray-800">Choose from Gallery</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                className="flex-row items-center justify-center py-4 px-2 border-t border-gray-100 mt-2"
+                onPress={() => setShowImagePickerModal(false)}
+              >
+                <Text className="text-base text-red-600">Cancel</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-          <View className="p-4">
-            <TouchableOpacity
-              className="flex-row items-center py-4 px-2"
-              onPress={() => {
-                pickImageFromCamera(pickerContext.isForSell);
-                setShowImagePickerModal(false);
-              }}
-            >
-              <Camera size={24} color="#666" />
-              <Text className="ml-4 text-base text-gray-800">Take Photo</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              className="flex-row items-center py-4 px-2 border-t border-gray-100"
-              onPress={() => {
-                pickImageFromGallery(pickerContext.isForSell);
-                setShowImagePickerModal(false);
-              }}
-            >
-              <ImageIcon size={24} color="#666" />
-              <Text className="ml-4 text-base text-gray-800">Choose from Gallery</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              className="flex-row items-center justify-center py-4 px-2 border-t border-gray-100 mt-2"
-              onPress={() => setShowImagePickerModal(false)}
-            >
-              <Text className="text-base text-red-600">Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 
@@ -563,44 +602,52 @@ export default function CreatePost({ onClose }: CreatePostProps) {
     <Modal
       visible={showVideoPicker}
       transparent
-      animationType="slide"
+      animationType="fade"
+      statusBarTranslucent
       onRequestClose={() => setShowVideoPickerModal(false)}
     >
-      <View className="flex-1 bg-black/50 justify-end">
-        <View className="bg-white rounded-t-3xl">
-          <View className="p-4 border-b border-gray-200">
-            <Text className="text-lg font-semibold text-center">Select Video</Text>
+      <StatusBar backgroundColor="rgba(0,0,0,0.5)" barStyle="light-content" />
+      <Pressable
+        className="flex-1 bg-black/50 justify-end"
+        onPress={() => setShowVideoPickerModal(false)}
+        activeOpacity={1}
+      >
+        <Pressable onPress={(e) => e.stopPropagation()}>
+          <View className="bg-white rounded-t-3xl">
+            <View className="p-4 border-b border-gray-200">
+              <Text className="text-lg font-semibold text-center">Select Video</Text>
+            </View>
+            <View className="p-4">
+              <TouchableOpacity
+                className="flex-row items-center py-4 px-2"
+                onPress={() => {
+                  pickVideoFromCamera(pickerContext.isForSell);
+                  setShowVideoPickerModal(false);
+                }}
+              >
+                <Video size={24} color="#666" />
+                <Text className="ml-4 text-base text-gray-800">Record Video</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                className="flex-row items-center py-4 px-2 border-t border-gray-100"
+                onPress={() => {
+                  pickVideoFromGallery(pickerContext.isForSell);
+                  setShowVideoPickerModal(false);
+                }}
+              >
+                <Video size={24} color="#666" />
+                <Text className="ml-4 text-base text-gray-800">Choose from Gallery</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                className="flex-row items-center justify-center py-4 px-2 border-t border-gray-100 mt-2"
+                onPress={() => setShowVideoPickerModal(false)}
+              >
+                <Text className="text-base text-red-600">Cancel</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-          <View className="p-4">
-            <TouchableOpacity
-              className="flex-row items-center py-4 px-2"
-              onPress={() => {
-                pickVideoFromCamera(pickerContext.isForSell);
-                setShowVideoPickerModal(false);
-              }}
-            >
-              <Video size={24} color="#666" />
-              <Text className="ml-4 text-base text-gray-800">Record Video</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              className="flex-row items-center py-4 px-2 border-t border-gray-100"
-              onPress={() => {
-                pickVideoFromGallery(pickerContext.isForSell);
-                setShowVideoPickerModal(false);
-              }}
-            >
-              <Video size={24} color="#666" />
-              <Text className="ml-4 text-base text-gray-800">Choose from Gallery</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              className="flex-row items-center justify-center py-4 px-2 border-t border-gray-100 mt-2"
-              onPress={() => setShowVideoPickerModal(false)}
-            >
-              <Text className="text-base text-red-600">Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 
@@ -652,15 +699,6 @@ export default function CreatePost({ onClose }: CreatePostProps) {
           </View>
         </View>
       </View>
-
-      {/* Preview */}
-      {(postText.trim() || postMedia.length > 0) && (
-        <PostPreview
-          text={postText}
-          media={postMedia}
-          userProfile={{ username: (currentUser as any)?.username || (currentUser as any)?.name || "User" }}
-        />
-      )}
     </ScrollView>
   );
 
@@ -778,22 +816,6 @@ export default function CreatePost({ onClose }: CreatePostProps) {
           </View>
         </View>
       </View>
-
-      {/* Preview */}
-      {(sellForm.title.trim() || sellForm.description.trim() || sellMedia.length > 0) && (
-        <PostPreview
-          text={sellForm.description}
-          media={sellMedia}
-          userProfile={{ username: (currentUser as any)?.username || (currentUser as any)?.name || "User" }}
-          isSellingPost={true}
-          sellData={{
-            title: sellForm.title,
-            price: sellForm.price,
-            category: sellForm.category,
-            location: sellForm.location,
-          }}
-        />
-      )}
     </ScrollView>
   );
 

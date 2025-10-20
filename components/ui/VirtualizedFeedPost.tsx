@@ -1,7 +1,7 @@
 import React, { memo, useState } from "react";
 import { View, Text, ActivityIndicator } from "react-native";
 import FeedPost from "@/components/FeedPost";
-import { PostData } from "@/data/postdata";
+import { PostData } from "@/types/post";
 
 interface VirtualizedFeedPostProps {
   post: PostData;

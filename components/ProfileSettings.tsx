@@ -1,8 +1,8 @@
 // Path: components/ProfileSettings.tsx
 import { useRouter } from "expo-router";
-import { Bell, FileText, Globe, HardDrive, HelpCircle, Info, Key, LogOut, MessageSquare, Phone, ScrollText, Shield, Smartphone, Users, X } from 'lucide-react-native';
-import { ScrollView, Text, TouchableOpacity, View, Modal } from "react-native";
-import { useState } from "react";
+import { Bell, FileText, Globe, HardDrive, HelpCircle, Info, Key, LogOut, MessageSquare, Phone, ScrollText, Shield, Smartphone, Users, ArrowLeft } from 'lucide-react-native';
+import { ScrollView, Text, TouchableOpacity, View, Modal, Animated } from "react-native";
+import { useState, useEffect, useRef } from "react";
 import {
   ChangePassword,
   PrivacyPolicy,
@@ -28,6 +28,15 @@ interface ProfileSettingsProps {
 export default function ProfileSettings({ onClose, currentUser, onLogout }: ProfileSettingsProps) {
   const router = useRouter();
   const [activeModal, setActiveModal] = useState<string | null>(null);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
+  }, []);
 
   const handleNavigation = (modalName: string) => {
     setActiveModal(modalName);
@@ -38,27 +47,30 @@ export default function ProfileSettings({ onClose, currentUser, onLogout }: Prof
   };
 
   return (
-    <TouchableOpacity
-      className="flex-1 bg-black/50 justify-end"
-      activeOpacity={1}
-      onPress={onClose}
-    >
-      <TouchableOpacity activeOpacity={1} className="bg-white rounded-t-3xl max-h-4/5">
-        <View className="p-6">
-          {/* Handle Bar */}
-          <View className="w-12 h-1 bg-gray-300 rounded-full self-center mb-6" />
-          
-          {/* Header */}
-          <View className="flex-row items-center justify-between mb-6">
-            <Text className="text-xl font-mbold text-gray-900">Settings</Text>
-            <TouchableOpacity
-              onPress={onClose}
-              className="w-8 h-8 items-center justify-center rounded-full bg-gray-100"
-              activeOpacity={0.7}
-            >
-              <X size={16} className="text-gray-600" />
-            </TouchableOpacity>
-          </View>
+    <View className="flex-1">
+      {/* Fading background overlay that covers status bar */}
+      <Animated.View
+        className="absolute top-0 left-0 right-0 bottom-0 bg-black/30"
+        style={{
+          opacity: fadeAnim,
+          marginTop: -100 // Extend upward to cover status bar
+        }}
+      />
+
+      {/* Top space to show underlying page */}
+      <View className="h-20" />
+
+      {/* Sliding white content */}
+      <View className="flex-1 bg-white rounded-t-3xl overflow-hidden">
+        {/* Header with back button */}
+        <View className="flex-row items-center p-4 border-b border-gray-200">
+          <TouchableOpacity onPress={onClose} className="mr-3">
+            <ArrowLeft size={24} color="#000" />
+          </TouchableOpacity>
+          <Text className="text-lg font-semibold text-gray-900">Settings</Text>
+        </View>
+
+        <View className="flex-1 p-6">
 
           <ScrollView showsVerticalScrollIndicator={false}>
             {/* Privacy Section */}
@@ -307,108 +319,121 @@ export default function ProfileSettings({ onClose, currentUser, onLogout }: Prof
         {/* Modal Components */}
         <Modal
           visible={activeModal === 'changePassword'}
-          animationType="slide"
+          animationType="fade"
           onRequestClose={closeActiveModal}
+          transparent
         >
-          <ChangePassword />
+          <ChangePassword onClose={closeActiveModal} />
         </Modal>
 
         <Modal
           visible={activeModal === 'privacyPolicy'}
-          animationType="slide"
+          animationType="fade"
           onRequestClose={closeActiveModal}
+          transparent
         >
-          <PrivacyPolicy />
+          <PrivacyPolicy onClose={closeActiveModal} />
         </Modal>
 
         <Modal
           visible={activeModal === 'sellerPolicy'}
-          animationType="slide"
+          animationType="fade"
           onRequestClose={closeActiveModal}
+          transparent
         >
-          <SellerPolicy />
+          <SellerPolicy onClose={closeActiveModal} />
         </Modal>
 
         <Modal
           visible={activeModal === 'termsOfService'}
-          animationType="slide"
+          animationType="fade"
           onRequestClose={closeActiveModal}
+          transparent
         >
-          <TermsOfService />
+          <TermsOfService onClose={closeActiveModal} />
         </Modal>
 
         <Modal
           visible={activeModal === 'communityGuidelines'}
-          animationType="slide"
+          animationType="fade"
           onRequestClose={closeActiveModal}
+          transparent
         >
-          <CommunityGuidelines />
+          <CommunityGuidelines onClose={closeActiveModal} />
         </Modal>
 
         <Modal
           visible={activeModal === 'notifications'}
-          animationType="slide"
+          animationType="fade"
           onRequestClose={closeActiveModal}
+          transparent
         >
-          <Notifications />
+          <Notifications onClose={closeActiveModal} />
         </Modal>
 
         <Modal
           visible={activeModal === 'dataStorage'}
-          animationType="slide"
+          animationType="fade"
           onRequestClose={closeActiveModal}
+          transparent
         >
-          <DataStorage />
+          <DataStorage onClose={closeActiveModal} />
         </Modal>
 
         <Modal
           visible={activeModal === 'languageRegion'}
-          animationType="slide"
+          animationType="fade"
           onRequestClose={closeActiveModal}
+          transparent
         >
-          <LanguageRegion />
+          <LanguageRegion onClose={closeActiveModal} />
         </Modal>
 
         <Modal
           visible={activeModal === 'helpCenter'}
-          animationType="slide"
+          animationType="fade"
           onRequestClose={closeActiveModal}
+          transparent
         >
-          <HelpCenter />
+          <HelpCenter onClose={closeActiveModal} />
         </Modal>
 
         <Modal
           visible={activeModal === 'contactUs'}
-          animationType="slide"
+          animationType="fade"
           onRequestClose={closeActiveModal}
+          transparent
         >
-          <ContactUs />
+          <ContactUs onClose={closeActiveModal} />
         </Modal>
 
         <Modal
           visible={activeModal === 'sendFeedback'}
-          animationType="slide"
+          animationType="fade"
           onRequestClose={closeActiveModal}
+          transparent
         >
-          <SendFeedback />
+          <SendFeedback onClose={closeActiveModal} />
         </Modal>
 
         <Modal
           visible={activeModal === 'appVersion'}
-          animationType="slide"
+          animationType="fade"
           onRequestClose={closeActiveModal}
+          transparent
         >
-          <AppVersion />
+          <AppVersion onClose={closeActiveModal} />
         </Modal>
 
         <Modal
           visible={activeModal === 'aboutApp'}
-          animationType="slide"
+          animationType="fade"
           onRequestClose={closeActiveModal}
+          transparent
         >
-          <AboutApp />
+          <AboutApp onClose={closeActiveModal} />
         </Modal>
-      </TouchableOpacity>
-    </TouchableOpacity>
+      </View>
+    </View>
   );
 }
