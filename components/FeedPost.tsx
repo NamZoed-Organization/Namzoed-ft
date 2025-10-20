@@ -1,8 +1,9 @@
 import ImageViewer from "@/components/ImageViewer";
+import FullscreenVideoPlayer from "@/components/FullscreenVideoPlayer";
 import { PostData } from "@/types/post";
 import { VideoView, useVideoPlayer } from "expo-video";
-import { Bookmark, Heart, MessageCircle, MoreHorizontal } from "lucide-react-native";
-import React, { useState } from "react";
+import { Bookmark, Heart, MessageCircle, MoreHorizontal, Play } from "lucide-react-native";
+import React, { useState, useEffect } from "react";
 import { Animated, Image, Text, TouchableOpacity, View } from "react-native";
 
 export { default as PostSkeleton } from "@/components/ui/PostSkeleton";
@@ -97,45 +98,91 @@ const PostVideo = ({
   videoUri,
   onPress,
   className,
-  style
+  style,
+  videoId,
+  postContent,
+  username,
+  likes,
+  comments
 }: {
   videoUri: string;
   onPress: () => void;
   className?: string;
   style?: any;
+  videoId: string;
+  postContent?: string;
+  username?: string;
+  likes?: number;
+  comments?: number;
 }) => {
+  const [showFullscreen, setShowFullscreen] = useState(false);
   const [videoLoading, setVideoLoading] = useState(true);
-  
+
   const player = useVideoPlayer(videoUri, player => {
     player.loop = true;
-    player.muted = false;
+    player.muted = true;
+    player.pause();
   });
 
- React.useEffect(() => {
-  const interval = setInterval(() => {
-    if (player.status === 'readyToPlay') {
-      setVideoLoading(false);
-    }
-  }, 100);
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (player.status === 'readyToPlay') {
+        setVideoLoading(false);
+      }
+    }, 100);
 
-  return () => clearInterval(interval);
-}, [player]);
+    return () => clearInterval(interval);
+  }, [player]);
+
   return (
-    <View className={className} style={style}>
-      <View className="relative">
-        {videoLoading && <ImageSkeleton width="100%" height="100%" />}
-        <VideoView
-          player={player}
-          style={{ width: '100%', height: '100%' }}
-          nativeControls={true}
-          contentFit="cover"
-        />
-      </View>
-    </View>
+    <>
+      <TouchableOpacity
+        onPress={() => setShowFullscreen(true)}
+        activeOpacity={0.9}
+        className={className}
+        style={style}
+      >
+        <View className="relative">
+          {videoLoading && <ImageSkeleton width="100%" height="100%" />}
+          {/* Video preview - paused and muted */}
+          <VideoView
+            player={player}
+            style={{ width: '100%', height: '100%' }}
+            nativeControls={false}
+            contentFit="cover"
+          />
+
+          {/* Play button overlay - centered with no background */}
+          <View className="absolute inset-0 items-center justify-center pointer-events-none">
+            <Play size={64} color="#fff" fill="#fff" strokeWidth={0} />
+          </View>
+        </View>
+      </TouchableOpacity>
+
+      {/* Fullscreen video player */}
+      <FullscreenVideoPlayer
+        visible={showFullscreen}
+        videoUri={videoUri}
+        videoId={videoId}
+        onClose={() => setShowFullscreen(false)}
+        postContent={postContent}
+        username={username}
+        likes={likes}
+        comments={comments}
+      />
+    </>
   );
 };
 
-const renderImages = (images: string[], onImagePress: (index: number) => void) => {
+const renderImages = (
+  images: string[],
+  onImagePress: (index: number) => void,
+  postId: string,
+  postContent?: string,
+  username?: string,
+  likes?: number,
+  comments?: number
+) => {
   if (images.length === 0) return null;
 
   // Helper to render media item (image or video)
@@ -150,6 +197,11 @@ const renderImages = (images: string[], onImagePress: (index: number) => void) =
           onPress={() => onImagePress(index)}
           className={className}
           style={style}
+          videoId={`${postId}-video-${index}`}
+          postContent={postContent}
+          username={username}
+          likes={likes}
+          comments={comments}
         />
       );
     }
@@ -288,7 +340,7 @@ export default function FeedPost({ post }: FeedPostProps) {
       
       {/* Post Images */}
       <View className="px-4">
-        {renderImages(post.images, handleImagePress)}
+        {renderImages(post.images, handleImagePress, post.id, post.content, post.username, likesCount, post.comments)}
       </View>
       
       {/* Action Buttons */}
