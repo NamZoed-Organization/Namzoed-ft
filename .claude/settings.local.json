@@ -9,7 +9,9 @@
       "Bash(npx expo:*)",
       "Bash(npm uninstall:*)",
       "Bash(npm start)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(npm install:*)"
     ],
     "deny": [],
     "ask": []

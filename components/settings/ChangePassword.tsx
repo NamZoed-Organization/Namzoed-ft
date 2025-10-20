@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, TextInput, Alert, Animated } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TouchableOpacity, TextInput, Alert, ScrollView } from 'react-native';
 import { ArrowLeft, Eye, EyeOff } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 
@@ -15,23 +15,6 @@ export default function ChangePassword({ onClose }: ChangePasswordProps) {
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(300)).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: true,
-      })
-    ]).start();
-  }, []);
 
   const handleChangePassword = async () => {
     if (!newPassword || !confirmPassword) {
@@ -105,32 +88,17 @@ export default function ChangePassword({ onClose }: ChangePasswordProps) {
   };
 
   return (
-    <View className="flex-1">
-      {/* Fading background overlay that covers status bar */}
-      <Animated.View
-        className="absolute top-0 left-0 right-0 bottom-0 bg-black/30"
-        style={{
-          opacity: fadeAnim,
-          marginTop: -100 // Extend upward to cover status bar
-        }}
-      />
+    <View className="flex-1 bg-white">
+      {/* Header */}
+      <View className="flex-row items-center p-4 border-b border-gray-200">
+        <TouchableOpacity onPress={onClose} className="mr-3">
+          <ArrowLeft size={24} color="#000" />
+        </TouchableOpacity>
+        <Text className="text-lg font-semibold text-gray-900">Change Password</Text>
+      </View>
 
-      {/* Top space to show underlying page */}
-      <View className="h-20" />
-
-      {/* Sliding white content */}
-      <Animated.View
-        className="flex-1 bg-white rounded-t-3xl overflow-hidden"
-        style={{ transform: [{ translateY: slideAnim }] }}
-      >
-        <View className="flex-row items-center p-4 border-b border-gray-200">
-          <TouchableOpacity onPress={onClose} className="mr-3">
-            <ArrowLeft size={24} color="#000" />
-          </TouchableOpacity>
-          <Text className="text-lg font-semibold text-gray-900">Change Password</Text>
-        </View>
-
-        {/* Content */}
+      {/* Scrollable Content */}
+      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
         <View className="px-6 py-8">
           {/* Current Password (for testing) */}
           <View className="mb-6">
@@ -226,7 +194,7 @@ export default function ChangePassword({ onClose }: ChangePasswordProps) {
             Password must be at least 6 characters long
           </Text>
         </View>
-      </Animated.View>
+      </ScrollView>
     </View>
   );
 }

@@ -19,6 +19,7 @@ import "../global.css";
 // 1. import your Dzongkhag provider
 import { DzongkhagProvider } from "@/contexts/DzongkhagContext";
 import { UserProvider } from "@/contexts/UserContext";
+import { VideoPlaybackProvider } from "@/contexts/VideoPlaybackContext";
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -52,16 +53,18 @@ export default function RootLayout() {
         {/* 2. wrap your entire app in the provider */}
         <UserProvider>
           <DzongkhagProvider>
-            <View className="flex-1 bg-background">
-              <Stack screenOptions={{ headerShown: false }} />
-              <StatusBar style="dark" />
-              <FlashMessage
-                position="top"
-                renderCustomContent={(msg) => (
-                  <CustomFlashMessage message={msg} />
-                )}
-              />
-            </View>
+            <VideoPlaybackProvider>
+              <View className="flex-1 bg-background">
+                <Stack screenOptions={{ headerShown: false }} />
+                <StatusBar style="dark" />
+                <FlashMessage
+                  position="top"
+                  renderCustomContent={(msg) => (
+                    <CustomFlashMessage message={msg} />
+                  )}
+                />
+              </View>
+            </VideoPlaybackProvider>
           </DzongkhagProvider>
         </UserProvider>
       </ThemeProvider>

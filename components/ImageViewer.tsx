@@ -13,7 +13,6 @@ import { X, Heart, MessageCircle, Share2 } from "lucide-react-native";
 import { VideoView, useVideoPlayer } from "expo-video";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
 import Animated, { useSharedValue, useAnimatedStyle, withSpring } from "react-native-reanimated";
-import * as FileSystem from 'expo-file-system';
 
 interface ImageViewerProps {
   visible: boolean;
@@ -76,55 +75,30 @@ const ZoomableImage = ({ uri }: { uri: string }) => {
   );
 };
 
-// Individual media item component with video download
+// Individual media item component
 const MediaItem = ({ uri, index, isActive }: { uri: string; index: number; isActive?: boolean }) => {
   const isVideo = isVideoUrl(uri);
-  const [localVideoUri, setLocalVideoUri] = useState<string | null>(null);
-  const [downloading, setDownloading] = useState(false);
-  const [error, setError] = useState(false);
+  const [videoLoading, setVideoLoading] = useState(true);
 
-  const player = localVideoUri && isVideo
-    ? useVideoPlayer(localVideoUri, player => {
+  const player = isVideo
+    ? useVideoPlayer(uri, player => {
         player.loop = true;
         player.muted = false;
       })
     : null;
 
-  // Download video to local storage
+  // Check when video is ready to play
   useEffect(() => {
-    if (isVideo && isActive && !localVideoUri && !downloading && !error) {
-      const downloadVideo = async () => {
-        try {
-          setDownloading(true);
-          const fileName = uri.split('/').pop() || `video_${Date.now()}.mp4`;
-          const localUri = `${FileSystem.cacheDirectory}${fileName}`;
+    if (!isVideo || !player) return;
 
-          // Check if already downloaded
-          const fileInfo = await FileSystem.getInfoAsync(localUri);
-          if (fileInfo.exists) {
-            setLocalVideoUri(localUri);
-            setDownloading(false);
-            return;
-          }
+    const interval = setInterval(() => {
+      if (player.status === 'readyToPlay') {
+        setVideoLoading(false);
+      }
+    }, 100);
 
-          // Download the video
-          const downloadResult = await FileSystem.downloadAsync(uri, localUri);
-          if (downloadResult.status === 200) {
-            setLocalVideoUri(downloadResult.uri);
-          } else {
-            setError(true);
-          }
-          setDownloading(false);
-        } catch (err) {
-          console.error('Error downloading video:', err);
-          setError(true);
-          setDownloading(false);
-        }
-      };
-
-      downloadVideo();
-    }
-  }, [isVideo, isActive, uri, localVideoUri, downloading, error]);
+    return () => clearInterval(interval);
+  }, [player, isVideo]);
 
   // Play/pause based on active state
   useEffect(() => {
@@ -148,22 +122,18 @@ const MediaItem = ({ uri, index, isActive }: { uri: string; index: number; isAct
           backgroundColor: '#000000'
         }}
       >
-        {downloading ? (
+        {videoLoading ? (
           <View className="items-center justify-center flex-1">
             <ActivityIndicator size="large" color="white" />
             <Text className="text-white mt-4">Loading video...</Text>
           </View>
-        ) : error ? (
-          <View className="items-center justify-center flex-1">
-            <Text className="text-white">Failed to load video</Text>
-          </View>
-        ) : player && localVideoUri ? (
+        ) : null}
+        {player ? (
           <VideoView
             player={player}
             style={{ width: '100%', height: '70%' }}
             nativeControls={true}
             contentFit="contain"
-            allowsFullscreen={false}
           />
         ) : null}
       </View>
