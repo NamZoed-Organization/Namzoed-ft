@@ -63,6 +63,7 @@ export default function MessageScreen() {
   const [isSearching, setIsSearching] = useState(false);
   const [conversations, setConversations] = useState<any[]>([]);
   const [isLoadingConversations, setIsLoadingConversations] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<string>("");
 
   if (!currentUser) {
     return (
@@ -107,18 +108,6 @@ export default function MessageScreen() {
   const conversationPartners = useMemo(() => {
     return Object.keys(userData.messages as Record<string, IMessage[]>);
   }, [userData.messages]);
-
-  // Filter users based on search
-  const filteredConversations = useMemo(() => {
-    if (!searchQuery) return conversationPartners;
-    
-    return conversationPartners.filter(phoneNumber => {
-      const user = Object.values(users).find(u => 
-        `+975${u.phone_number}` === phoneNumber || u.phone_number === phoneNumber.replace('+975', '')
-      );
-      return user?.username.toLowerCase().includes(searchQuery.toLowerCase());
-    });
-  }, [searchQuery, conversationPartners]);
 
   // Search users from Supabase profiles table
   useEffect(() => {
@@ -171,86 +160,187 @@ export default function MessageScreen() {
 
   // Fetch conversations from Supabase
   const fetchConversations = async () => {
-    if (!currentUser?.phone_number) return;
-    
     setIsLoadingConversations(true);
     try {
-      console.log('Temporarily disabled conversation fetch until we know column names');
-      setConversations([]);
-      /*
-      // Get all unique conversations for the current user
-      const { data, error } = await supabase
+      console.log('=== FETCHING CONVERSATIONS ===');
+      console.log('Current user object:', JSON.stringify(currentUser));
+      console.log('Current user properties:', currentUser ? Object.keys(currentUser) : 'null');
+      
+      // Try multiple possible phone number properties
+      const userPhone = currentUser?.phone_number || 
+                       (currentUser as any)?.phone || 
+                       (currentUser as any)?.phoneNumber ||
+                       (currentUser as any)?.mobile;
+      
+      console.log('Detected user phone:', userPhone);
+      
+      if (!userPhone) {
+        console.log('❌ No phone number found for current user');
+        setConversations([]);
+        setDebugInfo('Please login with a valid phone number');
+        setIsLoadingConversations(false);
+        return;
+      }
+      
+      // Get current user's profile to get their UUID
+      console.log('🔍 Searching for profile with phone:', userPhone);
+      const { data: currentUserProfile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, name, phone')
+        .eq('phone', userPhone)
+        .maybeSingle();
+
+      if (profileError) {
+        console.log('❌ Error finding profile:', profileError);
+      }
+      
+      console.log('✅ Current user profile found:', currentUserProfile);
+
+      if (!currentUserProfile) {
+        console.log('❌ Current user not found in profiles table');
+        console.log('💡 Make sure your phone number matches a profile in the database');
+        setConversations([]);
+        setDebugInfo(`User with phone ${userPhone} not found in database`);
+        setIsLoadingConversations(false);
+        return;
+      }
+
+      // Fetch all messages where current user is sender or receiver using UUID
+      const { data: messages, error } = await supabase
         .from('messages')
-        .select(`
-          *,
-          sender_profile:profiles!messages_sender_id_fkey(name, phone),
-          receiver_profile:profiles!messages_receiver_id_fkey(name, phone)
-        `)
-        .or(`sender_id.eq.${currentUser.phone_number},receiver_id.eq.${currentUser.phone_number}`)
+        .select('*')
+        .or(`sender_id.eq.${currentUserProfile.id},receiver_id.eq.${currentUserProfile.id}`)
         .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('Error fetching conversations:', error);
-      } else {
-        // Group messages by conversation partner and get the latest message for each
-        const conversationMap = new Map();
-        
-        data?.forEach(message => {
-          const partnerId = message.sender_id === currentUser.phone_number 
-            ? message.receiver_id 
-            : message.sender_id;
-          
-          const partnerProfile = message.sender_id === currentUser.phone_number
-            ? message.receiver_profile
-            : message.sender_profile;
+      console.log('Messages fetched:', messages?.length, 'error:', error?.message);
 
-          if (!conversationMap.has(partnerId) || 
-              new Date(message.created_at) > new Date(conversationMap.get(partnerId).created_at)) {
-            conversationMap.set(partnerId, {
-              partnerId,
-              partnerProfile,
-              lastMessage: message,
-              created_at: message.created_at
-            });
-          }
-        });
-
-        setConversations(Array.from(conversationMap.values()));
+      if (error || !messages || messages.length === 0) {
+        console.log('No messages found from database');
+        setConversations([]);
+        setDebugInfo('No conversations for this user');
+        setIsLoadingConversations(false);
+        return;
       }
-      */
+
+      // Extract unique partner UUIDs
+      console.log('Processing messages to extract partners...');
+      const partnerMap = new Map();
+      for (const message of messages) {
+        const partnerId = message.sender_id === currentUserProfile.id
+          ? message.receiver_id
+          : message.sender_id;
+        
+        console.log(`Message: sender=${message.sender_id?.substring(0,8)}, receiver=${message.receiver_id?.substring(0,8)}, partnerId=${partnerId?.substring(0,8)}`);
+        
+        if (!partnerMap.has(partnerId) || new Date(message.created_at) > new Date(partnerMap.get(partnerId).created_at)) {
+          partnerMap.set(partnerId, message);
+        }
+      }
+
+      const partnerIds = Array.from(partnerMap.keys());
+      console.log('Unique partner IDs found:', partnerIds.length);
+      console.log('Partner IDs:', partnerIds.map(id => id?.substring(0, 8)));
+      
+      let profiles: any[] = [];
+      
+      if (partnerIds.length > 0) {
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('id, name, phone')
+          .in('id', partnerIds);
+        
+        console.log('Profiles fetched:', profileData?.length, 'error:', profileError?.message);
+        if (profileData) {
+          console.log('Profile names:', profileData.map(p => p.name));
+        }
+        
+        profiles = profileData || [];
+      }
+
+      const supabaseConversations = partnerIds
+        .map(pid => {
+          const lastMessage = partnerMap.get(pid);
+          const partnerProfile = profiles.find(p => p.id === pid);
+          console.log(`Building conversation for ${partnerProfile?.name || 'Unknown'} (${pid?.substring(0,8)})`);
+          return {
+            partnerId: pid,
+            partnerProfile,
+            lastMessage,
+            created_at: lastMessage.created_at
+          };
+        })
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+      console.log('Final conversations built:', supabaseConversations.length);
+      console.log('Conversation partners:', supabaseConversations.map(c => c.partnerProfile?.name || c.partnerId?.substring(0,8)));
+      
+      setConversations(supabaseConversations);
+      setDebugInfo(`${supabaseConversations.length} chat partners`);
+      console.log('State updated with conversations');
     } catch (e) {
       console.error('Error fetching conversations:', e);
+      setDebugInfo(`Error: ${(e as any).message}`);
+      setConversations([]);
     } finally {
       setIsLoadingConversations(false);
     }
   };
 
   useEffect(() => {
+    // Fetch conversations from Supabase (prioritize database over local data)
+    console.log('useEffect triggered, fetching conversations...');
     fetchConversations();
   }, [currentUser?.phone_number]);
 
   // Subscribe to real-time updates for new messages
   useEffect(() => {
-    if (!currentUser?.phone_number) return;
+    const userPhone = currentUser?.phone_number || 
+                     (currentUser as any)?.phone || 
+                     (currentUser as any)?.phoneNumber ||
+                     (currentUser as any)?.mobile;
+    
+    if (!userPhone) {
+      console.log('⚠️ Cannot setup real-time: no phone number');
+      return;
+    }
 
-    const channel = supabase
-      .channel('conversations')
-      .on('postgres_changes', { 
-        event: '*', 
-        schema: 'public', 
-        table: 'messages',
-        filter: `or(sender_id.eq.${currentUser.phone_number},receiver_id.eq.${currentUser.phone_number})`
-      }, (payload) => {
-        console.log('New message received, refreshing conversations');
-        // Refresh conversations when a new message is received
-        fetchConversations();
-      })
-      .subscribe();
+    const setupRealtimeSubscription = async () => {
+      // Get user's UUID for real-time filtering
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('phone', userPhone)
+        .maybeSingle();
 
-    return () => {
-      supabase.removeChannel(channel);
+      const userUUID = profile?.id;
+
+      if (!userUUID) {
+        console.log('⚠️ Cannot setup real-time: user UUID not found');
+        return;
+      }
+
+      console.log('🔔 Setting up real-time subscription for user:', userUUID.substring(0, 8));
+
+      const channel = supabase
+        .channel('conversations')
+        .on('postgres_changes', { 
+          event: '*', 
+          schema: 'public', 
+          table: 'messages',
+          filter: `or(sender_id.eq.${userUUID},receiver_id.eq.${userUUID})`
+        }, (payload) => {
+          console.log('📨 New message received, refreshing conversations');
+          fetchConversations();
+        })
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
     };
-  }, [currentUser?.phone_number]);
+
+    setupRealtimeSubscription();
+  }, [currentUser]);
 
   // Get mongoose chats for current user
   const mongooseChats = useMemo(() => {
@@ -315,31 +405,89 @@ export default function MessageScreen() {
     );
   };
 
+  const handleDeleteConversation = async (partnerId: string, partnerName: string) => {
+    try {
+      // Get current user's UUID
+      const userPhone = currentUser?.phone_number || 
+                       (currentUser as any)?.phone || 
+                       (currentUser as any)?.phoneNumber ||
+                       (currentUser as any)?.mobile;
+      
+      if (!userPhone) {
+        console.log('❌ No phone number found for deletion');
+        return;
+      }
+      
+      const { data: currentUserProfile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('phone', userPhone)
+        .maybeSingle();
+
+      if (!currentUserProfile) {
+        console.log('❌ User profile not found');
+        return;
+      }
+
+      // Delete all messages between current user and partner
+      const { error } = await supabase
+        .from('messages')
+        .delete()
+        .or(`and(sender_id.eq.${currentUserProfile.id},receiver_id.eq.${partnerId}),and(sender_id.eq.${partnerId},receiver_id.eq.${currentUserProfile.id})`);
+
+      if (error) {
+        console.error('Error deleting conversation:', error);
+      } else {
+        console.log(`✅ Deleted conversation with ${partnerName}`);
+        // Remove from local state immediately
+        setConversations(prev => prev.filter(c => c.partnerId !== partnerId));
+      }
+    } catch (e) {
+      console.error('Error deleting conversation:', e);
+    }
+  };
+
   const renderConversationItem = ({ item: conversation }: { item: any }) => {
+    // Handle both UUID-based profiles and phone-based profiles
+    const userName = conversation.partnerProfile?.name || 
+                     conversation.partnerProfile?.username || 
+                     conversation.partnerId?.substring(0, 8) || 
+                     'Unknown';
+    
     return (
-      <TouchableOpacity 
-        className="flex-row items-center p-4 border-b border-gray-200"
-        onPress={() => router.push(`/(users)/chat/${conversation.partnerId}`)}
-      >
-        <View className="w-12 h-12 bg-primary rounded-full items-center justify-center mr-3">
-          <Text className="text-white font-bold">
-            {conversation.partnerProfile?.name?.charAt(0).toUpperCase() || 'U'}
+      <View className="flex-row items-center border-b border-gray-200">
+        <TouchableOpacity 
+          className="flex-row items-center p-4 flex-1"
+          onPress={() => router.push(`/(users)/chat/${conversation.partnerId}`)}
+        >
+          <View className="w-12 h-12 bg-primary rounded-full items-center justify-center mr-3">
+            <Text className="text-white font-bold">
+              {userName?.charAt(0).toUpperCase() || 'U'}
+            </Text>
+          </View>
+          <View className="flex-1">
+            <Text className="font-semibold text-gray-800">
+              {userName}
+            </Text>
+            <Text className="text-sm text-gray-500 mt-1" numberOfLines={1}>
+              {conversation.lastMessage?.content || 'No messages yet'}
+            </Text>
+          </View>
+          <Text className="text-xs text-gray-400 mr-2">
+            {conversation.lastMessage?.created_at ? 
+              new Date(conversation.lastMessage.created_at).toLocaleDateString() : ''
+            }
           </Text>
-        </View>
-        <View className="flex-1">
-          <Text className="font-semibold text-gray-800">
-            {conversation.partnerProfile?.name || conversation.partnerId}
-          </Text>
-          <Text className="text-sm text-gray-500 mt-1" numberOfLines={1}>
-            {conversation.lastMessage?.content || 'No messages yet'}
-          </Text>
-        </View>
-        <Text className="text-xs text-gray-400">
-          {conversation.lastMessage?.created_at ? 
-            new Date(conversation.lastMessage.created_at).toLocaleDateString() : ''
-          }
-        </Text>
-      </TouchableOpacity>
+        </TouchableOpacity>
+        
+        {/* Delete Button */}
+        <TouchableOpacity
+          className="p-4 items-center justify-center"
+          onPress={() => handleDeleteConversation(conversation.partnerId, userName)}
+        >
+          <Ionicons name="trash-outline" size={22} color="#EF4444" />
+        </TouchableOpacity>
+      </View>
     );
   };
 
@@ -526,15 +674,11 @@ export default function MessageScreen() {
               {/* Show existing conversations when not searching */}
               {!searchQuery.trim() && (
                 <>
-                  {isLoadingConversations ? (
-                    <View className="flex-1 items-center justify-center py-8">
-                      <Text className="text-gray-500 text-center">Loading conversations...</Text>
-                    </View>
-                  ) : conversations.length > 0 ? (
+                  {conversations.length > 0 ? (
                     <>
                       <View className="px-4 py-2 bg-gray-50 border-b border-gray-200">
                         <Text className="text-sm font-medium text-gray-600">
-                          Recent Conversations
+                          Your Chats ({conversations.length})
                         </Text>
                       </View>
                       <FlatList
@@ -548,7 +692,7 @@ export default function MessageScreen() {
                   ) : (
                     <View className="flex-1 items-center justify-center py-8">
                       <Text className="text-gray-500 text-center">
-                        No conversations yet.{'\n'}Search for users to start chatting!
+                        No conversations yet.{"\n"}Search for users to start chatting!
                       </Text>
                     </View>
                   )}

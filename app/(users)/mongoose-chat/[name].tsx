@@ -2,16 +2,15 @@
 import { useUser } from "@/contexts/UserContext";
 import mongooses from "@/data/mongoose";
 import { Ionicons } from "@expo/vector-icons";
-import { Mic, Trash2, Play, Pause } from "lucide-react-native";
-import * as Location from 'expo-location';
 import { Audio } from 'expo-av';
+import * as Location from 'expo-location';
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { Mic, Pause, Play, Trash2 } from "lucide-react-native";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
     Alert,
     Animated,
     Keyboard,
-    KeyboardAvoidingView,
     Platform,
     ScrollView,
     Text,
@@ -243,8 +242,8 @@ export default function MongooseChatScreen() {
   const [playingMessageIndex, setPlayingMessageIndex] = useState<number | null>(null);
   const [playbackPosition, setPlaybackPosition] = useState(0);
   const scrollViewRef = useRef<ScrollView>(null);
-  const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const playbackIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const recordingIntervalRef = useRef<number | null>(null);
+  const playbackIntervalRef = useRef<number | null>(null);
   const recordingRef = useRef<Audio.Recording | null>(null);
   const soundRef = useRef<Audio.Sound | null>(null);
 
