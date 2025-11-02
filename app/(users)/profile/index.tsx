@@ -1,11 +1,20 @@
 // Path: app/(tabs)/profile.tsx
 import ProfileSettings from "@/components/ProfileSettings";
+import ImageViewer from "@/components/ImageViewer";
 import { useUser } from "@/contexts/UserContext";
+import { fetchUserPosts, Post } from "@/lib/postsService";
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from "expo-router";
-import { useState } from "react";
-import { Alert, Image, Modal, ScrollView, Text, TouchableOpacity, View } from "react-native";
-import { Settings, User, Edit3, Mail, Phone, Image as ImageLucide, ShoppingBag, Wrench, Camera, ImageIcon } from 'lucide-react-native';
+import { Camera, Edit3, ImageIcon, Image as ImageLucide, Mail, Phone, Settings, ShoppingBag, User, Wrench, Play } from 'lucide-react-native';
+import { useEffect, useRef, useState } from "react";
+import { ActivityIndicator, Alert, Animated, Easing, Image, Modal, PanResponder, ScrollView, Text, TouchableOpacity, View } from "react-native";
+
+// Helper to check if URL is a video
+const isVideoUrl = (url: string): boolean => {
+  const videoExtensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.m4v'];
+  const lowerUrl = url.toLowerCase();
+  return videoExtensions.some(ext => lowerUrl.includes(ext)) || lowerUrl.includes('post-videos');
+};
 
 export default function ProfileScreen() {
   const { currentUser, logout } = useUser();
@@ -14,6 +23,269 @@ export default function ProfileScreen() {
   const [showImagePicker, setShowImagePicker] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [profileImage, setProfileImage] = useState(null);
+  const [userPosts, setUserPosts] = useState<Post[]>([]);
+  const [loadingPosts, setLoadingPosts] = useState(true);
+  const [userImages, setUserImages] = useState<string[]>([]);
+
+  // ImageViewer state
+  const [showImageViewer, setShowImageViewer] = useState(false);
+  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
+  const [imagePostMap, setImagePostMap] = useState<Map<string, Post>>(new Map());
+
+  // Animation values for fade and slide
+  const fadeAnimImagePicker = useRef(new Animated.Value(0)).current;
+  const slideAnimImagePicker = useRef(new Animated.Value(0)).current;
+  const fadeAnimSettings = useRef(new Animated.Value(0)).current;
+  const slideAnimSettings = useRef(new Animated.Value(0)).current;
+  const contentOpacitySettings = useRef(new Animated.Value(1)).current;
+
+  // Pan responder for drag to close - Image Picker
+  const panResponderImagePicker = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dy) > 5;
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (gestureState.dy > 0) {
+          slideAnimImagePicker.setValue(gestureState.dy);
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        const shouldClose = gestureState.dy > 150 || gestureState.vy > 0.5;
+
+        if (shouldClose) {
+          const velocity = Math.max(Math.abs(gestureState.vy), 0.5);
+          const distance = 600 - gestureState.dy;
+          const duration = Math.min(Math.max(distance / velocity / 3, 150), 300);
+
+          Animated.parallel([
+            Animated.timing(fadeAnimImagePicker, {
+              toValue: 0,
+              duration: duration,
+              easing: Easing.bezier(0.4, 0.0, 0.2, 1),
+              useNativeDriver: true,
+            }),
+            Animated.timing(slideAnimImagePicker, {
+              toValue: 600,
+              duration: duration,
+              easing: Easing.bezier(0.4, 0.0, 0.2, 1),
+              useNativeDriver: true,
+            })
+          ]).start(({ finished }) => {
+            if (finished) {
+              setShowImagePicker(false);
+              slideAnimImagePicker.setValue(600);
+              fadeAnimImagePicker.setValue(0);
+            }
+          });
+        } else {
+          Animated.spring(slideAnimImagePicker, {
+            toValue: 0,
+            useNativeDriver: true,
+            tension: 50,
+            friction: 8,
+          }).start();
+        }
+      },
+    })
+  ).current;
+
+  // Pan responder for drag to close - Settings
+  const panResponderSettings = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dy) > 5;
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (gestureState.dy > 0) {
+          slideAnimSettings.setValue(gestureState.dy);
+          // Fade out content as user drags down
+          const opacity = Math.max(0, 1 - (gestureState.dy / 300));
+          contentOpacitySettings.setValue(opacity);
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        const shouldClose = gestureState.dy > 150 || gestureState.vy > 0.5;
+
+        if (shouldClose) {
+          const velocity = Math.max(Math.abs(gestureState.vy), 0.5);
+          const distance = 600 - gestureState.dy;
+          const duration = Math.min(Math.max(distance / velocity / 3, 150), 300);
+
+          Animated.parallel([
+            Animated.timing(fadeAnimSettings, {
+              toValue: 0,
+              duration: duration,
+              easing: Easing.bezier(0.4, 0.0, 0.2, 1),
+              useNativeDriver: true,
+            }),
+            Animated.timing(slideAnimSettings, {
+              toValue: 600,
+              duration: duration,
+              easing: Easing.bezier(0.4, 0.0, 0.2, 1),
+              useNativeDriver: true,
+            }),
+            Animated.timing(contentOpacitySettings, {
+              toValue: 0,
+              duration: duration,
+              easing: Easing.bezier(0.4, 0.0, 0.2, 1),
+              useNativeDriver: true,
+            })
+          ]).start(({ finished }) => {
+            if (finished) {
+              setShowSettings(false);
+              slideAnimSettings.setValue(600);
+              fadeAnimSettings.setValue(0);
+              contentOpacitySettings.setValue(1);
+            }
+          });
+        } else {
+          Animated.parallel([
+            Animated.spring(slideAnimSettings, {
+              toValue: 0,
+              useNativeDriver: true,
+              tension: 50,
+              friction: 8,
+            }),
+            Animated.spring(contentOpacitySettings, {
+              toValue: 1,
+              useNativeDriver: true,
+              tension: 50,
+              friction: 8,
+            })
+          ]).start();
+        }
+      },
+    })
+  ).current;
+
+  const handleCloseImagePicker = () => {
+    Animated.parallel([
+      Animated.timing(fadeAnimImagePicker, {
+        toValue: 0,
+        duration: 250,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnimImagePicker, {
+        toValue: 600,
+        duration: 250,
+        easing: Easing.bezier(0.4, 0.0, 0.2, 1),
+        useNativeDriver: true,
+      })
+    ]).start(({ finished }) => {
+      if (finished) {
+        setShowImagePicker(false);
+        slideAnimImagePicker.setValue(600);
+        fadeAnimImagePicker.setValue(0);
+      }
+    });
+  };
+
+  const handleCloseSettings = () => {
+    Animated.parallel([
+      Animated.timing(fadeAnimSettings, {
+        toValue: 0,
+        duration: 250,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnimSettings, {
+        toValue: 600,
+        duration: 250,
+        easing: Easing.bezier(0.4, 0.0, 0.2, 1),
+        useNativeDriver: true,
+      })
+    ]).start(({ finished }) => {
+      if (finished) {
+        setShowSettings(false);
+        slideAnimSettings.setValue(600);
+        fadeAnimSettings.setValue(0);
+      }
+    });
+  };
+
+  // Animate image picker
+  useEffect(() => {
+    if (showImagePicker) {
+      slideAnimImagePicker.setValue(600);
+      fadeAnimImagePicker.setValue(0);
+      Animated.parallel([
+        Animated.timing(fadeAnimImagePicker, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnimImagePicker, {
+          toValue: 0,
+          duration: 300,
+          easing: Easing.bezier(0.25, 0.1, 0.25, 1),
+          useNativeDriver: true,
+        })
+      ]).start();
+    }
+  }, [showImagePicker]);
+
+  // Animate settings
+  useEffect(() => {
+    if (showSettings) {
+      slideAnimSettings.setValue(600);
+      fadeAnimSettings.setValue(0);
+      Animated.parallel([
+        Animated.timing(fadeAnimSettings, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnimSettings, {
+          toValue: 0,
+          duration: 300,
+          easing: Easing.bezier(0.25, 0.1, 0.25, 1),
+          useNativeDriver: true,
+        })
+      ]).start();
+    }
+  }, [showSettings]);
+
+  // Fetch user posts when component mounts or user changes
+  useEffect(() => {
+    const loadUserPosts = async () => {
+      if (!currentUser?.id) {
+        setLoadingPosts(false);
+        return;
+      }
+
+      try {
+        setLoadingPosts(true);
+        const posts = await fetchUserPosts(currentUser.id);
+        setUserPosts(posts);
+
+        // Extract all images from posts and create mapping
+        const allImages: string[] = [];
+        const postMap = new Map<string, Post>();
+
+        posts.forEach(post => {
+          if (post.images && post.images.length > 0) {
+            post.images.forEach((imageUrl: string) => {
+              allImages.push(imageUrl);
+              postMap.set(imageUrl, post);
+            });
+          }
+        });
+
+        setUserImages(allImages);
+        setImagePostMap(postMap);
+      } catch (error) {
+        console.error('Error loading user posts:', error);
+        Alert.alert('Error', 'Failed to load your posts');
+      } finally {
+        setLoadingPosts(false);
+      }
+    };
+
+    loadUserPosts();
+  }, [currentUser?.id]);
 
   const handleEditProfile = () => {
     setShowImagePicker(true);
@@ -23,12 +295,24 @@ export default function ProfileScreen() {
     setShowSettings(true);
   };
 
+  const handleMediaClick = (imageUrl: string) => {
+    const post = imagePostMap.get(imageUrl);
+    if (!post) return;
+
+    // Find the index of this image in the post's images array
+    const mediaIndex = post.images.findIndex((img: string) => img === imageUrl);
+
+    setSelectedPost(post);
+    setSelectedMediaIndex(mediaIndex >= 0 ? mediaIndex : 0);
+    setShowImageViewer(true);
+  };
+
   const handleImageOption = async (option: 'camera' | 'gallery') => {
-    setShowImagePicker(false);
-    
+    handleCloseImagePicker();
+
     try {
       let result;
-      
+
       if (option === 'camera') {
         // Request camera permissions
         const cameraPermission = await ImagePicker.requestCameraPermissionsAsync();
@@ -36,7 +320,7 @@ export default function ProfileScreen() {
           Alert.alert('Permission Required', 'Camera access is needed to take photos.');
           return;
         }
-        
+
         result = await ImagePicker.launchCameraAsync({
           mediaTypes: ImagePicker.MediaTypeOptions.Images,
           allowsEditing: true,
@@ -50,7 +334,7 @@ export default function ProfileScreen() {
           Alert.alert('Permission Required', 'Gallery access is needed to select photos.');
           return;
         }
-        
+
         result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ImagePicker.MediaTypeOptions.Images,
           allowsEditing: true,
@@ -75,7 +359,7 @@ export default function ProfileScreen() {
       <View className="flex-1 bg-background">
         {/* Status Bar Space */}
         <View className="h-12 bg-white" />
-        
+
         <View className="flex-1 items-center justify-center px-4">
           <User size={72} className="text-gray-700 mb-4" />
           <Text className="text-xl font-mbold text-gray-700 mb-2">
@@ -84,7 +368,7 @@ export default function ProfileScreen() {
           <Text className="text-sm font-regular text-gray-500 text-center mb-6">
             Please log in to view your profile
           </Text>
-          
+
           <TouchableOpacity
             onPress={() => router.replace("/login")}
             className="bg-primary rounded-xl py-3 px-6"
@@ -103,7 +387,7 @@ export default function ProfileScreen() {
     <View className="flex-1 bg-background">
       {/* Status Bar Space */}
       <View className="h-12 bg-white" />
-      
+
       {/* Header with Settings */}
       <View className="flex-row items-center justify-end px-4 py-3 bg-white border-b border-gray-100">
         <TouchableOpacity
@@ -132,7 +416,7 @@ export default function ProfileScreen() {
                   <User size={32} className="text-gray-400" />
                 )}
               </View>
-              
+
               {/* Edit Profile Button */}
               <TouchableOpacity
                 onPress={handleEditProfile}
@@ -142,11 +426,15 @@ export default function ProfileScreen() {
                 <Edit3 size={16} className="text-white" />
               </TouchableOpacity>
             </View>
-            
-            <Text className="text-2xl font-mbold text-gray-900 mb-1">
-              {currentUser.username}
-            </Text>
-            
+
+            {currentUser.name && (
+              <Text className="text-2xl font-mbold text-gray-900 mb-1">
+                {currentUser.name}
+              </Text>
+            )}
+
+
+
             {currentUser.email && (
               <View className="flex-row items-center mb-2">
                 <Mail size={16} color="#6B7280" />
@@ -219,7 +507,7 @@ export default function ProfileScreen() {
                 Images
               </Text>
             </TouchableOpacity>
-            
+
             <TouchableOpacity
               className={`flex-1 py-4 items-center border-b-2 ${
                 activeTab === 'products' ? 'border-primary' : 'border-transparent'
@@ -257,21 +545,57 @@ export default function ProfileScreen() {
         {/* Tab Content */}
         <View className="px-4 py-4">
           {activeTab === 'images' && (
-            <View className="flex-row flex-wrap">
-              {[1, 2, 3, 4].map((index) => (
-                <View key={index} className="w-[33.33%] aspect-square p-1">
-                  <View className="flex-1 bg-gray-200 rounded-lg overflow-hidden">
-                    <Image
-                      source={require('@/assets/images/all.png')}
-                      className="w-full h-full"
-                      resizeMode="cover"
-                    />
-                  </View>
+            <>
+              {loadingPosts ? (
+                <View className="items-center justify-center py-12">
+                  <ActivityIndicator size="large" color="#059669" />
+                  <Text className="text-sm font-regular text-gray-500 mt-4">
+                    Loading posts...
+                  </Text>
                 </View>
-              ))}
-            </View>
+              ) : userImages.length > 0 ? (
+                <View className="flex-row flex-wrap">
+                  {userImages.map((imageUrl, index) => {
+                    const isVideo = isVideoUrl(imageUrl);
+                    return (
+                      <View key={index} className="w-[33.33%] aspect-square p-1">
+                        <TouchableOpacity
+                          className="flex-1 bg-gray-200 rounded-lg overflow-hidden relative"
+                          onPress={() => handleMediaClick(imageUrl)}
+                          activeOpacity={0.8}
+                        >
+                          <Image
+                            source={{ uri: imageUrl }}
+                            className="w-full h-full"
+                            resizeMode="cover"
+                          />
+                          {/* Video play icon overlay */}
+                          {isVideo && (
+                            <View className="absolute inset-0 items-center justify-center bg-black/30">
+                              <View className="bg-white rounded-full p-2">
+                                <Play size={24} color="#000" fill="#000" />
+                              </View>
+                            </View>
+                          )}
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })}
+                </View>
+              ) : (
+                <View className="items-center justify-center py-12">
+                  <ImageLucide size={48} className="text-gray-400 mb-4" />
+                  <Text className="text-lg font-msemibold text-gray-700 mb-2">
+                    No Images Yet
+                  </Text>
+                  <Text className="text-sm font-regular text-gray-500 text-center">
+                    Create a post with images to see them here
+                  </Text>
+                </View>
+              )}
+            </>
           )}
-          
+
           {activeTab === 'products' && (
             <View className="flex-row flex-wrap">
               {[1, 2].map((index) => (
@@ -287,7 +611,7 @@ export default function ProfileScreen() {
               ))}
             </View>
           )}
-          
+
           {activeTab === 'tools' && (
             <View className="items-center justify-center py-12">
               <Wrench size={48} className="text-gray-700 mb-4" />
@@ -306,86 +630,141 @@ export default function ProfileScreen() {
       </ScrollView>
 
       {/* Image Picker Bottom Sheet */}
-      <Modal
-        visible={showImagePicker}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowImagePicker(false)}
-      >
-        <TouchableOpacity
-          className="flex-1 bg-black/50 justify-end"
-          activeOpacity={1}
-          onPress={() => setShowImagePicker(false)}
+      {showImagePicker && (
+        <Modal
+          visible={true}
+          transparent={true}
+          animationType="none"
+          onRequestClose={handleCloseImagePicker}
+          statusBarTranslucent={true}
         >
-          <View className="bg-white rounded-t-3xl p-6">
-            <View className="w-12 h-1 bg-gray-300 rounded-full self-center mb-6" />
-            
-            <Text className="text-xl font-mbold text-gray-900 mb-6 text-center">
-              Change Profile Picture
-            </Text>
-
+          <View className="flex-1">
+            <Animated.View
+              className="absolute top-0 left-0 right-0 bottom-0"
+              style={{
+                backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                opacity: fadeAnimImagePicker
+              }}
+            />
             <TouchableOpacity
-              className="flex-row items-center bg-gray-50 rounded-xl px-4 py-4 mb-3"
-              onPress={() => handleImageOption('camera')}
-              activeOpacity={0.7}
+              className="flex-1"
+              activeOpacity={1}
+              onPress={handleCloseImagePicker}
+            />
+            <Animated.View
+              className="bg-white rounded-t-3xl"
+              style={{
+                transform: [{ translateY: slideAnimImagePicker }]
+              }}
             >
-              <Camera size={24} className="text-gray-700 mr-4" />
-              <View>
-                <Text className="text-base font-msemibold text-gray-900">
-                  Take Photo
-                </Text>
-                <Text className="text-sm font-regular text-gray-500">
-                  Use camera to take a new photo
-                </Text>
+              <View {...panResponderImagePicker.panHandlers} className="px-6 pt-6 pb-2">
+                <View className="w-12 h-1 bg-gray-300 rounded-full self-center mb-4" />
               </View>
-            </TouchableOpacity>
 
-            <TouchableOpacity
-              className="flex-row items-center bg-gray-50 rounded-xl px-4 py-4 mb-6"
-              onPress={() => handleImageOption('gallery')}
-              activeOpacity={0.7}
-            >
-              <ImageIcon size={24} className="text-gray-700 mr-4" />
-              <View>
-                <Text className="text-base font-msemibold text-gray-900">
-                  Choose from Gallery
+              <View className="px-6 pb-6">
+                <Text className="text-xl font-mbold text-gray-900 mb-6 text-center">
+                  Change Profile Picture
                 </Text>
-                <Text className="text-sm font-regular text-gray-500">
-                  Select from your photo library
-                </Text>
+
+                <TouchableOpacity
+                  className="flex-row items-center bg-gray-50 rounded-xl px-4 py-4 mb-3"
+                  onPress={() => handleImageOption('camera')}
+                  activeOpacity={0.7}
+                >
+                  <Camera size={24} className="text-gray-700 mr-4" />
+                  <View>
+                    <Text className="text-base font-msemibold text-gray-900">
+                      Take Photo
+                    </Text>
+                    <Text className="text-sm font-regular text-gray-500">
+                      Use camera to take a new photo
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  className="flex-row items-center bg-gray-50 rounded-xl px-4 py-4 mb-6"
+                  onPress={() => handleImageOption('gallery')}
+                  activeOpacity={0.7}
+                >
+                  <ImageIcon size={24} className="text-gray-700 mr-4" />
+                  <View>
+                    <Text className="text-base font-msemibold text-gray-900">
+                      Choose from Gallery
+                    </Text>
+                    <Text className="text-sm font-regular text-gray-500">
+                      Select from your photo library
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  className="bg-gray-100 rounded-xl py-4 items-center"
+                  onPress={handleCloseImagePicker}
+                  activeOpacity={0.8}
+                >
+                  <Text className="text-gray-600 font-msemibold">
+                    Cancel
+                  </Text>
+                </TouchableOpacity>
               </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              className="bg-gray-100 rounded-xl py-4 items-center"
-              onPress={() => setShowImagePicker(false)}
-              activeOpacity={0.8}
-            >
-              <Text className="text-gray-600 font-msemibold">
-                Cancel
-              </Text>
-            </TouchableOpacity>
+            </Animated.View>
           </View>
-        </TouchableOpacity>
-      </Modal>
+        </Modal>
+      )}
 
       {/* Settings Overlay */}
-      <Modal
-        visible={showSettings}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowSettings(false)}
-      >
-        <ProfileSettings 
-          onClose={() => setShowSettings(false)}
-          currentUser={currentUser}
-          onLogout={async () => {
-            setShowSettings(false);
-            await logout();
-            router.replace("/login");
-          }}
+      {showSettings && (
+        <Modal
+          visible={true}
+          transparent={true}
+          animationType="none"
+          onRequestClose={handleCloseSettings}
+          statusBarTranslucent={true}
+        >
+          <View className="flex-1">
+            <Animated.View
+              className="absolute top-0 left-0 right-0 bottom-0"
+              style={{
+                backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                opacity: fadeAnimSettings
+              }}
+            />
+            <Animated.View
+              className="flex-1"
+              style={{
+                transform: [{ translateY: slideAnimSettings }]
+              }}
+            >
+              <ProfileSettings
+                onClose={handleCloseSettings}
+                currentUser={currentUser}
+                onLogout={async () => {
+                  handleCloseSettings();
+                  await logout();
+                  router.replace("/login");
+                }}
+                panHandlers={panResponderSettings.panHandlers}
+                contentOpacity={contentOpacitySettings}
+              />
+            </Animated.View>
+          </View>
+        </Modal>
+      )}
+
+      {/* ImageViewer Modal */}
+      {showImageViewer && selectedPost && (
+        <ImageViewer
+          visible={showImageViewer}
+          images={selectedPost.images}
+          initialIndex={selectedMediaIndex}
+          onClose={() => setShowImageViewer(false)}
+          postContent={selectedPost.content}
+          username={currentUser?.name || 'User'}
+          likes={selectedPost.likes}
+          comments={selectedPost.comments}
         />
-      </Modal>
+      )}
     </View>
   );
 }

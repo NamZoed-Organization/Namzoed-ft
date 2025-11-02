@@ -1,12 +1,15 @@
+import FullscreenVideoPlayer from "@/components/FullscreenVideoPlayer";
 import ImageViewer from "@/components/ImageViewer";
-import { PostData } from "@/data/postdata";
+import { PostData } from "@/types/post";
+import { VideoView, useVideoPlayer } from "expo-video";
 import {
   Bookmark,
   Heart,
   MessageCircle,
   MoreHorizontal,
+  Play,
 } from "lucide-react-native";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Animated, Image, Text, TouchableOpacity, View } from "react-native";
 
 export { default as PostSkeleton } from "@/components/ui/PostSkeleton";
@@ -32,6 +35,26 @@ const formatDate = (date: Date): string => {
       year: "numeric",
     });
   }
+};
+
+// Helper to check if URL is a video
+const isVideoUrl = (url: string): boolean => {
+  const videoExtensions = [".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"];
+  const lowerUrl = url.toLowerCase();
+  return (
+    videoExtensions.some((ext) => lowerUrl.includes(ext)) ||
+    lowerUrl.includes("post-videos")
+  );
+};
+
+// Helper to check if URL is a video
+const isVideoUrl = (url: string): boolean => {
+  const videoExtensions = [".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"];
+  const lowerUrl = url.toLowerCase();
+  return (
+    videoExtensions.some((ext) => lowerUrl.includes(ext)) ||
+    lowerUrl.includes("post-videos")
+  );
 };
 
 const ImageSkeleton = ({
@@ -103,21 +126,138 @@ const PostImage = ({
     </TouchableOpacity>
   );
 };
+const PostVideo = ({
+  videoUri,
+  onPress,
+  className,
+  style,
+  videoId,
+  postContent,
+  username,
+  likes,
+  comments,
+}: {
+  videoUri: string;
+  onPress: () => void;
+  className?: string;
+  style?: any;
+  videoId: string;
+  postContent?: string;
+  username?: string;
+  likes?: number;
+  comments?: number;
+}) => {
+  const [showFullscreen, setShowFullscreen] = useState(false);
+  const [videoLoading, setVideoLoading] = useState(true);
+
+  const player = useVideoPlayer(videoUri, (player) => {
+    player.loop = true;
+    player.muted = true;
+    player.pause();
+  });
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (player.status === "readyToPlay") {
+        setVideoLoading(false);
+      }
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [player]);
+
+  return (
+    <>
+      <TouchableOpacity
+        onPress={() => setShowFullscreen(true)}
+        activeOpacity={0.9}
+        className={className}
+        style={style}
+      >
+        <View className="relative">
+          {videoLoading && <ImageSkeleton width="100%" height="100%" />}
+          {/* Video preview - paused and muted */}
+          <VideoView
+            player={player}
+            style={{ width: "100%", height: "100%" }}
+            nativeControls={false}
+            contentFit="cover"
+          />
+
+          {/* Play button overlay - centered with no background */}
+          <View className="absolute inset-0 items-center justify-center pointer-events-none">
+            <Play size={64} color="#fff" fill="#fff" strokeWidth={0} />
+          </View>
+        </View>
+      </TouchableOpacity>
+
+      {/* Fullscreen video player */}
+      <FullscreenVideoPlayer
+        visible={showFullscreen}
+        videoUri={videoUri}
+        videoId={videoId}
+        onClose={() => setShowFullscreen(false)}
+        postContent={postContent}
+        username={username}
+        likes={likes}
+        comments={comments}
+      />
+    </>
+  );
+};
 
 const renderImages = (
   images: string[],
-  onImagePress: (index: number) => void
+  onImagePress: (index: number) => void,
+  postId: string,
+  postContent?: string,
+  username?: string,
+  likes?: number,
+  comments?: number
 ) => {
   if (images.length === 0) return null;
+
+  // Helper to render media item (image or video)
+  const renderMediaItem = (
+    mediaUri: string,
+    index: number,
+    className: string,
+    style?: any
+  ) => {
+    const isVideo = isVideoUrl(mediaUri);
+
+    if (isVideo) {
+      return (
+        <PostVideo
+          key={index}
+          videoUri={mediaUri}
+          onPress={() => onImagePress(index)}
+          className={className}
+          style={style}
+          videoId={`${postId}-video-${index}`}
+          postContent={postContent}
+          username={username}
+          likes={likes}
+          comments={comments}
+        />
+      );
+    }
+
+    return (
+      <PostImage
+        key={index}
+        imageUri={mediaUri}
+        onPress={() => onImagePress(index)}
+        className={className}
+        style={style}
+      />
+    );
+  };
 
   if (images.length === 1) {
     return (
       <View className="mt-3 rounded-lg overflow-hidden">
-        <PostImage
-          imageUri={images[0]}
-          onPress={() => onImagePress(0)}
-          className="w-full h-64"
-        />
+        {renderMediaItem(images[0], 0, "w-full h-64")}
       </View>
     );
   }
@@ -125,16 +265,8 @@ const renderImages = (
   if (images.length === 2) {
     return (
       <View className="mt-3 flex-row gap-1 rounded-lg overflow-hidden">
-        <PostImage
-          imageUri={images[0]}
-          onPress={() => onImagePress(0)}
-          className="flex-1 h-48"
-        />
-        <PostImage
-          imageUri={images[1]}
-          onPress={() => onImagePress(1)}
-          className="flex-1 h-48"
-        />
+        {renderMediaItem(images[0], 0, "flex-1 h-48")}
+        {renderMediaItem(images[1], 1, "flex-1 h-48")}
       </View>
     );
   }
@@ -144,6 +276,10 @@ const renderImages = (
 
   return (
     <View className="mt-3 gap-1 rounded-lg overflow-hidden">
+      {/* First row - single large media */}
+      {renderMediaItem(images[0], 0, "w-full h-48")}
+
+      {/* Second row - two smaller media items */}
       {/* First row - single large image */}
       <PostImage
         imageUri={images[0]}
@@ -153,19 +289,11 @@ const renderImages = (
 
       {/* Second row - two smaller images */}
       <View className="flex-row gap-1">
-        <PostImage
-          imageUri={images[1]}
-          onPress={() => onImagePress(1)}
-          className="flex-1 h-32"
-        />
+        {renderMediaItem(images[1], 1, "flex-1 h-32")}
 
-        {/* Third image with overlay if more exist */}
+        {/* Third media with overlay if more exist */}
         <View className="flex-1 relative">
-          <PostImage
-            imageUri={images[2]}
-            onPress={() => onImagePress(2)}
-            className="w-full h-32"
-          />
+          {renderMediaItem(images[2], 2, "w-full h-32")}
           {remainingCount > 0 && (
             <View className="absolute inset-0 bg-black/60 items-center justify-center z-10">
               <Text className="text-white font-bold text-xl">
@@ -228,7 +356,7 @@ export default function FeedPost({ post }: FeedPostProps) {
               </>
             ) : (
               <Text className="text-gray-600 font-semibold">
-                {usernameInitial}
+                {post.username ? post.username.charAt(0).toUpperCase() : "U"}
               </Text>
             )}
           </View>
@@ -236,7 +364,7 @@ export default function FeedPost({ post }: FeedPostProps) {
           {/* User Info */}
           <View className="flex-1">
             <Text className="font-semibold text-gray-900 text-base">
-              {displayName}
+              {post.username || "Unknown User"}
             </Text>
             <Text className="text-gray-500 text-sm">
               {formatDate(post.date)}
@@ -259,7 +387,15 @@ export default function FeedPost({ post }: FeedPostProps) {
 
       {/* Post Images */}
       <View className="px-4">
-        {renderImages(post.images, handleImagePress)}
+        {renderImages(
+          post.images,
+          handleImagePress,
+          post.id,
+          post.content,
+          post.username,
+          likesCount,
+          post.comments
+        )}
       </View>
 
       {/* Action Buttons */}
@@ -313,6 +449,10 @@ export default function FeedPost({ post }: FeedPostProps) {
         images={post.images}
         initialIndex={selectedImageIndex}
         onClose={() => setShowImageViewer(false)}
+        postContent={post.content}
+        username={post.username}
+        likes={likesCount}
+        comments={post.comments}
       />
     </View>
   );
