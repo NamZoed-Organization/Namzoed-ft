@@ -1,17 +1,25 @@
-import React, { useMemo, useRef, useEffect, useState } from "react";
-import { FlatList, Text, TouchableOpacity, View, RefreshControl, Modal, ActivityIndicator } from "react-native";
-import { Plus, Radio } from "lucide-react-native";
-import FeedPost, { PostSkeleton } from "@/components/FeedPost";
-import VirtualizedFeedPost from "@/components/ui/VirtualizedFeedPost";
 import CreatePost from "@/components/CreatePost";
+import { PostSkeleton } from "@/components/FeedPost";
 import LiveScreen from "@/components/Live";
-import { posts, PostData } from "@/data/postdata";
+import VirtualizedFeedPost from "@/components/ui/VirtualizedFeedPost";
 import { useUser } from "@/contexts/UserContext";
-import { useRouter } from "expo-router";
-import { feedEvents } from "@/utils/feedEvents";
+import { PostData, posts } from "@/data/postdata";
 import { useFeedPagination } from "@/hooks/usePagination";
 import { useVirtualizedList } from "@/hooks/useVirtualizedList";
 import { fetchPosts, Post } from "@/lib/postsService";
+import { feedEvents } from "@/utils/feedEvents";
+import { useRouter } from "expo-router";
+import { Plus, Radio } from "lucide-react-native";
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  FlatList,
+  Modal,
+  RefreshControl,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
 // Wrapper component for Live with onClose prop
 function LiveWrapper({ onClose }: { onClose: () => void }) {
@@ -47,19 +55,19 @@ export default function FeedScreen() {
       setLoadingNewPosts(true);
 
       // Add a small delay to show skeleton
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
       const { posts: fetchedPosts } = await fetchPosts(0, 50);
       const convertedPosts = fetchedPosts.map(convertToPostData);
 
       // Sort by date (newest first)
-      const sortedNewPosts = convertedPosts.sort((a, b) =>
-        new Date(b.date).getTime() - new Date(a.date).getTime()
+      const sortedNewPosts = convertedPosts.sort(
+        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
       );
 
       setNewPosts(sortedNewPosts);
     } catch (error) {
-      console.error('Error loading new posts:', error);
+      console.error("Error loading new posts:", error);
     } finally {
       setLoadingNewPosts(false);
     }
@@ -72,7 +80,9 @@ export default function FeedScreen() {
 
   // Sort static posts by date in descending order (latest first)
   const sortedPosts = useMemo(() => {
-    return [...posts].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    return [...posts].sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
   }, []);
 
   // Combine new posts from Supabase (first) and static posts (below)
@@ -86,7 +96,7 @@ export default function FeedScreen() {
     loading: postsLoading,
     hasMore,
     loadMore,
-    refresh
+    refresh,
   } = useFeedPagination({ data: allPosts, pageSize: 10, bufferSize: 5 });
 
   // Use virtualized list for performance
@@ -96,7 +106,7 @@ export default function FeedScreen() {
     onLayout,
     onScroll,
     scrollToTop,
-    visibleRange
+    visibleRange,
   } = useVirtualizedList({ estimatedItemSize: 400, overscan: 3 });
 
   // Listen for double-tap events from the feed tab button
@@ -107,10 +117,10 @@ export default function FeedScreen() {
       handleRefresh();
     };
 
-    feedEvents.on('scrollToTop', handleScrollToTop);
+    feedEvents.on("scrollToTop", handleScrollToTop);
 
     return () => {
-      feedEvents.off('scrollToTop', handleScrollToTop);
+      feedEvents.off("scrollToTop", handleScrollToTop);
     };
   }, [scrollToTop]);
 
@@ -120,7 +130,7 @@ export default function FeedScreen() {
     await loadNewPosts(); // Reload posts from Supabase
     await refresh();
     setRefreshing(false);
-    console.log('Feed refreshed!');
+    console.log("Feed refreshed!");
   };
 
   // Handle end of list reached
@@ -153,7 +163,9 @@ export default function FeedScreen() {
     return (
       <View className="py-4 items-center">
         <ActivityIndicator size="small" color="#1877F2" />
-        <Text className="text-sm text-gray-500 mt-1">Loading more posts...</Text>
+        <Text className="text-sm text-gray-500 mt-1">
+          Loading more posts...
+        </Text>
       </View>
     );
   };
@@ -178,7 +190,7 @@ export default function FeedScreen() {
             onPress={() => setShowLive(true)}
           >
             <Radio size={20} color="#DC2626" strokeWidth={1.5} />
-            <Text className="ml-2 text-gray-700 font-medium">Go Live</Text>
+            <Text className="ml-2 text-gray-700 font-medium">Live</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -199,7 +211,7 @@ export default function FeedScreen() {
       <View className="flex-1 bg-gray-100">
         {/* Status Bar Space */}
         <View className="h-12 bg-white" />
-        
+
         <View className="flex-1 items-center justify-center px-4">
           <Text className="text-xl font-semibold text-gray-700 mb-2">
             Welcome to Feed
@@ -216,8 +228,7 @@ export default function FeedScreen() {
     <View className="flex-1 bg-gray-100">
       {/* Status Bar Space */}
       <View className="h-12 bg-white" />
-      
-      
+
       {/* Feed Content */}
       <FlatList
         ref={flatListRef}
@@ -262,11 +273,13 @@ export default function FeedScreen() {
         onRequestClose={() => setShowCreatePost(false)}
       >
         <View className="flex-1 bg-white">
-          <CreatePost onClose={() => {
-            setShowCreatePost(false);
-            // Reload posts after creating a new one
-            loadNewPosts();
-          }} />
+          <CreatePost
+            onClose={() => {
+              setShowCreatePost(false);
+              // Reload posts after creating a new one
+              loadNewPosts();
+            }}
+          />
         </View>
       </Modal>
 

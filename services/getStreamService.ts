@@ -1,5 +1,30 @@
-import { StreamVideoClient, User } from "@stream-io/video-react-native-sdk";
+import type {
+  StreamVideoClient,
+  User,
+} from "@stream-io/video-react-native-sdk";
 import { GETSTREAM_CONFIG, StreamUser } from "../config/getstream";
+
+type StreamSdkModule = typeof import("@stream-io/video-react-native-sdk");
+
+let cachedSdk: StreamSdkModule | null = null;
+
+const loadStreamSdk = async (): Promise<StreamSdkModule> => {
+  if (cachedSdk) {
+    return cachedSdk;
+  }
+
+  try {
+    cachedSdk = await import("@stream-io/video-react-native-sdk");
+    return cachedSdk;
+  } catch (error) {
+    cachedSdk = null;
+    const message =
+      "GetStream native modules are unavailable. Install a development build to enable livestreaming.";
+    const detailedError = new Error(message);
+    (detailedError as any).cause = error;
+    throw detailedError;
+  }
+};
 
 class GetStreamService {
   private client: StreamVideoClient | null = null;
@@ -11,6 +36,8 @@ class GetStreamService {
     token: string
   ): Promise<StreamVideoClient> {
     try {
+      const { StreamVideoClient: StreamVideoClientClass } =
+        await loadStreamSdk();
       this.currentUser = {
         id: user.id,
         name: user.name,
@@ -18,7 +45,7 @@ class GetStreamService {
         custom: user.custom,
       };
 
-      this.client = new StreamVideoClient({
+      this.client = new StreamVideoClientClass({
         apiKey: GETSTREAM_CONFIG.apiKey,
         user: this.currentUser,
         token,
@@ -126,28 +153,20 @@ class GetStreamService {
     }
   }
 
-  // Generate a user token (this should be done on your backend)
-  generateUserToken(userId: string): string {
-    // WARNING: This is for development only!
-    // In production, tokens should be generated on your backend
-    console.warn(
-      "Generating user token on client side - this should be done on the backend in production!"
-    );
-
-    // For now, return a mock token
-    // You'll need to implement proper token generation on your backend
-    return `mock_token_${userId}_${Date.now()}`;
-  }
-
   // Disconnect the client
   async disconnect(): Promise<void> {
-    if (this.client) {
-      try {
-        this.client = null;
-        this.currentUser = null;
-      } catch (error) {
-        console.error("Failed to disconnect GetStream client:", error);
-      }
+    if (!this.client) {
+      return;
+    }
+
+    try {
+      // Ensure we release native resources before dropping references.
+      await this.client.disconnectUser();
+    } catch (error) {
+      console.error("Failed to disconnect GetStream client:", error);
+    } finally {
+      this.client = null;
+      this.currentUser = null;
     }
   }
 

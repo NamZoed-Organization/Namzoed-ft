@@ -4,14 +4,14 @@ import TopNavbar from "@/components/ui/TopNavbar";
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import {
-    Alert,
-    FlatList,
-    Image,
-    Linking,
-    ScrollView,
-    Text,
-    TouchableOpacity,
-    View
+  Alert,
+  FlatList,
+  Image,
+  Linking,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { getServiceProviderById } from "../../../data/services";
 
@@ -56,10 +56,10 @@ export default function ProviderDetailScreen() {
         `Call ${provider.name} at ${provider.phone}?`,
         [
           { text: "Cancel", style: "cancel" },
-          { 
-            text: "Call", 
-            onPress: () => Linking.openURL(`tel:${provider.phone}`)
-          }
+          {
+            text: "Call",
+            onPress: () => Linking.openURL(`tel:${provider.phone}`),
+          },
         ]
       );
     }
@@ -71,13 +71,13 @@ export default function ProviderDetailScreen() {
       `Book "${service.name}" with ${provider?.name}?\nPrice: Nu. ${service.price}`,
       [
         { text: "Cancel", style: "cancel" },
-        { 
-          text: "Book Now", 
+        {
+          text: "Book Now",
           onPress: () => {
             // Navigate to booking screen or handle booking logic
             Alert.alert("Success", "Booking request sent successfully!");
-          }
-        }
+          },
+        },
       ]
     );
   };
@@ -92,34 +92,38 @@ export default function ProviderDetailScreen() {
           Nu. {item.price}
         </Text>
       </View>
-      
+
       {item.description && (
         <Text className="text-sm font-regular text-gray-500 mb-3">
           {item.description}
         </Text>
       )}
-      
+
       <TouchableOpacity
         className="bg-primary rounded-lg py-3 px-4 items-center"
         onPress={() => handleBookService(item)}
         activeOpacity={0.8}
       >
-        <Text className="text-white font-msemibold">
-          Book Now
-        </Text>
+        <Text className="text-white font-msemibold">Book Now</Text>
       </TouchableOpacity>
     </View>
   );
 
-  const renderImageItem = ({ item, index }: { item: string; index: number }) => (
+  const renderImageItem = ({
+    item,
+    index,
+  }: {
+    item: string;
+    index: number;
+  }) => (
     <TouchableOpacity
       onPress={() => setSelectedImageIndex(index)}
       activeOpacity={0.8}
     >
-      <Image 
+      <Image
         source={{ uri: item }}
         className={`w-16 h-16 rounded-lg mr-3 ${
-          selectedImageIndex === index ? 'border-2 border-primary' : ''
+          selectedImageIndex === index ? "border-2 border-primary" : ""
         }`}
         resizeMode="cover"
       />
@@ -145,16 +149,16 @@ export default function ProviderDetailScreen() {
   return (
     <View className="flex-1 bg-background">
       <TopNavbar />
-      
+
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
         {/* Hero Image Section */}
         <View className="bg-white">
-          <Image 
+          <Image
             source={{ uri: provider.images[selectedImageIndex] }}
             className="w-full h-64"
             resizeMode="cover"
           />
-          
+
           {/* Image Thumbnails */}
           {provider.images.length > 1 && (
             <View className="px-4 py-3">
@@ -183,14 +187,18 @@ export default function ProviderDetailScreen() {
                 📍 {provider.location}
               </Text>
             </View>
-            
-            <View className={`px-3 py-2 rounded-full ${
-              provider.available ? 'bg-green-100' : 'bg-red-100'
-            }`}>
-              <Text className={`text-sm font-medium ${
-                provider.available ? 'text-green-600' : 'text-red-600'
-              }`}>
-                {provider.available ? '✓ Available' : '✗ Unavailable'}
+
+            <View
+              className={`px-3 py-2 rounded-full ${
+                provider.available ? "bg-green-100" : "bg-red-100"
+              }`}
+            >
+              <Text
+                className={`text-sm font-medium ${
+                  provider.available ? "text-green-600" : "text-red-600"
+                }`}
+              >
+                {provider.available ? "✓ Available" : "✗ Unavailable"}
               </Text>
             </View>
           </View>
@@ -221,7 +229,7 @@ export default function ProviderDetailScreen() {
           <Text className="text-lg font-msemibold text-gray-900 mb-3">
             Contact Information
           </Text>
-          
+
           <TouchableOpacity
             className="flex-row items-center bg-primary/10 rounded-lg p-4"
             onPress={handleCallPress}
@@ -277,7 +285,7 @@ export default function ProviderDetailScreen() {
             📞 Call Now
           </Text>
         </TouchableOpacity>
-        
+
         <TouchableOpacity
           className="flex-1 bg-primary rounded-xl py-4 items-center"
           onPress={() => {

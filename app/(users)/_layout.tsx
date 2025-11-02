@@ -1,7 +1,4 @@
-import {
-  CategoriesIcon,
-  HomeIcon
-} from "@/components/icons/index";
+import { CategoriesIcon, HomeIcon } from "@/components/icons/index";
 import FeedTabButton from "@/components/ui/FeedTabButton";
 import TabBarButton from "@/components/ui/TabBarButton";
 import { Tabs, usePathname, useRouter } from "expo-router";
@@ -120,7 +117,7 @@ export default function TabLayout() {
             ),
           }}
         />
-            <Tabs.Screen
+        <Tabs.Screen
           name="services"
           options={{
             title: "Services",
@@ -192,27 +189,13 @@ export default function TabLayout() {
             href: null,
           }}
         />
-  
 
         <Tabs.Screen
-          name="getstream-live-fallback"
-          options={{
-            href: null,
-          }}
-        />
-        <Tabs.Screen
-          name="getstream-live"
-          options={{
-            href: null,
-          }}
-        />
-           <Tabs.Screen
           name="messages"
           options={{
             href: null,
           }}
         />
-     
       </Tabs>
     </View>
   );

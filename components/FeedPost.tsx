@@ -1,8 +1,13 @@
-import React, { useState } from "react";
-import { Image, Text, TouchableOpacity, View, Animated } from "react-native";
-import { Heart, MessageCircle, Bookmark, MoreHorizontal } from "lucide-react-native";
-import { PostData } from "@/data/postdata";
 import ImageViewer from "@/components/ImageViewer";
+import { PostData } from "@/data/postdata";
+import {
+  Bookmark,
+  Heart,
+  MessageCircle,
+  MoreHorizontal,
+} from "lucide-react-native";
+import React, { useState } from "react";
+import { Animated, Image, Text, TouchableOpacity, View } from "react-native";
 
 export { default as PostSkeleton } from "@/components/ui/PostSkeleton";
 
@@ -12,22 +17,30 @@ interface FeedPostProps {
 
 const formatDate = (date: Date): string => {
   const now = new Date();
-  const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
-  
+  const diffInHours = Math.floor(
+    (now.getTime() - date.getTime()) / (1000 * 60 * 60)
+  );
+
   if (diffInHours < 1) {
     return "Just now";
   } else if (diffInHours < 24) {
     return `${diffInHours}h`;
   } else {
-    return date.toLocaleDateString('en-GB', { 
-      day: 'numeric', 
-      month: 'short', 
-      year: 'numeric' 
+    return date.toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
     });
   }
 };
 
-const ImageSkeleton = ({ width, height }: { width: string; height: string }) => {
+const ImageSkeleton = ({
+  width,
+  height,
+}: {
+  width: string;
+  height: string;
+}) => {
   const shimmerOpacity = React.useRef(new Animated.Value(0.3)).current;
 
   React.useEffect(() => {
@@ -57,21 +70,26 @@ const ImageSkeleton = ({ width, height }: { width: string; height: string }) => 
   );
 };
 
-const PostImage = ({ 
-  imageUri, 
-  onPress, 
-  className, 
-  style 
-}: { 
-  imageUri: string; 
-  onPress: () => void; 
-  className?: string; 
-  style?: any; 
+const PostImage = ({
+  imageUri,
+  onPress,
+  className,
+  style,
+}: {
+  imageUri: string;
+  onPress: () => void;
+  className?: string;
+  style?: any;
 }) => {
   const [imageLoading, setImageLoading] = useState(true);
 
   return (
-    <TouchableOpacity onPress={onPress} activeOpacity={0.9} className={className} style={style}>
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.9}
+      className={className}
+      style={style}
+    >
       <View className="relative">
         {imageLoading && <ImageSkeleton width="100%" height="100%" />}
         <Image
@@ -86,9 +104,12 @@ const PostImage = ({
   );
 };
 
-const renderImages = (images: string[], onImagePress: (index: number) => void) => {
+const renderImages = (
+  images: string[],
+  onImagePress: (index: number) => void
+) => {
   if (images.length === 0) return null;
-  
+
   if (images.length === 1) {
     return (
       <View className="mt-3 rounded-lg overflow-hidden">
@@ -100,7 +121,7 @@ const renderImages = (images: string[], onImagePress: (index: number) => void) =
       </View>
     );
   }
-  
+
   if (images.length === 2) {
     return (
       <View className="mt-3 flex-row gap-1 rounded-lg overflow-hidden">
@@ -117,10 +138,10 @@ const renderImages = (images: string[], onImagePress: (index: number) => void) =
       </View>
     );
   }
-  
+
   // For 3 or more images - Facebook layout
   const remainingCount = images.length - 3;
-  
+
   return (
     <View className="mt-3 gap-1 rounded-lg overflow-hidden">
       {/* First row - single large image */}
@@ -129,7 +150,7 @@ const renderImages = (images: string[], onImagePress: (index: number) => void) =
         onPress={() => onImagePress(0)}
         className="w-full h-48"
       />
-      
+
       {/* Second row - two smaller images */}
       <View className="flex-row gap-1">
         <PostImage
@@ -137,7 +158,7 @@ const renderImages = (images: string[], onImagePress: (index: number) => void) =
           onPress={() => onImagePress(1)}
           className="flex-1 h-32"
         />
-        
+
         {/* Third image with overlay if more exist */}
         <View className="flex-1 relative">
           <PostImage
@@ -165,6 +186,8 @@ export default function FeedPost({ post }: FeedPostProps) {
   const [showImageViewer, setShowImageViewer] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [profilePicLoading, setProfilePicLoading] = useState(true);
+  const displayName = post.username?.trim() || "Namzoed Member";
+  const usernameInitial = displayName.charAt(0).toUpperCase();
 
   const handleLike = () => {
     if (isLiked) {
@@ -205,73 +228,77 @@ export default function FeedPost({ post }: FeedPostProps) {
               </>
             ) : (
               <Text className="text-gray-600 font-semibold">
-                {post.username.charAt(0).toUpperCase()}
+                {usernameInitial}
               </Text>
             )}
           </View>
-          
+
           {/* User Info */}
           <View className="flex-1">
             <Text className="font-semibold text-gray-900 text-base">
-              {post.username}
+              {displayName}
             </Text>
             <Text className="text-gray-500 text-sm">
               {formatDate(post.date)}
             </Text>
           </View>
         </View>
-        
+
         {/* Three Dots Menu */}
         <TouchableOpacity className="p-2">
           <MoreHorizontal size={20} color="#666" />
         </TouchableOpacity>
       </View>
-      
+
       {/* Post Content */}
       <View className="px-4">
         <Text className="text-gray-900 text-base leading-6">
           {post.content}
         </Text>
       </View>
-      
+
       {/* Post Images */}
       <View className="px-4">
         {renderImages(post.images, handleImagePress)}
       </View>
-      
+
       {/* Action Buttons */}
       <View className="border-t border-gray-200 px-4 py-4">
         <View className="flex-row items-center justify-between">
           {/* Left side - Like and Bookmark */}
           <View className="flex-row items-center">
-            <TouchableOpacity 
+            <TouchableOpacity
               className="flex-row items-center mr-6"
               onPress={handleLike}
             >
-              <Heart 
-                size={20} 
-                color={isLiked ? "#e91e63" : "#666"} 
+              <Heart
+                size={20}
+                color={isLiked ? "#e91e63" : "#666"}
                 fill={isLiked ? "#e91e63" : "none"}
-                strokeWidth={1.5} 
+                strokeWidth={1.5}
               />
-              <Text className={`ml-1 font-medium ${isLiked ? 'text-pink-600' : 'text-gray-600'}`}>
+              <Text
+                className={`ml-1 font-medium ${
+                  isLiked ? "text-pink-600" : "text-gray-600"
+                }`}
+              >
                 {likesCount}
               </Text>
             </TouchableOpacity>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               className="flex-row items-center"
               onPress={handleBookmark}
             >
-              <Bookmark 
-                size={20} 
-                color={isBookmarked ? "#1976d2" : "#666"} 
+              <Bookmark
+                size={20}
+                color={isBookmarked ? "#1976d2" : "#666"}
                 fill={isBookmarked ? "#1976d2" : "none"}
-                strokeWidth={1.5} 
+                strokeWidth={1.5}
               />
             </TouchableOpacity>
           </View>
-          
+
           {/* Right side - Message */}
           <TouchableOpacity className="flex-row items-center">
             <MessageCircle size={20} color="#666" strokeWidth={1.5} />
