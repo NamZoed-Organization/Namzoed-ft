@@ -1,4 +1,3 @@
-import { ResizeMode, Video } from "expo-av";
 import { LinearGradient } from "expo-linear-gradient";
 import { Radio, X } from "lucide-react-native";
 import React, {
@@ -16,7 +15,6 @@ import {
   Pressable,
   RefreshControl,
   SafeAreaView,
-  ScrollView,
   Switch,
   Text,
   TextInput,
@@ -25,7 +23,9 @@ import {
 } from "react-native";
 
 import { useUser } from "@/contexts/UserContext";
-import { supabase } from "@/lib/supabase";
+import getStreamService, {
+  type StreamIdentity,
+} from "@/services/getStreamService";
 import {
   adjustLivestreamViewerCount,
   createLivestreamRecord,
@@ -34,6 +34,15 @@ import {
   subscribeToLivestreams,
   type Livestream,
 } from "@/services/livestreamService";
+import {
+  HostLivestream,
+  StreamCall,
+  StreamVideo,
+  ViewerLivestream,
+  useCall,
+  type Call,
+  type StreamVideoClient,
+} from "@stream-io/video-react-native-sdk";
 
 interface LiveScreenProps {
   onClose: () => void;
@@ -120,6 +129,8 @@ interface StreamLiveStream {
   [key: string]: unknown;
 }
 
+type ActiveCallRole = "host" | "viewer" | null;
+
 const LiveScreen: React.FC<LiveScreenProps> = ({ onClose }) => {
   const { currentUser } = useUser();
   const [livestreams, setLivestreams] = useState<Livestream[]>([]);
@@ -128,26 +139,28 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose }) => {
   const [listError, setListError] = useState<string | null>(null);
   const [selectedStream, setSelectedStream] = useState<Livestream | null>(null);
   const [hostingRecord, setHostingRecord] = useState<Livestream | null>(null);
-  const [ingestDetails, setIngestDetails] = useState<IngestDetails | null>(
-    null
-  );
   const [viewerSession, setViewerSession] = useState<{
     streamId: string;
   } | null>(null);
-  const [isHosting, setIsHosting] = useState(false);
   const [creatingStream, setCreatingStream] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [joinLoadingId, setJoinLoadingId] = useState<string | null>(null);
   const [endingStream, setEndingStream] = useState(false);
   const [liveTitle, setLiveTitle] = useState("Going live on Namzoed");
   const [recordingEnabled, setRecordingEnabled] = useState(true);
-  const [playbackError, setPlaybackError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [streamClient, setStreamClient] = useState<StreamVideoClient | null>(
+    null
+  );
+  const [activeCall, setActiveCall] = useState<Call | null>(null);
+  const [callRole, setCallRole] = useState<ActiveCallRole>(null);
+  const [initializingCall, setInitializingCall] = useState(false);
 
-  const videoRef = useRef<Video | null>(null);
   const hostingRecordRef = useRef<Livestream | null>(null);
   const viewerSessionRef = useRef<{ streamId: string } | null>(null);
   const supabaseUserIdRef = useRef<string | null>(null);
+  const activeCallRef = useRef<Call | null>(null);
+  const callRoleRef = useRef<ActiveCallRole>(null);
 
   const userId = useMemo(
     () => deriveUserIdentifier(currentUser),
@@ -189,6 +202,14 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose }) => {
   }, [supabaseUserId]);
 
   useEffect(() => {
+    activeCallRef.current = activeCall;
+  }, [activeCall]);
+
+  useEffect(() => {
+    callRoleRef.current = callRole;
+  }, [callRole]);
+
+  useEffect(() => {
     return () => {
       const viewer = viewerSessionRef.current;
       if (viewer?.streamId) {
@@ -200,6 +221,13 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose }) => {
       if (host?.id && ownerId) {
         endLivestreamRecord(host.id, ownerId).catch(() => undefined);
       }
+
+      const call = activeCallRef.current;
+      if (call) {
+        call.leave().catch(() => undefined);
+      }
+
+      getStreamService.disconnect().catch(() => undefined);
     };
   }, []);
 
@@ -219,37 +247,73 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose }) => {
     }
   }, []);
 
-  const handleLeaveLivestream = useCallback(async () => {
-    if (!selectedStream) {
-      return;
+  const ensureStreamIdentity = useCallback((): StreamIdentity | null => {
+    if (!currentUser || !supabaseUserId) {
+      return null;
     }
 
-    setEndingStream(true);
-    try {
-      if (isHosting && hostingRecord?.id && supabaseUserId) {
-        await endLivestreamRecord(hostingRecord.id, supabaseUserId);
-        setHostingRecord(null);
-        setIngestDetails(null);
-        setIsHosting(false);
-      } else if (viewerSession?.streamId) {
-        await adjustLivestreamViewerCount(viewerSession.streamId, -1);
-        setViewerSession(null);
-      }
-    } catch (error) {
-      console.error("Failed to leave livestream", error);
-      setErrorMessage("Unable to update livestream status. Please try again.");
-    } finally {
-      setSelectedStream(null);
-      setEndingStream(false);
+    const profileImage =
+      typeof (currentUser as any)?.profileImg === "string"
+        ? (currentUser as any).profileImg
+        : null;
+
+    return {
+      id: supabaseUserId,
+      name: displayName || supabaseUserId,
+      image: profileImage,
+      custom: {
+        email: (currentUser as Record<string, unknown>)?.email ?? null,
+        username: displayName,
+      },
+    };
+  }, [currentUser, displayName, supabaseUserId]);
+
+  const ensureStreamClient = useCallback(async () => {
+    const identity = ensureStreamIdentity();
+    if (!identity) {
+      throw new Error("Please sign in before joining a livestream.");
     }
-  }, [hostingRecord, isHosting, selectedStream, supabaseUserId, viewerSession]);
+
+    const client = await getStreamService.ensureClient(identity);
+    setStreamClient(client);
+    return { identity, client };
+  }, [ensureStreamIdentity]);
+
+  const resetActiveCallState = useCallback(() => {
+    setActiveCall(null);
+    setStreamClient(null);
+    setCallRole(null);
+    setInitializingCall(false);
+  }, []);
+
+  const cleanupActiveCall = useCallback(
+    async (options: { keepSelection?: boolean } = {}) => {
+      const call = activeCallRef.current;
+      if (call) {
+        try {
+          await call.leave();
+        } catch (error) {
+          console.warn("Failed to leave Stream call", error);
+        }
+      }
+
+      await getStreamService.disconnect().catch(() => undefined);
+
+      if (!options.keepSelection) {
+        setSelectedStream(null);
+      }
+
+      resetActiveCallState();
+    },
+    [resetActiveCallState]
+  );
 
   const handleClose = useCallback(async () => {
-    if (selectedStream) {
-      await handleLeaveLivestream();
+    if (activeCallRef.current) {
+      await cleanupActiveCall();
     }
     onClose();
-  }, [handleLeaveLivestream, onClose, selectedStream]);
+  }, [cleanupActiveCall, onClose]);
 
   const handleStartLivestream = useCallback(async () => {
     if (!currentUser || !supabaseUserId) {
@@ -257,87 +321,51 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose }) => {
       return;
     }
 
-    const hostIdentifier = sanitizeIdentifier(userId ?? supabaseUserId);
-    if (!hostIdentifier) {
-      setErrorMessage("Unable to derive a host ID for Stream.");
-      return;
-    }
-
     try {
       setCreatingStream(true);
       setErrorMessage(null);
+      setInitializingCall(true);
 
-      const response = await supabase.functions.invoke<{
-        liveStream?: StreamLiveStream;
-      }>("create-live-stream", {
-        body: {
-          host_id: hostIdentifier,
-          title: liveTitle.trim().length > 0 ? liveTitle.trim() : null,
-          record: recordingEnabled,
-        },
-      });
+      const { identity, client } = await ensureStreamClient();
 
-      if (response.error) {
-        const { message, status } = response.error;
-        throw new Error(
-          `Supabase create-live-stream failed${
-            status ? ` (status ${status})` : ""
-          }${message ? `: ${message}` : "."}`
-        );
-      }
+      const callIdentifier = `namzoed-${sanitizeIdentifier(
+        identity.id
+      )}-${Date.now()}`;
 
-      const liveStream = response.data?.liveStream;
-      if (!liveStream) {
-        throw new Error(
-          "Supabase create-live-stream did not return liveStream data."
-        );
-      }
-
-      const playbackId = liveStream.playback_ids?.[0]?.id ?? null;
-      const playbackPolicy = liveStream.playback_ids?.[0]?.policy ?? null;
-      const hlsUrl =
-        liveStream.hls_url ??
-        liveStream.playback_url ??
-        buildPlaybackUrl(playbackId);
-      const dashUrl = liveStream.dash_url ?? null;
-      const rtmpAddress = liveStream.rtmp_address ?? null;
-      const streamKey = liveStream.stream_key ?? null;
-      const providerId = liveStream.id ?? null;
-      const metadata = liveStream as Record<string, unknown>;
-      const recordingFlag = Boolean(liveStream.recording ?? liveStream.record);
+      const call = await getStreamService.createHostCall(
+        identity,
+        callIdentifier,
+        {
+          title: liveTitle.trim().length > 0 ? liveTitle.trim() : liveTitle,
+        }
+      );
 
       const record = await createLivestreamRecord({
         user_id: supabaseUserId,
         username: displayName,
         profile_image:
           typeof currentUser.profileImg === "string"
-            ? currentUser.profileImg
+            ? (currentUser.profileImg as string)
             : null,
-        title: liveStream.name ?? liveTitle,
-        description: liveStream.description ?? null,
-        stream_key: streamKey,
-        stream_provider_id: providerId,
-        playback_id: playbackId,
-        playback_policy: playbackPolicy ?? liveStream.playback_policy ?? null,
-        hls_url: hlsUrl,
-        dash_url: dashUrl,
-        rtmp_address: rtmpAddress,
-        recording_enabled: recordingFlag,
-        external_metadata: metadata,
-        thumbnail: null,
+        title: liveTitle,
+        description: null,
+        stream_provider_id: callIdentifier,
+        recording_enabled: recordingEnabled,
+        call_id: callIdentifier,
+        call_cid: call.cid,
+        call_type: "livestream",
+        external_metadata: {
+          playback_mode: "webrtc",
+        },
       });
 
       setLivestreams((prev) => [record, ...prev]);
       setSelectedStream(record);
       setHostingRecord(record);
-      setIngestDetails({
-        streamKey: streamKey ?? null,
-        rtmpAddress,
-        hlsUrl: hlsUrl ?? null,
-        dashUrl,
-        playbackId,
-      });
-      setIsHosting(true);
+      setViewerSession(null);
+      setActiveCall(call);
+      setStreamClient(client);
+      setCallRole("host");
       setShowCreateModal(false);
     } catch (error) {
       console.error("Failed to start livestream", error);
@@ -346,45 +374,71 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose }) => {
       setErrorMessage(message);
     } finally {
       setCreatingStream(false);
+      setInitializingCall(false);
     }
   }, [
     currentUser,
     displayName,
+    ensureStreamClient,
     liveTitle,
     recordingEnabled,
     supabaseUserId,
-    userId,
   ]);
 
-  const handleJoinStream = useCallback(async (stream: Livestream) => {
-    const playbackUrl =
-      stream.hls_url ?? buildPlaybackUrl(stream.playback_id ?? null);
-
-    if (!playbackUrl) {
-      setErrorMessage(
-        "This livestream is not ready for playback yet. Please try again shortly."
-      );
-      return;
+  const resolveCallIdentifier = useCallback((stream: Livestream) => {
+    if (stream.stream_provider_id) {
+      return stream.stream_provider_id;
     }
 
-    setJoinLoadingId(stream.id);
-    setPlaybackError(null);
-    try {
-      await adjustLivestreamViewerCount(stream.id, 1);
-      setSelectedStream({ ...stream, hls_url: playbackUrl });
-      setViewerSession({ streamId: stream.id });
-      setIsHosting(false);
-      setHostingRecord(null);
-      setIngestDetails(null);
-    } catch (error) {
-      console.error("Failed to join livestream", error);
-      const message =
-        error instanceof Error ? error.message : "Unable to join livestream.";
-      setErrorMessage(message);
-    } finally {
-      setJoinLoadingId(null);
+    const external = stream.external_metadata;
+    if (external && typeof external === "object") {
+      const key = (external as Record<string, unknown>).call_id;
+      if (typeof key === "string" && key.length > 0) {
+        return key;
+      }
     }
+
+    return null;
   }, []);
+
+  const handleJoinStream = useCallback(
+    async (stream: Livestream) => {
+      const callId = resolveCallIdentifier(stream);
+      if (!callId) {
+        setErrorMessage(
+          "This livestream is not ready. Please try again later."
+        );
+        return;
+      }
+
+      setJoinLoadingId(stream.id);
+      setErrorMessage(null);
+      setInitializingCall(true);
+
+      try {
+        const { identity, client } = await ensureStreamClient();
+        const call = await getStreamService.prepareViewerCall(identity, callId);
+
+        await adjustLivestreamViewerCount(stream.id, 1);
+
+        setSelectedStream(stream);
+        setViewerSession({ streamId: stream.id });
+        setActiveCall(call);
+        setStreamClient(client);
+        setCallRole("viewer");
+        setHostingRecord(null);
+      } catch (error) {
+        console.error("Failed to join livestream", error);
+        const message =
+          error instanceof Error ? error.message : "Unable to join livestream.";
+        setErrorMessage(message);
+      } finally {
+        setJoinLoadingId(null);
+        setInitializingCall(false);
+      }
+    },
+    [ensureStreamClient, resolveCallIdentifier]
+  );
 
   useEffect(() => {
     loadLivestreams(true);
@@ -394,161 +448,130 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose }) => {
     };
   }, [loadLivestreams]);
 
-  useEffect(() => {
+  const activeViewerCount = useMemo(() => {
     if (!selectedStream) {
-      setPlaybackError(null);
+      return 0;
     }
-  }, [selectedStream]);
+    const updated = livestreams.find((item) => item.id === selectedStream.id);
+    return updated?.viewer_count ?? selectedStream.viewer_count ?? 0;
+  }, [livestreams, selectedStream]);
 
-  const renderViewerScreen = () => {
-    if (!selectedStream) {
-      return null;
+  const handleViewerLeave = useCallback(async () => {
+    if (viewerSession?.streamId) {
+      await adjustLivestreamViewerCount(viewerSession.streamId, -1);
     }
 
-    const playbackUrl =
-      selectedStream.hls_url ?? buildPlaybackUrl(selectedStream.playback_id);
-    const viewerCount = selectedStream.viewer_count ?? 0;
+    setViewerSession(null);
+    await cleanupActiveCall();
+  }, [cleanupActiveCall, viewerSession]);
+
+  const handleHostStreamEnd = useCallback(async () => {
+    const hostRecord = hostingRecordRef.current;
+    const ownerId = supabaseUserIdRef.current;
+    if (!hostRecord?.id || !ownerId) {
+      await cleanupActiveCall();
+      return;
+    }
+
+    setEndingStream(true);
+    try {
+      const call = activeCallRef.current;
+      if (call) {
+        try {
+          await call.stopLive?.();
+        } catch (stopError) {
+          console.warn("Unable to stop live broadcast", stopError);
+        }
+      }
+
+      await endLivestreamRecord(hostRecord.id, ownerId);
+      setLivestreams((prev) =>
+        prev.filter((item) => item.id !== hostRecord.id)
+      );
+    } catch (error) {
+      console.error("Failed to end livestream", error);
+      setErrorMessage("Unable to end livestream. Please try again.");
+    } finally {
+      setEndingStream(false);
+      setHostingRecord(null);
+      setViewerSession(null);
+      await cleanupActiveCall();
+    }
+  }, [cleanupActiveCall]);
+
+  const handleLeaveCurrentCall = useCallback(async () => {
+    if (callRole === "host") {
+      await handleHostStreamEnd();
+      return;
+    }
+    await handleViewerLeave();
+  }, [callRole, handleHostStreamEnd, handleViewerLeave]);
+
+  const handleViewerCallStart = useCallback(() => {
+    // no-op for now, placeholder for analytics
+  }, []);
+
+  const handleHostCallStart = useCallback(() => {
+    setLivestreams((prev) => {
+      if (!hostingRecordRef.current) {
+        return prev;
+      }
+      return prev.map((item) =>
+        item.id === hostingRecordRef.current?.id
+          ? { ...item, started_at: new Date().toISOString(), is_active: true }
+          : item
+      );
+    });
+  }, []);
+
+  const renderActiveCallScreen = () => {
+    if (!selectedStream || !streamClient || !activeCall || !callRole) {
+      return (
+        <View className="flex-1 items-center justify-center bg-black">
+          <ActivityIndicator color="#fff" />
+        </View>
+      );
+    }
 
     return (
       <View className="flex-1 bg-black">
-        {playbackUrl ? (
-          <Video
-            ref={videoRef}
-            source={{ uri: playbackUrl }}
-            style={{ flex: 1 }}
-            useNativeControls
-            shouldPlay
-            resizeMode={ResizeMode.CONTAIN}
-            onError={(event) => {
-              console.error("Playback error", event);
-              setPlaybackError(
-                "We had trouble loading this stream. Please try again."
-              );
-            }}
-          />
-        ) : (
-          <View className="flex-1 items-center justify-center px-8">
-            <Text className="text-center text-base font-semibold text-white">
-              Stream is preparing
-            </Text>
-            <Text className="mt-2 text-center text-sm text-white/70">
-              We will start playing automatically once the broadcaster connects
-              their encoder.
-            </Text>
-          </View>
-        )}
+        <StreamVideo client={streamClient}>
+          <StreamCall call={activeCall}>
+            <View className="flex-1">
+              {callRole === "host" ? (
+                <HostCallContainer
+                  onEndStream={handleHostStreamEnd}
+                  onStartStream={handleHostCallStart}
+                  ending={endingStream}
+                />
+              ) : (
+                <ViewerCallContainer
+                  onLeaveStream={handleViewerLeave}
+                  onCallJoined={handleViewerCallStart}
+                  ending={endingStream}
+                />
+              )}
 
-        <View className="absolute inset-x-0 top-0 flex-row items-center justify-between px-4 pt-12">
-          <View className="flex-row items-center rounded-full bg-black/40 px-3 py-1">
-            <View className="mr-2 h-2 w-2 rounded-full bg-red-500" />
-            <Text className="text-sm font-semibold text-white">
-              {selectedStream.username ?? "Live"}
+              <ActiveCallHeader
+                role={callRole}
+                username={selectedStream.username ?? "Live"}
+                viewerCount={activeViewerCount}
+                onClose={handleLeaveCurrentCall}
+                busy={endingStream || initializingCall}
+              />
+            </View>
+          </StreamCall>
+        </StreamVideo>
+        {initializingCall && (
+          <View className="absolute inset-0 items-center justify-center bg-black/70">
+            <ActivityIndicator color="#fff" size="large" />
+            <Text className="mt-3 text-sm font-semibold text-white/80">
+              Connecting to Stream…
             </Text>
-          </View>
-          <TouchableOpacity
-            onPress={handleLeaveLivestream}
-            className="flex-row items-center rounded-full bg-white/20 px-3 py-1"
-            disabled={endingStream}
-          >
-            <Text className="mr-2 text-xs font-semibold text-white">Leave</Text>
-            <X color="#fff" size={18} />
-          </TouchableOpacity>
-        </View>
-
-        <View className="absolute right-4 top-20 rounded-full bg-black/50 px-3 py-1">
-          <Text className="text-xs font-semibold text-white">
-            {viewerCount} watching
-          </Text>
-        </View>
-
-        {playbackError && (
-          <View className="absolute inset-x-0 bottom-0 rounded-t-3xl bg-black/80 px-6 py-4">
-            <Text className="text-sm font-semibold text-white">
-              Playback issue
-            </Text>
-            <Text className="mt-1 text-xs text-white/70">{playbackError}</Text>
           </View>
         )}
       </View>
     );
-  };
-
-  const renderHostingScreen = () => {
-    if (!selectedStream) {
-      return null;
-    }
-
-    const details = ingestDetails ?? {
-      streamKey: selectedStream.stream_key ?? null,
-      rtmpAddress: selectedStream.rtmp_address ?? null,
-      hlsUrl:
-        selectedStream.hls_url ?? buildPlaybackUrl(selectedStream.playback_id),
-      dashUrl: selectedStream.dash_url ?? null,
-      playbackId: selectedStream.playback_id ?? null,
-    };
-
-    return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: "#fff" }}>
-        <View className="flex-row items-center justify-between px-4 py-3">
-          <Text className="text-xl font-semibold text-gray-900">
-            You are live
-          </Text>
-          <TouchableOpacity
-            onPress={handleLeaveLivestream}
-            className="flex-row items-center rounded-full bg-red-500 px-4 py-2"
-            disabled={endingStream}
-            activeOpacity={endingStream ? 1 : 0.8}
-          >
-            <Text className="mr-2 font-semibold text-white">End</Text>
-            <X color="#fff" size={18} />
-          </TouchableOpacity>
-        </View>
-
-        <ScrollView className="flex-1 px-4">
-          <Text className="text-lg font-semibold text-gray-900">
-            {selectedStream.title ?? liveTitle}
-          </Text>
-          <Text className="mt-2 text-sm text-gray-600">
-            Use an encoder like OBS, Streamlabs, or Restream to broadcast. Paste
-            the RTMP details below into your encoder and start streaming.
-          </Text>
-
-          <IngestField label="RTMP address" value={details.rtmpAddress} />
-          <IngestField label="Stream key" value={details.streamKey} />
-
-          <Text className="mt-6 text-sm font-semibold text-gray-800">
-            Share with viewers
-          </Text>
-          <Text className="mt-1 text-xs text-gray-500">
-            Once your encoder is live, send this playback link to your audience
-            or embed it where you need it.
-          </Text>
-
-          <IngestField label="HLS URL" value={details.hlsUrl} />
-          {details.dashUrl ? (
-            <IngestField label="DASH URL" value={details.dashUrl} />
-          ) : null}
-
-          <View className="mt-6 rounded-2xl bg-red-50 p-4">
-            <Text className="text-sm font-semibold text-red-600">
-              Need help?
-            </Text>
-            <Text className="mt-1 text-xs text-red-600/80">
-              Stream creates the livestream in a ready state. Start your encoder
-              within 15 minutes to keep the session active. You can manage the
-              broadcast from the Stream dashboard if needed.
-            </Text>
-          </View>
-        </ScrollView>
-      </SafeAreaView>
-    );
-  };
-
-  const renderPlaybackScreen = () => {
-    if (!selectedStream) {
-      return null;
-    }
-    return isHosting ? renderHostingScreen() : renderViewerScreen();
   };
 
   const renderLivestreamCard = ({ item }: { item: Livestream }) => (
@@ -673,7 +696,9 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose }) => {
     );
   };
 
-  return selectedStream ? renderPlaybackScreen() : renderListScreen();
+  return selectedStream && activeCall
+    ? renderActiveCallScreen()
+    : renderListScreen();
 };
 
 interface LivestreamCardProps {
@@ -808,22 +833,146 @@ const CreateLivestreamModal: React.FC<CreateLivestreamModalProps> = ({
   </Modal>
 );
 
-interface IngestFieldProps {
-  label: string;
-  value: string | null | undefined;
+interface ActiveCallHeaderProps {
+  role: Exclude<ActiveCallRole, null>;
+  username: string;
+  viewerCount: number;
+  onClose: () => void | Promise<void>;
+  busy?: boolean;
 }
 
-const IngestField: React.FC<IngestFieldProps> = ({ label, value }) => (
-  <View className="mt-4">
-    <Text className="text-xs font-semibold uppercase text-gray-500">
-      {label}
-    </Text>
-    <View className="mt-2 rounded-2xl border border-gray-200 bg-gray-50 px-3 py-2">
-      <Text className="font-mono text-sm text-gray-900" selectable>
-        {value ?? "Not available yet"}
-      </Text>
+const ActiveCallHeader: React.FC<ActiveCallHeaderProps> = ({
+  role,
+  username,
+  viewerCount,
+  onClose,
+  busy = false,
+}) => (
+  <View className="absolute inset-x-0 top-0 flex-row items-center justify-between px-4 pt-12">
+    <View className="flex-row items-center rounded-full bg-black/40 px-3 py-1">
+      <View className="mr-2 h-2 w-2 rounded-full bg-red-500" />
+      <Text className="text-sm font-semibold text-white">{username}</Text>
+    </View>
+
+    <View className="flex-row items-center space-x-3">
+      <View className="rounded-full bg-black/50 px-3 py-1">
+        <Text className="text-xs font-semibold text-white">
+          {viewerCount} watching
+        </Text>
+      </View>
+      <TouchableOpacity
+        onPress={onClose}
+        className={`flex-row items-center rounded-full px-3 py-1 ${
+          role === "host" ? "bg-red-500" : "bg-white/20"
+        }`}
+        disabled={busy}
+        activeOpacity={busy ? 1 : 0.85}
+      >
+        <Text
+          className={`mr-2 text-xs font-semibold ${
+            role === "host" ? "text-white" : "text-white"
+          }`}
+        >
+          {role === "host" ? "End" : "Leave"}
+        </Text>
+        <X color="#fff" size={18} />
+      </TouchableOpacity>
     </View>
   </View>
 );
+
+interface HostCallContainerProps {
+  onEndStream: () => void | Promise<void>;
+  onStartStream?: () => void | Promise<void>;
+  ending: boolean;
+}
+
+const HostCallContainer: React.FC<HostCallContainerProps> = ({
+  onEndStream,
+  onStartStream,
+  ending,
+}) => {
+  const call = useCall();
+  const [initializing, setInitializing] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    const enableMedia = async () => {
+      try {
+        await call?.camera.enable();
+      } catch (cameraError) {
+        console.warn("Failed to enable camera", cameraError);
+      }
+
+      try {
+        await call?.microphone.enable();
+      } catch (microphoneError) {
+        console.warn("Failed to enable microphone", microphoneError);
+      }
+
+      if (!cancelled) {
+        setInitializing(false);
+      }
+    };
+
+    enableMedia();
+
+    return () => {
+      cancelled = true;
+      call?.camera.disable().catch(() => undefined);
+      call?.microphone.disable().catch(() => undefined);
+    };
+  }, [call]);
+
+  return (
+    <View className="flex-1 bg-black">
+      <HostLivestream
+        onEndStreamHandler={onEndStream}
+        onStartStreamHandler={onStartStream}
+        disableStopPublishedStreamsOnEndStream
+      />
+
+      {(initializing || ending) && (
+        <View className="absolute inset-0 items-center justify-center bg-black/70">
+          <ActivityIndicator color="#fff" />
+          <Text className="mt-3 text-sm font-semibold text-white/80">
+            {ending ? "Ending stream…" : "Preparing your camera…"}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+};
+
+interface ViewerCallContainerProps {
+  onLeaveStream: () => void | Promise<void>;
+  onCallJoined?: () => void | Promise<void>;
+  ending: boolean;
+}
+
+const ViewerCallContainer: React.FC<ViewerCallContainerProps> = ({
+  onLeaveStream,
+  onCallJoined,
+  ending,
+}) => {
+  useEffect(() => {
+    onCallJoined?.();
+  }, [onCallJoined]);
+
+  return (
+    <View className="flex-1 bg-black">
+      <ViewerLivestream onLeaveStreamHandler={onLeaveStream} />
+
+      {ending && (
+        <View className="absolute inset-0 items-center justify-center bg-black/70">
+          <ActivityIndicator color="#fff" />
+          <Text className="mt-3 text-sm font-semibold text-white/80">
+            Leaving stream…
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+};
 
 export default LiveScreen;

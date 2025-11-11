@@ -47,16 +47,6 @@ const isVideoUrl = (url: string): boolean => {
   );
 };
 
-// Helper to check if URL is a video
-const isVideoUrl = (url: string): boolean => {
-  const videoExtensions = [".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"];
-  const lowerUrl = url.toLowerCase();
-  return (
-    videoExtensions.some((ext) => lowerUrl.includes(ext)) ||
-    lowerUrl.includes("post-videos")
-  );
-};
-
 const ImageSkeleton = ({
   width,
   height,

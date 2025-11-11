@@ -44,23 +44,9 @@ export async function fetchActiveLivestreams(): Promise<Livestream[]> {
 }
 
 export function subscribeToLivestreams(onChange: () => void): () => void {
-  // Deprecated: callers should use this exported function which now delegates
-  // to a shared manager below. Keep the signature but forward to manager so
-  // existing code continues to work.
   return subscribeToLivestreamsShared(onChange);
 }
 
-/*
-  Shared subscription manager
-
-  Problem being fixed: code was repeatedly creating many realtime channels
-  which results in excessive calls to `realtime.list_changes`. To avoid that
-  we create at most one Realtime channel per client instance and keep a Set
-  of callbacks. When the first listener registers we subscribe; when the
-  last listener unsubscribes we remove the channel.
-
-  This prevents noisy resubscribe loops and reduces compute usage.
-*/
 const _livestreamsChannelState: {
   channel: ReturnType<typeof supabase.channel> | null;
   callbacks: Set<() => void>;
@@ -184,12 +170,32 @@ interface CreateLivestreamPayload {
   recording_enabled?: boolean | null;
   external_metadata?: Record<string, unknown> | null;
   thumbnail?: string | null;
+  call_id?: string | null;
+  call_cid?: string | null;
+  call_type?: string | null;
 }
 
 export async function createLivestreamRecord(
   payload: CreateLivestreamPayload
 ): Promise<Livestream> {
   const now = new Date().toISOString();
+
+  const mergedMetadata: Record<string, unknown> | null = (() => {
+    const base = payload.external_metadata
+      ? { ...payload.external_metadata }
+      : {};
+
+    if (payload.call_id) {
+      base.call_id = payload.call_id;
+    }
+    if (payload.call_cid) {
+      base.call_cid = payload.call_cid;
+    }
+    if (payload.call_type) {
+      base.call_type = payload.call_type;
+    }
+    return Object.keys(base).length > 0 ? base : null;
+  })();
 
   const { data, error } = await supabase
     .from(TABLE_NAME)
@@ -211,7 +217,7 @@ export async function createLivestreamRecord(
       dash_url: payload.dash_url ?? null,
       rtmp_address: payload.rtmp_address ?? null,
       recording_enabled: payload.recording_enabled ?? false,
-      external_metadata: payload.external_metadata ?? null,
+      external_metadata: mergedMetadata,
       thumbnail: payload.thumbnail ?? null,
       created_at: now,
       updated_at: now,

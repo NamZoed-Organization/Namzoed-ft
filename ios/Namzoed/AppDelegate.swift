@@ -28,7 +28,8 @@ public class AppDelegate: ExpoAppDelegate {
       in: window,
       launchOptions: launchOptions)
 #endif
-
+    // Write device IP addresses to Documents (not inside the app bundle) to avoid sandbox denial
+//    IPAddressLogger.logIPAddresses()
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
