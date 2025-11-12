@@ -6,6 +6,21 @@ import { useFeedPagination } from "@/hooks/usePagination";
 import { useVirtualizedList } from "@/hooks/useVirtualizedList";
 import { fetchPosts, PostWithUser } from "@/lib/postsService";
 import { PostData } from "@/types/post";
+import { useRouter } from "expo-router";
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  FlatList,
+  Modal,
+  RefreshControl,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+
+import FeedPost from "@/components/FeedPost";
+import { feedEvents } from "@/utils/feedEvents";
+import { Plus, Radio } from "lucide-react-native";
 
 // Wrapper component for Live with onClose prop
 function LiveWrapper({ onClose }: { onClose: () => void }) {
