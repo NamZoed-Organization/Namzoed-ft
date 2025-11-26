@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 // Path: components/ProfileSettings.tsx
 import {
   AboutApp,
@@ -19,43 +18,6 @@ import { useRouter } from "expo-router";
 import { ArrowLeft, Bell, FileText, Globe, HardDrive, HelpCircle, Info, Key, LogOut, MessageSquare, Phone, ScrollText, Shield, Smartphone, Users } from 'lucide-react-native';
 import React, { useRef, useState } from "react";
 import { Animated, Dimensions, ScrollView, Text, TouchableOpacity, View } from "react-native";
-=======
-import { useRouter } from "expo-router";
-import { ArrowLeft, Bell, FileText, Globe, HardDrive, HelpCircle, Info, Key, LogOut, MessageSquare, Phone, ScrollText, Shield, Smartphone, Users } from 'lucide-react-native';
-import React, { useRef, useState } from "react";
-import { Animated, Dimensions, PanResponder, ScrollView, Text, TouchableOpacity, View } from "react-native";
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
-// --- Placeholder Components for Self-Containment (Fixes Import Errors) ---
-const PlaceholderComponent = ({ title, onClose }: { title: string, onClose: () => void }) => (
-  <View className="flex-1 bg-white">
-    <View className="flex-row items-center px-4 py-4 border-b border-gray-200">
-      <TouchableOpacity onPress={onClose} className="mr-3">
-        <ArrowLeft size={24} color="#000" />
-      </TouchableOpacity>
-      <Text className="text-lg font-semibold text-gray-900">{title}</Text>
-    </View>
-    <View className="flex-1 items-center justify-center p-6">
-      <Text className="text-gray-500 text-center">Content for {title} goes here.</Text>
-    </View>
-  </View>
-);
-
-// Minimal inline versions of the imported components to prevent crash
-const ChangePassword = ({ onClose }: any) => <PlaceholderComponent title="Change Password" onClose={onClose} />;
-const PrivacyPolicy = ({ onClose }: any) => <PlaceholderComponent title="Privacy Policy" onClose={onClose} />;
-const SellerPolicy = ({ onClose }: any) => <PlaceholderComponent title="Seller Policy" onClose={onClose} />;
-const TermsOfService = ({ onClose }: any) => <PlaceholderComponent title="Terms of Service" onClose={onClose} />;
-const CommunityGuidelines = ({ onClose }: any) => <PlaceholderComponent title="Community Guidelines" onClose={onClose} />;
-const Notifications = ({ onClose }: any) => <PlaceholderComponent title="Notifications" onClose={onClose} />;
-const DataStorage = ({ onClose }: any) => <PlaceholderComponent title="Data & Storage" onClose={onClose} />;
-const LanguageRegion = ({ onClose }: any) => <PlaceholderComponent title="Language & Region" onClose={onClose} />;
-const HelpCenter = ({ onClose }: any) => <PlaceholderComponent title="Help Center" onClose={onClose} />;
-const ContactUs = ({ onClose }: any) => <PlaceholderComponent title="Contact Us" onClose={onClose} />;
-const SendFeedback = ({ onClose }: any) => <PlaceholderComponent title="Send Feedback" onClose={onClose} />;
-const AppVersion = ({ onClose }: any) => <PlaceholderComponent title="App Version" onClose={onClose} />;
-const AboutApp = ({ onClose }: any) => <PlaceholderComponent title="About App" onClose={onClose} />;
->>>>>>> 3633f64f9fed69d3808af1553cbe14481c4d7fff
 
 interface ProfileSettingsProps {
   onClose: () => void;
