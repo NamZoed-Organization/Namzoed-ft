@@ -1,23 +1,23 @@
 // Path: components/ProfileSettings.tsx
-import { useRouter } from "expo-router";
-import { Bell, FileText, Globe, HardDrive, HelpCircle, Info, Key, LogOut, MessageSquare, Phone, ScrollText, Shield, Smartphone, Users, ArrowLeft } from 'lucide-react-native';
-import { ScrollView, Text, TouchableOpacity, View, Animated, Dimensions } from "react-native";
-import { useState, useRef } from "react";
 import {
+  AboutApp,
+  AppVersion,
   ChangePassword,
+  CommunityGuidelines,
+  ContactUs,
+  DataStorage,
+  HelpCenter,
+  LanguageRegion,
+  Notifications,
   PrivacyPolicy,
   SellerPolicy,
-  TermsOfService,
-  CommunityGuidelines,
-  Notifications,
-  DataStorage,
-  LanguageRegion,
-  HelpCenter,
-  ContactUs,
   SendFeedback,
-  AppVersion,
-  AboutApp
+  TermsOfService
 } from '@/components/settings';
+import { useRouter } from "expo-router";
+import { ArrowLeft, Bell, FileText, Globe, HardDrive, HelpCircle, Info, Key, LogOut, MessageSquare, Phone, ScrollText, Shield, Smartphone, Users } from 'lucide-react-native';
+import React, { useRef, useState } from "react";
+import { Animated, Dimensions, ScrollView, Text, TouchableOpacity, View } from "react-native";
 
 interface ProfileSettingsProps {
   onClose: () => void;
