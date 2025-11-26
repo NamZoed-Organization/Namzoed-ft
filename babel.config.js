@@ -6,7 +6,10 @@ module.exports = function (api) {
       "nativewind/babel",
     ],
     plugins: [
-      'react-native-worklets/plugin',
+      // REMOVED: 'react-native-worklets/plugin', 
+      
+      // This handles all the animation worklets you need:
+      'react-native-reanimated/plugin', 
     ],
   };
 };

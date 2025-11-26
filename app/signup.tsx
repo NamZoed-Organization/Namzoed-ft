@@ -4,7 +4,7 @@ import {
   MaterialIcons
 } from "@expo/vector-icons";
 import { Link, useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
   Image,

@@ -11,7 +11,9 @@
       "Bash(npm start)",
       "Bash(ls:*)",
       "Bash(find:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(npm i:*)",
+      "Bash(npx react-native log-android:*)"
     ],
     "deny": [],
     "ask": []
