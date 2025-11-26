@@ -3,23 +3,24 @@
 import TopNavbar from "@/components/ui/TopNavbar";
 import { serviceCategories } from "@/data/servicecategory";
 import { router } from "expo-router";
-import { FlatList, Text, TouchableOpacity, View } from "react-native";
-import { 
-  Car, 
-  Home, 
-  Building2, 
-  Sparkles, 
-  Wrench, 
-  GraduationCap, 
-  Palette, 
-  Briefcase, 
-  MapPin, 
-  Heart, 
-  Activity, 
-  Calendar, 
-  Shield, 
-  Plane 
+import {
+  Activity,
+  Briefcase,
+  Building2,
+  Calendar,
+  Car,
+  GraduationCap,
+  Heart,
+  Home,
+  MapPin,
+  Palette,
+  Plane,
+  Shield,
+  Sparkles,
+  Wrench
 } from "lucide-react-native";
+import React from "react";
+import { FlatList, Text, TouchableOpacity, View } from "react-native";
 
 export default function ServiceScreen() {
   const handleCategoryPress = (category: any) => {

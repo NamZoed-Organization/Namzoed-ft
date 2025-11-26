@@ -1,7 +1,8 @@
 import { products } from "@/data/products";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams } from "expo-router";
-import { Image, ScrollView, Text, View, TouchableOpacity, Alert } from "react-native";
+import React from "react";
+import { Alert, Image, ScrollView, Text, TouchableOpacity, View } from "react-native";
 
 export default function ProductDetail() {
   const { id } = useLocalSearchParams();

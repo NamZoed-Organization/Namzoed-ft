@@ -1,7 +1,8 @@
 // app/index.tsx
-import { Redirect } from "expo-router";
 import { useUser } from "@/contexts/UserContext";
-import { View, ActivityIndicator } from "react-native";
+import { Redirect } from "expo-router";
+import React from "react";
+import { ActivityIndicator, View } from "react-native";
 
 export default function Index() {
   const { currentUser, isLoading } = useUser();

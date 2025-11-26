@@ -1,13 +1,14 @@
 import CreatePost from "@/components/CreatePost";
 import { PostSkeleton } from "@/components/FeedPost";
-import LiveScreen from "@/components/Live";
+import LiveWrapper from "@/components/LiveWrapper";
+import { VideoErrorBoundary } from "@/components/VideoErrorBoundary";
 import { useUser } from "@/contexts/UserContext";
 import { useFeedPagination } from "@/hooks/usePagination";
 import { useVirtualizedList } from "@/hooks/useVirtualizedList";
 import { fetchPosts, PostWithUser } from "@/lib/postsService";
 import { PostData } from "@/types/post";
 import { useRouter } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -22,11 +23,6 @@ import FeedPost from "@/components/FeedPost";
 import { feedEvents } from "@/utils/feedEvents";
 import { Plus, Radio } from "lucide-react-native";
 
-// Wrapper component for Live with onClose prop
-function LiveWrapper({ onClose }: { onClose: () => void }) {
-  return <LiveScreen onClose={onClose} />;
-}
-
 export default function FeedScreen() {
   const { currentUser } = useUser();
   const router = useRouter();
@@ -35,6 +31,7 @@ export default function FeedScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [newPosts, setNewPosts] = useState<PostData[]>([]);
   const [loadingNewPosts, setLoadingNewPosts] = useState(true);
+  const [visiblePostId, setVisiblePostId] = useState<string | null>(null);
 
   // Convert Supabase post to PostData format
   const convertToPostData = (post: PostWithUser): PostData => {
@@ -67,6 +64,14 @@ export default function FeedScreen() {
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       const { posts: fetchedPosts } = await fetchPosts(0, 50);
+
+      // Add null check for fetchedPosts
+      if (!fetchedPosts || !Array.isArray(fetchedPosts)) {
+        console.warn("No posts returned from fetchPosts");
+        setNewPosts([]);
+        return;
+      }
+
       const convertedPosts = fetchedPosts.map(convertToPostData);
 
       // Sort by date (newest first)
@@ -77,6 +82,7 @@ export default function FeedScreen() {
       setNewPosts(sortedNewPosts);
     } catch (error) {
       console.error("Error loading new posts:", error);
+      setNewPosts([]); // Set empty array on error to prevent crashes
     } finally {
       setLoadingNewPosts(false);
     }
@@ -111,29 +117,29 @@ export default function FeedScreen() {
     visibleRange,
   } = useVirtualizedList({ estimatedItemSize: 400, overscan: 3 });
 
-  // Listen for double-tap events from the feed tab button
-  useEffect(() => {
-    const handleScrollToTop = () => {
-      scrollToTop(true);
-      // Also trigger refresh
-      handleRefresh();
-    };
-
-    feedEvents.on("scrollToTop", handleScrollToTop);
-
-    return () => {
-      feedEvents.off("scrollToTop", handleScrollToTop);
-    };
-  }, [scrollToTop]);
-
-  // Handle pull to refresh
-  const handleRefresh = async () => {
+  // Handle pull to refresh - use useCallback to maintain stable reference
+  const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     await loadNewPosts(); // Reload posts from Supabase
     await refresh();
     setRefreshing(false);
     console.log("Feed refreshed!");
-  };
+  }, [refresh]);
+
+  // Listen for double-tap events from the feed tab button
+  // Use useCallback to maintain stable reference and prevent listener leaks
+  const handleScrollToTop = useCallback(() => {
+    scrollToTop(true);
+    handleRefresh();
+  }, [scrollToTop, handleRefresh]);
+
+  useEffect(() => {
+    feedEvents.on("scrollToTop", handleScrollToTop);
+
+    return () => {
+      feedEvents.off("scrollToTop", handleScrollToTop);
+    };
+  }, [handleScrollToTop]);
 
   // Handle end of list reached
   const handleEndReached = () => {
@@ -142,14 +148,45 @@ export default function FeedScreen() {
     }
   };
 
+  // TikTok-style viewability handler - only visible post gets to play videos
+  const onViewableItemsChanged = useCallback(({ viewableItems }: any) => {
+    // Find the most visible item (the one that's 50%+ visible)
+    const mostVisibleItem = viewableItems.find(
+      (item: any) => item.isViewable && item.item && item.item.id
+    );
+
+    if (mostVisibleItem) {
+      setVisiblePostId(mostVisibleItem.item.id);
+    } else {
+      setVisiblePostId(null);
+    }
+  }, []);
+
+  // Viewability config - item is considered visible when 50% is on screen
+  const viewabilityConfig = useRef({
+    itemVisiblePercentThreshold: 50,
+    minimumViewTime: 300,
+  }).current;
+
+  const viewabilityConfigCallbackPairs = useRef([
+    { viewabilityConfig, onViewableItemsChanged },
+  ]).current;
+
   const renderPost = ({ item, index }: { item: PostData; index: number }) => {
     // Show skeleton while loading new posts for the first few items
     if (loadingNewPosts && index < 3) {
       return <PostSkeleton />;
     }
 
-    // Always render posts initially (disable virtualization to fix initial load)
-    return <FeedPost post={item} />;
+    // Wrap FeedPost in VideoErrorBoundary to prevent crashes from bad video URIs
+    // Pass isVisible prop - only the visible post will play videos
+    const isVisible = visiblePostId === item.id;
+
+    return (
+      <VideoErrorBoundary>
+        <FeedPost post={item} isVisible={isVisible} />
+      </VideoErrorBoundary>
+    );
   };
 
   // Footer component for loading more posts
@@ -244,6 +281,7 @@ export default function FeedScreen() {
         maxToRenderPerBatch={15}
         windowSize={21}
         initialNumToRender={15}
+        viewabilityConfigCallbackPairs={viewabilityConfigCallbackPairs}
         getItemLayout={(data, index) => ({
           length: 400,
           offset: 400 * index,

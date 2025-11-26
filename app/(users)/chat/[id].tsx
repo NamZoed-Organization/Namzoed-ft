@@ -95,35 +95,42 @@ const TypingIndicator = () => {
   const dot1 = useRef(new Animated.Value(0)).current;
   const dot2 = useRef(new Animated.Value(0)).current;
   const dot3 = useRef(new Animated.Value(0)).current;
+  const animationRef = useRef<Animated.CompositeAnimation | null>(null);
 
   useEffect(() => {
-    const animate = () => {
-      const animateDot = (dot: Animated.Value, delay: number) => {
-        return Animated.loop(
-          Animated.sequence([
-            Animated.delay(delay),
-            Animated.timing(dot, {
-              toValue: 1,
-              duration: 300,
-              useNativeDriver: true,
-            }),
-            Animated.timing(dot, {
-              toValue: 0,
-              duration: 300,
-              useNativeDriver: true,
-            }),
-          ])
-        );
-      };
-
-      Animated.parallel([
-        animateDot(dot1, 0),
-        animateDot(dot2, 200),
-        animateDot(dot3, 400),
-      ]).start();
+    const animateDot = (dot: Animated.Value, delay: number) => {
+      return Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(dot, {
+            toValue: 1,
+            duration: 300,
+            useNativeDriver: true,
+          }),
+          Animated.timing(dot, {
+            toValue: 0,
+            duration: 300,
+            useNativeDriver: true,
+          }),
+        ])
+      );
     };
 
-    animate();
+    animationRef.current = Animated.parallel([
+      animateDot(dot1, 0),
+      animateDot(dot2, 200),
+      animateDot(dot3, 400),
+    ]);
+
+    animationRef.current.start();
+
+    // CRITICAL: Stop animations on unmount to prevent memory leaks
+    return () => {
+      if (animationRef.current) {
+        animationRef.current.stop();
+        animationRef.current = null;
+      }
+    };
   }, []);
 
   return (
@@ -190,6 +197,8 @@ export default function ChatScreen() {
   const [chatPartnerData, setChatPartnerData] = useState<any>(null);
   const [isLoadingPartner, setIsLoadingPartner] = useState(true);
   const scrollViewRef = useRef<ScrollView>(null);
+  const channelRef = useRef<any>(null);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isMongooseChat = typeof id === 'string' && id.startsWith('mongoose-');
   const mongooseName = isMongooseChat ? id.replace('mongoose-', '') : null;
@@ -282,8 +291,14 @@ export default function ChatScreen() {
 
   fetchInitialMessages();
 
+    // Clean up previous channel before creating new one
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
+
     // Use incremental updates from realtime events instead of refetching all messages
-    const channel = supabase
+    channelRef.current = supabase
       .channel(`messages:${chatPartnerId}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
         try {
@@ -334,7 +349,16 @@ export default function ChatScreen() {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
+
+      // Clean up typing timeout
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
     };
   }, [currentUser, chatPartnerId, currentUserUUID]);
 
@@ -568,14 +592,27 @@ export default function ChatScreen() {
     }
   };
 
-  // Simulate typing indicator (you can extend this for real-time typing)
+  // Debounced typing indicator - prevents timeout accumulation
   const handleTextChange = (text: string) => {
     setMessageText(text);
-    
-    // Simple typing indicator simulation
-    if (text.length > 0 && !isTyping) {
-      setIsTyping(true);
-      setTimeout(() => setIsTyping(false), 2000);
+
+    // Clear previous timeout to prevent accumulation
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    // Debounced typing indicator (500ms delay)
+    if (text.length > 0) {
+      if (!isTyping) {
+        setIsTyping(true);
+      }
+
+      typingTimeoutRef.current = setTimeout(() => {
+        setIsTyping(false);
+        typingTimeoutRef.current = null;
+      }, 2000);
+    } else {
+      setIsTyping(false);
     }
   };
 

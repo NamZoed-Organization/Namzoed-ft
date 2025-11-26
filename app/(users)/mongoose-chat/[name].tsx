@@ -143,35 +143,42 @@ const TypingIndicator = () => {
   const dot1 = useRef(new Animated.Value(0)).current;
   const dot2 = useRef(new Animated.Value(0)).current;
   const dot3 = useRef(new Animated.Value(0)).current;
+  const animationRef = useRef<Animated.CompositeAnimation | null>(null);
 
   useEffect(() => {
-    const animate = () => {
-      const animateDot = (dot: Animated.Value, delay: number) => {
-        return Animated.loop(
-          Animated.sequence([
-            Animated.delay(delay),
-            Animated.timing(dot, {
-              toValue: 1,
-              duration: 300,
-              useNativeDriver: true,
-            }),
-            Animated.timing(dot, {
-              toValue: 0,
-              duration: 300,
-              useNativeDriver: true,
-            }),
-          ])
-        );
-      };
-
-      Animated.parallel([
-        animateDot(dot1, 0),
-        animateDot(dot2, 200),
-        animateDot(dot3, 400),
-      ]).start();
+    const animateDot = (dot: Animated.Value, delay: number) => {
+      return Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(dot, {
+            toValue: 1,
+            duration: 300,
+            useNativeDriver: true,
+          }),
+          Animated.timing(dot, {
+            toValue: 0,
+            duration: 300,
+            useNativeDriver: true,
+          }),
+        ])
+      );
     };
 
-    animate();
+    animationRef.current = Animated.parallel([
+      animateDot(dot1, 0),
+      animateDot(dot2, 200),
+      animateDot(dot3, 400),
+    ]);
+
+    animationRef.current.start();
+
+    // CRITICAL: Stop animations on unmount to prevent memory leaks
+    return () => {
+      if (animationRef.current) {
+        animationRef.current.stop();
+        animationRef.current = null;
+      }
+    };
   }, []);
 
   return (
@@ -246,6 +253,7 @@ export default function MongooseChatScreen() {
   const playbackIntervalRef = useRef<number | null>(null);
   const recordingRef = useRef<Audio.Recording | null>(null);
   const soundRef = useRef<Audio.Sound | null>(null);
+  const replyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Get mongoose name from route parameter
   const mongooseName = typeof name === 'string' ? name : '';
@@ -305,6 +313,12 @@ export default function MongooseChatScreen() {
     return () => {
       showListener.remove();
       hideListener.remove();
+
+      // Clean up reply timeout on unmount
+      if (replyTimeoutRef.current) {
+        clearTimeout(replyTimeoutRef.current);
+        replyTimeoutRef.current = null;
+      }
     };
   }, []);
 
@@ -590,17 +604,23 @@ export default function MongooseChatScreen() {
 
   const simulateReply = () => {
     setIsTyping(true);
-    
-    setTimeout(() => {
+
+    // Clear previous timeout to prevent accumulation
+    if (replyTimeoutRef.current) {
+      clearTimeout(replyTimeoutRef.current);
+    }
+
+    replyTimeoutRef.current = setTimeout(() => {
       setIsTyping(false);
       const replyMessage: MongooseMessage = {
         sender: 'mongoose',
         content: messageCounter.toString(),
         timestamp: new Date()
       };
-      
+
       setLocalMessages(prev => [...prev, replyMessage]);
       setMessageCounter(prev => prev + 1);
+      replyTimeoutRef.current = null;
     }, 5000); // 5 seconds delay
   };
 

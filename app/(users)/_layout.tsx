@@ -3,6 +3,7 @@ import FeedTabButton from "@/components/ui/FeedTabButton";
 import TabBarButton from "@/components/ui/TabBarButton";
 import { Tabs, usePathname, useRouter } from "expo-router";
 import { Plus, Store, Wrench } from "lucide-react-native";
+import React from "react";
 import { View } from "react-native";
 
 export default function TabLayout() {

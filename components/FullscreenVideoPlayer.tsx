@@ -1,17 +1,27 @@
-import React, { useState, useEffect } from "react";
+import { Heart, MessageCircle, Pause, Play, RotateCw, Share2, SkipBack, SkipForward, X } from "lucide-react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  View,
-  TouchableOpacity,
+  ActivityIndicator,
+  Dimensions,
   Modal,
   StatusBar,
-  Dimensions,
-  ActivityIndicator,
+  StyleSheet,
   Text,
+  TouchableOpacity,
+  View
 } from "react-native";
-import { X, Heart, MessageCircle, Share2, Play, Pause, RotateCw } from "lucide-react-native";
-import { VideoView, useVideoPlayer } from "expo-video";
+// ✅ USING THE NEW LIBRARY
 import { useVideoPlayback } from "@/contexts/VideoPlaybackContext";
 import Slider from "@react-native-community/slider";
+import { VideoView, useVideoPlayer } from "expo-video";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+  runOnJS,
+} from "react-native-reanimated";
 
 interface FullscreenVideoPlayerProps {
   visible: boolean;
@@ -42,13 +52,107 @@ export default function FullscreenVideoPlayer({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [hasEnded, setHasEnded] = useState(false);
+  const [controlsVisible, setControlsVisible] = useState(true);
+
   const { currentlyPlayingId, play, pause } = useVideoPlayback();
   const isPlaying = currentlyPlayingId === videoId;
+
+  const isMounted = useRef(true);
+  const controlsTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const progressInterval = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const player = useVideoPlayer(videoUri, (player) => {
     player.loop = false;
     player.muted = false;
   });
+
+  // Drag-to-close gesture
+  const translateY = useSharedValue(0);
+  const dragContext = useSharedValue({ y: 0 });
+
+  const panGesture = Gesture.Pan()
+    .onStart(() => {
+      dragContext.value = { y: translateY.value };
+    })
+    .onUpdate((e) => {
+      // Only allow dragging down
+      if (e.translationY > 0) {
+        translateY.value = e.translationY + dragContext.value.y;
+      }
+    })
+    .onEnd((e) => {
+      if (translateY.value > 100 || e.velocityY > 500) {
+        // Close the modal
+        translateY.value = withTiming(1000, { duration: 250 }, (finished) => {
+          if (finished) {
+            runOnJS(handleClose)();
+          }
+        });
+      } else {
+        // Spring back to original position
+        translateY.value = withSpring(0, { damping: 15, stiffness: 150 });
+      }
+    });
+
+  const animatedContainerStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }],
+  }));
+
+  useEffect(() => {
+    isMounted.current = true;
+    return () => {
+      isMounted.current = false;
+      if (progressInterval.current) clearInterval(progressInterval.current);
+      if (controlsTimeout.current) clearTimeout(controlsTimeout.current);
+    };
+  }, []);
+
+  // Reset translateY when modal opens
+  useEffect(() => {
+    if (visible) {
+      translateY.value = 0;
+    }
+  }, [visible]);
+
+  // ✅ EVENT LISTENER (FIXED TYPE ERROR)
+  useEffect(() => {
+    const statusListener = player.addListener('statusChange', (payload) => {
+      if (!isMounted.current) return;
+      // We check payload.status now
+      if (payload.status === 'readyToPlay') {
+        setVideoLoading(false);
+        setDuration(player.duration);
+      }
+    });
+
+    const endListener = player.addListener('playToEnd', () => {
+        if (!isMounted.current) return;
+        setHasEnded(true);
+        pause(videoId);
+        setControlsVisible(true);
+    });
+
+    return () => {
+      statusListener.remove();
+      endListener.remove();
+    };
+  }, [player, videoId, pause]);
+
+  useEffect(() => {
+    if (isPlaying && visible && !videoLoading && !hasEnded) {
+        progressInterval.current = setInterval(() => {
+            if (isMounted.current && player) {
+                setCurrentTime(player.currentTime);
+            }
+        }, 250); 
+    } else {
+        if (progressInterval.current) clearInterval(progressInterval.current);
+    }
+
+    return () => {
+        if (progressInterval.current) clearInterval(progressInterval.current);
+    }
+  }, [isPlaying, visible, videoLoading, hasEnded, player]);
 
   const handleLike = () => {
     if (isLiked) {
@@ -60,63 +164,9 @@ export default function FullscreenVideoPlayer({
     }
   };
 
-  // Monitor video status
-  useEffect(() => {
-    if (!visible) return;
-
-    const interval = setInterval(() => {
-      if (player.status === "readyToPlay") {
-        setVideoLoading(false);
-        setDuration(player.duration);
-      }
-
-      // Update current time
-      setCurrentTime(player.currentTime);
-
-      // Check if ended
-      if (player.currentTime >= player.duration - 0.1 && player.duration > 0) {
-        if (!hasEnded) {
-          setHasEnded(true);
-          pause(videoId);
-        }
-      }
-    }, 100);
-
-    return () => clearInterval(interval);
-  }, [player, visible, hasEnded, videoId, pause]);
-
-  // Handle play/pause based on global state
-  useEffect(() => {
-    if (!visible) return;
-
-    if (isPlaying && !hasEnded) {
-      player.play();
-    } else {
-      player.pause();
-    }
-  }, [isPlaying, hasEnded, player, visible]);
-
-  // Reset and play when modal opens
-  useEffect(() => {
-    if (visible) {
-      setVideoLoading(true);
-      setHasEnded(false);
-      player.currentTime = 0;
-      setCurrentTime(0);
-      play(videoId);
-    } else {
-      pause(videoId);
-      player.pause();
-      player.currentTime = 0;
-      setCurrentTime(0);
-      setHasEnded(false);
-    }
-  }, [visible, videoId, play, pause, player]);
-
   const handleClose = () => {
     pause(videoId);
     player.pause();
-    player.currentTime = 0;
     setHasEnded(false);
     onClose();
   };
@@ -125,8 +175,13 @@ export default function FullscreenVideoPlayer({
     if (isPlaying) {
       pause(videoId);
     } else {
-      play(videoId);
+      if (hasEnded) {
+          handleReplay();
+      } else {
+          play(videoId);
+      }
     }
+    resetControlsTimeout();
   };
 
   const handleReplay = () => {
@@ -136,6 +191,53 @@ export default function FullscreenVideoPlayer({
     play(videoId);
     player.play();
   };
+
+  useEffect(() => {
+    if (!visible) return;
+    if (isPlaying && !hasEnded) {
+      player.play();
+    } else {
+      player.pause();
+    }
+  }, [isPlaying, hasEnded, player, visible]);
+
+  useEffect(() => {
+    if (visible) {
+      if (!player.currentTime || player.currentTime === 0) {
+        setVideoLoading(true);
+      }
+      setHasEnded(false);
+      play(videoId);
+      resetControlsTimeout();
+    } else {
+      pause(videoId);
+      player.pause();
+    }
+  }, [visible, videoId]);
+
+  const resetControlsTimeout = useCallback(() => {
+    if (controlsTimeout.current) clearTimeout(controlsTimeout.current);
+    setControlsVisible(true);
+    controlsTimeout.current = setTimeout(() => {
+      if (isMounted.current && isPlaying) {
+        setControlsVisible(false);
+      }
+    }, 3000);
+  }, [isPlaying]);
+
+  const seekForward = useCallback(() => {
+    const newTime = Math.min(currentTime + 5, duration);
+    player.currentTime = newTime;
+    setCurrentTime(newTime);
+    resetControlsTimeout();
+  }, [currentTime, duration, player, resetControlsTimeout]);
+
+  const seekBackward = useCallback(() => {
+    const newTime = Math.max(currentTime - 5, 0);
+    player.currentTime = newTime;
+    setCurrentTime(newTime);
+    resetControlsTimeout();
+  }, [currentTime, player, resetControlsTimeout]);
 
   const handleSliderChange = (value: number) => {
     player.currentTime = value;
@@ -151,141 +253,161 @@ export default function FullscreenVideoPlayer({
   return (
     <Modal
       visible={visible}
-      transparent={false}
+      transparent={true}
       animationType="fade"
       onRequestClose={handleClose}
       statusBarTranslucent={true}
     >
       <StatusBar hidden />
-      <View className="flex-1 bg-black">
-        {/* Back button - top left */}
-        <TouchableOpacity
-          onPress={handleClose}
-          className="absolute top-12 left-4 z-20 bg-black/70 rounded-full p-3"
-          activeOpacity={0.7}
-        >
-          <X size={28} color="#fff" />
-        </TouchableOpacity>
+      <GestureDetector gesture={panGesture}>
+        <Animated.View style={[styles.container, animatedContainerStyle]}>
+          {/* Drag Handle */}
+          <View style={styles.dragHandleContainer}>
+            <View style={styles.dragHandle} />
+          </View>
 
-        {/* Video player */}
-        <View className="flex-1 items-center justify-center">
+          <TouchableOpacity onPress={handleClose} style={styles.closeButton} activeOpacity={0.7}>
+            <X size={28} color="#fff" />
+          </TouchableOpacity>
+
+        <View style={styles.videoWrapper}>
           {videoLoading && (
-            <View className="absolute inset-0 items-center justify-center z-10">
+            <View style={styles.loadingOverlay}>
               <ActivityIndicator size="large" color="white" />
-              <Text className="text-white mt-4">Loading video...</Text>
+              <Text style={styles.loadingText}>Loading video...</Text>
             </View>
           )}
 
           <VideoView
             player={player}
-            style={{ width: screenWidth, height: screenWidth * 1.2 }}
+            style={{ width: screenWidth, height: screenWidth * 1.5 }}
             nativeControls={false}
-            contentFit="cover"
+            contentFit="contain" 
           />
 
-          {/* Play/Pause/Replay button overlay */}
-          {!videoLoading && (
-            <View className="absolute inset-0 items-center justify-center">
+          {!videoLoading && controlsVisible && (
+            <View style={styles.centerControlOverlay}>
               {hasEnded ? (
-                <TouchableOpacity
-                  onPress={handleReplay}
-                  className="bg-white/90 rounded-full p-6"
-                  activeOpacity={0.8}
-                >
+                <TouchableOpacity onPress={handleReplay} style={styles.centerButton}>
                   <RotateCw size={48} color="#000" />
                 </TouchableOpacity>
               ) : !isPlaying ? (
-                <TouchableOpacity
-                  onPress={handlePlayPause}
-                  className="bg-white/90 rounded-full p-6"
-                  activeOpacity={0.8}
-                >
+                <TouchableOpacity onPress={handlePlayPause} style={styles.centerButton}>
                   <Play size={48} color="#000" fill="#000" />
                 </TouchableOpacity>
               ) : null}
             </View>
           )}
 
-          {/* Simple controls at bottom of video */}
-          {!videoLoading && !hasEnded && (
-            <View className="absolute bottom-0 left-0 right-0 px-4 pb-4 bg-gradient-to-t from-black/80 to-transparent">
-              <View className="flex-row items-center gap-3">
-                <TouchableOpacity onPress={handlePlayPause} className="p-2">
-                  {isPlaying ? (
-                    <Pause size={24} color="#fff" fill="#fff" />
-                  ) : (
-                    <Play size={24} color="#fff" fill="#fff" />
-                  )}
-                </TouchableOpacity>
-
-                <Text className="text-white text-xs font-medium w-10">
-                  {formatTime(currentTime)}
-                </Text>
-
-                <View className="flex-1">
-                  <Slider
-                    value={currentTime}
-                    minimumValue={0}
-                    maximumValue={duration || 1}
-                    onSlidingComplete={handleSliderChange}
-                    minimumTrackTintColor="#fff"
-                    maximumTrackTintColor="#666"
-                    thumbTintColor="#fff"
-                  />
+          {!videoLoading && !hasEnded && controlsVisible && (
+            <View style={styles.controlsContainer}>
+              <View style={styles.controlsInner}>
+                <View style={styles.progressSection}>
+                  <Text style={styles.timeText}>{formatTime(currentTime)}</Text>
+                  <View style={styles.sliderWrapper}>
+                    <Slider
+                      value={currentTime}
+                      minimumValue={0}
+                      maximumValue={duration || 1}
+                      onSlidingComplete={handleSliderChange}
+                      onSlidingStart={resetControlsTimeout}
+                      minimumTrackTintColor="#fff"
+                      maximumTrackTintColor="rgba(255, 255, 255, 0.3)"
+                      thumbTintColor="#fff"
+                      style={{ width: '100%', height: 40 }}
+                    />
+                  </View>
+                  <Text style={styles.timeText}>{formatTime(duration)}</Text>
                 </View>
 
-                <Text className="text-white text-xs font-medium w-10">
-                  {formatTime(duration)}
-                </Text>
+                <View style={styles.buttonControls}>
+                    <TouchableOpacity onPress={seekBackward} style={styles.controlButton}>
+                        <SkipBack size={24} color="#fff" />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={handlePlayPause} style={[styles.controlButton, styles.playPauseButton]}>
+                        {isPlaying ? <Pause size={28} color="#fff" fill="#fff" /> : <Play size={28} color="#fff" fill="#fff" />}
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={seekForward} style={styles.controlButton}>
+                        <SkipForward size={24} color="#fff" />
+                    </TouchableOpacity>
+                </View>
               </View>
             </View>
           )}
         </View>
 
-        {/* Bottom Section - Same as ImageViewer */}
-        <View className="absolute bottom-0 left-0 right-0 z-10" style={{ paddingBottom: 20 }}>
-          {/* Post Description Box */}
+        <View style={styles.bottomSection}>
           {postContent && (
-            <View className="mx-4 p-4 border-2 border-gray-400 rounded-lg" style={{ backgroundColor: 'transparent', marginBottom: 8 }}>
-              {username && (
-                <Text className="text-white font-semibold text-sm mb-1">
-                  {username}
-                </Text>
-              )}
-              <Text className="text-white text-base leading-5">
-                {postContent}
-              </Text>
+            <View style={styles.postContentBox}>
+              {username && <Text style={styles.usernameText}>{username}</Text>}
+              <Text style={styles.contentText}>{postContent}</Text>
             </View>
           )}
-
-          {/* Action Strip - Likes, Comments, Share */}
-          <View className="mx-4 px-4 py-3 border border-gray-400 rounded-lg flex-row items-center justify-around" style={{ backgroundColor: 'transparent' }}>
-            <TouchableOpacity className="flex-row items-center" onPress={handleLike}>
-              <Heart
-                size={20}
-                color={isLiked ? "#e91e63" : "white"}
-                fill={isLiked ? "#e91e63" : "none"}
-                strokeWidth={1.5}
-              />
-              <Text className={`ml-2 font-medium ${isLiked ? 'text-pink-500' : 'text-white'}`}>
-                {likesCount > 0 ? likesCount : 'Like'}
-              </Text>
+          <View style={styles.actionStrip}>
+            <TouchableOpacity style={styles.actionButton} onPress={handleLike}>
+              <Heart size={20} color={isLiked ? "#ec4899" : "white"} fill={isLiked ? "#ec4899" : "none"} />
+              <Text style={[styles.actionText, isLiked && styles.actionTextLiked]}>{likesCount > 0 ? likesCount : 'Like'}</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity className="flex-row items-center">
-              <MessageCircle size={20} color="white" strokeWidth={1.5} />
-              <Text className="text-white ml-2 font-medium">
-                {comments > 0 ? comments : 'Comment'}
-              </Text>
+            <TouchableOpacity style={styles.actionButton}>
+              <MessageCircle size={20} color="white" />
+              <Text style={styles.actionText}>{comments > 0 ? comments : 'Comment'}</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity className="flex-row items-center">
-              <Share2 size={20} color="white" strokeWidth={1.5} />
-              <Text className="text-white ml-2 font-medium">Share</Text>
+            <TouchableOpacity style={styles.actionButton}>
+              <Share2 size={20} color="white" />
+              <Text style={styles.actionText}>Share</Text>
             </TouchableOpacity>
           </View>
         </View>
-      </View>
+        </Animated.View>
+      </GestureDetector>
     </Modal>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#000000',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  dragHandleContainer: {
+    width: '100%',
+    alignItems: 'center',
+    paddingTop: 12,
+    paddingBottom: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    zIndex: 30,
+  },
+  dragHandle: {
+    width: 60,
+    height: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    borderRadius: 3,
+  },
+  closeButton: { position: 'absolute', top: 60, left: 16, zIndex: 40, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 50, padding: 8 },
+  videoWrapper: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  loadingOverlay: { position: 'absolute', inset: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: '#000' },
+  loadingText: { color: '#fff', marginTop: 10 },
+  centerControlOverlay: { position: 'absolute', inset: 0, alignItems: 'center', justifyContent: 'center' },
+  centerButton: { backgroundColor: 'rgba(255,255,255,0.9)', borderRadius: 50, padding: 20 },
+  controlsContainer: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: 16, paddingBottom: 16, backgroundColor: 'rgba(0,0,0,0.3)' },
+  controlsInner: { gap: 10 },
+  progressSection: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  timeText: { color: '#fff', fontSize: 12, width: 40, textAlign: 'center' },
+  sliderWrapper: { flex: 1 },
+  buttonControls: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 30, marginTop: 10 },
+  controlButton: { padding: 8 },
+  playPauseButton: { padding: 12, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 50 },
+  bottomSection: { position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 10, paddingBottom: 20 },
+  postContentBox: { marginHorizontal: 16, marginBottom: 10, padding: 12, backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 8 },
+  usernameText: { color: '#fff', fontWeight: 'bold', marginBottom: 4 },
+  contentText: { color: '#fff' },
+  actionStrip: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 10, backgroundColor: 'rgba(0,0,0,0.6)' },
+  actionButton: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  actionText: { color: '#fff', fontSize: 12 },
+  actionTextLiked: { color: '#ec4899' },
+});

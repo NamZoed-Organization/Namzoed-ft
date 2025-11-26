@@ -87,17 +87,19 @@ const MediaItem = ({ uri, index, isActive }: { uri: string; index: number; isAct
       })
     : null;
 
-  // Check when video is ready to play
+  // Check when video is ready to play - Use event listener instead of polling
   useEffect(() => {
     if (!isVideo || !player) return;
 
-    const interval = setInterval(() => {
-      if (player.status === 'readyToPlay') {
+    const statusListener = player.addListener('statusChange', (payload) => {
+      if (payload.status === 'readyToPlay') {
         setVideoLoading(false);
       }
-    }, 100);
+    });
 
-    return () => clearInterval(interval);
+    return () => {
+      statusListener.remove();
+    };
   }, [player, isVideo]);
 
   // Play/pause based on active state

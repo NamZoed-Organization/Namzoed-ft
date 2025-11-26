@@ -14,13 +14,13 @@ import {
   Modal,
   Pressable,
   RefreshControl,
-  SafeAreaView,
   Switch,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useUser } from "@/contexts/UserContext";
 import getStreamService, {
@@ -440,13 +440,18 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose }) => {
     [ensureStreamClient, resolveCallIdentifier]
   );
 
+  // Stable callback reference for subscription
+  const handleLivestreamsChange = useCallback(() => {
+    loadLivestreams(false);
+  }, [loadLivestreams]);
+
   useEffect(() => {
     loadLivestreams(true);
-    const unsubscribe = subscribeToLivestreams(() => loadLivestreams(false));
+    const unsubscribe = subscribeToLivestreams(handleLivestreamsChange);
     return () => {
       unsubscribe();
     };
-  }, [loadLivestreams]);
+  }, [loadLivestreams, handleLivestreamsChange]);
 
   const activeViewerCount = useMemo(() => {
     if (!selectedStream) {
