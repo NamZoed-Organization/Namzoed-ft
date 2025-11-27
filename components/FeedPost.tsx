@@ -1,9 +1,6 @@
 import FullscreenVideoPlayer from "@/components/FullscreenVideoPlayer";
 import ImageViewer from "@/components/ImageViewer";
-import { useVideoCache } from "@/contexts/VideoCacheContext";
 import { PostData } from "@/types/post";
-// ✅ USING THE NEW, NON-DEPRECATED LIBRARY
-import { VideoView, useVideoPlayer } from "expo-video";
 import {
   Bookmark,
   Heart,
@@ -11,8 +8,8 @@ import {
   MoreHorizontal,
   Play,
 } from "lucide-react-native";
-import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Animated, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React, { useState } from "react";
+import { Animated, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 export { default as PostSkeleton } from "@/components/ui/PostSkeleton";
 
@@ -93,7 +90,6 @@ const PostImage = ({ imageUri, onPress, className, style }: any) => {
 
 const PostVideo = ({
   videoUri,
-  onPress,
   className,
   style,
   videoId,
@@ -101,112 +97,23 @@ const PostVideo = ({
   username,
   likes,
   comments,
-  isVisible = false
 }: any) => {
   const [showFullscreen, setShowFullscreen] = useState(false);
-  const [videoLoading, setVideoLoading] = useState(true);
-  const [duration, setDuration] = useState(0);
-  const isMounted = useRef(true);
-  const statusSubscriptionRef = useRef<any>(null);
-  const { registerPlayer, releasePlayer } = useVideoCache();
-
-  // ✅ 1. Setup Player (New Library)
-  const player = useVideoPlayer(videoUri, (player) => {
-    player.loop = true;
-    player.muted = true;
-  });
-
-  // Register player with cache
-  useEffect(() => {
-    if (player) {
-      registerPlayer(videoId, player, videoUri);
-    }
-  }, [player, videoId, videoUri, registerPlayer]);
-
-  // ✅ 2. Event Listeners (FIXED TYPE ERROR HERE)
-  useEffect(() => {
-    if (!player) return;
-
-    statusSubscriptionRef.current = player.addListener('statusChange', (payload) => {
-      // We access 'payload.status' now
-      if (isMounted.current && payload.status === 'readyToPlay') {
-        setVideoLoading(false);
-        setDuration(player.duration);
-      }
-    });
-
-    return () => {
-      if (statusSubscriptionRef.current) {
-        statusSubscriptionRef.current.remove();
-        statusSubscriptionRef.current = null;
-      }
-    };
-  }, [player]);
-
-  // 3. Visibility Logic - Only play if visible and not in fullscreen
-  useEffect(() => {
-    if (!player) return;
-
-    if (isVisible && !showFullscreen) {
-        player.play();
-    } else {
-        player.pause();
-    }
-  }, [isVisible, player, showFullscreen]);
-
-  // 4. Cleanup - Properly release player
-  useEffect(() => {
-    isMounted.current = true;
-    return () => {
-      isMounted.current = false;
-
-      // Clean up listeners
-      if (statusSubscriptionRef.current) {
-        statusSubscriptionRef.current.remove();
-        statusSubscriptionRef.current = null;
-      }
-
-      // Pause and release from cache
-      if (player) {
-        player.pause();
-      }
-
-      // Release player from cache (it will handle cleanup)
-      releasePlayer(videoId);
-    };
-  }, [player, videoId, releasePlayer]);
-
-  const formatDuration = (seconds: number) => {
-    if (!seconds || seconds === 0) return "";
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
 
   return (
     <>
       <TouchableOpacity
-        onPress={() => {
-            player.pause();
-            setShowFullscreen(true);
-        }}
+        onPress={() => setShowFullscreen(true)}
         activeOpacity={0.85}
         className={className}
         style={[videoPreviewStyles.container, style]}
       >
         <View style={videoPreviewStyles.videoWrapper}>
-          {videoLoading && (
-            <View style={videoPreviewStyles.loadingOverlay}>
-              <ActivityIndicator size="large" color="#ffffff" />
-            </View>
-          )}
-
-          {/* ✅ New Component from expo-video */}
-          <VideoView
-            player={player}
+          {/* Static video thumbnail placeholder */}
+          <Image
+            source={{ uri: videoUri }}
             style={videoPreviewStyles.videoPlayer}
-            nativeControls={false}
-            contentFit="cover"
+            resizeMode="cover"
           />
 
           <View style={videoPreviewStyles.overlay}>
@@ -215,13 +122,10 @@ const PostVideo = ({
             </View>
           </View>
 
-          {!videoLoading && duration > 0 && (
-            <View style={videoPreviewStyles.durationBadge}>
-              <Text style={videoPreviewStyles.durationText}>
-                {formatDuration(duration)}
-              </Text>
-            </View>
-          )}
+          {/* Video badge indicator */}
+          <View style={videoPreviewStyles.videoBadge}>
+            <Text style={videoPreviewStyles.videoBadgeText}>VIDEO</Text>
+          </View>
         </View>
       </TouchableOpacity>
 
@@ -229,10 +133,7 @@ const PostVideo = ({
         visible={showFullscreen}
         videoUri={videoUri}
         videoId={videoId}
-        onClose={() => {
-            setShowFullscreen(false);
-            if (isVisible) player.play();
-        }}
+        onClose={() => setShowFullscreen(false)}
         postContent={postContent}
         username={username}
         likes={likes}
@@ -414,17 +315,6 @@ const videoPreviewStyles = StyleSheet.create({
     height: '100%',
     position: 'relative'
   },
-  loadingOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 10
-  },
   videoPlayer: {
     position: 'absolute',
     top: 0,
@@ -447,15 +337,16 @@ const videoPreviewStyles = StyleSheet.create({
     borderRadius: 50,
     padding: 15
   },
-  durationBadge: {
+  videoBadge: {
     position: 'absolute',
-    bottom: 8,
-    right: 8,
+    top: 8,
+    left: 8,
     backgroundColor: 'rgba(0,0,0,0.7)',
-    padding: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: 4
   },
-  durationText: {
+  videoBadgeText: {
     color: '#fff',
     fontSize: 10,
     fontWeight: 'bold'

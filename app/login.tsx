@@ -21,6 +21,7 @@ import {
 
 export default function Login() {
   const [email, setEmail] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
@@ -31,38 +32,81 @@ export default function Login() {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input);
   };
 
+  const isValidBhutanesePhone = (input: string) => {
+    return (input.startsWith("17") || input.startsWith("77")) && input.length === 8;
+  };
+
+  // Field disable logic
+  const isEmailDisabled = phoneNumber.length > 0;
+  const isPhoneDisabled = email.length > 0;
+
+  // Clear handlers
+  const handleClearEmail = () => {
+    setEmail("");
+  };
+
+  const handleClearPhone = () => {
+    setPhoneNumber("");
+  };
+
 
   const handleLogin = async () => {
-    if (!isValidEmail(email)) {
+    const loginIdentifier = email || phoneNumber;
+
+    // Validation
+    if (!loginIdentifier || !password) {
+      Alert.alert("Error", "Please fill in all fields");
+      return;
+    }
+
+    // Validate email format if email is being used
+    if (email && !isValidEmail(email)) {
       console.error("Invalid email:", email);
       Alert.alert("Error", "Please enter a valid email address");
       return;
     }
-    
+
+    // Validate phone format if phone is being used
+    if (phoneNumber && !isValidBhutanesePhone(phoneNumber)) {
+      console.error("Invalid phone:", phoneNumber);
+      Alert.alert("Error", "Please enter a valid Bhutanese phone number (starts with 17 or 77, 8 digits)");
+      return;
+    }
+
     try {
       setLoading(true);
-      
-      // Debug: Check if user exists in auth
-      const { data: authCheck } = await supabase.auth.getUser();
-      console.log("Current auth state:", authCheck);
 
-      // Debug: Check if user exists in profiles
-      const { data: profileCheck } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('email', email)
-        .single();
-      
-      console.log("Profile check:", profileCheck);
+      let authEmail = email;
 
-      console.log("Attempting login with:", { 
-        email,
-        passwordLength: password.length 
+      // If using phone number, lookup email from profiles
+      if (phoneNumber && !email) {
+        console.log("Looking up user by phone:", phoneNumber);
+
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('email')
+          .eq('phone', phoneNumber)
+          .single();
+
+        if (profileError || !profile) {
+          console.error("Phone lookup error:", profileError);
+          Alert.alert("Error", "Phone number not found. Please check your number or sign up.");
+          setLoading(false);
+          return;
+        }
+
+        authEmail = profile.email;
+        console.log("Found email for phone:", authEmail);
+      }
+
+      console.log("Attempting login with:", {
+        email: authEmail,
+        passwordLength: password.length
       });
 
       // Attempt to sign in
       const { data, error } = await supabase.auth.signInWithPassword({
-        email,
+        email: authEmail,
         password
       });
 
@@ -182,11 +226,13 @@ export default function Login() {
        
 
             {/* Email Input */}
-            <View className="border border-gray-300 rounded-lg px-4 py-2 mb-4 flex-row items-center">
+            <View className={`border rounded-lg px-4 py-2 mb-4 flex-row items-center ${
+              isEmailDisabled ? 'border-gray-200 bg-gray-50' : 'border-gray-300'
+            }`}>
               <MaterialIcons
                 name="email"
                 size={20}
-                color="#999"
+                color={isEmailDisabled ? "#ccc" : "#999"}
                 className="mr-2"
               />
               <TextInput
@@ -195,16 +241,56 @@ export default function Login() {
                 placeholder="Email Address"
                 keyboardType="email-address"
                 autoCapitalize="none"
+                editable={!isEmailDisabled}
                 style={{
                   flex: 1,
                   fontSize: 16,
                   fontWeight: '400',
-                  color: '#000000',
+                  color: isEmailDisabled ? '#999' : '#000000',
                   marginLeft: 8,
                   paddingVertical: 12,
                 }}
                 placeholderTextColor="#999999"
               />
+              {email.length > 0 && (
+                <Pressable onPress={handleClearEmail}>
+                  <Ionicons name="close-circle" size={20} color="#999" />
+                </Pressable>
+              )}
+            </View>
+
+            {/* Phone Number Input */}
+            <View className={`border rounded-lg px-4 py-2 mb-4 flex-row items-center ${
+              isPhoneDisabled ? 'border-gray-200 bg-gray-50' : 'border-gray-300'
+            }`}>
+              <Ionicons
+                name="call"
+                size={20}
+                color={isPhoneDisabled ? "#ccc" : "#999"}
+                className="mr-2"
+              />
+              <TextInput
+                value={phoneNumber}
+                onChangeText={setPhoneNumber}
+                placeholder="Phone Number (17XXXXXX or 77XXXXXX)"
+                keyboardType="phone-pad"
+                editable={!isPhoneDisabled}
+                maxLength={8}
+                style={{
+                  flex: 1,
+                  fontSize: 16,
+                  fontWeight: '400',
+                  color: isPhoneDisabled ? '#999' : '#000000',
+                  marginLeft: 8,
+                  paddingVertical: 12,
+                }}
+                placeholderTextColor="#999999"
+              />
+              {phoneNumber.length > 0 && (
+                <Pressable onPress={handleClearPhone}>
+                  <Ionicons name="close-circle" size={20} color="#999" />
+                </Pressable>
+              )}
             </View>
 
             {/* Password Input */}
@@ -250,11 +336,19 @@ export default function Login() {
           {/* Login Button */}
           <TouchableOpacity
             disabled={
-              !isValidEmail(email) || password.length === 0 || loading
+              !(email || phoneNumber) ||
+              password.length === 0 ||
+              (email && !isValidEmail(email)) ||
+              (phoneNumber && !isValidBhutanesePhone(phoneNumber)) ||
+              loading
             }
             onPress={handleLogin}
             className={`py-5 rounded-md items-center my-10 ${
-              isValidEmail(email) && password.length > 0 && !loading
+              (email || phoneNumber) &&
+              password.length > 0 &&
+              (!email || isValidEmail(email)) &&
+              (!phoneNumber || isValidBhutanesePhone(phoneNumber)) &&
+              !loading
                 ? "bg-primary"
                 : "bg-primary/50"
             }`}

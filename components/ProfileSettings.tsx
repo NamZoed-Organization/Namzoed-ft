@@ -17,7 +17,8 @@ import {
 import { useRouter } from "expo-router";
 import { ArrowLeft, Bell, FileText, Globe, HardDrive, HelpCircle, Info, Key, LogOut, MessageSquare, Phone, ScrollText, Shield, Smartphone, Users } from 'lucide-react-native';
 import React, { useRef, useState } from "react";
-import { Animated, Dimensions, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { Animated, Dimensions, PanResponder, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 interface ProfileSettingsProps {
   onClose: () => void;
@@ -28,9 +29,8 @@ interface ProfileSettingsProps {
 }
 
 export default function ProfileSettings({ onClose, currentUser, onLogout, panHandlers, contentOpacity }: ProfileSettingsProps) {
-  // Mock hooks for preview if needed, or standard imports
-  const router = useRouter ? useRouter() : { push: () => {} };
-  const insets = useSafeAreaInsets ? useSafeAreaInsets() : { top: 0, bottom: 20 };
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
   
   const [modalStack, setModalStack] = useState<string[]>([]);
   

@@ -6,6 +6,7 @@ import {
 import { Link, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
+  Alert,
   Animated,
   Image,
   Keyboard,
@@ -65,6 +66,22 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Check if phone number already exists
+  const checkPhoneExists = async (phoneNumber: string): Promise<boolean> => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('phone')
+        .eq('phone', phoneNumber)
+        .maybeSingle();
+
+      return !!data;
+    } catch (err) {
+      console.error("Error checking phone:", err);
+      return false; // Allow signup to proceed if check fails
+    }
+  };
+
   // handle signup
   const handleSignup = async () => {
     if (!isFormValid) {
@@ -74,6 +91,21 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
     try {
       setLoading(true);
       setError(null);
+
+      // PRE-CHECK: Check if phone already exists
+      const phoneExists = await checkPhoneExists(phone);
+      if (phoneExists) {
+        Alert.alert(
+          "Phone Already Registered",
+          "This phone number is already associated with an account. Please login or use a different number.",
+          [
+            { text: "Go to Login", onPress: () => router.push("/login") },
+            { text: "Cancel", style: "cancel" }
+          ]
+        );
+        setLoading(false);
+        return;
+      }
 
       // Sign up with Supabase
       const { data, error: signUpError } = await supabase.auth.signUp({
@@ -129,7 +161,16 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
       }
     } catch (err: any) {
       console.error("Signup error:", err);
-      setError(err?.message || "An error occurred during signup");
+
+      // FALLBACK: Handle duplicate phone constraint error
+      if (err.code === '23505' || err.message?.includes('profiles_phone_unique')) {
+        Alert.alert(
+          "Phone Already Registered",
+          "This phone number is already in use. Please login or try a different number."
+        );
+      } else {
+        setError(err?.message || "An error occurred during signup");
+      }
     } finally {
       setLoading(false);
     }
