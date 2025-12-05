@@ -14,7 +14,6 @@ import {
   SendFeedback,
   TermsOfService
 } from '@/components/settings';
-import { useRouter } from "expo-router";
 import { ArrowLeft, Bell, FileText, Globe, HardDrive, HelpCircle, Info, Key, LogOut, MessageSquare, Phone, ScrollText, Shield, Smartphone, Users } from 'lucide-react-native';
 import React, { useRef, useState } from "react";
 import { Animated, Dimensions, PanResponder, ScrollView, Text, TouchableOpacity, View } from "react-native";
@@ -29,7 +28,6 @@ interface ProfileSettingsProps {
 }
 
 export default function ProfileSettings({ onClose, currentUser, onLogout, panHandlers, contentOpacity }: ProfileSettingsProps) {
-  const router = useRouter();
   const insets = useSafeAreaInsets();
   
   const [modalStack, setModalStack] = useState<string[]>([]);
@@ -144,21 +142,22 @@ export default function ProfileSettings({ onClose, currentUser, onLogout, panHan
         */}
         <View 
           {...panResponder.panHandlers} 
-          className="w-full items-center justify-center py-3 bg-white z-50 border-b border-gray-100"
+          className="w-full items-center justify-center py-3 bg-white z-50 "
         >
           <View className="w-16 h-1.5 bg-gray-300 rounded-full" />
         </View>
 
         {/* --- CONTENT CONTAINER --- */}
         <View className="flex-1 relative overflow-hidden">
-            
+
             {/* 1. MAIN SETTINGS LIST */}
-            <Animated.View
-              className="flex-1 bg-white"
-              style={{ opacity: contentOpacity || 1 }}
-            >
+            <View className="flex-1">
+              <Animated.View
+                className="flex-1 bg-white"
+                style={{ opacity: contentOpacity || 1 }}
+              >
               {/* Header */}
-              <View className="flex-row items-center px-4 pb-4 pt-2 border-b border-gray-200">
+              <View className="flex-row items-center px-4 pb-4 pt-2">
                 <TouchableOpacity onPress={onClose} className="mr-3 p-1">
                   <ArrowLeft size={24} color="#000" />
                 </TouchableOpacity>
@@ -313,11 +312,12 @@ export default function ProfileSettings({ onClose, currentUser, onLogout, panHan
                   </View>
                 </View>
               </ScrollView>
-            </Animated.View>
+              </Animated.View>
+            </View>
 
             {/* 2. NESTED MODAL (SLIDES OVER CONTENT, UNDER BAR) */}
             {/* Key Fix: This is now absolute positioned INSIDE the 'Content Container',
-               so it sits 'on top' of the settings list, but 'below' the drag handle 
+               so it sits 'on top' of the settings list, but 'below' the drag handle
                (which is outside this container).
             */}
             {activeModal && (

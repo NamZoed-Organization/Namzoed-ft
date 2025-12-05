@@ -6,6 +6,7 @@ import {
 import TabBarButton from "@/components/ui/TabBarButton";
 import { useRouter } from "expo-router";
 import { UserCircle } from "lucide-react-native";
+import React from "react";
 import { Image, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 export default function TopNavbar() {
@@ -13,7 +14,7 @@ export default function TopNavbar() {
 
   return (
     <SafeAreaView>
-      <View className="flex-row items-center justify-between px-4 pt-6 bg-background">
+      <View className="flex-row items-center justify-between px-4 py-6 bg-background">
         <View className="flex-row items-center">
           <Image
             source={require("@/assets/images/logo.png")}
