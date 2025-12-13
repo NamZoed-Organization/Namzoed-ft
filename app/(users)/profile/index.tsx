@@ -1,4 +1,5 @@
 // Path: app/(tabs)/profile.tsx
+import BookmarksOverlay from "@/components/BookmarksOverlay";
 import ImageViewer from "@/components/ImageViewer";
 import ProfileSettings from "@/components/ProfileSettings";
 import { useUser } from "@/contexts/UserContext";
@@ -66,6 +67,7 @@ export default function ProfileScreen() {
   const [showImagePicker, setShowImagePicker] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showBookmarks, setShowBookmarks] = useState(false);
 
   // Data State
   const [profileImage, setProfileImage] = useState<string | null>(null);
@@ -154,10 +156,7 @@ export default function ProfileScreen() {
 
   const handleEditProfile = () => setShowImagePicker(true);
   const handleSettings = () => setShowSettings(true);
-  const handleBookmark = () => {
-    // Implement bookmark functionality here
-    Alert.alert("Bookmarks", "Bookmarks feature coming soon!");
-  };
+  const handleBookmark = () => setShowBookmarks(true);
   const handleNotifications = () => {
     setShowNotifications(true);
     // You can implement a notifications modal similar to settings
@@ -234,8 +233,8 @@ export default function ProfileScreen() {
       {/* Header */}
       <View className="flex-row items-center justify-between px-4 py-3 bg-white border-b border-gray-100">
         {/* Bookmark Icon on Left */}
-        <TouchableOpacity onPress={handleBookmark} className="w-10 h-10 items-center justify-center">
-          <Bookmark size={24} className="text-gray-700" />
+        <TouchableOpacity onPress={handleBookmark} className="w-10 h-10 items-center justify-center ">
+          <Bookmark size={24} className="text-yellow-400" />
         </TouchableOpacity>
 
         {/* Notification and Settings Icons on Right */}
@@ -412,6 +411,20 @@ export default function ProfileScreen() {
                 await logout();
                 router.replace("/login");
               }}
+            />
+          </Animated.View>
+        </Modal>
+      )}
+
+      {/* ------------------------------------------------------ */}
+      {/* BOOKMARKS MODAL */}
+      {/* ------------------------------------------------------ */}
+      {showBookmarks && currentUser?.id && (
+        <Modal transparent statusBarTranslucent animationType="none" visible={showBookmarks} onRequestClose={() => setShowBookmarks(false)}>
+          <Animated.View entering={SlideInDown.springify()} exiting={SlideOutDown} style={{ height: "100%",  borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: "hidden" }}>
+            <BookmarksOverlay
+              onClose={() => setShowBookmarks(false)}
+              userId={currentUser.id}
             />
           </Animated.View>
         </Modal>

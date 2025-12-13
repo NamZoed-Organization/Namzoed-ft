@@ -1,5 +1,6 @@
-// app/(users)/product/[id].tsx
+import { useUser } from "@/contexts/UserContext";
 import { fetchProductById, ProductWithUser } from "@/lib/productsService";
+import { supabase } from "@/lib/supabase"; // Add Supabase import
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
@@ -30,11 +31,15 @@ function DetailSkeleton() {
 export default function ProductDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  
+  const { currentUser } = useUser();
+
   const [product, setProduct] = useState<ProductWithUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  
+  // Bookmark State
+  const [isBookmarked, setIsBookmarked] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -45,6 +50,18 @@ export default function ProductDetail() {
       try {
         const data = await fetchProductById(id);
         setProduct(data);
+        
+        // Check if bookmarked
+        if (currentUser) {
+            const { data: bookmarkData } = await supabase
+                .from('user_bookmarks')
+                .select('*')
+                .eq('user_id', currentUser.id)
+                .eq('product_id', id)
+                .single();
+            
+            setIsBookmarked(!!bookmarkData);
+        }
       } catch (err: any) {
         console.error("Error loading product:", err);
         setError(err.message || "Failed to load product");
@@ -54,24 +71,56 @@ export default function ProductDetail() {
     };
 
     loadProduct();
-  }, [id]);
+  }, [id, currentUser]);
+
+  const toggleBookmark = async () => {
+    if (!currentUser) {
+        Alert.alert("Sign in required", "Please sign in to save items.");
+        return;
+    }
+    if (!product) return;
+
+    // Optimistic Update
+    const previousState = isBookmarked;
+    setIsBookmarked(!isBookmarked);
+
+    try {
+        if (previousState) {
+            // Remove
+            const { error } = await supabase
+                .from('user_bookmarks')
+                .delete()
+                .eq('user_id', currentUser.id)
+                .eq('product_id', product.id);
+            if (error) throw error;
+        } else {
+            // Add
+            const { error } = await supabase
+                .from('user_bookmarks')
+                .insert({
+                    user_id: currentUser.id,
+                    product_id: product.id
+                });
+            if (error) throw error;
+        }
+    } catch (err) {
+        console.error("Bookmark error:", err);
+        setIsBookmarked(previousState); // Revert
+        Alert.alert("Error", "Failed to update bookmark");
+    }
+  };
 
   const handleMessageSeller = () => {
     if (!product) return;
-    
-    Alert.alert(
-      "Message Seller",
-      `Send a message about "${product.name}" to ${product.profiles?.name || 'the seller'}?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        { 
-          text: "Send Message", 
-          onPress: () => {
-            Alert.alert("Success", "Message sent to seller!");
-          }
-        }
-      ]
-    );
+
+    // Prevent messaging yourself on your own product
+    if (currentUser?.id === product.user_id) {
+      Alert.alert("Info", "This is your own product");
+      return;
+    }
+
+    // Navigate to chat with seller
+    router.push(`/(users)/chat/${product.user_id}`);
   };
 
   if (loading) return <DetailSkeleton />;
@@ -138,9 +187,23 @@ export default function ProductDetail() {
           </ScrollView>
         )}
 
-        <View className="p-4">
+        {/* Content Section */}
+        <View className="p-4 relative">
+          
+          {/* Bookmark Button (Positioned Top Right of content) */}
+          <TouchableOpacity
+            onPress={toggleBookmark}
+            className="absolute top-4 right-4 z-10 w-10 h-10 bg-primary rounded-full items-center justify-center shadow-sm"
+          >
+             <Ionicons
+                name={isBookmarked ? "bookmark" : "bookmark-outline"}
+                size={22}
+                color="#FBBF24"
+             />
+          </TouchableOpacity>
+
           {/* Category & Tags */}
-          <View className="flex-row flex-wrap gap-2 mb-3">
+          <View className="flex-row flex-wrap gap-2 mb-3 pr-12">
             <View className="bg-gray-100 px-3 py-1 rounded-full">
               <Text className="text-xs text-gray-600">{product.category}</Text>
             </View>
@@ -152,7 +215,7 @@ export default function ProductDetail() {
           </View>
 
           {/* Title */}
-          <Text className="text-xl font-bold text-gray-900 mb-2">
+          <Text className="text-xl font-bold text-gray-900 mb-2 pr-2">
             {product.name}
           </Text>
 
@@ -173,6 +236,15 @@ export default function ProductDetail() {
                 </Text>
                 <Text className="text-xs text-gray-500">Seller</Text>
               </View>
+              {/* Message Button */}
+              <TouchableOpacity
+                onPress={handleMessageSeller}
+                className="bg-primary px-4 py-2 rounded-lg flex-row items-center gap-1"
+                activeOpacity={0.8}
+              >
+                <Ionicons name="chatbubble-outline" size={16} color="white" />
+                <Text className="text-white font-semibold text-sm">Chat</Text>
+              </TouchableOpacity>
             </View>
           )}
 
@@ -188,20 +260,6 @@ export default function ProductDetail() {
           </Text>
         </View>
       </ScrollView>
-
-      {/* Fixed Bottom Button */}
-      <View className="p-4 bg-white border-t border-gray-100">
-        <TouchableOpacity
-          className="bg-primary rounded-xl py-4 flex-row items-center justify-center"
-          onPress={handleMessageSeller}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="chatbubble-outline" size={20} color="white" />
-          <Text className="text-white font-bold text-base ml-2">
-            Message Seller
-          </Text>
-        </TouchableOpacity>
-      </View>
     </View>
   );
 }
