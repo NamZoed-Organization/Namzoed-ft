@@ -272,7 +272,7 @@ export default function Login() {
               <TextInput
                 value={phoneNumber}
                 onChangeText={setPhoneNumber}
-                placeholder="Phone Number (17XXXXXX or 77XXXXXX)"
+                placeholder="Phone Number"
                 keyboardType="phone-pad"
                 editable={!isPhoneDisabled}
                 maxLength={8}

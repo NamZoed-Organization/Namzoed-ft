@@ -8,11 +8,18 @@ import SearchBar from "@/components/SearchBar";
 import TopNavbar from "@/components/ui/TopNavbar";
 import { Coins, Heart, Radio, Ticket, Users } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
-import { FlatList, Image, Text, TouchableOpacity, View } from "react-native";
+import { FlatList, Image, ListRenderItem, Text, TouchableOpacity, View } from "react-native";
+
+type TabType = "foryou" | "featured" | "live" | "bidding" | "norbu";
+
+interface HeaderDataItem {
+  key: string;
+  component: 'header' | 'content' | 'footer';
+}
 
 export default function HomeScreen() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeTab, setActiveTab] = useState("foryou");
+  const [activeTab, setActiveTab] = useState<TabType>("foryou");
   const [isLoaded, setIsLoaded] = useState(false);
   console.log(" home screen" )
   
@@ -23,7 +30,6 @@ export default function HomeScreen() {
     }, 100);
     return () => clearTimeout(timer);
   }, []);
-
 
   const renderTabContent = () => {
     if (!isLoaded && activeTab === "foryou") {
@@ -80,13 +86,13 @@ export default function HomeScreen() {
     }
   };
 
-  const headerData = [
+  const headerData: HeaderDataItem[] = [
     { key: 'header', component: 'header' },
     { key: 'content', component: 'content' },
     { key: 'footer', component: 'footer' }
   ];
 
-  const renderItem = ({ item }) => {
+  const renderItem: ListRenderItem<HeaderDataItem> = ({ item }) => {
     if (item.component === 'header') {
       return (
         <View className="px-4 gap-2">
@@ -94,76 +100,76 @@ export default function HomeScreen() {
           <SearchBar value={searchQuery} onChangeText={setSearchQuery} />
           <Banner />
           
-          {/* Tab Navigation */}
+          {/* Tab Navigation - Updated styling */}
           <View className="flex-row items-center w-full mx-auto mt-2 gap-2">
             <TouchableOpacity
               onPress={() => setActiveTab("foryou")}
-              className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm bg-white ${
+              className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm ${
                 activeTab === "foryou"
-                  ? "border-2 border-black"
-                  : ""
+                  ? "bg-primary"
+                  : "bg-white"
               }`}
             >
               <Heart 
                 size={20} 
-                color="black"
-                fill="none"
+                color={activeTab === "foryou" ? "white" : "black"}
+                fill={activeTab === "foryou" ? "white" : "none"}
               />
             </TouchableOpacity>
 
             <TouchableOpacity
               onPress={() => setActiveTab("featured")}
-              className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm bg-white ${
+              className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm ${
                 activeTab === "featured"
-                  ? "border-2 border-black"
-                  : ""
+                  ? "bg-primary"
+                  : "bg-white"
               }`}
             >
               <Users 
                 size={20} 
-                color="black"
+                color={activeTab === "featured" ? "white" : "black"}
               />
             </TouchableOpacity>
 
             <TouchableOpacity
               onPress={() => setActiveTab("live")}
-              className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm bg-white ${
+              className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm ${
                 activeTab === "live"
-                  ? "border-2 border-black"
-                  : ""
+                  ? "bg-primary"
+                  : "bg-white"
               }`}
             >
               <Radio 
                 size={20} 
-                color="black"
+                color={activeTab === "live" ? "white" : "black"}
               />
             </TouchableOpacity>
 
             <TouchableOpacity
               onPress={() => setActiveTab("norbu")}
-              className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm bg-white ${
+              className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm ${
                 activeTab === "norbu"
-                  ? "border-2 border-black"
-                  : ""
+                  ? "bg-primary"
+                  : "bg-white"
               }`}
             >
               <Coins 
                 size={20} 
-                color="black"
+                color={activeTab === "norbu" ? "white" : "black"}
               />
             </TouchableOpacity>
 
             <TouchableOpacity
               onPress={() => setActiveTab("bidding")}
-              className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm bg-white ${
+              className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm ${
                 activeTab === "bidding"
-                  ? "border-2 border-black"
-                  : ""
+                  ? "bg-primary"
+                  : "bg-white"
               }`}
             >
               <Ticket 
                 size={20} 
-                color="black"
+                color={activeTab === "bidding" ? "white" : "black"}
               />
             </TouchableOpacity>
           </View>
@@ -221,13 +227,15 @@ export default function HomeScreen() {
         </View>
       );
     }
+
+    return null;
   };
 
   return (
     <FlatList
       data={headerData}
       renderItem={renderItem}
-      keyExtractor={(item) => item.key}
+      keyExtractor={(item: HeaderDataItem) => item.key}
       className="flex-1 bg-background mb-20"
       showsVerticalScrollIndicator={false}
       scrollEventThrottle={16}

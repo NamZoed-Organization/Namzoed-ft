@@ -1,4 +1,5 @@
 // Path: app/(tabs)/profile.tsx
+import BookmarksOverlay from "@/components/BookmarksOverlay";
 import ImageViewer from "@/components/ImageViewer";
 import ProfileSettings from "@/components/ProfileSettings";
 import { useUser } from "@/contexts/UserContext";
@@ -6,6 +7,8 @@ import { fetchUserPosts, Post } from "@/lib/postsService";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import {
+  Bell,
+  Bookmark,
   Camera,
   Edit3,
   ImageIcon,
@@ -63,6 +66,8 @@ export default function ProfileScreen() {
   // UI State
   const [showImagePicker, setShowImagePicker] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [showBookmarks, setShowBookmarks] = useState(false);
 
   // Data State
   const [profileImage, setProfileImage] = useState<string | null>(null);
@@ -151,6 +156,12 @@ export default function ProfileScreen() {
 
   const handleEditProfile = () => setShowImagePicker(true);
   const handleSettings = () => setShowSettings(true);
+  const handleBookmark = () => setShowBookmarks(true);
+  const handleNotifications = () => {
+    setShowNotifications(true);
+    // You can implement a notifications modal similar to settings
+    Alert.alert("Notifications", "Notifications feature coming soon!");
+  };
 
   const handleMediaClick = (imageUrl: string) => {
     const post = imagePostMap.get(imageUrl);
@@ -220,10 +231,21 @@ export default function ProfileScreen() {
       <View className="h-12 bg-white" />
 
       {/* Header */}
-      <View className="flex-row items-center justify-end px-4 py-3 bg-white border-b border-gray-100">
-        <TouchableOpacity onPress={handleSettings} className="w-10 h-10 items-center justify-center">
-          <Settings size={24} className="text-gray-700" />
+      <View className="flex-row items-center justify-between px-4 py-3 bg-white border-b border-gray-100">
+        {/* Bookmark Icon on Left */}
+        <TouchableOpacity onPress={handleBookmark} className="w-10 h-10 items-center justify-center ">
+          <Bookmark size={24} className="text-yellow-400" />
         </TouchableOpacity>
+
+        {/* Notification and Settings Icons on Right */}
+        <View className="flex-row items-center">
+          <TouchableOpacity onPress={handleNotifications} className="w-10 h-10 items-center justify-center mr-2">
+            <Bell size={24} className="text-gray-700" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleSettings} className="w-10 h-10 items-center justify-center">
+            <Settings size={24} className="text-gray-700" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
@@ -380,24 +402,31 @@ export default function ProfileScreen() {
       {/* ------------------------------------------------------ */}
       {showSettings && (
         <Modal transparent statusBarTranslucent animationType="none" visible={showSettings} onRequestClose={() => setShowSettings(false)}>
-          <View className="flex-1 justify-end">
-            <Animated.View entering={FadeIn} exiting={FadeOut} style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: 0, backgroundColor: "rgba(0,0,0,0.5)" }}>
-              <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setShowSettings(false)} />
-            </Animated.View>
+          <Animated.View entering={SlideInDown.springify()} exiting={SlideOutDown} style={{ height: "100%",  borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: "hidden" }}>
+            <ProfileSettings
+              onClose={() => setShowSettings(false)}
+              currentUser={currentUser}
+              onLogout={async () => {
+                setShowSettings(false);
+                await logout();
+                router.replace("/login");
+              }}
+            />
+          </Animated.View>
+        </Modal>
+      )}
 
-            <Animated.View entering={SlideInDown.springify()} exiting={SlideOutDown} style={{ height: "90%", backgroundColor: "white", borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: "hidden" }}>
-
-              <ProfileSettings
-                onClose={() => setShowSettings(false)}
-                currentUser={currentUser}
-                onLogout={async () => {
-                  setShowSettings(false);
-                  await logout();
-                  router.replace("/login");
-                }}
-              />
-            </Animated.View>
-          </View>
+      {/* ------------------------------------------------------ */}
+      {/* BOOKMARKS MODAL */}
+      {/* ------------------------------------------------------ */}
+      {showBookmarks && currentUser?.id && (
+        <Modal transparent statusBarTranslucent animationType="none" visible={showBookmarks} onRequestClose={() => setShowBookmarks(false)}>
+          <Animated.View entering={SlideInDown.springify()} exiting={SlideOutDown} style={{ height: "100%",  borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: "hidden" }}>
+            <BookmarksOverlay
+              onClose={() => setShowBookmarks(false)}
+              userId={currentUser.id}
+            />
+          </Animated.View>
         </Modal>
       )}
 
