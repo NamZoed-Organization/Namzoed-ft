@@ -1,9 +1,13 @@
-// Path: app/(tabs)/profile.tsx
 import BookmarksOverlay from "@/components/BookmarksOverlay";
+import ImageCropOverlay from "@/components/ImageCropOverlay";
 import ImageViewer from "@/components/ImageViewer";
+import ManageListingsOverlay from "@/components/ManageListingsOverlay";
+import ProfileImageViewer from "@/components/ProfileImageViewer";
 import ProfileSettings from "@/components/ProfileSettings";
 import { useUser } from "@/contexts/UserContext";
 import { fetchUserPosts, Post } from "@/lib/postsService";
+// Added import for profile services
+import { fetchUserProfile, updateUserProfile, uploadAvatar } from "@/lib/profileService";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import {
@@ -14,6 +18,7 @@ import {
   ImageIcon,
   Image as ImageLucide,
   Mail,
+  Package,
   Play,
   Settings,
   ShoppingBag,
@@ -59,7 +64,7 @@ const isVideoUrl = (url: string): boolean => {
 export default function ProfileScreen() {
   const { currentUser, logout } = useUser();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"images" | "products" | "tools">(
+  const [activeTab, setActiveTab] = useState<"images" | "products" | "services">(
     "images"
   );
 
@@ -68,6 +73,9 @@ export default function ProfileScreen() {
   const [showSettings, setShowSettings] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showBookmarks, setShowBookmarks] = useState(false);
+  const [showManageListings, setShowManageListings] = useState(false);
+  const [showCropOverlay, setShowCropOverlay] = useState(false);
+  const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
 
   // Data State
   const [profileImage, setProfileImage] = useState<string | null>(null);
@@ -82,6 +90,9 @@ export default function ProfileScreen() {
   const [imagePostMap, setImagePostMap] = useState<Map<string, Post>>(
     new Map()
   );
+
+  // Profile image viewer state
+  const [showProfileImageViewer, setShowProfileImageViewer] = useState(false);
 
   // ------------------------------------------------------
   // 1. SMOOTH ANIMATION LOGIC (Reanimated)
@@ -113,11 +124,37 @@ export default function ProfileScreen() {
   useEffect(() => { if (showImagePicker) pickerTranslateY.value = 0; }, [showImagePicker]);
 
   const rPickerStyle = useAnimatedStyle(() => ({ transform: [{ translateY: pickerTranslateY.value }] }));
-  const rPickerBackdrop = useAnimatedStyle(() => ({ opacity: 1 - pickerTranslateY.value / 500 }));
+  const rPickerBackdrop = useAnimatedStyle(() => ({ opacity: Math.max(0, Math.min(1, 1 - pickerTranslateY.value / 500)) }));
 
   // ------------------------------------------------------
   // END ANIMATION LOGIC
   // ------------------------------------------------------
+
+  // Initialize profile image from current user data or fetch if missing
+  useEffect(() => {
+    const loadProfileImage = async () => {
+      if (!currentUser?.id) return;
+
+      // 1. Try from context first (if available)
+      const user = currentUser as any;
+      if (user?.avatar_url) {
+        setProfileImage(user.avatar_url);
+        return;
+      }
+
+      // 2. Fetch from DB if not in context
+      try {
+        const profile = await fetchUserProfile(currentUser.id);
+        if (profile?.avatar_url) {
+          setProfileImage(profile.avatar_url);
+        }
+      } catch (error) {
+        console.error("Failed to fetch profile image:", error);
+      }
+    };
+
+    loadProfileImage();
+  }, [currentUser]);
 
   useEffect(() => {
     const loadUserPosts = async () => {
@@ -157,10 +194,42 @@ export default function ProfileScreen() {
   const handleEditProfile = () => setShowImagePicker(true);
   const handleSettings = () => setShowSettings(true);
   const handleBookmark = () => setShowBookmarks(true);
+  const handleManageListings = () => setShowManageListings(true);
   const handleNotifications = () => {
     setShowNotifications(true);
     // You can implement a notifications modal similar to settings
     Alert.alert("Notifications", "Notifications feature coming soon!");
+  };
+
+  // UPDATED: Save Logic
+  const handleCropSave = async (croppedUri: string) => {
+    if (!currentUser?.id) return;
+
+    // 1. Optimistic Update (Immediate UI feedback)
+    setProfileImage(croppedUri);
+    setShowCropOverlay(false);
+    setSelectedImageUri(null);
+
+    try {
+      // 2. Upload to Supabase Storage
+      // Note: Ensure your 'profile' bucket exists and has RLS policies for uploads
+      const publicUrl = await uploadAvatar(croppedUri, currentUser.id);
+
+      // 3. Update User Profile in Database
+      await updateUserProfile(currentUser.id, { avatar_url: publicUrl });
+      
+      console.log("Profile image updated successfully:", publicUrl);
+      Alert.alert("Success", "Profile has been changed successfully");
+    } catch (error) {
+      console.error("Failed to save profile image:", error);
+      Alert.alert("Error", "Failed to save profile image. Please try again.");
+      // Optional: Revert profileImage state here if needed
+    }
+  };
+
+  const handleCropCancel = () => {
+    setShowCropOverlay(false);
+    setSelectedImageUri(null);
   };
 
   const handleMediaClick = (imageUrl: string) => {
@@ -186,10 +255,9 @@ export default function ProfileScreen() {
           return;
         }
         result = await ImagePicker.launchCameraAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
-          allowsEditing: true,
-          aspect: [1, 1],
-          quality: 0.8,
+          mediaTypes: ['images'],
+          allowsEditing: false, // We use our own cropper
+          quality: 1.0,
         });
       } else {
         const galleryPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -198,15 +266,15 @@ export default function ProfileScreen() {
           return;
         }
         result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
-          allowsEditing: true,
-          aspect: [1, 1],
-          quality: 0.8,
+          mediaTypes: ['images'],
+          allowsEditing: false, // We use our own cropper
+          quality: 1.0,
         });
       }
 
       if (!result.canceled && result.assets[0]) {
-        setProfileImage(result.assets[0].uri);
+        setSelectedImageUri(result.assets[0].uri);
+        setShowCropOverlay(true);
       }
     } catch (error) {
       console.error("Error picking image:", error);
@@ -232,10 +300,18 @@ export default function ProfileScreen() {
 
       {/* Header */}
       <View className="flex-row items-center justify-between px-4 py-3 bg-white border-b border-gray-100">
-        {/* Bookmark Icon on Left */}
-        <TouchableOpacity onPress={handleBookmark} className="w-10 h-10 items-center justify-center ">
-          <Bookmark size={24} className="text-yellow-400" />
-        </TouchableOpacity>
+        {/* Left Icons */}
+        <View className="flex-row items-center gap-2">
+          {/* Bookmark Icon */}
+          <TouchableOpacity onPress={handleBookmark} className="w-10 h-10 items-center justify-center">
+            <Bookmark size={24} className="text-yellow-400" />
+          </TouchableOpacity>
+
+          {/* Manage Listings Icon */}
+          <TouchableOpacity onPress={handleManageListings} className="w-10 h-10 items-center justify-center">
+            <Package size={24} className="text-primary" />
+          </TouchableOpacity>
+        </View>
 
         {/* Notification and Settings Icons on Right */}
         <View className="flex-row items-center">
@@ -253,13 +329,17 @@ export default function ProfileScreen() {
         <View className="bg-white border-b border-gray-100 px-4 py-8">
           <View className="items-center">
             <View className="relative mb-4">
-              <View className="w-24 h-24 rounded-full bg-gray-200 items-center justify-center">
+              <TouchableOpacity
+                onPress={() => profileImage && setShowProfileImageViewer(true)}
+                disabled={!profileImage}
+                className="w-24 h-24 rounded-full bg-gray-200 items-center justify-center overflow-hidden"
+              >
                 {profileImage ? (
                   <Image source={{ uri: profileImage }} className="w-24 h-24 rounded-full" resizeMode="cover" />
                 ) : (
                   <User size={32} className="text-gray-400" />
                 )}
-              </View>
+              </TouchableOpacity>
               <TouchableOpacity onPress={handleEditProfile} className="absolute -bottom-1 -right-1 w-8 h-8 bg-primary rounded-full items-center justify-center border-2 border-white">
                 <Edit3 size={16} className="text-white" />
               </TouchableOpacity>
@@ -303,9 +383,9 @@ export default function ProfileScreen() {
               <ShoppingBag size={24} className={`mb-1 ${activeTab === "products" ? "text-primary" : "text-gray-500"}`} />
               <Text className={`font-msemibold text-xs ${activeTab === "products" ? "text-primary" : "text-gray-500"}`}>Products</Text>
             </TouchableOpacity>
-            <TouchableOpacity className={`flex-1 py-4 items-center border-b-2 ${activeTab === "tools" ? "border-primary" : "border-transparent"}`} onPress={() => setActiveTab("tools")}>
-              <Wrench size={24} className={`mb-1 ${activeTab === "tools" ? "text-primary" : "text-gray-500"}`} />
-              <Text className={`font-msemibold text-xs ${activeTab === "tools" ? "text-primary" : "text-gray-500"}`}>Tools</Text>
+            <TouchableOpacity className={`flex-1 py-4 items-center border-b-2 ${activeTab === "services" ? "border-primary" : "border-transparent"}`} onPress={() => setActiveTab("services")}>
+              <Wrench size={24} className={`mb-1 ${activeTab === "services" ? "text-primary" : "text-gray-500"}`} />
+              <Text className={`font-msemibold text-xs ${activeTab === "services" ? "text-primary" : "text-gray-500"}`}>services</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -345,7 +425,7 @@ export default function ProfileScreen() {
             </>
           )}
           {activeTab === "products" && <Text className="text-center py-8 text-gray-500">Products Tab Placeholder</Text>}
-          {activeTab === "tools" && <Text className="text-center py-8 text-gray-500">Tools Tab Placeholder</Text>}
+          {activeTab === "services" && <Text className="text-center py-8 text-gray-500">services Tab Placeholder</Text>}
         </View>
         <View className="h-8" />
       </ScrollView>
@@ -430,6 +510,38 @@ export default function ProfileScreen() {
         </Modal>
       )}
 
+      {/* ------------------------------------------------------ */}
+      {/* MANAGE LISTINGS MODAL */}
+      {/* ------------------------------------------------------ */}
+      {showManageListings && currentUser?.id && (
+        <Modal transparent statusBarTranslucent animationType="none" visible={showManageListings} onRequestClose={() => setShowManageListings(false)}>
+          <Animated.View entering={SlideInDown.springify()} exiting={SlideOutDown} style={{ height: "100%", borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: "hidden" }}>
+            <ManageListingsOverlay
+              onClose={() => setShowManageListings(false)}
+              userId={currentUser.id}
+            />
+          </Animated.View>
+        </Modal>
+      )}
+
+      {/* ------------------------------------------------------ */}
+      {/* IMAGE CROP OVERLAY */}
+      {/* ------------------------------------------------------ */}
+      {showCropOverlay && selectedImageUri && (
+        <Modal
+          visible={showCropOverlay}
+          animationType="slide"
+          statusBarTranslucent
+          onRequestClose={handleCropCancel}
+        >
+          <ImageCropOverlay
+            imageUri={selectedImageUri}
+            onSave={handleCropSave}
+            onCancel={handleCropCancel}
+          />
+        </Modal>
+      )}
+
       {showImageViewer && selectedPost && (
         <ImageViewer
           visible={showImageViewer}
@@ -440,6 +552,15 @@ export default function ProfileScreen() {
           username={currentUser?.name || "User"}
           likes={selectedPost.likes}
           comments={selectedPost.comments}
+        />
+      )}
+
+      {/* Profile Image Viewer */}
+      {showProfileImageViewer && profileImage && (
+        <ProfileImageViewer
+          visible={showProfileImageViewer}
+          imageUri={profileImage}
+          onClose={() => setShowProfileImageViewer(false)}
         />
       )}
     </View>

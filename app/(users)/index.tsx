@@ -9,6 +9,7 @@ import TopNavbar from "@/components/ui/TopNavbar";
 import { Coins, Heart, Radio, Ticket, Users } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import { FlatList, Image, ListRenderItem, Text, TouchableOpacity, View } from "react-native";
+import Animated, { SlideInLeft, SlideInRight, SlideOutLeft, SlideOutRight } from "react-native-reanimated";
 
 type TabType = "foryou" | "featured" | "live" | "bidding" | "norbu";
 
@@ -20,9 +21,22 @@ interface HeaderDataItem {
 export default function HomeScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<TabType>("foryou");
+  const [previousTab, setPreviousTab] = useState<TabType>("foryou");
   const [isLoaded, setIsLoaded] = useState(false);
   console.log(" home screen" )
-  
+
+  // Map tab names to positions for directional animations
+  const getTabPosition = (tab: TabType): number => {
+    const positions: Record<TabType, number> = {
+      foryou: 0,
+      featured: 1,
+      live: 2,
+      norbu: 3,
+      bidding: 4
+    };
+    return positions[tab];
+  };
+
   // Force re-render after initial mount
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -30,6 +44,11 @@ export default function HomeScreen() {
     }, 100);
     return () => clearTimeout(timer);
   }, []);
+
+  // Track previous tab for animation direction
+  useEffect(() => {
+    setPreviousTab(activeTab);
+  }, [activeTab]);
 
   const renderTabContent = () => {
     if (!isLoaded && activeTab === "foryou") {
@@ -55,7 +74,7 @@ export default function HomeScreen() {
         );
       case "live":
         return (
-          <View className="mt-6 min-h-96">
+          <View className="mt-6 min-h-96 justify-center items-center">
             <Text className="text-base font-semibold text-primary mb-2">
               No live events at the moment.
             </Text>
@@ -63,7 +82,7 @@ export default function HomeScreen() {
         );
       case "bidding":
         return (
-          <View className="mt-6 min-h-96">
+          <View className="mt-6 min-h-96 justify-center items-center">
             <Text className="text-base font-semibold text-primary mb-2">
               Bidding (Coming Soon)
             </Text>
@@ -71,7 +90,7 @@ export default function HomeScreen() {
         );
       case "norbu":
         return (
-          <View className="mt-6 min-h-96">
+          <View className="mt-6 min-h-96 justify-center items-center">
             <Text className="text-base font-semibold text-primary mb-2">
               Norbu Coin (Coming Soon)
             </Text>
@@ -180,7 +199,21 @@ export default function HomeScreen() {
     if (item.component === 'content') {
       return (
         <View className="px-4 mt-2 flex-1" style={{ minHeight: 400 }}>
-          {renderTabContent()}
+          <Animated.View
+            key={activeTab}
+            entering={
+              getTabPosition(activeTab) > getTabPosition(previousTab)
+                ? SlideInLeft.duration(300)
+                : SlideInRight.duration(300)
+            }
+            exiting={
+              getTabPosition(activeTab) > getTabPosition(previousTab)
+                ? SlideOutRight.duration(200)
+                : SlideOutLeft.duration(200)
+            }
+          >
+            {renderTabContent()}
+          </Animated.View>
         </View>
       );
     }

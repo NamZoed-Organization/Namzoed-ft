@@ -1,8 +1,7 @@
 // Path: app/(users)/providerdetail/[id].tsx
-
 import TopNavbar from "@/components/ui/TopNavbar";
 import { useLocalSearchParams } from "expo-router";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   FlatList,

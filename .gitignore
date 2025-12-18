@@ -152,3 +152,4 @@ expo-env.d.ts
 .DS_Store
 # Keystore properties with secrets
 **/keystore.properties
+/android
