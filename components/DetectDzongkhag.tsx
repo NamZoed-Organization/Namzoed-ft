@@ -43,7 +43,7 @@ export default function DetectDzongkhag() {
           <View className="flex-row items-center">
             <MapPin size={20} stroke="#666" />
             <Text className="text-sm font-regular text-gray-600 ml-1">
-              {accessDenied ? "No access" : dzongkhag ?? "Dzongkhag"}
+              {accessDenied ? "location off" : dzongkhag ?? "Dzongkhag"}
             </Text>
           </View>
         )}

@@ -1,5 +1,5 @@
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useLocalSearchParams, useRouter, Stack, useFocusEffect } from 'expo-router';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Dimensions,
   Alert,
   Linking,
+  RefreshControl,
 } from 'react-native';
 import {
   ArrowLeft,
@@ -19,10 +20,14 @@ import {
   User,
   ChevronLeft,
   ChevronRight,
+  Flag,
+  Bookmark,
 } from 'lucide-react-native';
 import { fetchMarketplaceItemById, MarketplaceItemWithUser } from '@/lib/postMarketPlace';
+import { supabase } from '@/lib/supabase';
 import ImageWithFallback from '@/components/ui/ImageWithFallback';
 import MarketplaceImageViewer from '@/components/MarketplaceImageViewer';
+import ReportProductModal from '@/components/ReportProductModal';
 import { useUser } from '@/contexts/UserContext';
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -35,24 +40,48 @@ export default function MarketplaceDetailScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [showImageViewer, setShowImageViewer] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [isBookmarked, setIsBookmarked] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    loadItem();
-  }, [id]);
-
-  const loadItem = async () => {
+  const loadItem = useCallback(async (isRefreshing = false) => {
     if (!id) return;
 
     try {
-      setIsLoading(true);
+      if (!isRefreshing) setIsLoading(true);
       const data = await fetchMarketplaceItemById(id);
       setItem(data);
+
+      // Check if bookmarked
+      if (currentUser) {
+        const { data: bookmarkData } = await supabase
+          .from('user_bookmarks')
+          .select('*')
+          .eq('user_id', currentUser.id)
+          .eq('marketplace_id', id)
+          .single();
+
+        setIsBookmarked(!!bookmarkData);
+      }
     } catch (error) {
       console.error('Error loading item:', error);
       Alert.alert('Error', 'Failed to load item details');
     } finally {
       setIsLoading(false);
+      setRefreshing(false);
     }
+  }, [id, currentUser]);
+
+  // Reload data every time screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      loadItem();
+    }, [loadItem])
+  );
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    loadItem(true);
   };
 
   const handleCall = () => {
@@ -71,6 +100,51 @@ export default function MarketplaceDetailScreen() {
 
     if (item?.user_id) {
       router.push(`/chat/${item.user_id}` as any);
+    }
+  };
+
+  const handleReportItem = () => {
+    if (!currentUser) {
+      Alert.alert("Sign in required", "Please sign in to report items.");
+      return;
+    }
+    setShowReportModal(true);
+  };
+
+  const toggleBookmark = async () => {
+    if (!currentUser) {
+      Alert.alert("Sign in required", "Please sign in to bookmark items.");
+      return;
+    }
+    if (!item) return;
+
+    // Optimistic update
+    const previousState = isBookmarked;
+    setIsBookmarked(!isBookmarked);
+
+    try {
+      if (previousState) {
+        // Remove bookmark
+        const { error } = await supabase
+          .from('user_bookmarks')
+          .delete()
+          .eq('user_id', currentUser.id)
+          .eq('marketplace_id', item.id);
+        if (error) throw error;
+      } else {
+        // Add bookmark
+        const { error } = await supabase
+          .from('user_bookmarks')
+          .insert({
+            user_id: currentUser.id,
+            marketplace_id: item.id
+          });
+        if (error) throw error;
+      }
+    } catch (err) {
+      console.error("Bookmark error:", err);
+      setIsBookmarked(previousState); // Revert
+      Alert.alert("Error", "Failed to update bookmark");
     }
   };
 
@@ -134,10 +208,43 @@ export default function MarketplaceDetailScreen() {
             <Text className="text-xl font-bold text-gray-900 flex-1">
               Item Details
             </Text>
+            {/* Action Buttons */}
+            <View className="flex-row items-center gap-2">
+              {/* Bookmark Button */}
+              <TouchableOpacity
+                onPress={toggleBookmark}
+                className="w-10 h-10 items-center justify-center"
+              >
+                <Bookmark
+                  size={22}
+                  color={isBookmarked ? "#FBBF24" : "#666"}
+                  fill={isBookmarked ? "#FBBF24" : "none"}
+                />
+              </TouchableOpacity>
+
+              {/* Report Button */}
+              <TouchableOpacity
+                onPress={handleReportItem}
+                className="p-2 -mr-2"
+              >
+                <Flag size={22} color="#EF4444" />
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
 
-        <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+        <ScrollView
+          className="flex-1"
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor="#094569"
+              colors={["#094569"]}
+            />
+          }
+        >
           {/* Image Carousel */}
           <View className="relative">
             <TouchableOpacity
@@ -291,6 +398,21 @@ export default function MarketplaceDetailScreen() {
           images={item.images}
           initialIndex={currentImageIndex}
           onClose={() => setShowImageViewer(false)}
+        />
+      )}
+
+      {/* Report Modal */}
+      {currentUser?.id && item && item.user_id && (
+        <ReportProductModal
+          visible={showReportModal}
+          onClose={() => setShowReportModal(false)}
+          productId={item.id}
+          productName={item.title}
+          productOwnerId={item.user_id}
+          currentUserId={currentUser.id}
+          onReportSuccess={() => {
+            setShowReportModal(false);
+          }}
         />
       )}
     </>

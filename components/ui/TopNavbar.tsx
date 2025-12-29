@@ -4,6 +4,7 @@ import {
   ChatIcon,
 } from "@/components/icons/index";
 import TabBarButton from "@/components/ui/TabBarButton";
+import { useUser } from "@/contexts/UserContext";
 import { useRouter } from "expo-router";
 import { UserCircle } from "lucide-react-native";
 import React from "react";
@@ -11,6 +12,7 @@ import { Image, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 export default function TopNavbar() {
   const router = useRouter();
+  const { currentUser } = useUser();
 
   return (
     <SafeAreaView>
@@ -40,7 +42,15 @@ export default function TopNavbar() {
             onPress={() => router.push("/profile")}
             android_ripple={null}
           >
-            <UserCircle size={30} stroke="#444" />
+            {currentUser?.avatar_url ? (
+              <Image
+                source={{ uri: currentUser.avatar_url }}
+                className="w-[30px] h-[30px] rounded-full"
+                resizeMode="cover"
+              />
+            ) : (
+              <UserCircle size={30} stroke="#444" />
+            )}
           </TabBarButton>
         </View>
       </View>

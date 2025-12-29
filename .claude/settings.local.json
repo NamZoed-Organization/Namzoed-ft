@@ -15,7 +15,12 @@
       "Bash(npm i:*)",
       "Bash(npx react-native log-android:*)",
       "Bash(cat:*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(taskkill:*)",
+      "Bash(cmd.exe /c \"taskkill /F /PID 77112\")",
+      "Bash(grep:*)"
     ],
     "deny": [],
     "ask": []

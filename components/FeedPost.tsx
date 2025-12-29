@@ -1,5 +1,7 @@
 import FullscreenVideoPlayer from "@/components/FullscreenVideoPlayer";
 import ImageViewer from "@/components/ImageViewer";
+import ReportPostModal from "@/components/ReportPostModal";
+import { useUser } from "@/contexts/UserContext";
 import { PostData } from "@/types/post";
 import {
   Bookmark,
@@ -230,6 +232,8 @@ export default function FeedPost({ post, isVisible }: FeedPostProps) {
   const [likesCount, setLikesCount] = useState(post.likes);
   const [showImageViewer, setShowImageViewer] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const { currentUser } = useUser();
 
   const handleLike = () => { setIsLiked(!isLiked); setLikesCount(isLiked ? likesCount - 1 : likesCount + 1); };
   const handleBookmark = () => setIsBookmarked(!isBookmarked);
@@ -251,7 +255,9 @@ export default function FeedPost({ post, isVisible }: FeedPostProps) {
             <Text className="text-gray-500 text-sm">{formatDate(post.date)}</Text>
           </View>
         </View>
-        <MoreHorizontal size={20} color="#666" />
+        <TouchableOpacity onPress={() => setShowReportModal(true)}>
+          <MoreHorizontal size={20} color="#666" />
+        </TouchableOpacity>
       </View>
 
       <View className="px-4"><Text className="text-gray-900 text-base leading-6">{post.content}</Text></View>
@@ -297,6 +303,21 @@ export default function FeedPost({ post, isVisible }: FeedPostProps) {
         likes={likesCount}
         comments={post.comments}
       />
+
+      {/* Report Modal */}
+      {currentUser?.id && post.userId && (
+        <ReportPostModal
+          visible={showReportModal}
+          onClose={() => setShowReportModal(false)}
+          postId={post.id}
+          postContent={post.content.substring(0, 50) + (post.content.length > 50 ? '...' : '')}
+          postOwnerId={post.userId}
+          currentUserId={currentUser.id}
+          onReportSuccess={() => {
+            setShowReportModal(false);
+          }}
+        />
+      )}
     </View>
   );
 }

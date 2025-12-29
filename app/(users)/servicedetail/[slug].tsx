@@ -13,7 +13,7 @@ interface ServiceCategory {
   name: string;
   description: string;
   icon: string;
-  image: string;
+  image: string | number; // Support both URL strings and require() image sources
   slug: string;
 }
 
@@ -244,7 +244,7 @@ export default function ServiceDetailScreen() {
           <View className="flex-row items-center mb-3">
             <View className="w-16 h-16 bg-primary/10 rounded-full items-center justify-center mr-4">
               <Image
-                source={{ uri: category.image }}
+                source={typeof category.image === 'number' ? category.image : { uri: category.image }}
                 className="w-8 h-8"
                 resizeMode="contain"
               />

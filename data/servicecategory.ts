@@ -5,7 +5,7 @@ export interface ServiceCategory {
   name: string;
   description: string;
   icon: string;
-  image: string;
+  image: string | number; // Support both URL strings and require() image sources
   slug: string;
 }
 
@@ -15,112 +15,136 @@ export const serviceCategories: ServiceCategory[] = [
     name: 'Taxi Services',
     description: 'Professional taxi and transportation services',
     icon: 'taxi',
-    image: 'https://picsum.photos/300/200?random=301',
+    image: require('@/assets/yam/taxi.png'),
     slug: 'taxi-services'
   },
   {
     id: '2',
-    name: 'Home Services',
-    description: 'Residential maintenance and home improvement services',
-    icon: 'home',
-    image: 'https://picsum.photos/300/200?random=302',
-    slug: 'home-services'
+    name: 'Restaurants and Fastfoods',
+    description: 'Dining, restaurants and fast food services',
+    icon: 'briefcase',
+    image: require('@/assets/yam/restaurant.png'),
+    slug: 'restaurants-fastfoods'
   },
   {
     id: '3',
-    name: 'Hotel Services',
-    description: 'Hospitality and accommodation services',
-    icon: 'hotel',
-    image: 'https://picsum.photos/300/200?random=303',
-    slug: 'hotel-services'
+    name: 'Cafe and Bakeries',
+    description: 'Coffee shops, cafes and bakery services',
+    icon: 'home',
+    image: require('@/assets/yam/bakery.png'),
+    slug: 'cafe-bakeries'
   },
   {
     id: '4',
-    name: 'Beauty & Wellness',
-    description: 'Beauty treatments and wellness services',
-    icon: 'spa',
-    image: 'https://picsum.photos/300/200?random=304',
-    slug: 'beauty-wellness'
+    name: 'Hotel Services',
+    description: 'Hotel and hospitality services',
+    icon: 'hotel',
+    image: require('@/assets/yam/hotel.png'),
+    slug: 'hotel-services'
   },
   {
     id: '5',
-    name: 'Repair & Maintenance',
-    description: 'Technical repair and maintenance solutions',
-    icon: 'tools',
+    name: 'Home Stay, Ecolodge and Camping',
+    description: 'Homestays, eco-lodges and camping facilities',
+    icon: 'home',
     image: 'https://picsum.photos/300/200?random=305',
-    slug: 'repair-maintenance'
+    slug: 'homestay-ecolodge-camping'
   },
   {
     id: '6',
-    name: 'Education & Coaching',
-    description: 'Educational services and professional coaching',
-    icon: 'graduation-cap',
-    image: 'https://picsum.photos/300/200?random=306',
-    slug: 'education-coaching'
+    name: 'Groceries and Green Groceries',
+    description: 'Grocery stores and fresh produce services',
+    icon: 'briefcase',
+    image: require('@/assets/yam/grocery.png'),
+    slug: 'groceries-green-groceries'
   },
   {
     id: '7',
-    name: 'Creative & Media',
-    description: 'Creative design and media production services',
-    icon: 'palette',
-    image: 'https://picsum.photos/300/200?random=307',
-    slug: 'creative-media'
+    name: 'Games, Sports and eSports',
+    description: 'Gaming, sports and esports services',
+    icon: 'activity',
+    image: require('@/assets/yam/sports.png'),
+    slug: 'games-sports-esports'
   },
   {
     id: '8',
-    name: 'Business Services',
-    description: 'Professional business and consulting services',
-    icon: 'briefcase',
-    image: 'https://picsum.photos/300/200?random=308',
-    slug: 'business-services'
+    name: 'Pets and Animals',
+    description: 'Pet care and animal services',
+    icon: 'heart',
+    image: require('@/assets/yam/vet.png'),
+    slug: 'pets-animals'
   },
   {
     id: '9',
-    name: 'Travel & Leisure',
-    description: 'Travel planning and leisure activity services',
-    icon: 'map-pin',
+    name: 'Home and Real Estate Services',
+    description: 'Real estate and property services',
+    icon: 'home',
     image: 'https://picsum.photos/300/200?random=309',
-    slug: 'travel-leisure'
+    slug: 'home-real-estate-services'
   },
   {
     id: '10',
-    name: 'Pet Services',
-    description: 'Pet care and veterinary services',
-    icon: 'heart',
-    image: 'https://picsum.photos/300/200?random=310',
-    slug: 'pet-services'
+    name: 'Car Services',
+    description: 'Automotive and car maintenance services',
+    icon: 'taxi',
+    image: require('@/assets/yam/transport.png'),
+    slug: 'car-services'
   },
   {
     id: '11',
-    name: 'Health & Medical',
-    description: 'Healthcare and medical consultation services',
-    icon: 'activity',
+    name: 'Porter Services',
+    description: 'Porter and luggage handling services',
+    icon: 'briefcase',
     image: 'https://picsum.photos/300/200?random=311',
-    slug: 'health-medical'
+    slug: 'porter-services'
   },
   {
     id: '12',
-    name: 'Events & Entertainment',
-    description: 'Event planning and entertainment services',
-    icon: 'calendar',
-    image: 'https://picsum.photos/300/200?random=312',
-    slug: 'events-entertainment'
+    name: 'Medical, Legal and Financial Services',
+    description: 'Healthcare, legal and financial consultation',
+    icon: 'shield',
+    image: require('@/assets/yam/doctor.png'),
+    slug: 'medical-legal-financial-services'
   },
   {
     id: '13',
-    name: 'Government Services',
-    description: 'Official government and public services',
-    icon: 'shield',
+    name: 'Consultancy and Educational Services',
+    description: 'Professional consulting and education',
+    icon: 'graduation-cap',
     image: 'https://picsum.photos/300/200?random=313',
-    slug: 'government-services'
+    slug: 'consultancy-educational-services'
   },
   {
     id: '14',
-    name: 'Travel Services',
-    description: 'Comprehensive travel and booking services',
-    icon: 'plane',
+    name: 'IT, Creative and Artistic Services',
+    description: 'Technology, creative and artistic services',
+    icon: 'palette',
     image: 'https://picsum.photos/300/200?random=314',
-    slug: 'travel-services'
+    slug: 'it-creative-artistic-services'
+  },
+  {
+    id: '15',
+    name: 'Beauty, Health and Personal Care Services',
+    description: 'Beauty treatments and personal care',
+    icon: 'spa',
+    image: require('@/assets/yam/parlor.png'),
+    slug: 'beauty-health-personal-care-services'
+  },
+  {
+    id: '16',
+    name: 'Repair and Maintenance Services',
+    description: 'Repair and maintenance solutions',
+    icon: 'tools',
+    image: require('@/assets/yam/mechanic.png'),
+    slug: 'repair-maintenance-services'
+  },
+  {
+    id: '17',
+    name: 'Travel and Leisure Services',
+    description: 'Travel planning and leisure activities',
+    icon: 'plane',
+    image: 'https://picsum.photos/300/200?random=317',
+    slug: 'travel-leisure-services'
   }
 ];
 

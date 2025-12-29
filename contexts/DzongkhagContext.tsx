@@ -1,14 +1,17 @@
 // context/DzongkhagContext.tsx
 
+import { useUser } from "@/contexts/UserContext";
 import { dzongkhagCenters } from "@/data/dzongkhag";
+import { supabase } from "@/lib/supabase";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Location from "expo-location";
 import React, {
-    createContext,
-    useCallback,
-    useContext,
-    useEffect,
-    useRef,
-    useState,
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
 } from "react";
 
 interface DzongkhagState {
@@ -23,6 +26,7 @@ const DzongkhagContext = createContext<DzongkhagState | undefined>(undefined);
 export const DzongkhagProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
+  const { currentUser, setCurrentUser } = useUser();
   const [name, setName] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [accessDenied, setAccessDenied] = useState(false);
@@ -82,8 +86,32 @@ export const DzongkhagProvider: React.FC<{ children: React.ReactNode }> = ({
         }
       }
       setName(nearest.name);
+
+      // Update Supabase if user is logged in
+      if (currentUser?.id && nearest.name) {
+        try {
+          const { error } = await supabase
+            .from('profiles')
+            .update({
+              dzongkhag: nearest.name,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', currentUser.id);
+
+          if (error) {
+            console.error('Failed to update dzongkhag:', error);
+          } else {
+            // Update local user data (context + AsyncStorage)
+            const updatedUser = { ...currentUser, dzongkhag: nearest.name };
+            await AsyncStorage.setItem('currentUser', JSON.stringify(updatedUser));
+            setCurrentUser(updatedUser);
+          }
+        } catch (err) {
+          console.error('Error updating dzongkhag in Supabase:', err);
+        }
+      }
     }, 3000);
-  }, []);
+  }, [currentUser, setCurrentUser]);
 
   // run once on mount
   useEffect(() => {
