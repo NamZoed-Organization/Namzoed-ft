@@ -20,7 +20,10 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 
 import { useUser } from "@/contexts/UserContext";
 import getStreamService, {
@@ -133,6 +136,7 @@ type ActiveCallRole = "host" | "viewer" | null;
 
 const LiveScreen: React.FC<LiveScreenProps> = ({ onClose }) => {
   const { currentUser } = useUser();
+  const insets = useSafeAreaInsets();
   const [livestreams, setLivestreams] = useState<Livestream[]>([]);
   const [loadingStreams, setLoadingStreams] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -532,14 +536,21 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose }) => {
   const renderActiveCallScreen = () => {
     if (!selectedStream || !streamClient || !activeCall || !callRole) {
       return (
-        <View className="flex-1 items-center justify-center bg-black">
+        <SafeAreaView
+          style={{
+            flex: 1,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: "#000",
+          }}
+        >
           <ActivityIndicator color="#fff" />
-        </View>
+        </SafeAreaView>
       );
     }
 
     return (
-      <View className="flex-1 bg-black">
+      <SafeAreaView style={{ flex: 1, backgroundColor: "#000" }}>
         <StreamVideo client={streamClient}>
           <StreamCall call={activeCall}>
             <View className="flex-1">
@@ -575,7 +586,7 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose }) => {
             </Text>
           </View>
         )}
-      </View>
+      </SafeAreaView>
     );
   };
 
@@ -592,8 +603,11 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose }) => {
     const isCreateDisabled = creatingStream;
 
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: "#fff" }}>
-        <View className="flex-row items-center justify-between px-4 py-3">
+      <SafeAreaView style={{ flex: 1, backgroundColor: "#fff" }} className="">
+        <View
+          className="flex-row items-center justify-between px-4"
+          style={{ paddingTop: Math.max(12, insets.top) }}
+        >
           <Text className="text-xl font-semibold text-gray-900">Live</Text>
           <TouchableOpacity
             onPress={() => setShowCreateModal(true)}
@@ -778,65 +792,82 @@ const CreateLivestreamModal: React.FC<CreateLivestreamModalProps> = ({
   recordingEnabled,
   onToggleRecording,
   loading,
-}) => (
-  <Modal visible={visible} animationType="slide" transparent>
-    <View className="flex-1 justify-end bg-black/60">
-      <View className="rounded-t-3xl bg-white px-6 pb-8 pt-6">
-        <View className="mb-4 flex-row items-center justify-between">
-          <Text className="text-lg font-semibold text-gray-900">
-            Create livestream
-          </Text>
-          <Pressable onPress={onClose}>
-            <X color="#111" size={22} />
-          </Pressable>
-        </View>
-        <Text className="text-sm text-gray-600">
-          Name your Stream Live Stream and decide if you want Stream to record
-          it automatically.
-        </Text>
-        <TextInput
-          value={title}
-          onChangeText={onTitleChange}
-          placeholder="Describe what you will stream..."
-          className="mt-4 rounded-2xl border border-gray-200 px-4 py-3 text-base text-gray-900"
-          placeholderTextColor="#9CA3AF"
-          maxLength={80}
-        />
+}) => {
+  const insets = useSafeAreaInsets();
 
-        <View className="mt-4 flex-row items-center justify-between">
-          <View>
-            <Text className="text-sm font-semibold text-gray-800">
-              Record stream
-            </Text>
-            <Text className="text-xs text-gray-500">
-              Store a VOD in the Stream dashboard after you go live.
-            </Text>
-          </View>
-          <Switch
-            value={recordingEnabled}
-            onValueChange={onToggleRecording}
-            thumbColor={recordingEnabled ? "#DC2626" : "#f4f3f4"}
-            trackColor={{ false: "#D1D5DB", true: "#FECACA" }}
-          />
-        </View>
-
-        <TouchableOpacity
-          onPress={onConfirm}
-          disabled={loading}
-          className="mt-6 items-center rounded-full bg-red-500 py-3"
+  return (
+    <Modal visible={visible} animationType="slide" transparent>
+      <SafeAreaView
+        edges={["bottom"]}
+        style={{
+          flex: 1,
+          justifyContent: "flex-end",
+          backgroundColor: "rgba(0,0,0,0.6)",
+        }}
+      >
+        <View
+          style={{
+            paddingBottom: Math.max(16, insets.bottom + 8),
+          }}
         >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text className="text-base font-semibold text-white">
-              Create Stream session
+          <View className="rounded-t-3xl bg-white px-6 pb-8 pt-6">
+            <View className="mb-4 flex-row items-center justify-between">
+              <Text className="text-lg font-semibold text-gray-900">
+                Create livestream
+              </Text>
+              <Pressable onPress={onClose}>
+                <X color="#111" size={22} />
+              </Pressable>
+            </View>
+            <Text className="text-sm text-gray-600">
+              Name your Stream Live Stream and decide if you want Stream to
+              record it automatically.
             </Text>
-          )}
-        </TouchableOpacity>
-      </View>
-    </View>
-  </Modal>
-);
+            <TextInput
+              value={title}
+              onChangeText={onTitleChange}
+              placeholder="Describe what you will stream..."
+              className="mt-4 rounded-2xl border border-gray-200 px-4 py-3 text-base text-gray-900"
+              placeholderTextColor="#9CA3AF"
+              maxLength={80}
+            />
+
+            <View className="mt-4 flex-row items-center justify-between">
+              <View>
+                <Text className="text-sm font-semibold text-gray-800">
+                  Record stream
+                </Text>
+                <Text className="text-xs text-gray-500">
+                  Store a VOD in the Stream dashboard after you go live.
+                </Text>
+              </View>
+              <Switch
+                value={recordingEnabled}
+                onValueChange={onToggleRecording}
+                thumbColor={recordingEnabled ? "#DC2626" : "#f4f3f4"}
+                trackColor={{ false: "#D1D5DB", true: "#FECACA" }}
+              />
+            </View>
+
+            <TouchableOpacity
+              onPress={onConfirm}
+              disabled={loading}
+              className="mt-6 items-center rounded-full bg-red-500 py-3"
+            >
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text className="text-base font-semibold text-white">
+                  Create Stream session
+                </Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </SafeAreaView>
+    </Modal>
+  );
+};
 
 interface ActiveCallHeaderProps {
   role: Exclude<ActiveCallRole, null>;
@@ -852,39 +883,46 @@ const ActiveCallHeader: React.FC<ActiveCallHeaderProps> = ({
   viewerCount,
   onClose,
   busy = false,
-}) => (
-  <View className="absolute inset-x-0 top-0 flex-row items-center justify-between px-4 pt-12">
-    <View className="flex-row items-center rounded-full bg-black/40 px-3 py-1">
-      <View className="mr-2 h-2 w-2 rounded-full bg-red-500" />
-      <Text className="text-sm font-semibold text-white">{username}</Text>
-    </View>
+}) => {
+  const insets = useSafeAreaInsets();
 
-    <View className="flex-row items-center space-x-3">
-      <View className="rounded-full bg-black/50 px-3 py-1">
-        <Text className="text-xs font-semibold text-white">
-          {viewerCount} watching
-        </Text>
+  return (
+    <View
+      className="absolute inset-x-0 top-0 flex-row items-center justify-between px-4"
+      style={{ paddingTop: Math.max(12, insets.top) }}
+    >
+      <View className="flex-row items-center rounded-full bg-black/40 px-3 py-1">
+        <View className="mr-2 h-2 w-2 rounded-full bg-red-500" />
+        <Text className="text-sm font-semibold text-white">{username}</Text>
       </View>
-      <TouchableOpacity
-        onPress={onClose}
-        className={`flex-row items-center rounded-full px-3 py-1 ${
-          role === "host" ? "bg-red-500" : "bg-white/20"
-        }`}
-        disabled={busy}
-        activeOpacity={busy ? 1 : 0.85}
-      >
-        <Text
-          className={`mr-2 text-xs font-semibold ${
-            role === "host" ? "text-white" : "text-white"
+
+      <View className="flex-row items-center space-x-3">
+        <View className="rounded-full bg-black/50 px-3 py-1">
+          <Text className="text-xs font-semibold text-white">
+            {viewerCount} watching
+          </Text>
+        </View>
+        <TouchableOpacity
+          onPress={onClose}
+          className={`flex-row items-center rounded-full px-3 py-1 ${
+            role === "host" ? "bg-red-500" : "bg-white/20"
           }`}
+          disabled={busy}
+          activeOpacity={busy ? 1 : 0.85}
         >
-          {role === "host" ? "End" : "Leave"}
-        </Text>
-        <X color="#fff" size={18} />
-      </TouchableOpacity>
+          <Text
+            className={`mr-2 text-xs font-semibold ${
+              role === "host" ? "text-white" : "text-white"
+            }`}
+          >
+            {role === "host" ? "End" : "Leave"}
+          </Text>
+          <X color="#fff" size={18} />
+        </TouchableOpacity>
+      </View>
     </View>
-  </View>
-);
+  );
+};
 
 interface HostCallContainerProps {
   onEndStream: () => void | Promise<void>;
