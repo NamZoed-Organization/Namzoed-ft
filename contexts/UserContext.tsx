@@ -6,11 +6,13 @@ interface User {
   username?: string;
   name?: string;
   email?: string;
-  phone_number?: string;
+  phone?: string;
   password?: string;
   followers?: number;
   following?: number;
   profileImg?: any;
+  avatar_url?: string | null;
+  dzongkhag?: string | null;
   products?: Array<{
     name: string;
     productImg: any;

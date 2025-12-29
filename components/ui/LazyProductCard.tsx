@@ -3,6 +3,7 @@ import { View, Text, Animated, TouchableOpacity, Image } from "react-native";
 import { Product } from "@/data/products";
 import { Ionicons } from "@expo/vector-icons";
 import { Link } from "expo-router";
+import CountdownTimer from "../CountdownTimer";
 
 interface LazyProductCardProps {
   product: Product;
@@ -130,9 +131,37 @@ const LazyProductCard = memo(({
           </Text>
 
           <View className="flex-row items-center justify-between mb-4">
-            <Text className="text-lg font-bold text-black">
-              Nu. {product.price}
-            </Text>
+            {/* Price with Discount Support */}
+            {(product as any).is_currently_active ? (
+              <View className="gap-1 flex-1">
+                {/* Original price struck */}
+                <Text className="text-xs text-gray-400 line-through">
+                  Nu. {product.price}
+                </Text>
+
+                {/* Discounted price, badge, and timer */}
+                <View className="flex-row items-center gap-2 flex-wrap">
+                  <Text className="text-base font-bold text-black">
+                    Nu. {(product as any).current_price?.toLocaleString()}
+                  </Text>
+
+                  {/* Discount badge */}
+                  <View className="bg-red-500 px-1.5 py-0.5 rounded">
+                    <Text className="text-white text-[10px] font-bold">
+                      -{(product as any).discount_percent}%
+                    </Text>
+                  </View>
+
+                  {/* Countdown (compact) */}
+                  <CountdownTimer endsAt={(product as any).discount_ends_at} compact={true} />
+                </View>
+              </View>
+            ) : (
+              <Text className="text-lg font-bold text-black">
+                Nu. {product.price}
+              </Text>
+            )}
+
             <View className="flex-row items-center gap-1">
               <Ionicons name="location-outline" size={14} color="#666" />
               <Text className="text-sm text-gray-500">{product.dzongkhag}</Text>

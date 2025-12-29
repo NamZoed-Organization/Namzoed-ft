@@ -11,6 +11,16 @@ export interface Product {
   tags: string[];
   images: string[];
   created_at: string;
+  // Discount fields (stored in database)
+  is_discount_active?: boolean;
+  discount_percent?: number;
+  discount_started_at?: string;
+  discount_duration_hrs?: number;
+  // Calculated discount fields (from products_with_discounts view)
+  is_expired?: boolean;              // True if discount period has passed
+  is_currently_active?: boolean;     // True if discount is active RIGHT NOW
+  current_price?: number;            // Auto-calculated price with discount applied
+  discount_ends_at?: string;         // Timestamp when discount expires
 }
 
 export interface ProductWithUser extends Product {
@@ -22,12 +32,13 @@ export interface ProductWithUser extends Product {
 }
 
 // Fetch products with pagination and user profile data
+// Uses products_with_discounts view for real-time discount calculations
 export const fetchProducts = async (page: number = 0, pageSize: number = 10) => {
   const from = page * pageSize;
   const to = from + pageSize - 1;
 
   const { data, error, count } = await supabase
-    .from('products')
+    .from('products_with_discounts')  // ← Query the view for real-time discount status
     .select(`
       *,
       profiles:user_id (
@@ -48,9 +59,10 @@ export const fetchProducts = async (page: number = 0, pageSize: number = 10) => 
 };
 
 // Fetch single product by ID
+// Uses products_with_discounts view for real-time discount calculations
 export const fetchProductById = async (productId: string): Promise<ProductWithUser | null> => {
   const { data, error } = await supabase
-    .from('products')
+    .from('products_with_discounts')  // ← Query the view for real-time discount status
     .select(`
       *,
       profiles:user_id (
@@ -87,17 +99,18 @@ export const fetchUserProducts = async (userId: string) => {
 };
 
 // Fetch products by category
+// Uses products_with_discounts view for real-time discount calculations
 export const fetchProductsByCategory = async (
-  category: string, 
+  category: string,
   filter?: string | null,
-  page: number = 0, 
+  page: number = 0,
   pageSize: number = 20
 ) => {
   const from = page * pageSize;
   const to = from + pageSize - 1;
 
   let query = supabase
-    .from('products')
+    .from('products_with_discounts')  // ← Query the view for real-time discount status
     .select(`
       *,
       profiles:user_id (

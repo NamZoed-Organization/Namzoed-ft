@@ -1,10 +1,12 @@
 import { useUser } from "@/contexts/UserContext";
 import { fetchProductById, ProductWithUser } from "@/lib/productsService";
-import { supabase } from "@/lib/supabase"; // Add Supabase import
+import { supabase } from "@/lib/supabase";
 import { Ionicons } from "@expo/vector-icons";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
-import { Alert, Image, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import React, { useCallback, useState } from "react";
+import { Alert, Image, RefreshControl, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import ReportProductModal from "@/components/ReportProductModal";
+import CountdownTimer from "@/components/CountdownTimer";
 
 function DetailSkeleton() {
   return (
@@ -37,41 +39,55 @@ export default function ProductDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
-  
+
   // Bookmark State
   const [isBookmarked, setIsBookmarked] = useState(false);
 
-  useEffect(() => {
+  // Refresh & Report State
+  const [refreshing, setRefreshing] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+
+  // Load product data - wrapped in useCallback for useFocusEffect
+  const loadProduct = useCallback(async (isRefreshing = false) => {
     if (!id) return;
 
-    const loadProduct = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const data = await fetchProductById(id);
-        setProduct(data);
-        
-        // Check if bookmarked
-        if (currentUser) {
-            const { data: bookmarkData } = await supabase
-                .from('user_bookmarks')
-                .select('*')
-                .eq('user_id', currentUser.id)
-                .eq('product_id', id)
-                .single();
-            
-            setIsBookmarked(!!bookmarkData);
-        }
-      } catch (err: any) {
-        console.error("Error loading product:", err);
-        setError(err.message || "Failed to load product");
-      } finally {
-        setLoading(false);
-      }
-    };
+    if (!isRefreshing) setLoading(true);
+    setError(null);
+    try {
+      const data = await fetchProductById(id);
+      setProduct(data);
 
-    loadProduct();
+      // Check if bookmarked
+      if (currentUser) {
+        const { data: bookmarkData } = await supabase
+          .from('user_bookmarks')
+          .select('*')
+          .eq('user_id', currentUser.id)
+          .eq('product_id', id)
+          .single();
+
+        setIsBookmarked(!!bookmarkData);
+      }
+    } catch (err: any) {
+      console.error("Error loading product:", err);
+      setError(err.message || "Failed to load product");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   }, [id, currentUser]);
+
+  // Reload data every time screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      loadProduct();
+    }, [loadProduct])
+  );
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    loadProduct(true);
+  };
 
   const toggleBookmark = async () => {
     if (!currentUser) {
@@ -123,6 +139,14 @@ export default function ProductDetail() {
     router.push(`/(users)/chat/${product.user_id}`);
   };
 
+  const handleReportProduct = () => {
+    if (!currentUser) {
+      Alert.alert("Sign in required", "Please sign in to report products.");
+      return;
+    }
+    setShowReportModal(true);
+  };
+
   if (loading) return <DetailSkeleton />;
 
   if (error || !product) {
@@ -148,7 +172,18 @@ export default function ProductDetail() {
 
   return (
     <View className="flex-1 bg-white">
-      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+      <ScrollView
+        className="flex-1"
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor="#094569"
+            colors={["#094569"]}
+          />
+        }
+      >
         {/* Main Image */}
         {mainImage ? (
           <Image
@@ -189,18 +224,29 @@ export default function ProductDetail() {
 
         {/* Content Section */}
         <View className="p-4 relative">
-          
-          {/* Bookmark Button (Positioned Top Right of content) */}
-          <TouchableOpacity
-            onPress={toggleBookmark}
-            className="absolute top-4 right-4 z-10 w-10 h-10 bg-primary rounded-full items-center justify-center shadow-sm"
-          >
-             <Ionicons
+
+          {/* Report & Bookmark Buttons Row */}
+          <View className="flex-row absolute top-4 right-4 z-10 gap-2">
+            {/* Report Button */}
+            <TouchableOpacity
+              onPress={handleReportProduct}
+              className="w-10 h-10 bg-white rounded-full items-center justify-center shadow-sm border border-gray-200"
+            >
+              <Ionicons name="flag-outline" size={20} color="#EF4444" />
+            </TouchableOpacity>
+
+            {/* Bookmark Button */}
+            <TouchableOpacity
+              onPress={toggleBookmark}
+              className="w-10 h-10 bg-primary rounded-full items-center justify-center shadow-sm"
+            >
+              <Ionicons
                 name={isBookmarked ? "bookmark" : "bookmark-outline"}
                 size={22}
                 color="#FBBF24"
-             />
-          </TouchableOpacity>
+              />
+            </TouchableOpacity>
+          </View>
 
           {/* Category & Tags */}
           <View className="flex-row flex-wrap gap-2 mb-3 pr-12">
@@ -219,10 +265,40 @@ export default function ProductDetail() {
             {product.name}
           </Text>
 
-          {/* Price */}
-          <Text className="text-2xl font-bold text-primary mb-4">
-            Nu. {product.price.toLocaleString()}
-          </Text>
+          {/* Price Display with Discount Support */}
+          <View className="mb-4">
+            {product.is_currently_active ? (
+              // Show discount pricing
+              <View>
+                {/* Original price struck through */}
+                <Text className="text-base text-gray-400 line-through mb-1">
+                  Nu. {product.price.toLocaleString()}
+                </Text>
+
+                {/* Discounted price + badge + time remaining in same row */}
+                <View className="flex-row items-center gap-3 flex-wrap">
+                  <Text className="text-2xl font-bold text-primary">
+                    Nu. {product.current_price?.toLocaleString()}
+                  </Text>
+
+                  {/* Discount badge */}
+                  <View className="bg-red-500 px-2 py-1 rounded-md">
+                    <Text className="text-white text-xs font-bold">
+                      -{product.discount_percent}% OFF
+                    </Text>
+                  </View>
+
+                  {/* Time remaining */}
+                  <CountdownTimer endsAt={product.discount_ends_at} />
+                </View>
+              </View>
+            ) : (
+              // Show regular price (no discount)
+              <Text className="text-2xl font-bold text-primary">
+                Nu. {product.price.toLocaleString()}
+              </Text>
+            )}
+          </View>
 
           {/* Seller Info */}
           {product.profiles?.name && (
@@ -260,6 +336,21 @@ export default function ProductDetail() {
           </Text>
         </View>
       </ScrollView>
+
+      {/* Report Modal */}
+      {currentUser && product && product.user_id && (
+        <ReportProductModal
+          visible={showReportModal}
+          onClose={() => setShowReportModal(false)}
+          productId={product.id}
+          productName={product.name}
+          productOwnerId={product.user_id}
+          currentUserId={currentUser.id}
+          onReportSuccess={() => {
+            setShowReportModal(false);
+          }}
+        />
+      )}
     </View>
   );
 }

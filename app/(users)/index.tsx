@@ -7,8 +7,9 @@ import ForYou from "@/components/ForYou";
 import SearchBar from "@/components/SearchBar";
 import TopNavbar from "@/components/ui/TopNavbar";
 import { Coins, Heart, Radio, Ticket, Users } from "lucide-react-native";
-import React, { useEffect, useState } from "react";
-import { FlatList, Image, ListRenderItem, Text, TouchableOpacity, View } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { FlatList, Image, ListRenderItem, RefreshControl, Text, TouchableOpacity, View } from "react-native";
+import Animated, { SlideInLeft, SlideInRight } from "react-native-reanimated";
 
 type TabType = "foryou" | "featured" | "live" | "bidding" | "norbu";
 
@@ -20,16 +21,64 @@ interface HeaderDataItem {
 export default function HomeScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<TabType>("foryou");
+  const [previousTab, setPreviousTab] = useState<TabType>("foryou");
   const [isLoaded, setIsLoaded] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
   console.log(" home screen" )
-  
+
+  // Map tab names to positions for directional animations
+  // Use ref for immediate direction tracking
+  const animationDirection = useRef<'right' | 'left'>('right');
+  const tabPressTime = useRef<number>(0);
+
+  console.log(" home screen" )
+
+  // Map tab names to positions
+  const getTabPosition = (tab: TabType): number => {
+    const positions: Record<TabType, number> = {
+      foryou: 0,
+      featured: 1,
+      live: 2,
+      norbu: 3,
+      bidding: 4
+    };
+    return positions[tab];
+  };
+
   // Force re-render after initial mount
-  useEffect(() => {
+   useEffect(() => {
     const timer = setTimeout(() => {
       setIsLoaded(true);
-    }, 100);
+    }, 50);
     return () => clearTimeout(timer);
   }, []);
+
+  const handleTabPress = (tab: TabType) => {
+    const now = Date.now();
+
+    // Debounce rapid clicks
+    if (now - tabPressTime.current < 100) return;
+    tabPressTime.current = now;
+
+    const currentPos = getTabPosition(activeTab);
+    const newPos = getTabPosition(tab);
+
+    // Set animation direction
+    animationDirection.current = newPos > currentPos ? 'right' : 'left';
+
+    setActiveTab(tab);
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    // Increment refresh key to force component remount
+    setRefreshKey(prev => prev + 1);
+    // Simulate refresh delay
+    setTimeout(() => {
+      setRefreshing(false);
+    }, 1000);
+  };
 
   const renderTabContent = () => {
     if (!isLoaded && activeTab === "foryou") {
@@ -44,18 +93,18 @@ export default function HomeScreen() {
       case "foryou":
         return (
           <View className="min-h-96">
-            <ForYou key="foryou-content" />
+            <ForYou key={`foryou-content-${refreshKey}`} />
           </View>
         );
       case "featured":
         return (
           <View className="mt-6 min-h-96">
-            <FeaturedSellers />
+            <FeaturedSellers key={`featured-${refreshKey}`} />
           </View>
         );
       case "live":
         return (
-          <View className="mt-6 min-h-96">
+          <View className="mt-6 min-h-96 justify-center items-center">
             <Text className="text-base font-semibold text-primary mb-2">
               No live events at the moment.
             </Text>
@@ -63,7 +112,7 @@ export default function HomeScreen() {
         );
       case "bidding":
         return (
-          <View className="mt-6 min-h-96">
+          <View className="mt-6 min-h-96 justify-center items-center">
             <Text className="text-base font-semibold text-primary mb-2">
               Bidding (Coming Soon)
             </Text>
@@ -71,7 +120,7 @@ export default function HomeScreen() {
         );
       case "norbu":
         return (
-          <View className="mt-6 min-h-96">
+          <View className="mt-6 min-h-96 justify-center items-center">
             <Text className="text-base font-semibold text-primary mb-2">
               Norbu Coin (Coming Soon)
             </Text>
@@ -80,7 +129,7 @@ export default function HomeScreen() {
       default:
         return (
           <View className="min-h-96">
-            <ForYou key="foryou-default" />
+            <ForYou key={`foryou-default-${refreshKey}`} />
           </View>
         );
     }
@@ -103,7 +152,7 @@ export default function HomeScreen() {
           {/* Tab Navigation - Updated styling */}
           <View className="flex-row items-center w-full mx-auto mt-2 gap-2">
             <TouchableOpacity
-              onPress={() => setActiveTab("foryou")}
+              onPress={() => handleTabPress("foryou")}
               className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm ${
                 activeTab === "foryou"
                   ? "bg-primary"
@@ -118,7 +167,7 @@ export default function HomeScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              onPress={() => setActiveTab("featured")}
+              onPress={() => handleTabPress("featured")}
               className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm ${
                 activeTab === "featured"
                   ? "bg-primary"
@@ -132,7 +181,7 @@ export default function HomeScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              onPress={() => setActiveTab("live")}
+              onPress={() => handleTabPress("live")}
               className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm ${
                 activeTab === "live"
                   ? "bg-primary"
@@ -146,7 +195,7 @@ export default function HomeScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              onPress={() => setActiveTab("norbu")}
+              onPress={() => handleTabPress("norbu")}
               className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm ${
                 activeTab === "norbu"
                   ? "bg-primary"
@@ -160,7 +209,7 @@ export default function HomeScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              onPress={() => setActiveTab("bidding")}
+              onPress={() => handleTabPress("bidding")}
               className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm ${
                 activeTab === "bidding"
                   ? "bg-primary"
@@ -177,15 +226,32 @@ export default function HomeScreen() {
       );
     }
     
-    if (item.component === 'content') {
+      if (item.component === 'content') {
+      const isMovingRight = animationDirection.current === 'right';
+      
       return (
-        <View className="px-4 mt-2 flex-1" style={{ minHeight: 400 }}>
-          {renderTabContent()}
+        <View className="px-4 mt-2" style={{ minHeight: 400 }}>
+          <Animated.View
+            key={activeTab}
+            entering={
+              isMovingRight 
+                ? SlideInRight.duration(180)
+                : SlideInLeft.duration(180)
+            }
+          >
+            {renderTabContent()}
+          </Animated.View>
         </View>
       );
     }
+
     
     if (item.component === 'footer') {
+      // Only show footer cards in "For You" tab
+      if (activeTab !== 'foryou') {
+        return <View className="mb-10" />;
+      }
+
       return (
         <View className="px-4 gap-2 mb-10">
           {/* Offer Header Card */}
@@ -239,6 +305,14 @@ export default function HomeScreen() {
       className="flex-1 bg-background mb-20"
       showsVerticalScrollIndicator={false}
       scrollEventThrottle={16}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          colors={["#059669"]}
+          tintColor="#059669"
+        />
+      }
     />
   );
 }

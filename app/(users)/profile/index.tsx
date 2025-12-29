@@ -1,31 +1,41 @@
-// Path: app/(tabs)/profile.tsx
-import BookmarksOverlay from "@/components/BookmarksOverlay";
+import FollowRequests from "@/components/FollowRequests";
+import FollowRequestsOverlay from "@/components/FollowRequestsOverlay";
+import ImageCropOverlay from "@/components/ImageCropOverlay";
 import ImageViewer from "@/components/ImageViewer";
+import ManageListingsOverlay from "@/components/ManageListingsOverlay";
+import ProfileImageViewer from "@/components/ProfileImageViewer";
 import ProfileSettings from "@/components/ProfileSettings";
 import { useUser } from "@/contexts/UserContext";
 import { fetchUserPosts, Post } from "@/lib/postsService";
+import { fetchUserProducts, Product } from "@/lib/productsService";
+// Added import for profile services
+import { fetchUserProfile, updateUserProfile, uploadAvatar } from "@/lib/profileService";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import {
   Bell,
-  Bookmark,
   Camera,
   Edit3,
   ImageIcon,
   Image as ImageLucide,
   Mail,
+  Package,
   Play,
   Settings,
   ShoppingBag,
   User,
+  UserPlus,
   Wrench,
+  X
 } from "lucide-react-native";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Image,
   Modal,
+  RefreshControl,
   ScrollView,
   Text,
   TouchableOpacity,
@@ -57,9 +67,9 @@ const isVideoUrl = (url: string): boolean => {
 };
 
 export default function ProfileScreen() {
-  const { currentUser, logout } = useUser();
+  const { currentUser, setCurrentUser, logout } = useUser();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"images" | "products" | "tools">(
+  const [activeTab, setActiveTab] = useState<"images" | "products" | "services">(
     "images"
   );
 
@@ -67,13 +77,26 @@ export default function ProfileScreen() {
   const [showImagePicker, setShowImagePicker] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [showBookmarks, setShowBookmarks] = useState(false);
+  const [showFollowRequests, setShowFollowRequests] = useState(false);
+  const [showPendingRequests, setShowPendingRequests] = useState(false);
+  const [followRequestsTab, setFollowRequestsTab] = useState<'following' | 'followers'>('following');
+  const [showManageListings, setShowManageListings] = useState(false);
+  const [showCropOverlay, setShowCropOverlay] = useState(false);
+  const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
 
   // Data State
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [userPosts, setUserPosts] = useState<Post[]>([]);
   const [loadingPosts, setLoadingPosts] = useState(true);
   const [userImages, setUserImages] = useState<string[]>([]);
+  const [userProducts, setUserProducts] = useState<Product[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(true);
+  const [followerCount, setFollowerCount] = useState(0);
+  const [followingCount, setFollowingCount] = useState(0);
+
+  // Refresh state
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // ImageViewer state
   const [showImageViewer, setShowImageViewer] = useState(false);
@@ -82,6 +105,9 @@ export default function ProfileScreen() {
   const [imagePostMap, setImagePostMap] = useState<Map<string, Post>>(
     new Map()
   );
+
+  // Profile image viewer state
+  const [showProfileImageViewer, setShowProfileImageViewer] = useState(false);
 
   // ------------------------------------------------------
   // 1. SMOOTH ANIMATION LOGIC (Reanimated)
@@ -113,11 +139,65 @@ export default function ProfileScreen() {
   useEffect(() => { if (showImagePicker) pickerTranslateY.value = 0; }, [showImagePicker]);
 
   const rPickerStyle = useAnimatedStyle(() => ({ transform: [{ translateY: pickerTranslateY.value }] }));
-  const rPickerBackdrop = useAnimatedStyle(() => ({ opacity: 1 - pickerTranslateY.value / 500 }));
+  const rPickerBackdrop = useAnimatedStyle(() => ({ opacity: Math.max(0, Math.min(1, 1 - pickerTranslateY.value / 500)) }));
 
   // ------------------------------------------------------
   // END ANIMATION LOGIC
   // ------------------------------------------------------
+
+  // Initialize profile image and follower counts from DB
+  useEffect(() => {
+    const loadProfileData = async () => {
+      if (!currentUser?.id) return;
+
+      try {
+        const profile = await fetchUserProfile(currentUser.id);
+
+        // Set profile image
+        if (profile?.avatar_url) {
+          setProfileImage(profile.avatar_url);
+
+          // If context doesn't have avatar_url but DB does, sync it
+          if (!currentUser?.avatar_url) {
+            const updatedUser = { ...currentUser, avatar_url: profile.avatar_url };
+            await AsyncStorage.setItem('currentUser', JSON.stringify(updatedUser));
+            setCurrentUser(updatedUser);
+          }
+        } else {
+          // Fallback to context
+          const user = currentUser as any;
+          if (user?.avatar_url) {
+            setProfileImage(user.avatar_url);
+          }
+        }
+
+        // Set follower counts from database
+        setFollowerCount(profile?.follower_count || 0);
+        setFollowingCount(profile?.following_count || 0);
+      } catch (error) {
+        console.error("Failed to fetch profile data:", error);
+      }
+    };
+
+    loadProfileData();
+  }, [currentUser, refreshKey]);
+
+  // Close all overlays when navigating away from screen
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        // Cleanup function runs when screen loses focus
+        setShowFollowRequests(false);
+        setShowPendingRequests(false);
+        setShowSettings(false);
+        setShowImagePicker(false);
+        setShowManageListings(false);
+        setShowCropOverlay(false);
+        setShowImageViewer(false);
+        setShowProfileImageViewer(false);
+      };
+    }, [])
+  );
 
   useEffect(() => {
     const loadUserPosts = async () => {
@@ -152,15 +232,81 @@ export default function ProfileScreen() {
       }
     };
     loadUserPosts();
-  }, [currentUser?.id]);
+  }, [currentUser?.id, refreshKey]);
+
+  // Load user products
+  useEffect(() => {
+    const loadProducts = async () => {
+      if (!currentUser?.id) {
+        setLoadingProducts(false);
+        return;
+      }
+      try {
+        setLoadingProducts(true);
+        const products = await fetchUserProducts(currentUser.id);
+        setUserProducts(products);
+      } catch (error) {
+        console.error("Error loading user products:", error);
+        Alert.alert("Error", "Failed to load your products");
+      } finally {
+        setLoadingProducts(false);
+      }
+    };
+    loadProducts();
+  }, [currentUser?.id, refreshKey]);
+
+  // Refresh handler
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    setRefreshKey(prev => prev + 1);
+    setTimeout(() => setRefreshing(false), 1000);
+  }, []);
 
   const handleEditProfile = () => setShowImagePicker(true);
   const handleSettings = () => setShowSettings(true);
-  const handleBookmark = () => setShowBookmarks(true);
+  const handleFollowRequests = () => setShowPendingRequests(true);
+  const handleManageListings = () => setShowManageListings(true);
   const handleNotifications = () => {
     setShowNotifications(true);
     // You can implement a notifications modal similar to settings
     Alert.alert("Notifications", "Notifications feature coming soon!");
+  };
+
+  // UPDATED: Save Logic
+  const handleCropSave = async (croppedUri: string) => {
+    if (!currentUser?.id) return;
+
+    // 1. Optimistic Update (Immediate UI feedback)
+    setProfileImage(croppedUri);
+    setShowCropOverlay(false);
+    setSelectedImageUri(null);
+
+    try {
+      // 2. Upload to Supabase Storage
+      // Note: Ensure your 'profile' bucket exists and has RLS policies for uploads
+      const publicUrl = await uploadAvatar(croppedUri, currentUser.id);
+
+      // 3. Update User Profile in Database
+      await updateUserProfile(currentUser.id, { avatar_url: publicUrl });
+
+      // 4. Update UserContext and AsyncStorage to sync across app
+      const updatedUser = { ...currentUser, avatar_url: publicUrl };
+      await AsyncStorage.setItem('currentUser', JSON.stringify(updatedUser));
+      setCurrentUser(updatedUser);
+
+      console.log("Profile image updated successfully:", publicUrl);
+      Alert.alert("Success", "Profile has been changed successfully");
+    } catch (error) {
+      console.error("Failed to save profile image:", error);
+      Alert.alert("Error", "Failed to save profile image. Please try again.");
+      // Optional: Revert profileImage state here if needed
+    }
+  };
+
+  const handleCropCancel = () => {
+    setShowCropOverlay(false);
+    setSelectedImageUri(null);
+    setRefreshKey(prev => prev + 1);
   };
 
   const handleMediaClick = (imageUrl: string) => {
@@ -186,10 +332,9 @@ export default function ProfileScreen() {
           return;
         }
         result = await ImagePicker.launchCameraAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
-          allowsEditing: true,
-          aspect: [1, 1],
-          quality: 0.8,
+          mediaTypes: ['images'],
+          allowsEditing: false, // We use our own cropper
+          quality: 1.0,
         });
       } else {
         const galleryPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -198,15 +343,15 @@ export default function ProfileScreen() {
           return;
         }
         result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
-          allowsEditing: true,
-          aspect: [1, 1],
-          quality: 0.8,
+          mediaTypes: ['images'],
+          allowsEditing: false, // We use our own cropper
+          quality: 1.0,
         });
       }
 
       if (!result.canceled && result.assets[0]) {
-        setProfileImage(result.assets[0].uri);
+        setSelectedImageUri(result.assets[0].uri);
+        setShowCropOverlay(true);
       }
     } catch (error) {
       console.error("Error picking image:", error);
@@ -232,10 +377,18 @@ export default function ProfileScreen() {
 
       {/* Header */}
       <View className="flex-row items-center justify-between px-4 py-3 bg-white border-b border-gray-100">
-        {/* Bookmark Icon on Left */}
-        <TouchableOpacity onPress={handleBookmark} className="w-10 h-10 items-center justify-center ">
-          <Bookmark size={24} className="text-yellow-400" />
-        </TouchableOpacity>
+        {/* Left Icons */}
+        <View className="flex-row items-center gap-2">
+          {/* Follow Requests Icon */}
+          <TouchableOpacity onPress={handleFollowRequests} className="w-10 h-10 items-center justify-center">
+            <UserPlus size={24} className="text-primary" />
+          </TouchableOpacity>
+
+          {/* Manage Listings Icon */}
+          <TouchableOpacity onPress={handleManageListings} className="w-10 h-10 items-center justify-center">
+            <Package size={24} className="text-primary" />
+          </TouchableOpacity>
+        </View>
 
         {/* Notification and Settings Icons on Right */}
         <View className="flex-row items-center">
@@ -248,18 +401,32 @@ export default function ProfileScreen() {
         </View>
       </View>
 
-      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+      <ScrollView
+        className="flex-1"
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#094569"
+          />
+        }
+      >
         {/* Profile Header */}
         <View className="bg-white border-b border-gray-100 px-4 py-8">
           <View className="items-center">
             <View className="relative mb-4">
-              <View className="w-24 h-24 rounded-full bg-gray-200 items-center justify-center">
+              <TouchableOpacity
+                onPress={() => profileImage && setShowProfileImageViewer(true)}
+                disabled={!profileImage}
+                className="w-24 h-24 rounded-full bg-gray-200 items-center justify-center overflow-hidden"
+              >
                 {profileImage ? (
                   <Image source={{ uri: profileImage }} className="w-24 h-24 rounded-full" resizeMode="cover" />
                 ) : (
                   <User size={32} className="text-gray-400" />
                 )}
-              </View>
+              </TouchableOpacity>
               <TouchableOpacity onPress={handleEditProfile} className="absolute -bottom-1 -right-1 w-8 h-8 bg-primary rounded-full items-center justify-center border-2 border-white">
                 <Edit3 size={16} className="text-white" />
               </TouchableOpacity>
@@ -274,20 +441,35 @@ export default function ProfileScreen() {
             )}
             
             <View className="flex-row items-center space-x-6 mt-4">
-              <View className="items-center">
-                <Text className="text-xl font-mbold text-gray-900">{currentUser.products?.length || 0}</Text>
-                <Text className="text-sm font-regular text-gray-500">Products</Text>
-              </View>
-              <Text className="text-gray-300 text-xl font-light">|</Text>
-              <View className="items-center">
-                <Text className="text-xl font-mbold text-gray-900">{currentUser.followers || 0}</Text>
-                <Text className="text-sm font-regular text-gray-500">Followers</Text>
-              </View>
-              <Text className="text-gray-300 text-xl font-light">|</Text>
-              <View className="items-center">
-                <Text className="text-xl font-mbold text-gray-900">{currentUser.following || 0}</Text>
+              <TouchableOpacity
+                className="items-center"
+                onPress={() => {
+                  setFollowRequestsTab('following');
+                  setShowFollowRequests(true);
+                }}
+              >
+                <Text className="text-xl font-mbold text-gray-900">
+                  {followingCount > 999
+                    ? `${(followingCount / 1000).toFixed(1)}k`
+                    : followingCount}
+                </Text>
                 <Text className="text-sm font-regular text-gray-500">Following</Text>
-              </View>
+              </TouchableOpacity>
+              <Text className="text-gray-300 text-xl font-light">|</Text>
+              <TouchableOpacity
+                className="items-center"
+                onPress={() => {
+                  setFollowRequestsTab('followers');
+                  setShowFollowRequests(true);
+                }}
+              >
+                <Text className="text-xl font-mbold text-gray-900">
+                  {followerCount > 999
+                    ? `${(followerCount / 1000).toFixed(1)}k`
+                    : followerCount}
+                </Text>
+                <Text className="text-sm font-regular text-gray-500">Followers</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -303,9 +485,9 @@ export default function ProfileScreen() {
               <ShoppingBag size={24} className={`mb-1 ${activeTab === "products" ? "text-primary" : "text-gray-500"}`} />
               <Text className={`font-msemibold text-xs ${activeTab === "products" ? "text-primary" : "text-gray-500"}`}>Products</Text>
             </TouchableOpacity>
-            <TouchableOpacity className={`flex-1 py-4 items-center border-b-2 ${activeTab === "tools" ? "border-primary" : "border-transparent"}`} onPress={() => setActiveTab("tools")}>
-              <Wrench size={24} className={`mb-1 ${activeTab === "tools" ? "text-primary" : "text-gray-500"}`} />
-              <Text className={`font-msemibold text-xs ${activeTab === "tools" ? "text-primary" : "text-gray-500"}`}>Tools</Text>
+            <TouchableOpacity className={`flex-1 py-4 items-center border-b-2 ${activeTab === "services" ? "border-primary" : "border-transparent"}`} onPress={() => setActiveTab("services")}>
+              <Wrench size={24} className={`mb-1 ${activeTab === "services" ? "text-primary" : "text-gray-500"}`} />
+              <Text className={`font-msemibold text-xs ${activeTab === "services" ? "text-primary" : "text-gray-500"}`}>services</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -344,8 +526,52 @@ export default function ProfileScreen() {
               )}
             </>
           )}
-          {activeTab === "products" && <Text className="text-center py-8 text-gray-500">Products Tab Placeholder</Text>}
-          {activeTab === "tools" && <Text className="text-center py-8 text-gray-500">Tools Tab Placeholder</Text>}
+          {activeTab === "products" && (
+            <>
+              {loadingProducts ? (
+                <ActivityIndicator size="large" color="#059669" className="py-12" />
+              ) : userProducts.length > 0 ? (
+                <View className="flex-row flex-wrap">
+                  {userProducts.map((product, index) => (
+                    <View key={product.id || index} className="w-[33.33%] aspect-square p-1">
+                      <TouchableOpacity
+                        className="flex-1 bg-gray-200 rounded-lg overflow-hidden"
+                        onPress={() => router.push(`/(users)/product/${product.id}` as any)}
+                      >
+                        {product.images && product.images.length > 0 ? (
+                          <Image
+                            source={{ uri: product.images[0] }}
+                            className="w-full h-full"
+                            resizeMode="cover"
+                          />
+                        ) : (
+                          <View className="w-full h-full items-center justify-center bg-gray-100">
+                            <ShoppingBag size={32} className="text-gray-400" />
+                          </View>
+                        )}
+                        {/* Price tag overlay */}
+                        <View className="absolute bottom-0 left-0 right-0 bg-black/60 px-2 py-1">
+                          <Text className="text-white text-xs font-semibold" numberOfLines={1}>
+                            {product.name}
+                          </Text>
+                          <Text className="text-white text-xs font-bold">
+                            Nu. {product.price.toLocaleString()}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <View className="items-center justify-center py-12">
+                  <ShoppingBag size={48} className="text-gray-400 mb-4" />
+                  <Text className="text-lg font-msemibold text-gray-700">No Products Yet</Text>
+                  <Text className="text-sm text-gray-500 mt-2">Start selling to see your products here</Text>
+                </View>
+              )}
+            </>
+          )}
+          {activeTab === "services" && <Text className="text-center py-8 text-gray-500">services Tab Placeholder</Text>}
         </View>
         <View className="h-8" />
       </ScrollView>
@@ -388,7 +614,15 @@ export default function ProfileScreen() {
                   </View>
                 </TouchableOpacity>
 
-                <TouchableOpacity className="bg-gray-100 rounded-xl py-4 items-center" onPress={() => { pickerTranslateY.value = withTiming(1000, {}, () => runOnJS(setShowImagePicker)(false)); }}>
+                <TouchableOpacity
+                  className="bg-gray-100 rounded-xl py-4 items-center"
+                  onPress={() => {
+                    pickerTranslateY.value = withTiming(1000, {}, () => {
+                      runOnJS(setShowImagePicker)(false);
+                      runOnJS(setRefreshKey)((prev: number) => prev + 1);
+                    });
+                  }}
+                >
                   <Text className="text-gray-600 font-msemibold">Cancel</Text>
                 </TouchableOpacity>
               </View>
@@ -417,16 +651,72 @@ export default function ProfileScreen() {
       )}
 
       {/* ------------------------------------------------------ */}
-      {/* BOOKMARKS MODAL */}
+      {/* FOLLOW REQUESTS MODAL */}
       {/* ------------------------------------------------------ */}
-      {showBookmarks && currentUser?.id && (
-        <Modal transparent statusBarTranslucent animationType="none" visible={showBookmarks} onRequestClose={() => setShowBookmarks(false)}>
+      {showFollowRequests && currentUser?.id && (
+        <Modal transparent statusBarTranslucent animationType="none" visible={showFollowRequests} onRequestClose={() => setShowFollowRequests(false)}>
           <Animated.View entering={SlideInDown.springify()} exiting={SlideOutDown} style={{ height: "100%",  borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: "hidden" }}>
-            <BookmarksOverlay
-              onClose={() => setShowBookmarks(false)}
+            <FollowRequestsOverlay
+              onClose={() => {
+                setShowFollowRequests(false);
+                setRefreshKey(prev => prev + 1);
+              }}
+              userId={currentUser.id}
+              initialTab={followRequestsTab}
+            />
+          </Animated.View>
+        </Modal>
+      )}
+
+      {/* ------------------------------------------------------ */}
+      {/* PENDING FOLLOW REQUESTS MODAL */}
+      {/* ------------------------------------------------------ */}
+      {showPendingRequests && currentUser?.id && (
+        <Modal transparent statusBarTranslucent animationType="none" visible={showPendingRequests} onRequestClose={() => setShowPendingRequests(false)}>
+          <Animated.View entering={SlideInDown.springify()} exiting={SlideOutDown} style={{ height: "100%", borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: "hidden" }}>
+            <FollowRequests
+              onClose={() => {
+                setShowPendingRequests(false);
+                setRefreshKey(prev => prev + 1);
+              }}
               userId={currentUser.id}
             />
           </Animated.View>
+        </Modal>
+      )}
+
+      {/* ------------------------------------------------------ */}
+      {/* MANAGE LISTINGS MODAL */}
+      {/* ------------------------------------------------------ */}
+      {showManageListings && currentUser?.id && (
+        <Modal transparent statusBarTranslucent animationType="none" visible={showManageListings} onRequestClose={() => setShowManageListings(false)}>
+          <Animated.View entering={SlideInDown.springify()} exiting={SlideOutDown} style={{ height: "100%", borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: "hidden" }}>
+            <ManageListingsOverlay
+              onClose={() => {
+                setShowManageListings(false);
+                setRefreshKey(prev => prev + 1);
+              }}
+              userId={currentUser.id}
+            />
+          </Animated.View>
+        </Modal>
+      )}
+
+      {/* ------------------------------------------------------ */}
+      {/* IMAGE CROP OVERLAY */}
+      {/* ------------------------------------------------------ */}
+      {showCropOverlay && selectedImageUri && (
+        <Modal
+          visible={showCropOverlay}
+          animationType="slide"
+          statusBarTranslucent
+          onRequestClose={handleCropCancel}
+        >
+          <ImageCropOverlay
+            imageUri={selectedImageUri}
+            onSave={handleCropSave}
+            onCancel={handleCropCancel}
+          />
         </Modal>
       )}
 
@@ -435,11 +725,26 @@ export default function ProfileScreen() {
           visible={showImageViewer}
           images={selectedPost.images}
           initialIndex={selectedMediaIndex}
-          onClose={() => setShowImageViewer(false)}
+          onClose={() => {
+            setShowImageViewer(false);
+            setRefreshKey(prev => prev + 1);
+          }}
           postContent={selectedPost.content}
           username={currentUser?.name || "User"}
           likes={selectedPost.likes}
           comments={selectedPost.comments}
+        />
+      )}
+
+      {/* Profile Image Viewer */}
+      {showProfileImageViewer && profileImage && (
+        <ProfileImageViewer
+          visible={showProfileImageViewer}
+          imageUri={profileImage}
+          onClose={() => {
+            setShowProfileImageViewer(false);
+            setRefreshKey(prev => prev + 1);
+          }}
         />
       )}
     </View>
