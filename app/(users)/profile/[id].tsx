@@ -1,25 +1,24 @@
+import ReportUserModal from "@/components/ReportUserModal";
 import { useUser } from "@/contexts/UserContext";
-import { followUser, unfollowUser, isFollowing } from "@/lib/followService";
+import { blockUser, isUserBlocked, unblockUser } from "@/lib/blockService";
+import { followUser, isFollowing, unfollowUser } from "@/lib/followService";
 import { fetchUserPosts, Post } from "@/lib/postsService";
 import { fetchUserProducts, Product } from "@/lib/productsService";
 import { fetchUserProfile } from "@/lib/profileService";
-import { blockUser, isUserBlocked, unblockUser } from "@/lib/blockService";
-import ReportUserModal from "@/components/ReportUserModal";
-import { Redirect, Stack, useLocalSearchParams, useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
+import { Redirect, Stack, useLocalSearchParams, useRouter } from "expo-router";
 import {
   AlertCircle,
   ArrowLeft,
   Ban,
   Grid,
   Image as ImageLucide,
-  MoreHorizontal,
   Play,
   ShoppingBag,
   User,
   UserCheck,
   UserPlus,
-  Wrench
+  Wrench,
 } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
@@ -34,7 +33,6 @@ import {
   View,
 } from "react-native";
 import Animated, { SlideInDown, SlideOutDown } from "react-native-reanimated";
-
 
 // Helper to check if URL is a video
 const isVideoUrl = (url: string): boolean => {
@@ -51,14 +49,16 @@ export default function PublicProfileScreen() {
   const { id } = useLocalSearchParams(); // Get user ID from route: /user/123
   const { currentUser } = useUser();
   const router = useRouter();
-  
+
   // Guard: If viewing own profile, redirect to the main profile tab
   if (currentUser?.id === id) {
-    return <Redirect href="/(tabs)/profile" />;
+    return <Redirect href="/(users)/profile" />;
   }
 
   // State
-  const [activeTab, setActiveTab] = useState<"images" | "products" | "services">("images");
+  const [activeTab, setActiveTab] = useState<
+    "images" | "products" | "services"
+  >("images");
   const [loading, setLoading] = useState(true);
   const [userProfile, setUserProfile] = useState<any>(null);
   const [userPosts, setUserPosts] = useState<Post[]>([]);
@@ -78,7 +78,7 @@ export default function PublicProfileScreen() {
   // Fetch Data on Mount
   useEffect(() => {
     const loadData = async () => {
-      if (!id || typeof id !== 'string') return;
+      if (!id || typeof id !== "string") return;
 
       if (!refreshing) setLoading(true);
       try {
@@ -112,7 +112,6 @@ export default function PublicProfileScreen() {
           const blocked = await isUserBlocked(currentUser.id, id);
           setIsBlocked(blocked);
         }
-
       } catch (error) {
         console.error("Error loading public profile:", error);
         Alert.alert("Error", "Could not load user profile");
@@ -129,7 +128,7 @@ export default function PublicProfileScreen() {
   const handleRefresh = () => {
     setRefreshing(true);
     const loadData = async () => {
-      if (!id || typeof id !== 'string') return;
+      if (!id || typeof id !== "string") return;
 
       try {
         // 1. Fetch Profile Data
@@ -162,7 +161,6 @@ export default function PublicProfileScreen() {
           const blocked = await isUserBlocked(currentUser.id, id);
           setIsBlocked(blocked);
         }
-
       } catch (error) {
         console.error("Error loading public profile:", error);
       } finally {
@@ -174,13 +172,15 @@ export default function PublicProfileScreen() {
 
   // Action Handlers
   const handleMainAction = async () => {
-    if (!currentUser?.id || typeof id !== 'string') return;
+    if (!currentUser?.id || typeof id !== "string") return;
 
     if (isFollowingUser) {
       // If already following, unfollow on button click
       Alert.alert(
         "Unfollow",
-        `Are you sure you want to unfollow ${userProfile?.name || 'this user'}?`,
+        `Are you sure you want to unfollow ${
+          userProfile?.name || "this user"
+        }?`,
         [
           { text: "Cancel", style: "cancel" },
           {
@@ -200,8 +200,8 @@ export default function PublicProfileScreen() {
               } finally {
                 setLoadingFollow(false);
               }
-            }
-          }
+            },
+          },
         ]
       );
     } else {
@@ -224,54 +224,60 @@ export default function PublicProfileScreen() {
 
   // Block/Unblock Handler
   const handleBlockToggle = async () => {
-    if (!currentUser?.id || typeof id !== 'string') return;
+    if (!currentUser?.id || typeof id !== "string") return;
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     if (isBlocked) {
       // Show unblock confirmation
       Alert.alert(
-        'Unblock User',
-        `Are you sure you want to unblock @${userProfile?.name || 'this user'}?`,
+        "Unblock User",
+        `Are you sure you want to unblock @${
+          userProfile?.name || "this user"
+        }?`,
         [
-          { text: 'Cancel', style: 'cancel' },
+          { text: "Cancel", style: "cancel" },
           {
-            text: 'Unblock',
-            style: 'default',
+            text: "Unblock",
+            style: "default",
             onPress: async () => {
               const result = await unblockUser(currentUser.id, id as string);
               if (result.success) {
                 setIsBlocked(false);
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                Alert.alert('Success', 'User unblocked');
+                Haptics.notificationAsync(
+                  Haptics.NotificationFeedbackType.Success
+                );
+                Alert.alert("Success", "User unblocked");
               } else {
-                Alert.alert('Error', result.error || 'Failed to unblock user');
+                Alert.alert("Error", result.error || "Failed to unblock user");
               }
-            }
-          }
+            },
+          },
         ]
       );
     } else {
       // Block user
       Alert.alert(
-        'Block User',
-        `Are you sure you want to block @${userProfile?.name || 'this user'}?`,
+        "Block User",
+        `Are you sure you want to block @${userProfile?.name || "this user"}?`,
         [
-          { text: 'Cancel', style: 'cancel' },
+          { text: "Cancel", style: "cancel" },
           {
-            text: 'Block',
-            style: 'destructive',
+            text: "Block",
+            style: "destructive",
             onPress: async () => {
               const result = await blockUser(currentUser.id, id as string);
               if (result.success) {
                 setIsBlocked(true);
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                Alert.alert('Success', 'User blocked');
+                Haptics.notificationAsync(
+                  Haptics.NotificationFeedbackType.Success
+                );
+                Alert.alert("Success", "User blocked");
               } else {
-                Alert.alert('Error', result.error || 'Failed to block user');
+                Alert.alert("Error", result.error || "Failed to block user");
               }
-            }
-          }
+            },
+          },
         ]
       );
     }
@@ -288,7 +294,6 @@ export default function PublicProfileScreen() {
     // Called after successful report with "Block" confirmation
     handleBlockToggle();
   };
-
 
   if (loading) {
     return (
@@ -313,10 +318,13 @@ export default function PublicProfileScreen() {
 
       {/* Custom Header */}
       <View className="flex-row items-center justify-between px-4 pt-12 pb-3 bg-white border-b border-gray-100">
-        <TouchableOpacity onPress={() => router.back()} className="w-10 h-10 items-center justify-center -ml-2">
+        <TouchableOpacity
+          onPress={() => router.back()}
+          className="w-10 h-10 items-center justify-center -ml-2"
+        >
           <ArrowLeft size={24} className="text-gray-800" />
         </TouchableOpacity>
-        
+
         <Text className="text-lg font-mbold text-gray-900" numberOfLines={1}>
           {userProfile.username || userProfile.name || "Profile"}
         </Text>
@@ -349,10 +357,10 @@ export default function PublicProfileScreen() {
           {/* Avatar */}
           <View className="w-24 h-24 rounded-full bg-gray-200 overflow-hidden mb-4 border border-gray-100">
             {userProfile.avatar_url ? (
-              <Image 
-                source={{ uri: userProfile.avatar_url }} 
-                className="w-full h-full" 
-                resizeMode="cover" 
+              <Image
+                source={{ uri: userProfile.avatar_url }}
+                className="w-full h-full"
+                resizeMode="cover"
               />
             ) : (
               <View className="w-full h-full items-center justify-center bg-gray-100">
@@ -374,18 +382,30 @@ export default function PublicProfileScreen() {
           {/* Stats */}
           <View className="flex-row items-center justify-center space-x-8 mt-2 mb-6">
             <View className="items-center">
-              <Text className="text-lg font-mbold text-gray-900">{userProducts.length}</Text>
-              <Text className="text-xs font-regular text-gray-500">Products</Text>
+              <Text className="text-lg font-mbold text-gray-900">
+                {userProducts.length}
+              </Text>
+              <Text className="text-xs font-regular text-gray-500">
+                Products
+              </Text>
             </View>
             <View className="w-[1px] h-8 bg-gray-200" />
             <View className="items-center">
-              <Text className="text-lg font-mbold text-gray-900">{userProfile.follower_count || 0}</Text>
-              <Text className="text-xs font-regular text-gray-500">Followers</Text>
+              <Text className="text-lg font-mbold text-gray-900">
+                {userProfile.follower_count || 0}
+              </Text>
+              <Text className="text-xs font-regular text-gray-500">
+                Followers
+              </Text>
             </View>
             <View className="w-[1px] h-8 bg-gray-200" />
             <View className="items-center">
-              <Text className="text-lg font-mbold text-gray-900">{userProfile.following_count || 0}</Text>
-              <Text className="text-xs font-regular text-gray-500">Following</Text>
+              <Text className="text-lg font-mbold text-gray-900">
+                {userProfile.following_count || 0}
+              </Text>
+              <Text className="text-xs font-regular text-gray-500">
+                Following
+              </Text>
             </View>
           </View>
 
@@ -396,17 +416,24 @@ export default function PublicProfileScreen() {
               onPress={handleMainAction}
               disabled={loadingFollow}
               className={`flex-1 py-3 rounded-xl flex-row items-center justify-center ${
-                isFollowingUser ? "bg-gray-100 border border-gray-300" : "bg-primary"
+                isFollowingUser
+                  ? "bg-gray-100 border border-gray-300"
+                  : "bg-primary"
               }`}
             >
               {loadingFollow ? (
-                <ActivityIndicator size="small" color={isFollowingUser ? "black" : "white"} />
+                <ActivityIndicator
+                  size="small"
+                  color={isFollowingUser ? "black" : "white"}
+                />
               ) : (
                 <>
                   {isFollowingUser ? (
                     <>
                       <UserCheck size={18} className="text-gray-600 mr-2" />
-                      <Text className="text-gray-600 font-msemibold">Followed</Text>
+                      <Text className="text-gray-600 font-msemibold">
+                        Followed
+                      </Text>
                     </>
                   ) : (
                     <>
@@ -423,17 +450,19 @@ export default function PublicProfileScreen() {
         {/* Tab Navigation */}
         <View className="bg-white border-b border-gray-100 mt-2">
           <View className="flex-row">
-            <TouchableOpacity 
+            <TouchableOpacity
               className={`flex-1 py-4 items-center border-b-2 ${
                 activeTab === "images" ? "border-primary" : "border-transparent"
-              }`} 
+              }`}
               onPress={() => setActiveTab("images")}
             >
-              <ImageLucide 
-                size={24} 
-                className={`mb-1 ${activeTab === "images" ? "text-primary" : "text-gray-400"}`} 
+              <ImageLucide
+                size={24}
+                className={`mb-1 ${
+                  activeTab === "images" ? "text-primary" : "text-gray-400"
+                }`}
               />
-              <Text 
+              <Text
                 className={`font-msemibold text-xs ${
                   activeTab === "images" ? "text-primary" : "text-gray-500"
                 }`}
@@ -442,17 +471,21 @@ export default function PublicProfileScreen() {
               </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               className={`flex-1 py-4 items-center border-b-2 ${
-                activeTab === "products" ? "border-primary" : "border-transparent"
-              }`} 
+                activeTab === "products"
+                  ? "border-primary"
+                  : "border-transparent"
+              }`}
               onPress={() => setActiveTab("products")}
             >
-              <ShoppingBag 
-                size={24} 
-                className={`mb-1 ${activeTab === "products" ? "text-primary" : "text-gray-400"}`} 
+              <ShoppingBag
+                size={24}
+                className={`mb-1 ${
+                  activeTab === "products" ? "text-primary" : "text-gray-400"
+                }`}
               />
-              <Text 
+              <Text
                 className={`font-msemibold text-xs ${
                   activeTab === "products" ? "text-primary" : "text-gray-500"
                 }`}
@@ -461,17 +494,21 @@ export default function PublicProfileScreen() {
               </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               className={`flex-1 py-4 items-center border-b-2 ${
-                activeTab === "services" ? "border-primary" : "border-transparent"
-              }`} 
+                activeTab === "services"
+                  ? "border-primary"
+                  : "border-transparent"
+              }`}
               onPress={() => setActiveTab("services")}
             >
-              <Wrench 
-                size={24} 
-                className={`mb-1 ${activeTab === "services" ? "text-primary" : "text-gray-400"}`} 
+              <Wrench
+                size={24}
+                className={`mb-1 ${
+                  activeTab === "services" ? "text-primary" : "text-gray-400"
+                }`}
               />
-              <Text 
+              <Text
                 className={`font-msemibold text-xs ${
                   activeTab === "services" ? "text-primary" : "text-gray-500"
                 }`}
@@ -490,12 +527,15 @@ export default function PublicProfileScreen() {
                 userImages.map((imageUrl, index) => {
                   const isVideo = isVideoUrl(imageUrl);
                   return (
-                    <View key={index} className="w-[33.33%] aspect-square p-[1px]">
+                    <View
+                      key={index}
+                      className="w-[33.33%] aspect-square p-[1px]"
+                    >
                       <TouchableOpacity className="flex-1 bg-gray-100 relative">
-                        <Image 
-                          source={{ uri: imageUrl }} 
-                          className="w-full h-full" 
-                          resizeMode="cover" 
+                        <Image
+                          source={{ uri: imageUrl }}
+                          className="w-full h-full"
+                          resizeMode="cover"
                         />
                         {isVideo && (
                           <View className="absolute inset-0 items-center justify-center bg-black/30">
@@ -509,7 +549,9 @@ export default function PublicProfileScreen() {
               ) : (
                 <View className="w-full py-12 items-center">
                   <Grid size={40} className="text-gray-300 mb-2" />
-                  <Text className="text-gray-400 font-mmedium">No images shared yet</Text>
+                  <Text className="text-gray-400 font-mmedium">
+                    No images shared yet
+                  </Text>
                 </View>
               )}
             </View>
@@ -521,7 +563,9 @@ export default function PublicProfileScreen() {
                 userProducts.map((product) => (
                   <View key={product.id} className="w-[50%] p-2">
                     <TouchableOpacity
-                      onPress={() => router.push(`/product/${product.id}` as any)}
+                      onPress={() =>
+                        router.push(`/product/${product.id}` as any)
+                      }
                       className="bg-white rounded-xl overflow-hidden border border-gray-100"
                     >
                       {product.images && product.images.length > 0 ? (
@@ -536,10 +580,16 @@ export default function PublicProfileScreen() {
                         </View>
                       )}
                       <View className="p-3">
-                        <Text className="text-sm font-msemibold text-gray-900" numberOfLines={2}>
+                        <Text
+                          className="text-sm font-msemibold text-gray-900"
+                          numberOfLines={2}
+                        >
                           {product.name}
                         </Text>
-                        <Text className="text-xs font-regular text-gray-500 mt-1" numberOfLines={1}>
+                        <Text
+                          className="text-xs font-regular text-gray-500 mt-1"
+                          numberOfLines={1}
+                        >
                           {product.category}
                         </Text>
                         <Text className="text-base font-mbold text-primary mt-2">
@@ -552,7 +602,9 @@ export default function PublicProfileScreen() {
               ) : (
                 <View className="w-full py-12 items-center">
                   <ShoppingBag size={40} className="text-gray-300 mb-2" />
-                  <Text className="text-gray-400 font-mmedium">No products listed</Text>
+                  <Text className="text-gray-400 font-mmedium">
+                    No products listed
+                  </Text>
                 </View>
               )}
             </View>
@@ -561,11 +613,13 @@ export default function PublicProfileScreen() {
           {activeTab === "services" && (
             <View className="items-center justify-center py-12">
               <Wrench size={40} className="text-gray-300 mb-2" />
-              <Text className="text-gray-400 font-mmedium">No services offered</Text>
+              <Text className="text-gray-400 font-mmedium">
+                No services offered
+              </Text>
             </View>
           )}
         </View>
-        
+
         {/* Bottom spacer */}
         <View className="h-8" />
       </ScrollView>
@@ -589,7 +643,9 @@ export default function PublicProfileScreen() {
               className="bg-white rounded-t-3xl pb-8"
             >
               <View className="px-6 py-4 border-b border-gray-200">
-                <Text className="text-lg font-mbold text-gray-900">User Actions</Text>
+                <Text className="text-lg font-mbold text-gray-900">
+                  User Actions
+                </Text>
               </View>
 
               {/* Block/Unblock Option */}
@@ -597,14 +653,14 @@ export default function PublicProfileScreen() {
                 onPress={handleBlockToggle}
                 className="flex-row items-center px-6 py-4 border-b border-gray-100"
               >
-                <Ban size={24} color={isBlocked ? '#10B981' : '#EF4444'} />
+                <Ban size={24} color={isBlocked ? "#10B981" : "#EF4444"} />
                 <View className="ml-4 flex-1">
                   <Text className="text-base font-msemibold text-gray-900">
-                    {isBlocked ? 'Unblock User' : 'Block User'}
+                    {isBlocked ? "Unblock User" : "Block User"}
                   </Text>
                   <Text className="text-sm text-gray-500 font-regular">
                     {isBlocked
-                      ? 'You will see their content again'
+                      ? "You will see their content again"
                       : "You won't see their content"}
                   </Text>
                 </View>
@@ -631,7 +687,9 @@ export default function PublicProfileScreen() {
                 onPress={() => setShowBlockMenu(false)}
                 className="mx-6 mt-4 py-3 rounded-2xl bg-gray-100"
               >
-                <Text className="text-center text-gray-900 font-msemibold">Cancel</Text>
+                <Text className="text-center text-gray-900 font-msemibold">
+                  Cancel
+                </Text>
               </TouchableOpacity>
             </Animated.View>
           </TouchableOpacity>
@@ -639,12 +697,12 @@ export default function PublicProfileScreen() {
       )}
 
       {/* Report Modal */}
-      {currentUser?.id && userProfile && typeof id === 'string' && (
+      {currentUser?.id && userProfile && typeof id === "string" && (
         <ReportUserModal
           visible={showReportModal}
           onClose={() => setShowReportModal(false)}
           targetUserId={id}
-          targetUserName={userProfile.name || userProfile.username || 'user'}
+          targetUserName={userProfile.name || userProfile.username || "user"}
           currentUserId={currentUser.id}
           onReportSuccess={handleReportSuccess}
         />

@@ -10,11 +10,11 @@ import React, {
 import {
   ActivityIndicator,
   FlatList,
+  Image,
   ImageBackground,
   Modal,
   Pressable,
   RefreshControl,
-  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -34,15 +34,16 @@ import {
   createLivestreamRecord,
   endLivestreamRecord,
   fetchActiveLivestreams,
+  incrementLivestreamViewerCountAtomic,
   subscribeToLivestreams,
   type Livestream,
 } from "@/services/livestreamService";
 import {
-  HostLivestream,
+  ParticipantView,
   StreamCall,
   StreamVideo,
-  ViewerLivestream,
   useCall,
+  useCallStateHooks,
   type Call,
   type StreamVideoClient,
 } from "@stream-io/video-react-native-sdk";
@@ -423,8 +424,6 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose }) => {
         const { identity, client } = await ensureStreamClient();
         const call = await getStreamService.prepareViewerCall(identity, callId);
 
-        await adjustLivestreamViewerCount(stream.id, 1);
-
         setSelectedStream(stream);
         setViewerSession({ streamId: stream.id });
         setActiveCall(call);
@@ -443,6 +442,17 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose }) => {
     },
     [ensureStreamClient, resolveCallIdentifier]
   );
+
+  useEffect(() => {
+    if (!selectedStream?.id || callRole !== "viewer" || !activeCall) return;
+
+    incrementLivestreamViewerCountAtomic(selectedStream.id, 1).catch(() => {});
+    return () => {
+      incrementLivestreamViewerCountAtomic(selectedStream.id, -1).catch(
+        () => {}
+      );
+    };
+  }, [selectedStream?.id, callRole, activeCall?.id]);
 
   // Stable callback reference for subscription
   const handleLivestreamsChange = useCallback(() => {
@@ -574,6 +584,12 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose }) => {
                 viewerCount={activeViewerCount}
                 onClose={handleLeaveCurrentCall}
                 busy={endingStream || initializingCall}
+                profileImage={
+                  (selectedStream as any)?.profile_image ??
+                  (selectedStream as any)?.thumbnail ??
+                  null
+                }
+                recording={Boolean((selectedStream as any)?.recording)}
               />
             </View>
           </StreamCall>
@@ -733,7 +749,7 @@ const LivestreamCard: React.FC<LivestreamCardProps> = ({
   loading,
   disabled = false,
 }) => {
-  const viewerCount = stream.viewer_count ?? 0;
+  const viewerCount = stream.viewer_count || 0;
   const thumbnail = stream.thumbnail || FALLBACK_THUMBNAIL;
 
   return (
@@ -832,23 +848,6 @@ const CreateLivestreamModal: React.FC<CreateLivestreamModalProps> = ({
               maxLength={80}
             />
 
-            <View className="mt-4 flex-row items-center justify-between">
-              <View>
-                <Text className="text-sm font-semibold text-gray-800">
-                  Record stream
-                </Text>
-                <Text className="text-xs text-gray-500">
-                  Store a VOD in the Stream dashboard after you go live.
-                </Text>
-              </View>
-              <Switch
-                value={recordingEnabled}
-                onValueChange={onToggleRecording}
-                thumbColor={recordingEnabled ? "#DC2626" : "#f4f3f4"}
-                trackColor={{ false: "#D1D5DB", true: "#FECACA" }}
-              />
-            </View>
-
             <TouchableOpacity
               onPress={onConfirm}
               disabled={loading}
@@ -875,6 +874,8 @@ interface ActiveCallHeaderProps {
   viewerCount: number;
   onClose: () => void | Promise<void>;
   busy?: boolean;
+  profileImage?: string | null;
+  recording?: boolean;
 }
 
 const ActiveCallHeader: React.FC<ActiveCallHeaderProps> = ({
@@ -883,6 +884,8 @@ const ActiveCallHeader: React.FC<ActiveCallHeaderProps> = ({
   viewerCount,
   onClose,
   busy = false,
+  profileImage,
+  recording = false,
 }) => {
   const insets = useSafeAreaInsets();
 
@@ -891,9 +894,25 @@ const ActiveCallHeader: React.FC<ActiveCallHeaderProps> = ({
       className="absolute inset-x-0 top-0 flex-row items-center justify-between px-4"
       style={{ paddingTop: Math.max(12, insets.top) }}
     >
-      <View className="flex-row items-center rounded-full bg-black/40 px-3 py-1">
-        <View className="mr-2 h-2 w-2 rounded-full bg-red-500" />
-        <Text className="text-sm font-semibold text-white">{username}</Text>
+      <View className="flex-row items-center rounded-full bg-black/30 px-3 py-1">
+        {profileImage ? (
+          <Image
+            source={{ uri: profileImage }}
+            style={{ width: 36, height: 36, borderRadius: 18, marginRight: 10 }}
+          />
+        ) : (
+          <View className="mr-2 h-2 w-2 rounded-full bg-red-500" />
+        )}
+
+        <View>
+          <Text className="text-sm font-semibold text-white">{username}</Text>
+          {recording && (
+            <View className="mt-1 flex-row items-center">
+              <View className="h-2 w-2 rounded-full bg-red-500 mr-2" />
+              <Text className="text-xs text-white/90">Live</Text>
+            </View>
+          )}
+        </View>
       </View>
 
       <View className="flex-row items-center space-x-3">
@@ -910,11 +929,7 @@ const ActiveCallHeader: React.FC<ActiveCallHeaderProps> = ({
           disabled={busy}
           activeOpacity={busy ? 1 : 0.85}
         >
-          <Text
-            className={`mr-2 text-xs font-semibold ${
-              role === "host" ? "text-white" : "text-white"
-            }`}
-          >
+          <Text className={`mr-2 text-xs font-semibold text-white`}>
             {role === "host" ? "End" : "Leave"}
           </Text>
           <X color="#fff" size={18} />
@@ -931,87 +946,288 @@ interface HostCallContainerProps {
 }
 
 const HostCallContainer: React.FC<HostCallContainerProps> = ({
-  onEndStream,
   onStartStream,
+  onEndStream,
   ending,
 }) => {
   const call = useCall();
-  const [initializing, setInitializing] = useState(true);
+  const { useCameraState, useMicrophoneState } = useCallStateHooks();
+
+  const { camera, isMute: isCameraMuted } = useCameraState();
+  const { microphone, isMute: isMicMuted } = useMicrophoneState();
+  const [showEndConfirm, setShowEndConfirm] = useState(false);
+
+  // Manually track live status since the hook is missing
+  const [isLive, setIsLive] = useState(false);
+  const [countdown, setCountdown] = useState<number | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
-    const enableMedia = async () => {
-      try {
-        await call?.camera.enable();
-      } catch (cameraError) {
-        console.warn("Failed to enable camera", cameraError);
-      }
+    if (!call) return;
 
+    const joinCall = async () => {
       try {
-        await call?.microphone.enable();
-      } catch (microphoneError) {
-        console.warn("Failed to enable microphone", microphoneError);
-      }
+        const currentState = call.state.callingState;
 
-      if (!cancelled) {
-        setInitializing(false);
+        if (currentState === "idle") {
+          await call.join({ create: true });
+          console.log("Successfully joined the call");
+        }
+      } catch (err) {
+        if (
+          err instanceof Error &&
+          err.message.includes("shall be called only once")
+        ) {
+          console.warn("Caught redundant join attempt safely");
+        } else {
+          console.error("Host join failed", err);
+        }
       }
     };
 
-    enableMedia();
+    joinCall();
+
+    const subscription = call.state.backstage$.subscribe((backstage) => {
+      setIsLive(!backstage);
+    });
 
     return () => {
-      cancelled = true;
-      call?.camera.disable().catch(() => undefined);
-      call?.microphone.disable().catch(() => undefined);
+      subscription.unsubscribe();
+      // Only leave if the component is actually unmounting permanently
+      // call.leave();
     };
-  }, [call]);
+  }, [call?.id]);
+
+  const handleToggleLive = async () => {
+    if (!call) return;
+
+    if (isLive) {
+      setShowEndConfirm(true);
+    } else {
+      setCountdown(3);
+    }
+  };
+
+  const confirmEnd = async () => {
+    setShowEndConfirm(false);
+    if (!call) return;
+    try {
+      await call.stopLive();
+      await onEndStream?.();
+    } catch (error) {
+      console.error("Stop Live Failed:", error);
+    }
+  };
+
+  useEffect(() => {
+    if (countdown === null) return;
+
+    if (countdown > 0) {
+      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+
+    if (countdown === 0) {
+      const startStream = async () => {
+        try {
+          await call?.goLive();
+          onStartStream?.();
+        } catch (error) {
+          console.error("Go Live Failed:", error);
+        } finally {
+          setCountdown(null);
+        }
+      };
+      startStream();
+    }
+  }, [countdown, call, onStartStream]);
 
   return (
     <View className="flex-1 bg-black">
-      <HostLivestream
-        onEndStreamHandler={onEndStream}
-        onStartStreamHandler={onStartStream}
-        disableStopPublishedStreamsOnEndStream
-      />
+      <Modal visible={showEndConfirm} transparent animationType="fade">
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            justifyContent: "center",
+            alignItems: "center",
+            padding: 20,
+          }}
+        >
+          <View
+            style={{
+              width: "100%",
+              maxWidth: 420,
+              backgroundColor: "#fff",
+              borderRadius: 12,
+              padding: 18,
+            }}
+          >
+            <Text style={{ fontSize: 18, fontWeight: "600", color: "#111" }}>
+              End Livestream?
+            </Text>
+            <Text style={{ marginTop: 8, color: "#4b5563" }}>
+              Are you sure you want to end the livestream? Viewers will be
+              disconnected.
+            </Text>
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "flex-end",
+                marginTop: 16,
+              }}
+            >
+              <TouchableOpacity
+                onPress={() => setShowEndConfirm(false)}
+                style={{
+                  marginRight: 12,
+                  paddingVertical: 8,
+                  paddingHorizontal: 14,
+                  borderRadius: 8,
+                  backgroundColor: "#e5e7eb",
+                }}
+              >
+                <Text style={{ color: "#111" }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={confirmEnd}
+                style={{
+                  paddingVertical: 8,
+                  paddingHorizontal: 14,
+                  backgroundColor: "#dc2626",
+                  borderRadius: 8,
+                }}
+              >
+                <Text style={{ color: "#fff", fontWeight: "600" }}>
+                  End Stream
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+      <View style={{ height: "70%", flexDirection: "row" }}>
+        <View style={{ width: "50%", backgroundColor: "#111" }}>
+          {call && call.state.localParticipant && (
+            <ParticipantView
+              participant={call.state.localParticipant}
+              style={{ flex: 1 }}
+              objectFit="cover"
+              ParticipantLabel={null}
+              ParticipantNetworkQualityIndicator={null}
+            />
+          )}
 
-      {(initializing || ending) && (
-        <View className="absolute inset-0 items-center justify-center bg-black/70">
-          <ActivityIndicator color="#fff" />
-          <Text className="mt-3 text-sm font-semibold text-white/80">
-            {ending ? "Ending stream…" : "Preparing your camera…"}
+          {countdown !== null && (
+            <View className="absolute inset-0 items-center justify-center bg-black/40">
+              <Text className="text-white text-6xl font-bold italic">
+                {countdown > 0 ? countdown : "GO!"}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        <View style={{ width: "50%", backgroundColor: "#1a1a1a" }}>
+          <View className="p-4">
+            <Text className="text-gray-500 italic">
+              Comments will appear here...
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      <View
+        style={{ height: "30%", width: "100%", backgroundColor: "#000" }}
+        className="p-4 justify-between"
+      >
+        <View className="flex-1 justify-center">
+          <Text className="text-white/50 text-center border border-dashed border-white/20 py-4 rounded-lg">
+            Drop Cards Here
           </Text>
         </View>
-      )}
+
+        {/* Control Buttons */}
+        <View className="flex-row items-center justify-around bg-zinc-900 rounded-2xl px-4 py-4 mb-4">
+          <TouchableOpacity onPress={() => camera.toggle()}>
+            <Text className="text-white font-medium">
+              {isCameraMuted ? "Cam Off" : "Cam On"}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={handleToggleLive}
+            disabled={countdown !== null}
+            className={`${
+              isLive ? "bg-zinc-700" : "bg-red-600"
+            } px-8 py-2 rounded-lg`}
+          >
+            <Text className="text-white font-bold">
+              {isLive ? "End Stream" : "Go Live"}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={() => microphone.toggle()}>
+            <Text className="text-white font-medium">
+              {isMicMuted ? "Mic Off" : "Mic On"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
     </View>
   );
 };
-
 interface ViewerCallContainerProps {
   onLeaveStream: () => void | Promise<void>;
   onCallJoined?: () => void | Promise<void>;
   ending: boolean;
 }
 
-const ViewerCallContainer: React.FC<ViewerCallContainerProps> = ({
-  onLeaveStream,
-  onCallJoined,
-  ending,
-}) => {
+const ViewerCallContainer: React.FC<ViewerCallContainerProps> = () => {
+  const call = useCall();
+  const { useParticipants, useCallCallingState } = useCallStateHooks();
+  const participants = useParticipants();
+  const callingState = useCallCallingState();
+
+  // 1. Viewer MUST join to see the participant list
   useEffect(() => {
-    onCallJoined?.();
-  }, [onCallJoined]);
+    if (!call) return;
+    if (call.state.callingState === "idle") {
+      call.join();
+    }
+  }, [call]);
+
+  // 2. Log the state to see what's happening
+  useEffect(() => {
+    console.log("Calling State:", callingState);
+    console.log("Participants Count:", participants.length);
+  }, [participants, callingState]);
+
+  // Find host
+  const hostParticipant = participants.find(
+    (p) =>
+      (p.roles ?? []).includes("host") ||
+      (p.roles ?? []).includes("admin") ||
+      p.userId === call?.state.createdBy?.id
+  );
 
   return (
     <View className="flex-1 bg-black">
-      <ViewerLivestream onLeaveStreamHandler={onLeaveStream} />
-
-      {ending && (
-        <View className="absolute inset-0 items-center justify-center bg-black/70">
-          <ActivityIndicator color="#fff" />
-          <Text className="mt-3 text-sm font-semibold text-white/80">
-            Leaving stream…
-          </Text>
+      {hostParticipant ? (
+        <ParticipantView
+          participant={hostParticipant}
+          style={{ flex: 1 }}
+          ParticipantNetworkQualityIndicator={null}
+          ParticipantLabel={null}
+          trackType="videoTrack"
+        />
+      ) : (
+        <View className="flex-1 items-center justify-center">
+          {callingState === "joining" ? (
+            <ActivityIndicator color="white" />
+          ) : (
+            <Text className="text-white mt-4">
+              Waiting for host to go live...
+            </Text>
+          )}
         </View>
       )}
     </View>

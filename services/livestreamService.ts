@@ -47,6 +47,21 @@ export function subscribeToLivestreams(onChange: () => void): () => void {
   return subscribeToLivestreamsShared(onChange);
 }
 
+export async function incrementLivestreamViewerCountAtomic(
+  id: string,
+  delta = 1
+): Promise<void> {
+  const { error } = await supabase.rpc("increment_viewer_count", {
+    p_id: id,
+    p_delta: delta,
+  });
+
+  if (error) {
+    console.error("Failed to increment viewer count atomically", error);
+    throw error;
+  }
+}
+
 const _livestreamsChannelState: {
   channel: ReturnType<typeof supabase.channel> | null;
   callbacks: Set<() => void>;
