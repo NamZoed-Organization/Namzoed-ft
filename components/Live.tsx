@@ -12,13 +12,19 @@ import {
   FlatList,
   Image,
   ImageBackground,
+  Keyboard,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
+  ViewStyle,
 } from "react-native";
 import {
   SafeAreaView,
@@ -38,6 +44,7 @@ import {
   subscribeToLivestreams,
   type Livestream,
 } from "@/services/livestreamService";
+import { Ionicons } from "@expo/vector-icons";
 import {
   ParticipantView,
   StreamCall,
@@ -47,6 +54,14 @@ import {
   type Call,
   type StreamVideoClient,
 } from "@stream-io/video-react-native-sdk";
+import Animated, {
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from "react-native-reanimated";
+import { supabase } from "../lib/supabase";
+import { LiveChat } from "./livechat";
 
 interface LiveScreenProps {
   onClose: () => void;
@@ -569,12 +584,17 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose }) => {
                   onEndStream={handleHostStreamEnd}
                   onStartStream={handleHostCallStart}
                   ending={endingStream}
+                  livestreamId={selectedStream?.id}
+                  hostId={selectedStream?.user_id}
+                  currentUserId={supabaseUserId}
                 />
               ) : (
                 <ViewerCallContainer
                   onLeaveStream={handleViewerLeave}
                   onCallJoined={handleViewerCallStart}
                   ending={endingStream}
+                  livestreamId={selectedStream?.id}
+                  hostId={selectedStream?.user_id}
                 />
               )}
 
@@ -943,265 +963,748 @@ interface HostCallContainerProps {
   onEndStream: () => void | Promise<void>;
   onStartStream?: () => void | Promise<void>;
   ending: boolean;
+  livestreamId?: string | null;
+  hostId?: string | null;
+  currentUserId?: string | null;
 }
 
 const HostCallContainer: React.FC<HostCallContainerProps> = ({
   onStartStream,
   onEndStream,
-  ending,
+  livestreamId,
+  hostId,
+  currentUserId,
 }) => {
   const call = useCall();
   const { useCameraState, useMicrophoneState } = useCallStateHooks();
 
   const { camera, isMute: isCameraMuted } = useCameraState();
   const { microphone, isMute: isMicMuted } = useMicrophoneState();
-  const [showEndConfirm, setShowEndConfirm] = useState(false);
 
-  // Manually track live status since the hook is missing
+  const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [isLive, setIsLive] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
+  const [myProducts, setMyProducts] = useState<any[]>([]);
+  const [sharedProducts, setSharedProducts] = useState<any[]>([]);
+  const [selectedProduct, setSelectedProduct] = useState<any | null>(null);
 
+  // --- ANIMATION LOGIC ---
+  const [isFullWidth, setIsFullWidth] = useState(false);
+  const layoutAnim = useSharedValue(0); // 0 = split, 1 = full
+
+  const toggleLayout = () => {
+    const nextValue = isFullWidth ? 0 : 1;
+    layoutAnim.value = withSpring(nextValue, {
+      damping: 15,
+      stiffness: 90,
+    });
+    setIsFullWidth(!isFullWidth);
+  };
+
+  const animatedVideoStyle = useAnimatedStyle<ViewStyle>(() => ({
+    width: `${interpolate(layoutAnim.value, [0, 1], [50, 100], "clamp")}%`,
+  }));
+
+  const animatedChatStyle = useAnimatedStyle<ViewStyle>(() => ({
+    width: `${interpolate(layoutAnim.value, [0, 1], [50, 100], "clamp")}%`,
+    position:
+      layoutAnim.value > 0.5 ? ("absolute" as const) : ("relative" as const),
+    right: 0,
+    height: "100%",
+    zIndex: 50,
+  }));
+
+  // --- STREAM LOGIC ---
   useEffect(() => {
     if (!call) return;
-
     const joinCall = async () => {
       try {
-        const currentState = call.state.callingState;
-
-        if (currentState === "idle") {
+        if (call.state.callingState === "idle") {
           await call.join({ create: true });
-          console.log("Successfully joined the call");
         }
       } catch (err) {
-        if (
-          err instanceof Error &&
-          err.message.includes("shall be called only once")
-        ) {
-          console.warn("Caught redundant join attempt safely");
-        } else {
-          console.error("Host join failed", err);
-        }
+        console.error("Host join failed", err);
       }
     };
-
     joinCall();
 
-    const subscription = call.state.backstage$.subscribe((backstage) => {
-      setIsLive(!backstage);
-    });
-
-    return () => {
-      subscription.unsubscribe();
-      // Only leave if the component is actually unmounting permanently
-      // call.leave();
-    };
+    const sub = call.state.backstage$.subscribe((bg) => setIsLive(!bg));
+    return () => sub.unsubscribe();
   }, [call?.id]);
 
-  const handleToggleLive = async () => {
-    if (!call) return;
+  const handleToggleLive = () => {
+    if (isLive) setShowEndConfirm(true);
+    else setCountdown(3);
+  };
 
-    if (isLive) {
-      setShowEndConfirm(true);
+  useEffect(() => {
+    if (countdown === null) return;
+    if (countdown > 0) {
+      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+    if (countdown === 0) {
+      call
+        ?.goLive()
+        .then(() => {
+          onStartStream?.();
+          setCountdown(null);
+        })
+        .catch(console.error);
+    }
+  }, [countdown]);
+
+  // Fetch host's products
+  useEffect(() => {
+    if (!currentUserId) return;
+    const fetchMyProducts = async () => {
+      const { data, error } = await supabase
+        .from("products")
+        .select("*")
+        .eq("user_id", currentUserId)
+        .order("created_at", { ascending: false });
+      if (error) {
+        console.error("Error fetching host products:", error);
+        return;
+      }
+      setMyProducts(data || []);
+    };
+    void fetchMyProducts();
+  }, [currentUserId]);
+
+  // Fetch shared products for this stream
+  const fetchSharedProducts = useCallback(async () => {
+    if (!livestreamId) return;
+    const { data, error } = await supabase
+      .from("stream_products")
+      .select("*")
+      .eq("live_stream_id", livestreamId)
+      .order("display_order", { ascending: true });
+    if (error) {
+      console.error("Error fetching stream products:", error);
+      return;
+    }
+
+    const rows = data || [];
+    const detailed = await Promise.all(
+      rows.map(async (row: any) => {
+        try {
+          const { data: prod } = await supabase
+            .from("products")
+            .select("*")
+            .eq("id", row.product_id)
+            .single();
+          return { ...row, product: prod };
+        } catch (e) {
+          return { ...row, product: null };
+        }
+      })
+    );
+    setSharedProducts(detailed);
+  }, [livestreamId]);
+
+  useEffect(() => {
+    void fetchSharedProducts();
+    if (!livestreamId) return;
+    const channel = supabase
+      .channel(`stream-products-${livestreamId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "stream_products",
+          filter: `live_stream_id=eq.${livestreamId}`,
+        },
+        async () => {
+          await fetchSharedProducts();
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "DELETE",
+          schema: "public",
+          table: "stream_products",
+          filter: `live_stream_id=eq.${livestreamId}`,
+        },
+        async () => {
+          await fetchSharedProducts();
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "stream_products",
+          filter: `live_stream_id=eq.${livestreamId}`,
+        },
+        async () => {
+          await fetchSharedProducts();
+        }
+      )
+      .subscribe();
+
+    return () => void supabase.removeChannel(channel);
+  }, [livestreamId, fetchSharedProducts]);
+
+  const toggleShareProduct = async (product: any) => {
+    if (!livestreamId) return;
+    const existing = sharedProducts.find(
+      (s) =>
+        String(s.product_id) === String(product.id) ||
+        String(s.product?.id) === String(product.id)
+    );
+    if (existing) {
+      await supabase
+        .from("stream_products")
+        .delete()
+        .match({
+          live_stream_id: livestreamId,
+          product_id: existing.product_id || product.id,
+        });
+      setSharedProducts((prev) =>
+        prev.filter((p) => String(p.product_id) !== String(product.id))
+      );
     } else {
-      setCountdown(3);
+      await supabase
+        .from("stream_products")
+        .insert({ live_stream_id: livestreamId, product_id: product.id });
+      setSharedProducts((prev) => [
+        { product_id: product.id, product },
+        ...prev,
+      ]);
     }
   };
 
   const confirmEnd = async () => {
     setShowEndConfirm(false);
-    if (!call) return;
     try {
-      await call.stopLive();
+      await call?.stopLive();
       await onEndStream?.();
     } catch (error) {
       console.error("Stop Live Failed:", error);
     }
   };
 
-  useEffect(() => {
-    if (countdown === null) return;
-
-    if (countdown > 0) {
-      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
-      return () => clearTimeout(timer);
-    }
-
-    if (countdown === 0) {
-      const startStream = async () => {
-        try {
-          await call?.goLive();
-          onStartStream?.();
-        } catch (error) {
-          console.error("Go Live Failed:", error);
-        } finally {
-          setCountdown(null);
-        }
-      };
-      startStream();
-    }
-  }, [countdown, call, onStartStream]);
-
   return (
-    <View className="flex-1 bg-black">
-      <Modal visible={showEndConfirm} transparent animationType="fade">
-        <View
-          style={{
-            flex: 1,
-            backgroundColor: "rgba(0,0,0,0.5)",
-            justifyContent: "center",
-            alignItems: "center",
-            padding: 20,
-          }}
-        >
-          <View
-            style={{
-              width: "100%",
-              maxWidth: 420,
-              backgroundColor: "#fff",
-              borderRadius: 12,
-              padding: 18,
-            }}
-          >
-            <Text style={{ fontSize: 18, fontWeight: "600", color: "#111" }}>
-              End Livestream?
-            </Text>
-            <Text style={{ marginTop: 8, color: "#4b5563" }}>
-              Are you sure you want to end the livestream? Viewers will be
-              disconnected.
-            </Text>
+    <KeyboardAvoidingView
+      className="flex-1 bg-black"
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
+      {/* End Stream Modal */}
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View className="flex-1">
+          <Modal visible={showEndConfirm} transparent animationType="fade">
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalContent}>
+                <Text style={styles.modalTitle}>End Livestream?</Text>
+                <Text style={styles.modalSub}>
+                  Are you sure you want to end the livestream?
+                </Text>
+                <View className="flex-row justify-end mt-4">
+                  <TouchableOpacity
+                    onPress={() => setShowEndConfirm(false)}
+                    style={styles.btnCancel}
+                  >
+                    <Text>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={confirmEnd} style={styles.btnEnd}>
+                    <Text className="text-white font-bold">End Stream</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </Modal>
+
+          {/* Product Details Modal for Host */}
+          <Modal visible={!!selectedProduct} transparent animationType="slide">
             <View
               style={{
-                flexDirection: "row",
-                justifyContent: "flex-end",
-                marginTop: 16,
+                flex: 1,
+                backgroundColor: "rgba(0,0,0,0.6)",
+                justifyContent: "center",
+                padding: 20,
               }}
             >
-              <TouchableOpacity
-                onPress={() => setShowEndConfirm(false)}
+              <View
                 style={{
-                  marginRight: 12,
-                  paddingVertical: 8,
-                  paddingHorizontal: 14,
-                  borderRadius: 8,
-                  backgroundColor: "#e5e7eb",
+                  backgroundColor: "#111",
+                  borderRadius: 12,
+                  padding: 16,
                 }}
               >
-                <Text style={{ color: "#111" }}>Cancel</Text>
+                {selectedProduct && (
+                  <>
+                    <Image
+                      source={{
+                        uri:
+                          selectedProduct.image_url ||
+                          selectedProduct.image ||
+                          selectedProduct.thumbnail ||
+                          selectedProduct.images?.[0] ||
+                          "https://picsum.photos/320/220",
+                      }}
+                      style={{ width: "100%", height: 200, borderRadius: 8 }}
+                    />
+                    <Text
+                      style={{
+                        color: "#fff",
+                        fontSize: 16,
+                        fontWeight: "700",
+                        marginTop: 10,
+                      }}
+                    >
+                      {selectedProduct.name || selectedProduct.title}
+                    </Text>
+                    <Text style={{ color: "#fff", marginTop: 6 }}>
+                      {selectedProduct.description || ""}
+                    </Text>
+                    <Text style={{ color: "#fff", marginTop: 8, fontSize: 15 }}>
+                      {selectedProduct.price
+                        ? `Nu ${selectedProduct.price}`
+                        : ""}{" "}
+                      {selectedProduct.is_discount_active
+                        ? ` • ${selectedProduct.discount_percent}% off`
+                        : ""}
+                    </Text>
+
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        justifyContent: "flex-end",
+                        marginTop: 14,
+                      }}
+                    >
+                      <TouchableOpacity
+                        onPress={() => setSelectedProduct(null)}
+                        style={{
+                          marginRight: 12,
+                          paddingVertical: 8,
+                          paddingHorizontal: 12,
+                          borderRadius: 8,
+                          backgroundColor: "#374151",
+                        }}
+                      >
+                        <Text style={{ color: "#fff" }}>Close</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={async () => {
+                          try {
+                            await toggleShareProduct(selectedProduct);
+                          } catch (e) {
+                            console.error(e);
+                          }
+                          // keep modal open briefly then close
+                          setTimeout(() => setSelectedProduct(null), 250);
+                        }}
+                        style={{
+                          paddingVertical: 8,
+                          paddingHorizontal: 12,
+                          borderRadius: 8,
+                          backgroundColor: "#DC2626",
+                        }}
+                      >
+                        <Text style={{ color: "#fff", fontWeight: "700" }}>
+                          {sharedProducts.some(
+                            (s) =>
+                              String(s.product_id) ===
+                              String(selectedProduct?.id)
+                          )
+                            ? "Unshare"
+                            : "Share"}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                )}
+              </View>
+            </View>
+          </Modal>
+
+          {/* TOP SECTION: 70% HEIGHT */}
+          <View style={{ height: "70%", flexDirection: "row" }}>
+            {/* VIDEO COLUMN */}
+            <Animated.View
+              style={[
+                animatedVideoStyle,
+                { backgroundColor: "#111", overflow: "hidden" },
+              ]}
+            >
+              {call?.state.localParticipant && (
+                <ParticipantView
+                  participant={call.state.localParticipant}
+                  style={{ flex: 1 }}
+                  objectFit="cover"
+                  ParticipantLabel={null}
+                  ParticipantNetworkQualityIndicator={null}
+                />
+              )}
+
+              {/* Toggle Button */}
+              <TouchableOpacity
+                onPress={toggleLayout}
+                activeOpacity={0.7}
+                style={styles.toggleBtn}
+                className="bg-black/50 p-2 rounded-full border border-white/20"
+              >
+                <Ionicons
+                  name={isFullWidth ? "contract" : "expand"}
+                  size={20}
+                  color="white"
+                />
               </TouchableOpacity>
-              <TouchableOpacity
-                onPress={confirmEnd}
+
+              {countdown !== null && (
+                <View className="absolute inset-0 items-center justify-center bg-black/40">
+                  <Text className="text-white text-6xl font-bold italic">
+                    {countdown > 0 ? countdown : "GO!"}
+                  </Text>
+                </View>
+              )}
+            </Animated.View>
+
+            {/* CHAT COLUMN / OVERLAY */}
+            <Animated.View
+              style={animatedChatStyle}
+              pointerEvents={isFullWidth ? "box-none" : "auto"}
+            >
+              <View
+                className="flex-1"
                 style={{
-                  paddingVertical: 8,
-                  paddingHorizontal: 14,
-                  backgroundColor: "#dc2626",
-                  borderRadius: 8,
+                  backgroundColor: isFullWidth ? "transparent" : "#1a1a1a",
+                  width: isFullWidth ? "90%" : "auto",
                 }}
               >
-                <Text style={{ color: "#fff", fontWeight: "600" }}>
-                  End Stream
+                <LiveChat
+                  liveStreamId={livestreamId}
+                  hostId={hostId}
+                  isHostView={true}
+                />
+              </View>
+            </Animated.View>
+          </View>
+
+          {/* BOTTOM SECTION: 30% HEIGHT */}
+          <View
+            style={{ height: "30%" }}
+            className="p-4 justify-between bg-black"
+          >
+            <View className="flex-1 justify-center">
+              {currentUserId && String(currentUserId) === String(hostId) ? (
+                // Host: show their products as stacked cards
+                <View>
+                  {myProducts.length === 0 ? (
+                    <Text className="text-white/50 text-center">
+                      No products found
+                    </Text>
+                  ) : (
+                    <FlatList
+                      horizontal
+                      data={myProducts}
+                      keyExtractor={(item) => item.id}
+                      showsHorizontalScrollIndicator={false}
+                      renderItem={({ item, index }) => {
+                        const isShared = sharedProducts.some(
+                          (s) =>
+                            String(s.product_id) === String(item.id) ||
+                            String(s.product?.id) === String(item.id)
+                        );
+                        return (
+                          <TouchableOpacity
+                            onPress={() => setSelectedProduct(item)}
+                            activeOpacity={0.9}
+                          >
+                            <View style={hostStyles.productCard}>
+                              <Image
+                                source={{
+                                  uri:
+                                    item.image_url ||
+                                    item.image ||
+                                    item.thumbnail ||
+                                    item.images?.[0] ||
+                                    "https://picsum.photos/160/120",
+                                }}
+                                style={hostStyles.productImage}
+                              />
+                              <Text
+                                style={hostStyles.productName}
+                                numberOfLines={1}
+                              >
+                                {item.name || item.title}
+                              </Text>
+                              <Text style={hostStyles.productPrice}>
+                                {item.price ? `Nu ${item.price}` : ""}{" "}
+                                {item.discount
+                                  ? ` • ${item.discount}% off`
+                                  : ""}
+                              </Text>
+                            </View>
+                          </TouchableOpacity>
+                        );
+                      }}
+                    />
+                  )}
+                </View>
+              ) : // Viewer: show currently shared products or placeholder
+              sharedProducts.length > 0 ? (
+                <FlatList
+                  horizontal
+                  data={sharedProducts}
+                  keyExtractor={(item) => item.id || item.product_id}
+                  showsHorizontalScrollIndicator={false}
+                  renderItem={({ item }) => (
+                    <View style={hostStyles.viewerSharedCard}>
+                      <Image
+                        source={{
+                          uri:
+                            item.product?.image_url ||
+                            item.product?.image ||
+                            item.product?.thumbnail ||
+                            item.product?.images?.[0] ||
+                            "https://picsum.photos/140/90",
+                        }}
+                        style={hostStyles.viewerSharedImage}
+                      />
+                      <Text
+                        style={hostStyles.viewerSharedTitle}
+                        numberOfLines={1}
+                      >
+                        {item.product?.name}
+                      </Text>
+                    </View>
+                  )}
+                />
+              ) : (
+                <Text className="text-white/50 text-center border border-dashed border-white/20 py-4 rounded-lg">
+                  Drop Cards Here
+                </Text>
+              )}
+            </View>
+
+            <View className="flex-row items-center justify-around bg-zinc-900 rounded-2xl px-4 py-4 mb-4">
+              <TouchableOpacity onPress={() => camera.toggle()}>
+                <Text className="text-white font-medium">
+                  {isCameraMuted ? "Cam Off" : "Cam On"}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={handleToggleLive}
+                disabled={countdown !== null}
+                className={`${
+                  isLive ? "bg-zinc-700" : "bg-red-600"
+                } px-8 py-2 rounded-lg`}
+              >
+                <Text className="text-white font-bold">
+                  {isLive ? "End Stream" : "Go Live"}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity onPress={() => microphone.toggle()}>
+                <Text className="text-white font-medium">
+                  {isMicMuted ? "Mic Off" : "Mic On"}
                 </Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
-      </Modal>
-      <View style={{ height: "70%", flexDirection: "row" }}>
-        <View style={{ width: "50%", backgroundColor: "#111" }}>
-          {call && call.state.localParticipant && (
-            <ParticipantView
-              participant={call.state.localParticipant}
-              style={{ flex: 1 }}
-              objectFit="cover"
-              ParticipantLabel={null}
-              ParticipantNetworkQualityIndicator={null}
-            />
-          )}
-
-          {countdown !== null && (
-            <View className="absolute inset-0 items-center justify-center bg-black/40">
-              <Text className="text-white text-6xl font-bold italic">
-                {countdown > 0 ? countdown : "GO!"}
-              </Text>
-            </View>
-          )}
-        </View>
-
-        <View style={{ width: "50%", backgroundColor: "#1a1a1a" }}>
-          <View className="p-4">
-            <Text className="text-gray-500 italic">
-              Comments will appear here...
-            </Text>
-          </View>
-        </View>
-      </View>
-
-      <View
-        style={{ height: "30%", width: "100%", backgroundColor: "#000" }}
-        className="p-4 justify-between"
-      >
-        <View className="flex-1 justify-center">
-          <Text className="text-white/50 text-center border border-dashed border-white/20 py-4 rounded-lg">
-            Drop Cards Here
-          </Text>
-        </View>
-
-        {/* Control Buttons */}
-        <View className="flex-row items-center justify-around bg-zinc-900 rounded-2xl px-4 py-4 mb-4">
-          <TouchableOpacity onPress={() => camera.toggle()}>
-            <Text className="text-white font-medium">
-              {isCameraMuted ? "Cam Off" : "Cam On"}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={handleToggleLive}
-            disabled={countdown !== null}
-            className={`${
-              isLive ? "bg-zinc-700" : "bg-red-600"
-            } px-8 py-2 rounded-lg`}
-          >
-            <Text className="text-white font-bold">
-              {isLive ? "End Stream" : "Go Live"}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity onPress={() => microphone.toggle()}>
-            <Text className="text-white font-medium">
-              {isMicMuted ? "Mic Off" : "Mic On"}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </View>
+      </TouchableWithoutFeedback>
+    </KeyboardAvoidingView>
   );
 };
+
+const styles = StyleSheet.create({
+  toggleBtn: {
+    position: "absolute",
+    bottom: 16,
+    right: 16,
+    zIndex: 100,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  modalContent: {
+    width: "100%",
+    maxWidth: 400,
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 20,
+  },
+  modalTitle: { fontSize: 18, fontWeight: "700", color: "#111" },
+  modalSub: { marginTop: 8, color: "#4b5563", lineHeight: 20 },
+  btnCancel: {
+    marginRight: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: "#f3f4f6",
+  },
+  btnEnd: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    backgroundColor: "#ef4444",
+    borderRadius: 8,
+  },
+});
+const hostStyles = StyleSheet.create({
+  productCard: {
+    width: 180,
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderRadius: 10,
+    padding: 10,
+    marginRight: 12,
+    alignItems: "center",
+  },
+  productImage: {
+    width: 160,
+    height: 110,
+    borderRadius: 8,
+    backgroundColor: "#222",
+  },
+  productName: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "700",
+    marginTop: 8,
+  },
+  productPrice: {
+    color: "#fff",
+    fontSize: 13,
+    marginTop: 4,
+    opacity: 0.9,
+  },
+  shareBtn: {
+    backgroundColor: "rgba(255,255,255,0.06)",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  shareBtnActive: {
+    backgroundColor: "rgba(234,179,8,0.95)",
+  },
+  shareBtnText: {
+    color: "#fff",
+    fontWeight: "700",
+  },
+  viewerSharedCard: {
+    width: 160,
+    marginRight: 10,
+    alignItems: "center",
+  },
+  viewerSharedImage: {
+    width: 140,
+    height: 90,
+    borderRadius: 8,
+  },
+  viewerSharedTitle: {
+    color: "#fff",
+    marginTop: 6,
+  },
+});
 interface ViewerCallContainerProps {
   onLeaveStream: () => void | Promise<void>;
   onCallJoined?: () => void | Promise<void>;
   ending: boolean;
+  livestreamId?: string | null;
+  hostId?: string | null;
 }
 
-const ViewerCallContainer: React.FC<ViewerCallContainerProps> = () => {
+const ViewerCallContainer: React.FC<ViewerCallContainerProps> = ({
+  onLeaveStream,
+  onCallJoined,
+  ending,
+  livestreamId,
+  hostId,
+}) => {
   const call = useCall();
   const { useParticipants, useCallCallingState } = useCallStateHooks();
   const participants = useParticipants();
   const callingState = useCallCallingState();
 
-  // 1. Viewer MUST join to see the participant list
+  const [isLive, setIsLive] = useState(false);
+  const [hostEnded, setHostEnded] = useState(false);
+  const [showHostEndedModal, setShowHostEndedModal] = useState(false);
+  const hadLiveRef = useRef(false);
+
+  const joinPromiseRef = useRef<Promise<any> | null>(null);
+
   useEffect(() => {
     if (!call) return;
-    if (call.state.callingState === "idle") {
-      call.join();
-    }
-  }, [call]);
+    const tryJoin = () => {
+      if (!call) return;
+      // If there's already an ongoing join attempt, skip.
+      if (joinPromiseRef.current) return;
 
-  // 2. Log the state to see what's happening
+      const state = call.state.callingState;
+      // Only initiate join when idle. If already joining, trust the existing attempt.
+      if (state !== "idle") return;
+
+      joinPromiseRef.current = call
+        .join()
+        .catch((err: any) => {
+          // Common SDK error when join() was already triggered elsewhere.
+          // Log for visibility but don't spam further attempts.
+          console.warn("Viewer join attempt failed", err);
+        })
+        .finally(() => {
+          // keep a small debounce before allowing another join attempt
+          setTimeout(() => {
+            joinPromiseRef.current = null;
+          }, 500);
+        });
+    };
+
+    // initial attempt (viewer may arrive before the host is live)
+    tryJoin();
+
+    const sub = call.state.backstage$?.subscribe((backstage) => {
+      const live = !backstage;
+      setIsLive(live);
+
+      if (live) {
+        // host started — ensure viewer tries to join (recover from stuck state)
+        hadLiveRef.current = true;
+        if (call.state.callingState !== "joined") {
+          tryJoin();
+        }
+      } else if (hadLiveRef.current) {
+        // Host went from live -> not live (ended)
+        setHostEnded(true);
+        setShowHostEndedModal(true);
+      }
+    });
+
+    const callingStateSub = (call.state as any).callingState$?.subscribe?.(
+      (s: string) => {
+        if (s === "joined") {
+          joinPromiseRef.current = null;
+          onCallJoined?.();
+        }
+        // if it falls back to idle, allow retries
+        if (s === "idle") {
+          joinPromiseRef.current = null;
+        }
+      }
+    );
+
+    return () => {
+      sub?.unsubscribe();
+      callingStateSub?.unsubscribe?.();
+    };
+  }, [call?.id]);
+
   useEffect(() => {
     console.log("Calling State:", callingState);
     console.log("Participants Count:", participants.length);
-  }, [participants, callingState]);
+    console.log("Is Live:", isLive);
+  }, [participants, callingState, isLive]);
 
-  // Find host
   const hostParticipant = participants.find(
     (p) =>
       (p.roles ?? []).includes("host") ||
@@ -1209,27 +1712,151 @@ const ViewerCallContainer: React.FC<ViewerCallContainerProps> = () => {
       p.userId === call?.state.createdBy?.id
   );
 
+  const handleLeaveAfterHostEnd = async () => {
+    setShowHostEndedModal(false);
+    try {
+      await onLeaveStream();
+    } catch {
+      // fallback: try leaving the call directly
+      try {
+        await call?.leave();
+      } catch {
+        /* ignore */
+      }
+    }
+  };
+
   return (
     <View className="flex-1 bg-black">
-      {hostParticipant ? (
-        <ParticipantView
-          participant={hostParticipant}
-          style={{ flex: 1 }}
-          ParticipantNetworkQualityIndicator={null}
-          ParticipantLabel={null}
-          trackType="videoTrack"
-        />
-      ) : (
-        <View className="flex-1 items-center justify-center">
-          {callingState === "joining" ? (
-            <ActivityIndicator color="white" />
-          ) : (
-            <Text className="text-white mt-4">
-              Waiting for host to go live...
-            </Text>
-          )}
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View className="flex-1">
+          <Modal visible={showHostEndedModal} transparent animationType="fade">
+            <View
+              style={{
+                flex: 1,
+                backgroundColor: "rgba(0,0,0,0.6)",
+                justifyContent: "center",
+                alignItems: "center",
+                padding: 20,
+              }}
+            >
+              <View
+                style={{
+                  width: "100%",
+                  maxWidth: 420,
+                  backgroundColor: "#111",
+                  borderRadius: 12,
+                  padding: 18,
+                }}
+              >
+                <Text
+                  style={{ fontSize: 18, fontWeight: "600", color: "#fff" }}
+                >
+                  The host has ended the livestream
+                </Text>
+                <Text style={{ marginTop: 8, color: "#9CA3AF" }}>
+                  The host stopped streaming. You can leave the call or wait to
+                  be returned to the list.
+                </Text>
+
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "flex-end",
+                    marginTop: 16,
+                  }}
+                >
+                  <TouchableOpacity
+                    onPress={() => setShowHostEndedModal(false)}
+                    style={{
+                      marginRight: 12,
+                      paddingVertical: 8,
+                      paddingHorizontal: 14,
+                      borderRadius: 8,
+                      backgroundColor: "#374151",
+                    }}
+                  >
+                    <Text style={{ color: "#fff" }}>Stay</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={handleLeaveAfterHostEnd}
+                    style={{
+                      paddingVertical: 8,
+                      paddingHorizontal: 14,
+                      backgroundColor: "#DC2626",
+                      borderRadius: 8,
+                    }}
+                  >
+                    <Text style={{ color: "#fff", fontWeight: "600" }}>
+                      Leave
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </Modal>
+          <View className="flex-1 bg-black">
+            {/* LAYER 1: VIDEO (Absolute Fill) */}
+            <View className="absolute inset-0">
+              {!isLive ? (
+                <View className="flex-1 items-center justify-center">
+                  {hostEnded ? (
+                    <View className="items-center px-6">
+                      <Text className="text-white/90 text-center mb-4">
+                        The host has ended the livestream.
+                      </Text>
+                      <TouchableOpacity
+                        onPress={handleLeaveAfterHostEnd}
+                        className="rounded-full bg-red-600 px-6 py-3"
+                      >
+                        <Text className="text-white font-semibold">Leave</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <Text className="text-white/80 text-center px-6">
+                      Waiting for the host to start the livestream...
+                    </Text>
+                  )}
+                </View>
+              ) : hostParticipant ? (
+                <ParticipantView
+                  participant={hostParticipant}
+                  style={{ flex: 1 }}
+                  ParticipantNetworkQualityIndicator={null}
+                  ParticipantLabel={null}
+                  trackType="videoTrack"
+                />
+              ) : (
+                <View className="flex-1 items-center justify-center">
+                  {callingState === "joining" ? (
+                    <ActivityIndicator color="white" />
+                  ) : (
+                    <Text className="text-white mt-4">
+                      Connecting to the stream…
+                    </Text>
+                  )}
+                </View>
+              )}
+            </View>
+
+            {/* LAYER 2: CHAT (Absolute Fill + Pointer Events) */}
+            <View className="absolute inset-0" pointerEvents="box-none">
+              <LiveChat
+                liveStreamId={livestreamId ?? null}
+                hostId={hostParticipant?.userId}
+                isHostView={false}
+              />
+            </View>
+
+            {/* LAYER 3: TOP UI */}
+            <View className="absolute top-14 left-4 flex-row items-center">
+              <View className="bg-red-600 px-2 py-0.5 rounded-sm">
+                <Text className="text-white text-[10px] font-bold">LIVE</Text>
+              </View>
+            </View>
+          </View>
         </View>
-      )}
+      </TouchableWithoutFeedback>
     </View>
   );
 };
