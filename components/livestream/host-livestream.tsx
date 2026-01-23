@@ -2,10 +2,18 @@ import {
   LivestreamPlayer,
   StreamCall,
   useCall,
+  useCallStateHooks,
 } from "@stream-io/video-react-native-sdk";
 import { Camera } from "expo-camera";
 import React, { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  Text,
+  View,
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 
 type Props = {
   callId: string;
@@ -21,6 +29,8 @@ export function HostLivestreamScreen({ callId }: Props) {
 
 function HostLivestreamUI({ callId }: { callId: string }) {
   const call = useCall();
+  const { useCameraState } = useCallStateHooks();
+  const { camera, optimisticIsMute, direction } = useCameraState();
 
   const [live, setLive] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -83,6 +93,36 @@ function HostLivestreamUI({ callId }: { callId: string }) {
 
       {/* CUSTOM CONTROLS */}
       <View className="absolute bottom-10 left-0 right-0 flex-row justify-center gap-4">
+        {live && (
+          <Pressable
+            onPress={async () => {
+              if (optimisticIsMute) return;
+              const cameraGranted = await ensureCameraPermission();
+              if (!cameraGranted) return;
+              try {
+                await camera.flip();
+              } catch (error) {
+                console.warn("Failed to switch camera:", error);
+              }
+            }}
+            className={`px-4 py-2 rounded-xl ${
+              optimisticIsMute ? "bg-gray-700" : "bg-gray-800"
+            }`}
+            disabled={optimisticIsMute}
+          >
+            <Ionicons
+              name="camera-reverse"
+              size={20}
+              color={
+                optimisticIsMute
+                  ? "#9CA3AF"
+                  : direction === "back"
+                    ? "#ef4444"
+                    : "#fff"
+              }
+            />
+          </Pressable>
+        )}
         {!live ? (
           <Pressable
             onPress={startLive}
