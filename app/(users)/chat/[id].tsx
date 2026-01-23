@@ -247,6 +247,62 @@ export default function ChatScreen() {
   const mongooseName = isMongooseChat ? id.replace("mongoose-", "") : null;
   const chatPartnerId = Array.isArray(id) ? id[0] : id;
 
+  // Combine original messages with local messages
+  const allMessages = useMemo(() => {
+    // Merge and dedupe by id. Prefer server `messages` over `localMessages` when IDs collide.
+    const map = new Map<string | number, any>();
+
+    // Add server messages first
+    for (const m of messages) {
+      if (m && m.id != null) map.set(String(m.id), m);
+    }
+
+    // Add local messages only if id not present (optimistic temp ids preserved)
+    for (const m of localMessages) {
+      if (!m) continue;
+      const key = String(m.id);
+      if (!map.has(key)) map.set(key, m);
+    }
+
+    return Array.from(map.values());
+  }, [messages, localMessages]);
+
+  const chatPartnerName = useMemo(() => {
+    if (isLoadingPartner) {
+      return "Loading...";
+    }
+
+    if (isMongooseChat && mongooseName) {
+      return `${mongooseName} (Mongoose)`;
+    }
+
+    if (chatPartnerData) {
+      // Prioritize actual names over phone numbers
+      // Use the hierarchy: name -> username -> full_name -> display_name
+      const name =
+        chatPartnerData.name ||
+        chatPartnerData.username ||
+        chatPartnerData.full_name ||
+        chatPartnerData.display_name;
+
+      // Only show phone number if no name is available or if it's a generic "User X" name
+      if (
+        name &&
+        name !== chatPartnerData.phone_number &&
+        !name.startsWith("User ")
+      ) {
+        return name;
+      }
+
+      // If we only have phone number, try to format it nicely
+      if (chatPartnerData.phone_number) {
+        return `+975${chatPartnerData.phone_number}`;
+      }
+    }
+
+    return "Unknown User";
+  }, [chatPartnerData, isMongooseChat, mongooseName, isLoadingPartner]);
+
   // Load chat partner data
   useEffect(() => {
     const loadChatPartnerData = async () => {
@@ -489,62 +545,6 @@ export default function ChatScreen() {
     };
   }, [currentUser?.phone_number, chatPartnerId, currentUserUUID]);
 
-  const chatPartnerName = useMemo(() => {
-    if (isLoadingPartner) {
-      return "Loading...";
-    }
-
-    if (isMongooseChat && mongooseName) {
-      return `${mongooseName} (Mongoose)`;
-    }
-
-    if (chatPartnerData) {
-      // Prioritize actual names over phone numbers
-      // Use the hierarchy: name -> username -> full_name -> display_name
-      const name =
-        chatPartnerData.name ||
-        chatPartnerData.username ||
-        chatPartnerData.full_name ||
-        chatPartnerData.display_name;
-
-      // Only show phone number if no name is available or if it's a generic "User X" name
-      if (
-        name &&
-        name !== chatPartnerData.phone_number &&
-        !name.startsWith("User ")
-      ) {
-        return name;
-      }
-
-      // If we only have phone number, try to format it nicely
-      if (chatPartnerData.phone_number) {
-        return `+975${chatPartnerData.phone_number}`;
-      }
-    }
-
-    return "Unknown User";
-  }, [chatPartnerData, isMongooseChat, mongooseName, isLoadingPartner]);
-
-  // Combine original messages with local messages
-  const allMessages = useMemo(() => {
-    // Merge and dedupe by id. Prefer server `messages` over `localMessages` when IDs collide.
-    const map = new Map<string | number, any>();
-
-    // Add server messages first
-    for (const m of messages) {
-      if (m && m.id != null) map.set(String(m.id), m);
-    }
-
-    // Add local messages only if id not present (optimistic temp ids preserved)
-    for (const m of localMessages) {
-      if (!m) continue;
-      const key = String(m.id);
-      if (!map.has(key)) map.set(key, m);
-    }
-
-    return Array.from(map.values());
-  }, [messages, localMessages]);
-
   // Auto-scroll to bottom when new messages are added
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -606,7 +606,14 @@ export default function ChatScreen() {
   if (!currentUser) {
     return (
       <View className="flex-1 items-center justify-center bg-background">
-        <Text className="text-gray-500">Please login to view messages</Text>
+        <Ionicons name="person-circle-outline" size={80} color="#9ca3af" />
+        <Text className="text-gray-500 text-lg mt-4">Please login to view messages</Text>
+        <TouchableOpacity
+          onPress={() => router.push('/login')}
+          className="mt-6 bg-primary px-6 py-3 rounded-full"
+        >
+          <Text className="text-white font-semibold">Go to Login</Text>
+        </TouchableOpacity>
       </View>
     );
   }

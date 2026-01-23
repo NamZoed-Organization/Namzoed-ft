@@ -77,7 +77,8 @@
         "projectId": "713fdf5d-51e5-4851-b15b-426a1dcf750f"
       },
       "BT_SMS_API": "http://52.66.255.185/api/send-sms/bt",
-      "TASHI_SMS_API": "http://52.66.255.185/api/send-sms/tashicell"
+      "TASHI_SMS_API": "http://52.66.255.185/api/send-sms/tashicell",
+      "GOOGLE_MAPS_API_KEY": "AIzaSyAFL1VPcsaURX96V8uDwDvwXkOOWaOYzv8"
     }
   }
 }
