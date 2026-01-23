@@ -1,8 +1,12 @@
-import { serviceCategories } from '@/data/servicecategory';
-import { createProviderService } from '@/lib/servicesService';
-import * as ImagePicker from 'expo-image-picker';
-import { ChevronDown, ChevronUp, Upload, X } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import ImageCropperOverlay from "@/components/modals/ImageCropperOverlay";
+import ImagePickerSheet from "@/components/ui/ImagePickerSheet";
+import PopupMessage from "@/components/ui/PopupMessage";
+import { serviceCategories } from "@/data/servicecategory";
+import { createProviderService } from "@/lib/servicesService";
+import { BlurView } from "expo-blur";
+import * as ImagePicker from "expo-image-picker";
+import { ChevronDown, ChevronUp, Upload, X } from "lucide-react-native";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -14,17 +18,13 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
-} from 'react-native';
-import PopupMessage from '@/components/ui/PopupMessage';
-import ImagePickerSheet from '@/components/ui/ImagePickerSheet';
-import ImageCropperOverlay from '@/components/ImageCropperOverlay';
+  View,
+} from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
-  withTiming
-} from 'react-native-reanimated';
-import { BlurView } from 'expo-blur';
+  withTiming,
+} from "react-native-reanimated";
 
 interface AddServicesModalProps {
   isVisible: boolean;
@@ -33,13 +33,18 @@ interface AddServicesModalProps {
   onSuccess: () => void;
 }
 
-export default function AddServicesModal({ isVisible, onClose, userId, onSuccess }: AddServicesModalProps) {
+export default function AddServicesModal({
+  isVisible,
+  onClose,
+  userId,
+  onSuccess,
+}: AddServicesModalProps) {
   const [loading, setLoading] = useState(false);
 
   // Popup states
   const [showSuccess, setShowSuccess] = useState(false);
   const [showError, setShowError] = useState(false);
-  const [popupMessage, setPopupMessage] = useState('');
+  const [popupMessage, setPopupMessage] = useState("");
 
   // Popup helpers
   const showErrorPopup = (message: string) => {
@@ -58,9 +63,9 @@ export default function AddServicesModal({ isVisible, onClose, userId, onSuccess
   };
 
   // Form State
-  const [selectedCategory, setSelectedCategory] = useState<string>('');
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>("");
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
   const [images, setImages] = useState<string[]>([]);
   const [isCategoryExpanded, setIsCategoryExpanded] = useState(false);
 
@@ -81,15 +86,15 @@ export default function AddServicesModal({ isVisible, onClose, userId, onSuccess
   }, [isVisible]);
 
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value }]
+    transform: [{ translateY: translateY.value }],
   }));
 
   // Reset form when modal closes
   useEffect(() => {
     if (!isVisible) {
-      setSelectedCategory('');
-      setName('');
-      setDescription('');
+      setSelectedCategory("");
+      setName("");
+      setDescription("");
       setImages([]);
       setIsCategoryExpanded(false);
     }
@@ -97,8 +102,11 @@ export default function AddServicesModal({ isVisible, onClose, userId, onSuccess
 
   const openCamera = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission Required', 'Camera access is needed to take photos.');
+    if (status !== "granted") {
+      Alert.alert(
+        "Permission Required",
+        "Camera access is needed to take photos.",
+      );
       return;
     }
 
@@ -115,7 +123,7 @@ export default function AddServicesModal({ isVisible, onClose, userId, onSuccess
 
   const openGallery = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
+      mediaTypes: ["images"],
       allowsEditing: false,
       quality: 1.0,
     });
@@ -147,29 +155,31 @@ export default function AddServicesModal({ isVisible, onClose, userId, onSuccess
 
   // Get selected category name
   const getSelectedCategoryName = () => {
-    const category = serviceCategories.find(cat => cat.slug === selectedCategory);
+    const category = serviceCategories.find(
+      (cat) => cat.slug === selectedCategory,
+    );
     return category ? category.name : null;
   };
 
   const handleSubmit = async () => {
     // Validation
     if (!selectedCategory) {
-      showErrorPopup('Please select a service category.');
+      showErrorPopup("Please select a service category.");
       return;
     }
 
     if (!name.trim()) {
-      showErrorPopup('Please provide a name for your service.');
+      showErrorPopup("Please provide a name for your service.");
       return;
     }
 
     if (!description.trim()) {
-      showErrorPopup('Please provide a description for your service.');
+      showErrorPopup("Please provide a description for your service.");
       return;
     }
 
     if (images.length === 0) {
-      showErrorPopup('Please add at least one image for your service.');
+      showErrorPopup("Please add at least one image for your service.");
       return;
     }
 
@@ -177,9 +187,15 @@ export default function AddServicesModal({ isVisible, onClose, userId, onSuccess
 
     try {
       // Create provider service
-      await createProviderService(userId, selectedCategory, name, description, images);
+      await createProviderService(
+        userId,
+        selectedCategory,
+        name,
+        description,
+        images,
+      );
 
-      showSuccessPopup('Service added successfully!', () => {
+      showSuccessPopup("Service added successfully!", () => {
         onSuccess();
         onClose();
       });
@@ -187,8 +203,10 @@ export default function AddServicesModal({ isVisible, onClose, userId, onSuccess
       console.error("Create service error:", error);
 
       // Check for duplicate service error
-      if (error.code === '23505') {
-        showErrorPopup('You have already added this service category. Please edit your existing service instead.');
+      if (error.code === "23505") {
+        showErrorPopup(
+          "You have already added this service category. Please edit your existing service instead.",
+        );
       } else {
         showErrorPopup(error.message || "Failed to add service");
       }
@@ -213,13 +231,20 @@ export default function AddServicesModal({ isVisible, onClose, userId, onSuccess
         >
           <View className="flex-1 bg-black/50 justify-end">
             <View className="bg-white rounded-t-3xl h-[90%] w-full overflow-hidden">
-
               {/* Header */}
-              <BlurView intensity={90} tint="light" className="border-b border-gray-200/50">
+              <BlurView
+                intensity={90}
+                tint="light"
+                className="border-b border-gray-200/50"
+              >
                 <View className="flex-row justify-between items-center px-6 py-4">
                   <View>
-                    <Text className="text-2xl font-mbold text-gray-900">Add Service</Text>
-                    <Text className="text-gray-500 text-xs font-mregular">List your professional service</Text>
+                    <Text className="text-2xl font-mbold text-gray-900">
+                      Add Service
+                    </Text>
+                    <Text className="text-gray-500 text-xs font-mregular">
+                      List your professional service
+                    </Text>
                   </View>
                   <TouchableOpacity
                     onPress={onClose}
@@ -230,8 +255,10 @@ export default function AddServicesModal({ isVisible, onClose, userId, onSuccess
                 </View>
               </BlurView>
 
-              <ScrollView className="flex-1 px-5" showsVerticalScrollIndicator={false}>
-
+              <ScrollView
+                className="flex-1 px-5"
+                showsVerticalScrollIndicator={false}
+              >
                 {/* Category Selection - Accordion Style */}
                 <View className="mt-5">
                   {/* Header with selected category */}
@@ -257,7 +284,7 @@ export default function AddServicesModal({ isVisible, onClose, userId, onSuccess
                     activeOpacity={0.7}
                   >
                     <Text className="text-gray-700 text-sm">
-                      {getSelectedCategoryName() || 'Select a category'}
+                      {getSelectedCategoryName() || "Select a category"}
                     </Text>
                     {isCategoryExpanded ? (
                       <ChevronUp size={20} color="#6B7280" />
@@ -279,16 +306,18 @@ export default function AddServicesModal({ isVisible, onClose, userId, onSuccess
                             }}
                             className={`px-3 py-2 rounded-lg border flex-row items-center ${
                               selectedCategory === category.slug
-                                ? 'bg-primary border-primary'
-                                : 'bg-white border-gray-300'
+                                ? "bg-primary border-primary"
+                                : "bg-white border-gray-300"
                             }`}
                           >
                             {/* Radio button indicator */}
-                            <View className={`w-4 h-4 rounded-full border-2 mr-2 items-center justify-center ${
-                              selectedCategory === category.slug
-                                ? 'border-white'
-                                : 'border-gray-400'
-                            }`}>
+                            <View
+                              className={`w-4 h-4 rounded-full border-2 mr-2 items-center justify-center ${
+                                selectedCategory === category.slug
+                                  ? "border-white"
+                                  : "border-gray-400"
+                              }`}
+                            >
                               {selectedCategory === category.slug && (
                                 <View className="w-2 h-2 rounded-full bg-white" />
                               )}
@@ -296,8 +325,8 @@ export default function AddServicesModal({ isVisible, onClose, userId, onSuccess
                             <Text
                               className={`text-xs ${
                                 selectedCategory === category.slug
-                                  ? 'text-white font-semibold'
-                                  : 'text-gray-700'
+                                  ? "text-white font-semibold"
+                                  : "text-gray-700"
                               }`}
                             >
                               {category.name}
@@ -351,12 +380,18 @@ export default function AddServicesModal({ isVisible, onClose, userId, onSuccess
                   <Text className="text-xs text-gray-500 mb-3">
                     Add photos of your work, equipment, or location
                   </Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row">
-
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    className="flex-row"
+                  >
                     {/* Selected Images */}
                     {images.map((uri, index) => (
                       <View key={index} className="relative mr-3">
-                        <Image source={{ uri }} className="w-24 h-24 rounded-xl" />
+                        <Image
+                          source={{ uri }}
+                          className="w-24 h-24 rounded-xl"
+                        />
                         <TouchableOpacity
                           onPress={() => removeImage(index)}
                           className="absolute -top-2 -right-2 bg-red-500 rounded-full p-1 border-2 border-white"
@@ -372,7 +407,9 @@ export default function AddServicesModal({ isVisible, onClose, userId, onSuccess
                       className="w-24 h-24 border-2 border-dashed border-gray-300 rounded-xl justify-center items-center mr-3 bg-gray-50"
                     >
                       <Upload size={24} color="#9CA3AF" />
-                      <Text className="text-xs text-gray-400 mt-1">Add Photo</Text>
+                      <Text className="text-xs text-gray-400 mt-1">
+                        Add Photo
+                      </Text>
                     </TouchableOpacity>
                   </ScrollView>
                 </View>
@@ -382,30 +419,39 @@ export default function AddServicesModal({ isVisible, onClose, userId, onSuccess
               </ScrollView>
 
               {/* Submit Button */}
-              <BlurView intensity={80} tint="light" className="absolute bottom-0 left-0 right-0 border-t border-gray-200/50">
+              <BlurView
+                intensity={80}
+                tint="light"
+                className="absolute bottom-0 left-0 right-0 border-t border-gray-200/50"
+              >
                 <View className="p-5">
                   <TouchableOpacity
                     onPress={handleSubmit}
                     disabled={loading}
                     className={`w-full py-4 rounded-[24px] flex-row justify-center items-center shadow-lg ${
-                      loading ? 'bg-gray-300' : 'bg-primary'
+                      loading ? "bg-gray-300" : "bg-primary"
                     }`}
                   >
                     {loading ? (
                       <ActivityIndicator color="white" />
                     ) : (
-                      <Text className="text-white font-mbold text-lg">Add Service</Text>
+                      <Text className="text-white font-mbold text-lg">
+                        Add Service
+                      </Text>
                     )}
                   </TouchableOpacity>
                 </View>
               </BlurView>
-
             </View>
           </View>
         </KeyboardAvoidingView>
 
         {/* Success/Error Popups */}
-        <PopupMessage visible={showSuccess} type="success" message={popupMessage} />
+        <PopupMessage
+          visible={showSuccess}
+          type="success"
+          message={popupMessage}
+        />
         <PopupMessage visible={showError} type="error" message={popupMessage} />
 
         {/* Image Picker Sheet */}

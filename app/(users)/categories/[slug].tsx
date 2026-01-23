@@ -1,23 +1,45 @@
 // app/(users)/categories/[slug].tsx
 import ProductGrid from "@/components/ProductGrid";
-import SearchBar from "@/components/SearchBar";
+import SearchBar from "@/components/modals/SearchBar";
 import TopNavbar from "@/components/ui/TopNavbar";
 import { categories as categoryData, SubCategory } from "@/data/categories";
-import { fetchProductsByCategory, ProductWithUser } from "@/lib/productsService";
+import {
+  fetchProductsByCategory,
+  ProductWithUser,
+} from "@/lib/productsService";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { ArrowUpDown, ChevronLeft } from "lucide-react-native";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, BackHandler, RefreshControl, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  Animated,
+  BackHandler,
+  RefreshControl,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
 export default function CategoryDetailScreen() {
   const router = useRouter();
-  const { slug, filter } = useLocalSearchParams<{ slug: string; filter?: string }>();
+  const { slug, filter } = useLocalSearchParams<{
+    slug: string;
+    filter?: string;
+  }>();
 
   const [products, setProducts] = useState<ProductWithUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [sortMode, setSortMode] = useState<"latest" | "oldest" | "cheapest" | "priciest">("latest");
+  const [sortMode, setSortMode] = useState<
+    "latest" | "oldest" | "cheapest" | "priciest"
+  >("latest");
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -35,12 +57,16 @@ export default function CategoryDetailScreen() {
     electronics: "Smart tech for smarter lives.",
     "home-and-living": "Make your space truly yours.",
   };
-  const tagline = categoryTaglines[categoryKey] || "Discover something amazing.";
+  const tagline =
+    categoryTaglines[categoryKey] || "Discover something amazing.";
 
   const loadProducts = async () => {
     setLoading(true);
     try {
-      const { products: data } = await fetchProductsByCategory(categoryKey, activeFilter);
+      const { products: data } = await fetchProductsByCategory(
+        categoryKey,
+        activeFilter,
+      );
       setProducts(data);
     } catch (err) {
       console.error("Error loading products:", err);
@@ -57,13 +83,16 @@ export default function CategoryDetailScreen() {
   // Handle Android back button - re-register on focus
   useFocusEffect(
     useCallback(() => {
-      const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
-        handleBackPress();
-        return true; // Prevent default back behavior
-      });
+      const backHandler = BackHandler.addEventListener(
+        "hardwareBackPress",
+        () => {
+          handleBackPress();
+          return true; // Prevent default back behavior
+        },
+      );
 
       return () => backHandler.remove();
-    }, [])
+    }, []),
   );
 
   // Refresh data when screen comes into focus
@@ -72,7 +101,7 @@ export default function CategoryDetailScreen() {
       if (categoryKey) {
         loadProducts();
       }
-    }, [categoryKey, activeFilter])
+    }, [categoryKey, activeFilter]),
   );
 
   // Fade-in animation when data loads
@@ -114,18 +143,25 @@ export default function CategoryDetailScreen() {
 
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      result = result.filter(p =>
-        p.name.toLowerCase().includes(query) ||
-        (p.description && p.description.toLowerCase().includes(query)) ||
-        (p.tags && p.tags.some(tag => tag.toLowerCase().includes(query)))
+      result = result.filter(
+        (p) =>
+          p.name.toLowerCase().includes(query) ||
+          (p.description && p.description.toLowerCase().includes(query)) ||
+          (p.tags && p.tags.some((tag) => tag.toLowerCase().includes(query))),
       );
     }
 
     // Sort based on sortMode
     if (sortMode === "latest") {
-      result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      result.sort(
+        (a, b) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+      );
     } else if (sortMode === "oldest") {
-      result.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      result.sort(
+        (a, b) =>
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+      );
     } else if (sortMode === "cheapest") {
       result.sort((a, b) => a.price - b.price);
     } else if (sortMode === "priciest") {
@@ -144,7 +180,7 @@ export default function CategoryDetailScreen() {
   };
 
   const handleBackPress = () => {
-    router.push('/categories');
+    router.push("/categories");
   };
 
   if (!slug) return null;
@@ -161,9 +197,9 @@ export default function CategoryDetailScreen() {
             width: 40,
             height: 40,
             borderRadius: 12,
-            backgroundColor: '#f5f5f5',
-            justifyContent: 'center',
-            alignItems: 'center',
+            backgroundColor: "#f5f5f5",
+            justifyContent: "center",
+            alignItems: "center",
           }}
         >
           <ChevronLeft size={24} color="#1a1a1a" strokeWidth={2.5} />
@@ -192,17 +228,23 @@ export default function CategoryDetailScreen() {
             <Text className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-1">
               {categoryKey.replace(/-/g, " ")}
             </Text>
-            <Text className="text-xl font-bold text-gray-900">
-              {tagline}
-            </Text>
+            <Text className="text-xl font-bold text-gray-900">{tagline}</Text>
           </View>
 
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-1">
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            className="mb-1"
+          >
             <TouchableOpacity
               className={`px-4 py-2 mr-2 rounded-full border ${!activeFilter ? "bg-black border-black" : "bg-white border-gray-200"}`}
               onPress={() => router.setParams({ filter: undefined })}
             >
-              <Text className={`text-sm font-medium ${!activeFilter ? "text-white" : "text-gray-700"}`}>All</Text>
+              <Text
+                className={`text-sm font-medium ${!activeFilter ? "text-white" : "text-gray-700"}`}
+              >
+                All
+              </Text>
             </TouchableOpacity>
 
             {subcategories.map((sub) => (
@@ -211,7 +253,9 @@ export default function CategoryDetailScreen() {
                 className={`px-4 py-2 mr-2 rounded-full border ${activeFilter === sub.name ? "bg-black border-black" : "bg-white border-gray-200"}`}
                 onPress={() => handleFilterPress(sub.name)}
               >
-                <Text className={`text-sm font-medium ${activeFilter === sub.name ? "text-white" : "text-gray-700"}`}>
+                <Text
+                  className={`text-sm font-medium ${activeFilter === sub.name ? "text-white" : "text-gray-700"}`}
+                >
                   {sub.name}
                 </Text>
               </TouchableOpacity>
@@ -226,7 +270,9 @@ export default function CategoryDetailScreen() {
           <TouchableOpacity
             onPress={() => {
               // Cycle: latest → oldest → cheapest → priciest → latest
-              const order: Array<"latest" | "oldest" | "cheapest" | "priciest"> = ["latest", "oldest", "cheapest", "priciest"];
+              const order: Array<
+                "latest" | "oldest" | "cheapest" | "priciest"
+              > = ["latest", "oldest", "cheapest", "priciest"];
               const currentIndex = order.indexOf(sortMode);
               const nextIndex = (currentIndex + 1) % order.length;
               setSortMode(order[nextIndex]);

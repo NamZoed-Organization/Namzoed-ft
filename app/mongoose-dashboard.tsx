@@ -1,4 +1,4 @@
-import LocationTrackingControl from "@/components/LocationTrackingControl";
+import LocationTrackingControl from "@/components/location/LocationTrackingControl";
 import { useUser } from "@/contexts/UserContext";
 import { supabase } from "@/lib/supabase";
 import { isMongooseUser, MONGOOSE_EMAIL } from "@/utils/roleCheck";
@@ -47,8 +47,11 @@ export default function MongooseDashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
-  const [selectedBookingForMap, setSelectedBookingForMap] = useState<BookingRequest | null>(null);
-  const [mapType, setMapType] = useState<'standard' | 'satellite' | 'hybrid'>('standard');
+  const [selectedBookingForMap, setSelectedBookingForMap] =
+    useState<BookingRequest | null>(null);
+  const [mapType, setMapType] = useState<"standard" | "satellite" | "hybrid">(
+    "standard",
+  );
   const debounceTimerRef = useRef<number | null>(null);
   const hasLoadedRef = useRef(false);
 
@@ -57,18 +60,21 @@ export default function MongooseDashboard() {
     try {
       // Check if there are any accepted bookings - if yes, mongoose is not available
       const { data: acceptedBookings, error } = await supabase
-        .from('booking_requests')
-        .select('id')
-        .eq('mongoose_email', MONGOOSE_EMAIL)
-        .eq('status', 'accepted')
+        .from("booking_requests")
+        .select("id")
+        .eq("mongoose_email", MONGOOSE_EMAIL)
+        .eq("status", "accepted")
         .limit(1);
 
       if (error) {
-        console.error('Error checking availability:', error);
+        console.error("Error checking availability:", error);
       } else {
         // If there are accepted bookings, mongoose is busy (not available)
         const available = !acceptedBookings || acceptedBookings.length === 0;
-        console.log('📊 Mongoose availability status:', available ? 'AVAILABLE' : 'IN PROGRESS');
+        console.log(
+          "📊 Mongoose availability status:",
+          available ? "AVAILABLE" : "IN PROGRESS",
+        );
         setIsAvailable(available);
       }
     } catch (error) {
@@ -88,8 +94,13 @@ export default function MongooseDashboard() {
 
       if (error) {
         // Table doesn't exist yet - just log and continue
-        if (error.code === "PGRST205" || error.message.includes("could not find")) {
-          console.log("Info: booking_requests table not created yet. Run the migration first.");
+        if (
+          error.code === "PGRST205" ||
+          error.message.includes("could not find")
+        ) {
+          console.log(
+            "Info: booking_requests table not created yet. Run the migration first.",
+          );
           setBookingRequests([]);
         } else {
           console.error("Error loading bookings:", error);
@@ -120,7 +131,10 @@ export default function MongooseDashboard() {
   useEffect(() => {
     const checkAccess = async () => {
       if (!currentUser || !isMongooseUser(currentUser.email)) {
-        Alert.alert("Access Denied", "You don't have permission to access this page.");
+        Alert.alert(
+          "Access Denied",
+          "You don't have permission to access this page.",
+        );
         router.replace("/(users)");
       } else if (!hasLoadedRef.current) {
         hasLoadedRef.current = true;
@@ -133,33 +147,37 @@ export default function MongooseDashboard() {
   useEffect(() => {
     if (!currentUser || !isMongooseUser(currentUser.email)) return;
 
-    console.log('🔔 Setting up real-time subscription for mongoose dashboard');
+    console.log("🔔 Setting up real-time subscription for mongoose dashboard");
 
     const channel = supabase
-      .channel('mongoose_dashboard_realtime')
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'booking_requests',
-        filter: `mongoose_email=eq.${MONGOOSE_EMAIL}`
-      }, (payload) => {
-        console.log('📨 Booking changed in real-time:', payload.eventType);
-        
-        // Debounce the refresh to prevent rapid consecutive updates
-        if (debounceTimerRef.current) {
-          clearTimeout(debounceTimerRef.current);
-        }
-        
-        debounceTimerRef.current = setTimeout(() => {
-          console.log('🔄 Refreshing data after debounce...');
-          loadBookingRequests();
-          loadAvailabilityStatus();
-        }, 1000); // Wait 1 second before updating
-      })
+      .channel("mongoose_dashboard_realtime")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "booking_requests",
+          filter: `mongoose_email=eq.${MONGOOSE_EMAIL}`,
+        },
+        (payload) => {
+          console.log("📨 Booking changed in real-time:", payload.eventType);
+
+          // Debounce the refresh to prevent rapid consecutive updates
+          if (debounceTimerRef.current) {
+            clearTimeout(debounceTimerRef.current);
+          }
+
+          debounceTimerRef.current = setTimeout(() => {
+            console.log("🔄 Refreshing data after debounce...");
+            loadBookingRequests();
+            loadAvailabilityStatus();
+          }, 1000); // Wait 1 second before updating
+        },
+      )
       .subscribe();
 
     return () => {
-      console.log('🔕 Cleaning up real-time subscription');
+      console.log("🔕 Cleaning up real-time subscription");
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
       }
@@ -171,24 +189,27 @@ export default function MongooseDashboard() {
   const toggleAvailability = async (value: boolean) => {
     try {
       setUpdatingStatus(true);
-      
+
       // Availability is now automatically determined by accepted bookings
       // User cannot manually toggle if there are accepted bookings
       const { data: acceptedBookings } = await supabase
-        .from('booking_requests')
-        .select('id')
-        .eq('mongoose_email', MONGOOSE_EMAIL)
-        .eq('status', 'accepted')
+        .from("booking_requests")
+        .select("id")
+        .eq("mongoose_email", MONGOOSE_EMAIL)
+        .eq("status", "accepted")
         .limit(1);
 
       if (acceptedBookings && acceptedBookings.length > 0 && !value) {
         Alert.alert(
           "Cannot Change Status",
-          "You have accepted bookings. Please complete them first by marking them as done."
+          "You have accepted bookings. Please complete them first by marking them as done.",
         );
       } else {
         setIsAvailable(value);
-        Alert.alert("Info", "Availability is automatically managed based on accepted bookings.");
+        Alert.alert(
+          "Info",
+          "Availability is automatically managed based on accepted bookings.",
+        );
       }
     } catch (error) {
       console.error("Error updating availability:", error);
@@ -199,7 +220,10 @@ export default function MongooseDashboard() {
   };
 
   // Handle booking request action
-  const handleBookingAction = async (bookingId: string, action: "accept" | "reject") => {
+  const handleBookingAction = async (
+    bookingId: string,
+    action: "accept" | "reject",
+  ) => {
     try {
       const { error } = await supabase
         .from("booking_requests")
@@ -212,15 +236,15 @@ export default function MongooseDashboard() {
       } else {
         Alert.alert(
           "Success",
-          `Booking ${action === "accept" ? "accepted" : "rejected"} successfully`
+          `Booking ${action === "accept" ? "accepted" : "rejected"} successfully`,
         );
-        
+
         // Real-time update: Immediately update availability status
         if (action === "accept") {
           setIsAvailable(false);
-          console.log('🔴 Mongoose now IN PROGRESS');
+          console.log("🔴 Mongoose now IN PROGRESS");
         }
-        
+
         await loadBookingRequests();
       }
     } catch (error) {
@@ -236,14 +260,14 @@ export default function MongooseDashboard() {
       [
         {
           text: "Cancel",
-          style: "cancel"
+          style: "cancel",
         },
         {
           text: "Done",
           onPress: async () => {
             try {
               console.log("Attempting to delete booking:", bookingId);
-              
+
               const { data, error } = await supabase
                 .from("booking_requests")
                 .delete()
@@ -255,36 +279,45 @@ export default function MongooseDashboard() {
               if (error) {
                 console.error("Error completing booking:", error);
                 Alert.alert(
-                  "Error", 
-                  `Failed to complete booking: ${error.message}\nCode: ${error.code}`
+                  "Error",
+                  `Failed to complete booking: ${error.message}\nCode: ${error.code}`,
                 );
               } else if (!data || data.length === 0) {
                 // No rows were deleted - likely RLS policy issue
-                console.error("No rows deleted - possible RLS policy restriction");
+                console.error(
+                  "No rows deleted - possible RLS policy restriction",
+                );
                 Alert.alert(
                   "Permission Error",
-                  "Unable to delete booking. This is likely a database permission issue (RLS policy). Please check your Supabase RLS policies for the booking_requests table."
+                  "Unable to delete booking. This is likely a database permission issue (RLS policy). Please check your Supabase RLS policies for the booking_requests table.",
                 );
               } else {
-                console.log("Booking deleted successfully:", data.length, "row(s)");
-                
+                console.log(
+                  "Booking deleted successfully:",
+                  data.length,
+                  "row(s)",
+                );
+
                 // Reload booking requests first
                 console.log("Reloading booking requests...");
                 await loadBookingRequests();
-                
+
                 // Check if there are any more accepted bookings
                 await loadAvailabilityStatus();
                 console.log("🟢 Mongoose availability status updated");
-                
+
                 Alert.alert("Success", "Booking completed successfully");
               }
             } catch (error: any) {
               console.error("Error completing booking:", error);
-              Alert.alert("Error", `An unexpected error occurred: ${error?.message || "Unknown error"}`);
+              Alert.alert(
+                "Error",
+                `An unexpected error occurred: ${error?.message || "Unknown error"}`,
+              );
             }
-          }
-        }
-      ]
+          },
+        },
+      ],
     );
   };
 
@@ -319,7 +352,9 @@ export default function MongooseDashboard() {
     <View className="bg-white p-4 mb-3 rounded-lg border border-gray-200 shadow-sm">
       <View className="flex-row justify-between items-start mb-2">
         <View className="flex-1">
-          <Text className="text-base font-semibold text-gray-900">{item.user_name}</Text>
+          <Text className="text-base font-semibold text-gray-900">
+            {item.user_name}
+          </Text>
           <Text className="text-sm text-gray-600">{item.user_email}</Text>
           {item.user_phone && (
             <Text className="text-sm text-gray-600">{item.user_phone}</Text>
@@ -330,8 +365,8 @@ export default function MongooseDashboard() {
             item.status === "pending"
               ? "bg-yellow-100"
               : item.status === "accepted"
-              ? "bg-green-100"
-              : "bg-red-100"
+                ? "bg-green-100"
+                : "bg-red-100"
           }`}
         >
           <Text
@@ -339,8 +374,8 @@ export default function MongooseDashboard() {
               item.status === "pending"
                 ? "text-yellow-800"
                 : item.status === "accepted"
-                ? "text-green-800"
-                : "text-red-800"
+                  ? "text-green-800"
+                  : "text-red-800"
             }`}
           >
             {item.status.toUpperCase()}
@@ -363,58 +398,68 @@ export default function MongooseDashboard() {
       </View>
 
       {/* Location Information */}
-      {(item.pickup_latitude && item.pickup_longitude && item.delivery_latitude && item.delivery_longitude) && (
-        <View className="mb-3">
-          <Pressable
-            onPress={() => setSelectedBookingForMap(item)}
-            className="bg-blue-50 border border-blue-200 p-3 rounded-lg"
-          >
-            <View className="flex-row items-center justify-between mb-2">
-              <View className="flex-row items-center">
-                <Ionicons name="map" size={20} color="#2563eb" />
-                <Text className="ml-2 text-sm font-semibold text-blue-900">
-                  Delivery Route
+      {item.pickup_latitude &&
+        item.pickup_longitude &&
+        item.delivery_latitude &&
+        item.delivery_longitude && (
+          <View className="mb-3">
+            <Pressable
+              onPress={() => setSelectedBookingForMap(item)}
+              className="bg-blue-50 border border-blue-200 p-3 rounded-lg"
+            >
+              <View className="flex-row items-center justify-between mb-2">
+                <View className="flex-row items-center">
+                  <Ionicons name="map" size={20} color="#2563eb" />
+                  <Text className="ml-2 text-sm font-semibold text-blue-900">
+                    Delivery Route
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color="#2563eb" />
+              </View>
+
+              {/* Pickup Location */}
+              <View className="bg-green-50 p-2 rounded mb-1">
+                <View className="flex-row items-center mb-1">
+                  <View className="w-2 h-2 bg-green-600 rounded-full mr-2" />
+                  <Text className="text-xs font-bold text-green-900">
+                    PICKUP (Seller)
+                  </Text>
+                </View>
+                <Text className="text-xs text-green-800 ml-4">
+                  {item.pickup_address ||
+                    `${item.pickup_latitude.toFixed(6)}, ${item.pickup_longitude.toFixed(6)}`}
                 </Text>
               </View>
-              <Ionicons name="chevron-forward" size={20} color="#2563eb" />
-            </View>
-            
-            {/* Pickup Location */}
-            <View className="bg-green-50 p-2 rounded mb-1">
-              <View className="flex-row items-center mb-1">
-                <View className="w-2 h-2 bg-green-600 rounded-full mr-2" />
-                <Text className="text-xs font-bold text-green-900">PICKUP (Seller)</Text>
-              </View>
-              <Text className="text-xs text-green-800 ml-4">
-                {item.pickup_address || `${item.pickup_latitude.toFixed(6)}, ${item.pickup_longitude.toFixed(6)}`}
-              </Text>
-            </View>
-            
-            {/* Delivery Location */}
-            <View className="bg-blue-50 p-2 rounded">
-              <View className="flex-row items-center mb-1">
-                <View className="w-2 h-2 bg-blue-600 rounded-full mr-2" />
-                <Text className="text-xs font-bold text-blue-900">DELIVERY (Buyer)</Text>
-              </View>
-              <Text className="text-xs text-blue-800 ml-4">
-                {item.delivery_address || `${item.delivery_latitude.toFixed(6)}, ${item.delivery_longitude.toFixed(6)}`}
-              </Text>
-            </View>
 
-            <Text className="text-xs text-blue-600 text-center mt-2">
-              Tap to view on map
-            </Text>
-          </Pressable>
-        </View>
-      )}
+              {/* Delivery Location */}
+              <View className="bg-blue-50 p-2 rounded">
+                <View className="flex-row items-center mb-1">
+                  <View className="w-2 h-2 bg-blue-600 rounded-full mr-2" />
+                  <Text className="text-xs font-bold text-blue-900">
+                    DELIVERY (Buyer)
+                  </Text>
+                </View>
+                <Text className="text-xs text-blue-800 ml-4">
+                  {item.delivery_address ||
+                    `${item.delivery_latitude.toFixed(6)}, ${item.delivery_longitude.toFixed(6)}`}
+                </Text>
+              </View>
+
+              <Text className="text-xs text-blue-600 text-center mt-2">
+                Tap to view on map
+              </Text>
+            </Pressable>
+          </View>
+        )}
 
       {item.status === "pending" && (
         <View className="flex-row space-x-3">
           <Pressable
             onPress={() => handleBookingAction(item.id, "accept")}
-            style={{ backgroundColor: '#094569' }}
-            className="flex-1 py-3 rounded-lg items-center">
-          {">"}
+            style={{ backgroundColor: "#094569" }}
+            className="flex-1 py-3 rounded-lg items-center"
+          >
+            {">"}
             <Text className="text-white font-semibold">Accept</Text>
           </Pressable>
           <Pressable
@@ -425,7 +470,7 @@ export default function MongooseDashboard() {
           </Pressable>
         </View>
       )}
-      
+
       {item.status === "accepted" && (
         <View className="space-y-2">
           <View className="flex-row gap-2">
@@ -437,7 +482,7 @@ export default function MongooseDashboard() {
             </View>
             <Pressable
               onPress={() => handleCompleteBooking(item.id, item.user_name)}
-              style={{ backgroundColor: '#16A34A' }}
+              style={{ backgroundColor: "#16A34A" }}
               className="flex-1 py-3 rounded-lg items-center flex-row justify-center"
             >
               <Ionicons name="checkmark-done" size={20} color="white" />
@@ -446,12 +491,12 @@ export default function MongooseDashboard() {
           </View>
         </View>
       )}
-      
+
       {item.status === "rejected" && (
         <View className="flex-row space-x-3">
           <Pressable
             onPress={() => handleBookingAction(item.id, "accept")}
-            style={{ backgroundColor: '#094569' }}
+            style={{ backgroundColor: "#094569" }}
             className="flex-1 py-3 rounded-lg items-center flex-row justify-center"
           >
             <Ionicons name="refresh" size={18} color="white" />
@@ -479,9 +524,14 @@ export default function MongooseDashboard() {
       ) : (
         <>
           {/* Header */}
-          <View style={{ backgroundColor: '#094569' }} className="pt-12 pb-6 px-4">
+          <View
+            style={{ backgroundColor: "#094569" }}
+            className="pt-12 pb-6 px-4"
+          >
             <View className="flex-row justify-between items-center">
-              <Text className="text-2xl font-bold text-white">Mongoose Dashboard</Text>
+              <Text className="text-2xl font-bold text-white">
+                Mongoose Dashboard
+              </Text>
               <Pressable
                 onPress={handleLogout}
                 className="bg-white/20 p-2 rounded-full"
@@ -489,11 +539,15 @@ export default function MongooseDashboard() {
                 <Ionicons name="log-out-outline" size={24} color="white" />
               </Pressable>
             </View>
-            <Text className="text-white/90 mt-1">Welcome, {currentUser?.name || "Mongoose"}</Text>
+            <Text className="text-white/90 mt-1">
+              Welcome, {currentUser?.name || "Mongoose"}
+            </Text>
           </View>
 
           <ScrollView
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            }
             contentContainerStyle={{ padding: 16 }}
           >
             {/* Availability Status Card */}
@@ -511,7 +565,11 @@ export default function MongooseDashboard() {
                 </View>
                 <View className="flex-row items-center">
                   {updatingStatus && (
-                    <ActivityIndicator size="small" color="#094569" style={{ marginRight: 8 }} />
+                    <ActivityIndicator
+                      size="small"
+                      color="#094569"
+                      style={{ marginRight: 8 }}
+                    />
                   )}
                   <Switch
                     value={isAvailable}
@@ -522,8 +580,14 @@ export default function MongooseDashboard() {
                   />
                 </View>
               </View>
-              <View style={isAvailable ? { backgroundColor: '#e6f0f5' } : undefined} className={`mt-3 p-3 rounded-lg ${!isAvailable ? "bg-gray-50" : ""}`}>
-                <Text style={isAvailable ? { color: '#094569' } : undefined} className={`text-center font-medium ${!isAvailable ? "text-gray-700" : ""}`}>
+              <View
+                style={isAvailable ? { backgroundColor: "#e6f0f5" } : undefined}
+                className={`mt-3 p-3 rounded-lg ${!isAvailable ? "bg-gray-50" : ""}`}
+              >
+                <Text
+                  style={isAvailable ? { color: "#094569" } : undefined}
+                  className={`text-center font-medium ${!isAvailable ? "text-gray-700" : ""}`}
+                >
                   {isAvailable ? "✓ Available for Bookings" : "✗ Not Available"}
                 </Text>
               </View>
@@ -532,9 +596,16 @@ export default function MongooseDashboard() {
             {/* Booking Requests Section */}
             <View className="mb-4">
               <View className="flex-row justify-between items-center mb-3">
-                <Text className="text-xl font-bold text-gray-900">Booking Requests</Text>
-                <View style={{ backgroundColor: '#e6f0f5' }} className="px-3 py-1 rounded-full">
-                  <Text style={{ color: '#094569' }} className="font-semibold">{bookingRequests.length}</Text>
+                <Text className="text-xl font-bold text-gray-900">
+                  Booking Requests
+                </Text>
+                <View
+                  style={{ backgroundColor: "#e6f0f5" }}
+                  className="px-3 py-1 rounded-full"
+                >
+                  <Text style={{ color: "#094569" }} className="font-semibold">
+                    {bookingRequests.length}
+                  </Text>
                 </View>
               </View>
 
@@ -588,103 +659,143 @@ export default function MongooseDashboard() {
                   <View className="flex-row gap-3 mt-3">
                     <View className="flex-row items-center">
                       <View className="w-3 h-3 bg-green-600 rounded-full mr-2" />
-                      <Text className="text-xs text-gray-700">Pickup (Seller)</Text>
+                      <Text className="text-xs text-gray-700">
+                        Pickup (Seller)
+                      </Text>
                     </View>
                     <View className="flex-row items-center">
                       <View className="w-3 h-3 bg-blue-600 rounded-full mr-2" />
-                      <Text className="text-xs text-gray-700">Delivery (Buyer)</Text>
+                      <Text className="text-xs text-gray-700">
+                        Delivery (Buyer)
+                      </Text>
                     </View>
                   </View>
 
                   {/* Map Type Toggle */}
                   <View className="flex-row gap-2 mt-3">
                     <Pressable
-                      onPress={() => setMapType('standard')}
+                      onPress={() => setMapType("standard")}
                       className={`flex-1 py-2 rounded-lg ${
-                        mapType === 'standard' ? 'bg-blue-600' : 'bg-gray-200'
+                        mapType === "standard" ? "bg-blue-600" : "bg-gray-200"
                       }`}
                     >
-                      <Text className={`text-xs font-semibold text-center ${
-                        mapType === 'standard' ? 'text-white' : 'text-gray-700'
-                      }`}>Standard</Text>
+                      <Text
+                        className={`text-xs font-semibold text-center ${
+                          mapType === "standard"
+                            ? "text-white"
+                            : "text-gray-700"
+                        }`}
+                      >
+                        Standard
+                      </Text>
                     </Pressable>
                     <Pressable
-                      onPress={() => setMapType('satellite')}
+                      onPress={() => setMapType("satellite")}
                       className={`flex-1 py-2 rounded-lg ${
-                        mapType === 'satellite' ? 'bg-blue-600' : 'bg-gray-200'
+                        mapType === "satellite" ? "bg-blue-600" : "bg-gray-200"
                       }`}
                     >
-                      <Text className={`text-xs font-semibold text-center ${
-                        mapType === 'satellite' ? 'text-white' : 'text-gray-700'
-                      }`}>Satellite</Text>
+                      <Text
+                        className={`text-xs font-semibold text-center ${
+                          mapType === "satellite"
+                            ? "text-white"
+                            : "text-gray-700"
+                        }`}
+                      >
+                        Satellite
+                      </Text>
                     </Pressable>
                     <Pressable
-                      onPress={() => setMapType('hybrid')}
+                      onPress={() => setMapType("hybrid")}
                       className={`flex-1 py-2 rounded-lg ${
-                        mapType === 'hybrid' ? 'bg-blue-600' : 'bg-gray-200'
+                        mapType === "hybrid" ? "bg-blue-600" : "bg-gray-200"
                       }`}
                     >
-                      <Text className={`text-xs font-semibold text-center ${
-                        mapType === 'hybrid' ? 'text-white' : 'text-gray-700'
-                      }`}>Hybrid</Text>
+                      <Text
+                        className={`text-xs font-semibold text-center ${
+                          mapType === "hybrid" ? "text-white" : "text-gray-700"
+                        }`}
+                      >
+                        Hybrid
+                      </Text>
                     </Pressable>
                   </View>
                 </View>
 
                 {/* Map */}
-                {selectedBookingForMap && 
-                 selectedBookingForMap.pickup_latitude && 
-                 selectedBookingForMap.pickup_longitude && 
-                 selectedBookingForMap.delivery_latitude && 
-                 selectedBookingForMap.delivery_longitude && (
-                  <MapView
-                    provider={PROVIDER_GOOGLE}
-                    mapType={mapType}
-                    style={{ flex: 1 }}
-                    initialRegion={{
-                      latitude: (selectedBookingForMap.pickup_latitude + selectedBookingForMap.delivery_latitude) / 2,
-                      longitude: (selectedBookingForMap.pickup_longitude + selectedBookingForMap.delivery_longitude) / 2,
-                      latitudeDelta: Math.abs(selectedBookingForMap.pickup_latitude - selectedBookingForMap.delivery_latitude) * 2 || 0.05,
-                      longitudeDelta: Math.abs(selectedBookingForMap.pickup_longitude - selectedBookingForMap.delivery_longitude) * 2 || 0.05,
-                    }}
-                    showsUserLocation
-                    showsMyLocationButton
-                  >
-                    {/* Green Marker - Pickup Location */}
-                    <Marker
-                      coordinate={{
-                        latitude: selectedBookingForMap.pickup_latitude,
-                        longitude: selectedBookingForMap.pickup_longitude,
+                {selectedBookingForMap &&
+                  selectedBookingForMap.pickup_latitude &&
+                  selectedBookingForMap.pickup_longitude &&
+                  selectedBookingForMap.delivery_latitude &&
+                  selectedBookingForMap.delivery_longitude && (
+                    <MapView
+                      provider={PROVIDER_GOOGLE}
+                      mapType={mapType}
+                      style={{ flex: 1 }}
+                      initialRegion={{
+                        latitude:
+                          (selectedBookingForMap.pickup_latitude +
+                            selectedBookingForMap.delivery_latitude) /
+                          2,
+                        longitude:
+                          (selectedBookingForMap.pickup_longitude +
+                            selectedBookingForMap.delivery_longitude) /
+                          2,
+                        latitudeDelta:
+                          Math.abs(
+                            selectedBookingForMap.pickup_latitude -
+                              selectedBookingForMap.delivery_latitude,
+                          ) * 2 || 0.05,
+                        longitudeDelta:
+                          Math.abs(
+                            selectedBookingForMap.pickup_longitude -
+                              selectedBookingForMap.delivery_longitude,
+                          ) * 2 || 0.05,
                       }}
-                      title="Pickup Location (Seller)"
-                      description={selectedBookingForMap.pickup_address || "Seller location"}
+                      showsUserLocation
+                      showsMyLocationButton
                     >
-                      <View className="items-center">
-                        <View className="bg-green-600 w-10 h-10 rounded-full items-center justify-center border-4 border-white shadow-lg">
-                          <Ionicons name="location" size={24} color="white" />
+                      {/* Green Marker - Pickup Location */}
+                      <Marker
+                        coordinate={{
+                          latitude: selectedBookingForMap.pickup_latitude,
+                          longitude: selectedBookingForMap.pickup_longitude,
+                        }}
+                        title="Pickup Location (Seller)"
+                        description={
+                          selectedBookingForMap.pickup_address ||
+                          "Seller location"
+                        }
+                      >
+                        <View className="items-center">
+                          <View className="bg-green-600 w-10 h-10 rounded-full items-center justify-center border-4 border-white shadow-lg">
+                            <Ionicons name="location" size={24} color="white" />
+                          </View>
+                          <View className="w-0 h-0 border-l-8 border-r-8 border-t-8 border-transparent border-t-green-600 -mt-1" />
                         </View>
-                        <View className="w-0 h-0 border-l-8 border-r-8 border-t-8 border-transparent border-t-green-600 -mt-1" />
-                      </View>
-                    </Marker>
+                      </Marker>
 
-                    {/* Blue Marker - Delivery Location */}
-                    <Marker
-                      coordinate={{
-                        latitude: selectedBookingForMap.delivery_latitude,
-                        longitude: selectedBookingForMap.delivery_longitude,
-                      }}
-                      title="Delivery Location (Buyer)"
-                      description={selectedBookingForMap.delivery_address || "Buyer location"}
-                    >
-                      <View className="items-center">
-                        <View className="bg-blue-600 w-10 h-10 rounded-full items-center justify-center border-4 border-white shadow-lg">
-                          <Ionicons name="location" size={24} color="white" />
+                      {/* Blue Marker - Delivery Location */}
+                      <Marker
+                        coordinate={{
+                          latitude: selectedBookingForMap.delivery_latitude,
+                          longitude: selectedBookingForMap.delivery_longitude,
+                        }}
+                        title="Delivery Location (Buyer)"
+                        description={
+                          selectedBookingForMap.delivery_address ||
+                          "Buyer location"
+                        }
+                      >
+                        <View className="items-center">
+                          <View className="bg-blue-600 w-10 h-10 rounded-full items-center justify-center border-4 border-white shadow-lg">
+                            <Ionicons name="location" size={24} color="white" />
+                          </View>
+                          <View className="w-0 h-0 border-l-8 border-r-8 border-t-8 border-transparent border-t-blue-600 -mt-1" />
                         </View>
-                        <View className="w-0 h-0 border-l-8 border-r-8 border-t-8 border-transparent border-t-blue-600 -mt-1" />
-                      </View>
-                    </Marker>
-                  </MapView>
-                )}
+                      </Marker>
+                    </MapView>
+                  )}
 
                 {/* Location Details */}
                 <View className="bg-white border-t border-gray-200 p-4">
@@ -698,8 +809,8 @@ export default function MongooseDashboard() {
                         </Text>
                       </View>
                       <Text className="text-xs text-green-800 ml-5">
-                        {selectedBookingForMap?.pickup_address || 
-                         `${selectedBookingForMap?.pickup_latitude?.toFixed(6)}, ${selectedBookingForMap?.pickup_longitude?.toFixed(6)}`}
+                        {selectedBookingForMap?.pickup_address ||
+                          `${selectedBookingForMap?.pickup_latitude?.toFixed(6)}, ${selectedBookingForMap?.pickup_longitude?.toFixed(6)}`}
                       </Text>
                     </View>
 
@@ -712,8 +823,8 @@ export default function MongooseDashboard() {
                         </Text>
                       </View>
                       <Text className="text-xs text-blue-800 ml-5">
-                        {selectedBookingForMap?.delivery_address || 
-                         `${selectedBookingForMap?.delivery_latitude?.toFixed(6)}, ${selectedBookingForMap?.delivery_longitude?.toFixed(6)}`}
+                        {selectedBookingForMap?.delivery_address ||
+                          `${selectedBookingForMap?.delivery_latitude?.toFixed(6)}, ${selectedBookingForMap?.delivery_longitude?.toFixed(6)}`}
                       </Text>
                     </View>
                   </View>
@@ -721,10 +832,12 @@ export default function MongooseDashboard() {
                   {/* Booking Details */}
                   <View className="mt-3 bg-gray-50 p-3 rounded-lg">
                     <Text className="text-xs text-gray-600">
-                      <Text className="font-semibold">Date:</Text> {selectedBookingForMap?.booking_date}
+                      <Text className="font-semibold">Date:</Text>{" "}
+                      {selectedBookingForMap?.booking_date}
                     </Text>
                     <Text className="text-xs text-gray-600">
-                      <Text className="font-semibold">Time:</Text> {selectedBookingForMap?.booking_time}
+                      <Text className="font-semibold">Time:</Text>{" "}
+                      {selectedBookingForMap?.booking_time}
                     </Text>
                   </View>
                 </View>

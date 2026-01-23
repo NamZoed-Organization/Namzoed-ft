@@ -1,10 +1,3 @@
-import {
-  ParticipantView,
-  StreamCall,
-  StreamVideo,
-  type Call,
-  type StreamVideoClient,
-} from "@stream-io/video-react-native-sdk";
 import React, {
   createContext,
   useContext,
@@ -20,6 +13,17 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+
+// Define types without importing WebRTC modules at the top level
+interface Call {
+  leave: () => Promise<void>;
+  state: {
+    localParticipant?: any;
+    participants: any[];
+  };
+}
+
+interface StreamVideoClient {}
 
 interface LiveSessionInfo {
   call: Call | null;
@@ -38,6 +42,23 @@ interface LiveSessionContextValue {
   setRestoreHandler: (fn: (() => void) | null) => void;
   pendingRestore: boolean;
   consumePendingRestore: () => void;
+}
+
+// Check if WebRTC is available (will be false in Expo Go)
+let webRTCAvailable = false;
+let StreamVideo: any = null;
+let StreamCall: any = null;
+let ParticipantView: any = null;
+
+try {
+  const webRTCModule = require("@stream-io/video-react-native-sdk");
+  StreamVideo = webRTCModule.StreamVideo;
+  StreamCall = webRTCModule.StreamCall;
+  ParticipantView = webRTCModule.ParticipantView;
+  webRTCAvailable = true;
+} catch (error) {
+  console.warn("WebRTC not available (Expo Go). Live features will be disabled.");
+  webRTCAvailable = false;
 }
 
 const LiveSessionContext = createContext<LiveSessionContextValue | undefined>(
@@ -199,73 +220,96 @@ export const LiveSessionProvider = ({
   const overlayWidth = collapsed ? 64 : 180;
   const overlayHeight = collapsed ? 64 : 120;
 
+  // Render overlay based on WebRTC availability
+  const renderOverlay = () => {
+    if (!showOverlay) return null;
+
+    const overlayContent = (
+      <View
+        style={[
+          styles.overlayContainer,
+          {
+            width: overlayWidth,
+            height: overlayHeight,
+            left: position.x,
+            top: position.y,
+          },
+        ]}
+        pointerEvents="box-none"
+        {...panResponder.panHandlers}
+      >
+        {collapsed ? (
+          <TouchableOpacity
+            style={styles.overlayCollapsed}
+            onPress={() => setCollapsed(false)}
+            activeOpacity={0.9}
+          >
+            <Text style={styles.overlayLabel}>Live</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.overlayCard}>
+            <TouchableOpacity
+              style={styles.overlayVideo}
+              onPress={restore}
+              activeOpacity={0.9}
+            >
+              {webRTCAvailable && mainParticipant ? (
+                <ParticipantView
+                  participant={mainParticipant}
+                  style={StyleSheet.absoluteFill}
+                />
+              ) : (
+                <View style={[StyleSheet.absoluteFill, { backgroundColor: '#1a1a1a', justifyContent: 'center', alignItems: 'center' }]}>
+                  <Text style={{ color: '#666', fontSize: 11 }}>
+                    {webRTCAvailable ? 'No video' : 'Expo Go'}
+                  </Text>
+                </View>
+              )}
+              <View style={styles.overlayLabelWrap}>
+                <Text style={styles.overlayLabel}>
+                  {session.streamMeta?.title || "Live"}
+                </Text>
+              </View>
+            </TouchableOpacity>
+            <View style={styles.overlayActions}>
+              <TouchableOpacity onPress={restore}>
+                <Text style={styles.overlayActionText}>Open</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setCollapsed(true)}>
+                <Text style={styles.overlayActionText}>Hide</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={clearSession}>
+                <Text
+                  style={[styles.overlayActionText, { color: "#F87171" }]}
+                >
+                  Close
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+      </View>
+    );
+
+    // Wrap in WebRTC components only if available
+    if (webRTCAvailable && StreamVideo && StreamCall) {
+      return (
+        <StreamVideo client={session.client!}>
+          <StreamCall call={session.call!}>
+            {overlayContent}
+          </StreamCall>
+        </StreamVideo>
+      );
+    }
+
+    // Return stub overlay for Expo Go
+    return overlayContent;
+  };
+
   return (
     <LiveSessionContext.Provider value={value}>
       {children}
-      {showOverlay ? (
-        <StreamVideo client={session.client!}>
-          <StreamCall call={session.call!}>
-            <View
-              style={[
-                styles.overlayContainer,
-                {
-                  width: overlayWidth,
-                  height: overlayHeight,
-                  left: position.x,
-                  top: position.y,
-                },
-              ]}
-              pointerEvents="box-none"
-              {...panResponder.panHandlers}
-            >
-              {collapsed ? (
-                <TouchableOpacity
-                  style={styles.overlayCollapsed}
-                  onPress={() => setCollapsed(false)}
-                  activeOpacity={0.9}
-                >
-                  <Text style={styles.overlayLabel}>Live</Text>
-                </TouchableOpacity>
-              ) : (
-                <View style={styles.overlayCard}>
-                  <TouchableOpacity
-                    style={styles.overlayVideo}
-                    onPress={restore}
-                    activeOpacity={0.9}
-                  >
-                    {mainParticipant ? (
-                      <ParticipantView
-                        participant={mainParticipant}
-                        style={StyleSheet.absoluteFill}
-                      />
-                    ) : null}
-                    <View style={styles.overlayLabelWrap}>
-                      <Text style={styles.overlayLabel}>
-                        {session.streamMeta?.title || "Live"}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                  <View style={styles.overlayActions}>
-                    <TouchableOpacity onPress={restore}>
-                      <Text style={styles.overlayActionText}>Open</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => setCollapsed(true)}>
-                      <Text style={styles.overlayActionText}>Hide</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={clearSession}>
-                      <Text
-                        style={[styles.overlayActionText, { color: "#F87171" }]}
-                      >
-                        Close
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
-            </View>
-          </StreamCall>
-        </StreamVideo>
-      ) : null}
+      {renderOverlay()}
     </LiveSessionContext.Provider>
   );
 };

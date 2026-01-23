@@ -1,4 +1,4 @@
-import ImageViewer from "@/components/ImageViewer";
+import ImageViewer from "@/components/modals/ImageViewer";
 import { useUser } from "@/contexts/UserContext";
 import { searchAll, SearchResult, SearchResults } from "@/lib/searchService";
 import { Ionicons } from "@expo/vector-icons";

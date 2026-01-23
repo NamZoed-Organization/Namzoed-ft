@@ -1,37 +1,44 @@
-import { useLocalSearchParams, useRouter, Stack, useFocusEffect } from 'expo-router';
-import React, { useCallback, useState } from 'react';
+import MarketplaceImageViewer from "@/components/modals/MarketplaceImageViewer";
+import ReportProductModal from "@/components/modals/ReportProductModal";
+import ImageWithFallback from "@/components/ui/ImageWithFallback";
+import { useUser } from "@/contexts/UserContext";
 import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-  Dimensions,
-  Alert,
-  Linking,
-  RefreshControl,
-  BackHandler,
-} from 'react-native';
+  fetchMarketplaceItemById,
+  MarketplaceItemWithUser,
+} from "@/lib/postMarketPlace";
+import { supabase } from "@/lib/supabase";
+import {
+  Stack,
+  useFocusEffect,
+  useLocalSearchParams,
+  useRouter,
+} from "expo-router";
 import {
   ArrowLeft,
-  MapPin,
+  Bookmark,
   Calendar,
-  MessageCircle,
-  Phone,
-  User,
   ChevronLeft,
   ChevronRight,
   Flag,
-  Bookmark,
-} from 'lucide-react-native';
-import { fetchMarketplaceItemById, MarketplaceItemWithUser } from '@/lib/postMarketPlace';
-import { supabase } from '@/lib/supabase';
-import ImageWithFallback from '@/components/ui/ImageWithFallback';
-import MarketplaceImageViewer from '@/components/MarketplaceImageViewer';
-import ReportProductModal from '@/components/ReportProductModal';
-import { useUser } from '@/contexts/UserContext';
+  MapPin,
+  MessageCircle,
+  User
+} from "lucide-react-native";
+import React, { useCallback, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  BackHandler,
+  Dimensions,
+  Linking,
+  RefreshControl,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
-const { width: screenWidth } = Dimensions.get('window');
+const { width: screenWidth } = Dimensions.get("window");
 
 export default function MarketplaceDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -45,55 +52,61 @@ export default function MarketplaceDetailScreen() {
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  const loadItem = useCallback(async (isRefreshing = false) => {
-    if (!id) return;
+  const loadItem = useCallback(
+    async (isRefreshing = false) => {
+      if (!id) return;
 
-    try {
-      if (!isRefreshing) setIsLoading(true);
-      const data = await fetchMarketplaceItemById(id);
-      setItem(data);
+      try {
+        if (!isRefreshing) setIsLoading(true);
+        const data = await fetchMarketplaceItemById(id);
+        setItem(data);
 
-      // Check if bookmarked
-      if (currentUser) {
-        const { data: bookmarkData } = await supabase
-          .from('user_bookmarks')
-          .select('*')
-          .eq('user_id', currentUser.id)
-          .eq('marketplace_id', id)
-          .single();
+        // Check if bookmarked
+        if (currentUser) {
+          const { data: bookmarkData } = await supabase
+            .from("user_bookmarks")
+            .select("*")
+            .eq("user_id", currentUser.id)
+            .eq("marketplace_id", id)
+            .single();
 
-        setIsBookmarked(!!bookmarkData);
+          setIsBookmarked(!!bookmarkData);
+        }
+      } catch (error) {
+        console.error("Error loading item:", error);
+        Alert.alert("Error", "Failed to load item details");
+      } finally {
+        setIsLoading(false);
+        setRefreshing(false);
       }
-    } catch (error) {
-      console.error('Error loading item:', error);
-      Alert.alert('Error', 'Failed to load item details');
-    } finally {
-      setIsLoading(false);
-      setRefreshing(false);
-    }
-  }, [id, currentUser]);
+    },
+    [id, currentUser],
+  );
 
   // Reload data every time screen comes into focus
   useFocusEffect(
     useCallback(() => {
       loadItem();
-    }, [loadItem])
+    }, [loadItem]),
   );
 
   // Handle Android back button
   useFocusEffect(
     useCallback(() => {
-      const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
-        handleGoBack();
-        return true;
-      });
+      const backHandler = BackHandler.addEventListener(
+        "hardwareBackPress",
+        () => {
+          handleGoBack();
+          return true;
+        },
+      );
 
       return () => backHandler.remove();
-    }, [])
+    }, []),
   );
 
   const handleGoBack = () => {
-    router.push('/marketplace');
+    router.push("/marketplace");
   };
 
   const handleRefresh = () => {
@@ -105,13 +118,13 @@ export default function MarketplaceDetailScreen() {
     if (item?.profiles?.phone) {
       Linking.openURL(`tel:${item.profiles.phone}`);
     } else {
-      Alert.alert('No Phone', 'Phone number not available');
+      Alert.alert("No Phone", "Phone number not available");
     }
   };
 
   const handleMessage = () => {
     if (currentUser?.id === item?.user_id) {
-      Alert.alert('Your Listing', 'This is your own product');
+      Alert.alert("Your Listing", "This is your own product");
       return;
     }
 
@@ -143,19 +156,17 @@ export default function MarketplaceDetailScreen() {
       if (previousState) {
         // Remove bookmark
         const { error } = await supabase
-          .from('user_bookmarks')
+          .from("user_bookmarks")
           .delete()
-          .eq('user_id', currentUser.id)
-          .eq('marketplace_id', item.id);
+          .eq("user_id", currentUser.id)
+          .eq("marketplace_id", item.id);
         if (error) throw error;
       } else {
         // Add bookmark
-        const { error } = await supabase
-          .from('user_bookmarks')
-          .insert({
-            user_id: currentUser.id,
-            marketplace_id: item.id
-          });
+        const { error } = await supabase.from("user_bookmarks").insert({
+          user_id: currentUser.id,
+          marketplace_id: item.id,
+        });
         if (error) throw error;
       }
     } catch (err) {
@@ -167,22 +178,22 @@ export default function MarketplaceDetailScreen() {
 
   const nextImage = () => {
     if (item?.images && currentImageIndex < item.images.length - 1) {
-      setCurrentImageIndex(prev => prev + 1);
+      setCurrentImageIndex((prev) => prev + 1);
     }
   };
 
   const prevImage = () => {
     if (currentImageIndex > 0) {
-      setCurrentImageIndex(prev => prev - 1);
+      setCurrentImageIndex((prev) => prev - 1);
     }
   };
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
+    return date.toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
     });
   };
 
@@ -216,10 +227,7 @@ export default function MarketplaceDetailScreen() {
         {/* Header */}
         <View className="bg-white border-b border-gray-200 pt-12 pb-4 px-4">
           <View className="flex-row items-center">
-            <TouchableOpacity
-              onPress={handleGoBack}
-              className="mr-4 p-2 -ml-2"
-            >
+            <TouchableOpacity onPress={handleGoBack} className="mr-4 p-2 -ml-2">
               <ArrowLeft size={24} color="#000" />
             </TouchableOpacity>
             <Text className="text-xl font-bold text-gray-900 flex-1">
@@ -269,7 +277,7 @@ export default function MarketplaceDetailScreen() {
               activeOpacity={0.9}
             >
               <ImageWithFallback
-                source={{ uri: item.images[currentImageIndex] || '' }}
+                source={{ uri: item.images[currentImageIndex] || "" }}
                 className="w-full h-80"
                 resizeMode="cover"
               />
@@ -325,18 +333,23 @@ export default function MarketplaceDetailScreen() {
             </Text>
 
             {/* Price */}
-            {(item.type === 'rent' || item.type === 'second_hand' || item.type === 'job_vacancy') && item.price > 0 && (
-              <Text className="text-3xl font-bold text-primary mb-4">
-                Nu. {item.price.toLocaleString()}
-              </Text>
-            )}
+            {(item.type === "rent" ||
+              item.type === "second_hand" ||
+              item.type === "job_vacancy") &&
+              item.price > 0 && (
+                <Text className="text-3xl font-bold text-primary mb-4">
+                  Nu. {item.price.toLocaleString()}
+                </Text>
+              )}
 
             {/* Location & Date */}
             <View className="flex-row items-center mb-4 gap-4">
               {item.dzongkhag && (
                 <View className="flex-row items-center">
                   <MapPin size={16} color="#666" />
-                  <Text className="text-sm text-gray-600 ml-1">{item.dzongkhag}</Text>
+                  <Text className="text-sm text-gray-600 ml-1">
+                    {item.dzongkhag}
+                  </Text>
                 </View>
               )}
               <View className="flex-row items-center">
@@ -348,7 +361,9 @@ export default function MarketplaceDetailScreen() {
             </View>
 
             {/* Description Section - Format depends on item type */}
-            {item.type === 'job_vacancy' && typeof item.description === 'object' && 'description' in item.description ? (
+            {item.type === "job_vacancy" &&
+            typeof item.description === "object" &&
+            "description" in item.description ? (
               // Job Vacancy Structure
               <>
                 <View className="mb-6">
@@ -389,7 +404,9 @@ export default function MarketplaceDetailScreen() {
                   Description
                 </Text>
                 <Text className="text-base text-gray-700 leading-6">
-                  {typeof item.description === 'string' ? item.description : item.description?.text || ''}
+                  {typeof item.description === "string"
+                    ? item.description
+                    : item.description?.text || ""}
                 </Text>
               </View>
             )}
@@ -402,8 +419,13 @@ export default function MarketplaceDetailScreen() {
                 </Text>
                 <View className="flex-row flex-wrap gap-2">
                   {item.tags.map((tag: string, index: number) => (
-                    <View key={index} className="bg-blue-100 px-3 py-2 rounded-lg">
-                      <Text className="text-sm text-blue-800 font-medium">{tag}</Text>
+                    <View
+                      key={index}
+                      className="bg-blue-100 px-3 py-2 rounded-lg"
+                    >
+                      <Text className="text-sm text-blue-800 font-medium">
+                        {tag}
+                      </Text>
                     </View>
                   ))}
                 </View>
@@ -421,10 +443,12 @@ export default function MarketplaceDetailScreen() {
                 </View>
                 <View className="flex-1">
                   <Text className="text-base font-semibold text-gray-900">
-                    {item.profiles?.name || 'Anonymous User'}
+                    {item.profiles?.name || "Anonymous User"}
                   </Text>
                   {item.profiles?.email && (
-                    <Text className="text-sm text-gray-600">{item.profiles.email}</Text>
+                    <Text className="text-sm text-gray-600">
+                      {item.profiles.email}
+                    </Text>
                   )}
                 </View>
               </View>

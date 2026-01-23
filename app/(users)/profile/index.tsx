@@ -1,16 +1,16 @@
-import FollowRequests from "@/components/FollowRequests";
-import FollowRequestsOverlay from "@/components/FollowRequestsOverlay";
-import ImageCropOverlay from "@/components/ImageCropOverlay";
-import ImageViewer from "@/components/ImageViewer";
-import LicenseViewerOverlay from "@/components/LicenseViewerOverlay";
-import ManageListingsOverlay from "@/components/ManageListingsOverlay";
-import ProfileImageViewer from "@/components/ProfileImageViewer";
-import ProfileSettings from "@/components/ProfileSettings";
+import FollowRequests from "@/components/modals/FollowRequests";
+import FollowRequestsOverlay from "@/components/modals/FollowRequestsOverlay";
+import ImageCropOverlay from "@/components/modals/ImageCropOverlay";
+import ImageViewer from "@/components/modals/ImageViewer";
+import LicenseViewerOverlay from "@/components/modals/LicenseViewerOverlay";
+import ManageListingsOverlay from "@/components/modals/ManageListingsOverlay";
+import ProfileImageViewer from "@/components/modals/ProfileImageViewer";
+import ProfileSettings from "@/components/modals/ProfileSettings";
 import { useUser } from "@/contexts/UserContext";
 import { fetchUserPosts, Post } from "@/lib/postsService";
 import { fetchUserProducts, Product } from "@/lib/productsService";
 // Added import for profile services
-import EditServicesModal from "@/components/EditServicesModal";
+import EditServicesModal from "@/components/modals/EditServicesModal";
 import PopupMessage from "@/components/ui/PopupMessage";
 import {
   deleteAvatar,

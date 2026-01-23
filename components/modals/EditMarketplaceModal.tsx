@@ -1,8 +1,17 @@
-import { MarketplaceItem, updateMarketplaceItem, uploadMarketplaceImages } from '@/lib/postMarketPlace';
-import { dzongkhagCenters } from '@/data/dzongkhag';
-import * as ImagePicker from 'expo-image-picker';
-import { Briefcase, DollarSign, Upload, X } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import ImageCropOverlay from "@/components/modals/ImageCropOverlay";
+import ImagePickerSheet from "@/components/ui/ImagePickerSheet";
+import PopupMessage from "@/components/ui/PopupMessage";
+import { dzongkhagCenters } from "@/data/dzongkhag";
+import {
+  MarketplaceItem,
+  updateMarketplaceItem,
+  uploadMarketplaceImages,
+} from "@/lib/postMarketPlace";
+import { Picker } from "@react-native-picker/picker";
+import { BlurView } from "expo-blur";
+import * as ImagePicker from "expo-image-picker";
+import { Upload, X } from "lucide-react-native";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -14,18 +23,13 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
-} from 'react-native';
-import PopupMessage from '@/components/ui/PopupMessage';
-import ImagePickerSheet from '@/components/ui/ImagePickerSheet';
-import ImageCropOverlay from '@/components/ImageCropOverlay';
-import { Picker } from '@react-native-picker/picker';
+  View,
+} from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
-  withTiming
-} from 'react-native-reanimated';
-import { BlurView } from 'expo-blur';
+  withTiming,
+} from "react-native-reanimated";
 
 interface EditMarketplaceModalProps {
   isVisible: boolean;
@@ -35,13 +39,19 @@ interface EditMarketplaceModalProps {
   onSuccess: () => void;
 }
 
-export default function EditMarketplaceModal({ isVisible, onClose, item, userId, onSuccess }: EditMarketplaceModalProps) {
+export default function EditMarketplaceModal({
+  isVisible,
+  onClose,
+  item,
+  userId,
+  onSuccess,
+}: EditMarketplaceModalProps) {
   const [loading, setLoading] = useState(false);
 
   // Popup states
   const [showSuccess, setShowSuccess] = useState(false);
   const [showError, setShowError] = useState(false);
-  const [popupMessage, setPopupMessage] = useState('');
+  const [popupMessage, setPopupMessage] = useState("");
 
   // Popup helpers
   const showErrorPopup = (message: string) => {
@@ -62,32 +72,40 @@ export default function EditMarketplaceModal({ isVisible, onClose, item, userId,
   // Form State - Pre-populated from item
   const [title, setTitle] = useState(item.title);
   const [description, setDescription] = useState(
-    typeof item.description === 'string'
+    typeof item.description === "string"
       ? item.description
-      : (item.description as any)?.text || ''
+      : (item.description as any)?.text || "",
   );
 
   // Job-specific fields
   const [jobDescription, setJobDescription] = useState(
-    item.type === 'job_vacancy' && typeof item.description === 'object' && 'description' in item.description
+    item.type === "job_vacancy" &&
+      typeof item.description === "object" &&
+      "description" in item.description
       ? item.description.description
-      : ''
+      : "",
   );
   const [jobRequirements, setJobRequirements] = useState(
-    item.type === 'job_vacancy' && typeof item.description === 'object' && 'requirements' in item.description
-      ? item.description.requirements || ''
-      : ''
+    item.type === "job_vacancy" &&
+      typeof item.description === "object" &&
+      "requirements" in item.description
+      ? item.description.requirements || ""
+      : "",
   );
   const [jobResponsibilities, setJobResponsibilities] = useState(
-    item.type === 'job_vacancy' && typeof item.description === 'object' && 'responsibilities' in item.description
-      ? item.description.responsibilities || ''
-      : ''
+    item.type === "job_vacancy" &&
+      typeof item.description === "object" &&
+      "responsibilities" in item.description
+      ? item.description.responsibilities || ""
+      : "",
   );
 
   const [price, setPrice] = useState(item.price.toString());
-  const [selectedType, setSelectedType] = useState<'rent' | 'swap' | 'second_hand' | 'free' | 'job_vacancy'>(item.type);
-  const [dzongkhag, setDzongkhag] = useState(item.dzongkhag || '');
-  const [tags, setTags] = useState(item.tags.join(', ')); // Freeform text
+  const [selectedType, setSelectedType] = useState<
+    "rent" | "swap" | "second_hand" | "free" | "job_vacancy"
+  >(item.type);
+  const [dzongkhag, setDzongkhag] = useState(item.dzongkhag || "");
+  const [tags, setTags] = useState(item.tags.join(", ")); // Freeform text
 
   // Image State - Separate existing from new
   const [existingImages, setExistingImages] = useState<string[]>(item.images);
@@ -110,13 +128,16 @@ export default function EditMarketplaceModal({ isVisible, onClose, item, userId,
   }, [isVisible]);
 
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: translateX.value }]
+    transform: [{ translateX: translateX.value }],
   }));
 
   const openCamera = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission Required', 'Camera access is needed to take photos.');
+    if (status !== "granted") {
+      Alert.alert(
+        "Permission Required",
+        "Camera access is needed to take photos.",
+      );
       return;
     }
 
@@ -133,7 +154,7 @@ export default function EditMarketplaceModal({ isVisible, onClose, item, userId,
 
   const openGallery = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
+      mediaTypes: ["images"],
       allowsEditing: false,
       quality: 1.0,
     });
@@ -170,19 +191,24 @@ export default function EditMarketplaceModal({ isVisible, onClose, item, userId,
   const handleUpdate = async () => {
     // Validation
     if (!title || !selectedType) {
-      showErrorPopup('Please fill in the Title and Type.');
+      showErrorPopup("Please fill in the Title and Type.");
       return;
     }
 
     // Price validation for rent/second_hand
-    if ((selectedType === 'rent' || selectedType === 'second_hand') && (!price || parseFloat(price) <= 0)) {
-      showErrorPopup('Please enter a valid price for rent or second hand items.');
+    if (
+      (selectedType === "rent" || selectedType === "second_hand") &&
+      (!price || parseFloat(price) <= 0)
+    ) {
+      showErrorPopup(
+        "Please enter a valid price for rent or second hand items.",
+      );
       return;
     }
 
     const totalImages = existingImages.length + newImages.length;
     if (totalImages === 0) {
-      showErrorPopup('Please add at least one image.');
+      showErrorPopup("Please add at least one image.");
       return;
     }
 
@@ -190,9 +216,8 @@ export default function EditMarketplaceModal({ isVisible, onClose, item, userId,
 
     try {
       // Upload only new images
-      const uploadedUrls = newImages.length > 0
-        ? await uploadMarketplaceImages(newImages)
-        : [];
+      const uploadedUrls =
+        newImages.length > 0 ? await uploadMarketplaceImages(newImages) : [];
 
       // Combine existing + newly uploaded images
       const finalImages = [...existingImages, ...uploadedUrls];
@@ -202,9 +227,9 @@ export default function EditMarketplaceModal({ isVisible, onClose, item, userId,
       // - job_vacancy: Use entered value or 0 if empty
       // - rent/second_hand: Use entered value (validated above)
       let finalPrice = 0;
-      if (selectedType === 'swap' || selectedType === 'free') {
+      if (selectedType === "swap" || selectedType === "free") {
         finalPrice = 0;
-      } else if (selectedType === 'job_vacancy') {
+      } else if (selectedType === "job_vacancy") {
         finalPrice = price.trim() ? parseFloat(price) : 0;
       } else {
         finalPrice = parseFloat(price);
@@ -212,18 +237,22 @@ export default function EditMarketplaceModal({ isVisible, onClose, item, userId,
 
       // Parse tags
       const parsedTags = tags
-        .split(',')
-        .map(tag => tag.trim())
-        .filter(tag => tag.length > 0);
+        .split(",")
+        .map((tag) => tag.trim())
+        .filter((tag) => tag.length > 0);
 
       // Build description based on type
       let descriptionData;
-      if (selectedType === 'job_vacancy') {
+      if (selectedType === "job_vacancy") {
         // Structured JSONB for job vacancies
         descriptionData = {
           description: jobDescription.trim(),
-          ...(jobRequirements.trim() && { requirements: jobRequirements.trim() }),
-          ...(jobResponsibilities.trim() && { responsibilities: jobResponsibilities.trim() }),
+          ...(jobRequirements.trim() && {
+            requirements: jobRequirements.trim(),
+          }),
+          ...(jobResponsibilities.trim() && {
+            responsibilities: jobResponsibilities.trim(),
+          }),
         };
       } else {
         // Simple text format for other categories
@@ -241,7 +270,7 @@ export default function EditMarketplaceModal({ isVisible, onClose, item, userId,
         tags: parsedTags,
       });
 
-      showSuccessPopup('Marketplace item updated successfully!', () => {
+      showSuccessPopup("Marketplace item updated successfully!", () => {
         onSuccess();
       });
     } catch (error: any) {
@@ -268,13 +297,20 @@ export default function EditMarketplaceModal({ isVisible, onClose, item, userId,
         >
           <View className="flex-1 bg-black/50 justify-end">
             <View className="bg-white rounded-t-3xl h-[90%] w-full overflow-hidden">
-
               {/* Premium Header with BlurView */}
-              <BlurView intensity={90} tint="light" className="border-b border-gray-200/50">
+              <BlurView
+                intensity={90}
+                tint="light"
+                className="border-b border-gray-200/50"
+              >
                 <View className="flex-row justify-between items-center px-6 py-4">
                   <View>
-                    <Text className="text-2xl font-mbold text-gray-900">Edit Marketplace Item</Text>
-                    <Text className="text-gray-500 text-xs font-mregular">Update your listing details</Text>
+                    <Text className="text-2xl font-mbold text-gray-900">
+                      Edit Marketplace Item
+                    </Text>
+                    <Text className="text-gray-500 text-xs font-mregular">
+                      Update your listing details
+                    </Text>
                   </View>
                   <TouchableOpacity
                     onPress={onClose}
@@ -285,17 +321,27 @@ export default function EditMarketplaceModal({ isVisible, onClose, item, userId,
                 </View>
               </BlurView>
 
-              <ScrollView className="flex-1 px-5" showsVerticalScrollIndicator={false}>
-
+              <ScrollView
+                className="flex-1 px-5"
+                showsVerticalScrollIndicator={false}
+              >
                 {/* Image Picker Section */}
                 <View className="mt-5">
-                  <Text className="text-sm font-semibold text-gray-700 mb-3">Photos <Text className="text-red-500">*</Text></Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row">
-
+                  <Text className="text-sm font-semibold text-gray-700 mb-3">
+                    Photos <Text className="text-red-500">*</Text>
+                  </Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    className="flex-row"
+                  >
                     {/* Existing Images */}
                     {existingImages.map((url, index) => (
                       <View key={`existing-${index}`} className="relative mr-3">
-                        <Image source={{ uri: url }} className="w-24 h-24 rounded-xl" />
+                        <Image
+                          source={{ uri: url }}
+                          className="w-24 h-24 rounded-xl"
+                        />
                         <TouchableOpacity
                           onPress={() => removeExistingImage(index)}
                           className="absolute -top-2 -right-2 bg-red-500 rounded-full p-1 border-2 border-white"
@@ -303,7 +349,9 @@ export default function EditMarketplaceModal({ isVisible, onClose, item, userId,
                           <X size={12} color="white" />
                         </TouchableOpacity>
                         <View className="absolute bottom-1 left-1 bg-white/80 rounded px-1">
-                          <Text className="text-[10px] text-gray-600">Existing</Text>
+                          <Text className="text-[10px] text-gray-600">
+                            Existing
+                          </Text>
                         </View>
                       </View>
                     ))}
@@ -311,7 +359,10 @@ export default function EditMarketplaceModal({ isVisible, onClose, item, userId,
                     {/* New Images */}
                     {newImages.map((uri, index) => (
                       <View key={`new-${index}`} className="relative mr-3">
-                        <Image source={{ uri }} className="w-24 h-24 rounded-xl" />
+                        <Image
+                          source={{ uri }}
+                          className="w-24 h-24 rounded-xl"
+                        />
                         <TouchableOpacity
                           onPress={() => removeNewImage(index)}
                           className="absolute -top-2 -right-2 bg-red-500 rounded-full p-1 border-2 border-white"
@@ -330,7 +381,9 @@ export default function EditMarketplaceModal({ isVisible, onClose, item, userId,
                       className="w-24 h-24 border-2 border-dashed border-gray-300 rounded-xl justify-center items-center mr-3 bg-gray-50"
                     >
                       <Upload size={24} color="#9CA3AF" />
-                      <Text className="text-xs text-gray-400 mt-1">Add Photo</Text>
+                      <Text className="text-xs text-gray-400 mt-1">
+                        Add Photo
+                      </Text>
                     </TouchableOpacity>
                   </ScrollView>
                 </View>
@@ -338,7 +391,9 @@ export default function EditMarketplaceModal({ isVisible, onClose, item, userId,
                 {/* Marketplace Item Info */}
                 <View className="mt-6 gap-y-5">
                   <View>
-                    <Text className="text-sm font-medium text-gray-700 mb-1">Title</Text>
+                    <Text className="text-sm font-medium text-gray-700 mb-1">
+                      Title
+                    </Text>
                     <TextInput
                       className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900"
                       placeholder="e.g. Apartment for Rent in Thimphu"
@@ -350,20 +405,37 @@ export default function EditMarketplaceModal({ isVisible, onClose, item, userId,
 
                   {/* Type Selection */}
                   <View>
-                    <Text className="text-sm font-medium text-gray-700 mb-2">Type</Text>
+                    <Text className="text-sm font-medium text-gray-700 mb-2">
+                      Type
+                    </Text>
                     <View className="flex-row gap-2 flex-wrap">
-                      {(['rent', 'swap', 'second_hand', 'free', 'job_vacancy'] as const).map((typeOption) => (
+                      {(
+                        [
+                          "rent",
+                          "swap",
+                          "second_hand",
+                          "free",
+                          "job_vacancy",
+                        ] as const
+                      ).map((typeOption) => (
                         <TouchableOpacity
                           key={typeOption}
                           onPress={() => setSelectedType(typeOption)}
                           className={`py-2 px-3 rounded-full border ${
                             selectedType === typeOption
-                              ? 'bg-primary border-primary'
-                              : 'bg-white border-gray-200'
+                              ? "bg-primary border-primary"
+                              : "bg-white border-gray-200"
                           }`}
                         >
-                          <Text className={`text-center text-xs ${selectedType === typeOption ? 'text-white font-medium' : 'text-gray-600'}`}>
-                            {typeOption === 'second_hand' ? 'Second Hand' : typeOption === 'job_vacancy' ? 'Job Vacancy' : typeOption.charAt(0).toUpperCase() + typeOption.slice(1)}
+                          <Text
+                            className={`text-center text-xs ${selectedType === typeOption ? "text-white font-medium" : "text-gray-600"}`}
+                          >
+                            {typeOption === "second_hand"
+                              ? "Second Hand"
+                              : typeOption === "job_vacancy"
+                                ? "Job Vacancy"
+                                : typeOption.charAt(0).toUpperCase() +
+                                  typeOption.slice(1)}
                           </Text>
                         </TouchableOpacity>
                       ))}
@@ -372,32 +444,56 @@ export default function EditMarketplaceModal({ isVisible, onClose, item, userId,
 
                   <View>
                     <Text className="text-sm font-medium text-gray-700 mb-1">
-                      {selectedType === 'job_vacancy' ? 'Salary' : 'Price'}
-                      {(selectedType === 'rent' || selectedType === 'second_hand') && <Text className="text-red-500">*</Text>}
-                      {selectedType === 'job_vacancy' && <Text className="text-gray-400 text-xs ml-1">(Optional)</Text>}
+                      {selectedType === "job_vacancy" ? "Salary" : "Price"}
+                      {(selectedType === "rent" ||
+                        selectedType === "second_hand") && (
+                        <Text className="text-red-500">*</Text>
+                      )}
+                      {selectedType === "job_vacancy" && (
+                        <Text className="text-gray-400 text-xs ml-1">
+                          (Optional)
+                        </Text>
+                      )}
                     </Text>
                     <View className="relative">
                       <View className="absolute left-4 top-3.5 z-10">
-                         <Text className="text-gray-600 font-medium">Nu.</Text>
+                        <Text className="text-gray-600 font-medium">Nu.</Text>
                       </View>
                       <TextInput
                         className="bg-gray-50 border border-gray-200 rounded-xl pl-14 pr-4 py-3 text-gray-900"
-                        placeholder={selectedType === 'swap' || selectedType === 'free' ? '0' : selectedType === 'job_vacancy' ? 'Enter salary or leave empty' : '0.00'}
+                        placeholder={
+                          selectedType === "swap" || selectedType === "free"
+                            ? "0"
+                            : selectedType === "job_vacancy"
+                              ? "Enter salary or leave empty"
+                              : "0.00"
+                        }
                         keyboardType="numeric"
                         value={price}
                         onChangeText={setPrice}
-                        editable={selectedType !== 'swap' && selectedType !== 'free'}
-                        style={{ opacity: selectedType === 'swap' || selectedType === 'free' ? 0.5 : 1 }}
+                        editable={
+                          selectedType !== "swap" && selectedType !== "free"
+                        }
+                        style={{
+                          opacity:
+                            selectedType === "swap" || selectedType === "free"
+                              ? 0.5
+                              : 1,
+                        }}
                       />
                     </View>
-                    {(selectedType === 'swap' || selectedType === 'free') && (
-                      <Text className="text-xs text-gray-500 mt-1">Price is not required for {selectedType} items</Text>
+                    {(selectedType === "swap" || selectedType === "free") && (
+                      <Text className="text-xs text-gray-500 mt-1">
+                        Price is not required for {selectedType} items
+                      </Text>
                     )}
                   </View>
 
                   {/* Location (Dzongkhag) */}
                   <View>
-                    <Text className="text-sm font-medium text-gray-700 mb-2">Location (Optional)</Text>
+                    <Text className="text-sm font-medium text-gray-700 mb-2">
+                      Location (Optional)
+                    </Text>
                     <View className="bg-gray-50 border border-gray-200 rounded-xl overflow-hidden">
                       <Picker
                         selectedValue={dzongkhag}
@@ -406,7 +502,11 @@ export default function EditMarketplaceModal({ isVisible, onClose, item, userId,
                       >
                         <Picker.Item label="Select Dzongkhag" value="" />
                         {dzongkhagCenters.map((dz) => (
-                          <Picker.Item key={dz.name} label={dz.name} value={dz.name} />
+                          <Picker.Item
+                            key={dz.name}
+                            label={dz.name}
+                            value={dz.name}
+                          />
                         ))}
                       </Picker>
                     </View>
@@ -415,7 +515,10 @@ export default function EditMarketplaceModal({ isVisible, onClose, item, userId,
                   {/* Tags (Freeform) */}
                   <View>
                     <Text className="text-sm font-medium text-gray-700 mb-1">
-                      Tags <Text className="text-gray-400 font-normal">(Optional, comma-separated)</Text>
+                      Tags{" "}
+                      <Text className="text-gray-400 font-normal">
+                        (Optional, comma-separated)
+                      </Text>
                     </Text>
                     <TextInput
                       className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900"
@@ -429,12 +532,13 @@ export default function EditMarketplaceModal({ isVisible, onClose, item, userId,
                   </View>
 
                   {/* Conditional Description/Job Fields */}
-                  {selectedType === 'job_vacancy' ? (
+                  {selectedType === "job_vacancy" ? (
                     // Job-specific fields
                     <>
                       <View>
                         <Text className="text-sm font-medium text-gray-700 mb-1">
-                          Job Description <Text className="text-red-500">*</Text>
+                          Job Description{" "}
+                          <Text className="text-red-500">*</Text>
                         </Text>
                         <TextInput
                           className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 min-h-[100px]"
@@ -445,12 +549,17 @@ export default function EditMarketplaceModal({ isVisible, onClose, item, userId,
                           onChangeText={setJobDescription}
                           maxLength={500}
                         />
-                        <Text className="text-xs text-gray-500 mt-1">{jobDescription.length}/500</Text>
+                        <Text className="text-xs text-gray-500 mt-1">
+                          {jobDescription.length}/500
+                        </Text>
                       </View>
 
                       <View>
                         <Text className="text-sm font-medium text-gray-700 mb-1">
-                          Requirements <Text className="text-gray-400 text-xs">(Optional)</Text>
+                          Requirements{" "}
+                          <Text className="text-gray-400 text-xs">
+                            (Optional)
+                          </Text>
                         </Text>
                         <TextInput
                           className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 min-h-[100px]"
@@ -461,12 +570,17 @@ export default function EditMarketplaceModal({ isVisible, onClose, item, userId,
                           onChangeText={setJobRequirements}
                           maxLength={500}
                         />
-                        <Text className="text-xs text-gray-500 mt-1">{jobRequirements.length}/500</Text>
+                        <Text className="text-xs text-gray-500 mt-1">
+                          {jobRequirements.length}/500
+                        </Text>
                       </View>
 
                       <View>
                         <Text className="text-sm font-medium text-gray-700 mb-1">
-                          Responsibilities <Text className="text-gray-400 text-xs">(Optional)</Text>
+                          Responsibilities{" "}
+                          <Text className="text-gray-400 text-xs">
+                            (Optional)
+                          </Text>
                         </Text>
                         <TextInput
                           className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 min-h-[100px]"
@@ -477,7 +591,9 @@ export default function EditMarketplaceModal({ isVisible, onClose, item, userId,
                           onChangeText={setJobResponsibilities}
                           maxLength={500}
                         />
-                        <Text className="text-xs text-gray-500 mt-1">{jobResponsibilities.length}/500</Text>
+                        <Text className="text-xs text-gray-500 mt-1">
+                          {jobResponsibilities.length}/500
+                        </Text>
                       </View>
                     </>
                   ) : (
@@ -495,10 +611,11 @@ export default function EditMarketplaceModal({ isVisible, onClose, item, userId,
                         onChangeText={setDescription}
                         maxLength={500}
                       />
-                      <Text className="text-xs text-gray-500 mt-1">{description.length}/500</Text>
+                      <Text className="text-xs text-gray-500 mt-1">
+                        {description.length}/500
+                      </Text>
                     </View>
                   )}
-
                 </View>
 
                 {/* Spacing for bottom button */}
@@ -506,30 +623,39 @@ export default function EditMarketplaceModal({ isVisible, onClose, item, userId,
               </ScrollView>
 
               {/* Premium Footer / Submit Button */}
-              <BlurView intensity={80} tint="light" className="absolute bottom-0 left-0 right-0 border-t border-gray-200/50">
+              <BlurView
+                intensity={80}
+                tint="light"
+                className="absolute bottom-0 left-0 right-0 border-t border-gray-200/50"
+              >
                 <View className="p-5">
                   <TouchableOpacity
                     onPress={handleUpdate}
                     disabled={loading}
                     className={`w-full py-4 rounded-[24px] flex-row justify-center items-center shadow-lg ${
-                      loading ? 'bg-gray-300' : 'bg-primary'
+                      loading ? "bg-gray-300" : "bg-primary"
                     }`}
                   >
                     {loading ? (
                       <ActivityIndicator color="white" />
                     ) : (
-                      <Text className="text-white font-mbold text-lg">Update Item</Text>
+                      <Text className="text-white font-mbold text-lg">
+                        Update Item
+                      </Text>
                     )}
                   </TouchableOpacity>
                 </View>
               </BlurView>
-
             </View>
           </View>
         </KeyboardAvoidingView>
 
         {/* Success/Error Popups */}
-        <PopupMessage visible={showSuccess} type="success" message={popupMessage} />
+        <PopupMessage
+          visible={showSuccess}
+          type="success"
+          message={popupMessage}
+        />
         <PopupMessage visible={showError} type="error" message={popupMessage} />
 
         {/* Image Picker Sheet */}

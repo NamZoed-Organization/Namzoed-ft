@@ -1,6 +1,11 @@
+import CountdownTimer from "@/components/CountdownTimer";
+import ReportProductModal from "@/components/modals/ReportProductModal";
+import PopupMessage from "@/components/ui/PopupMessage";
 import { useUser } from "@/contexts/UserContext";
 import { fetchProductById, ProductWithUser } from "@/lib/productsService";
 import { supabase } from "@/lib/supabase";
+import { BlurView } from "expo-blur";
+import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import {
   ArrowLeft,
@@ -16,31 +21,23 @@ import {
   Star,
   Tag,
   User,
-  Verified
+  Verified,
 } from "lucide-react-native";
-import React, { useCallback, useEffect, useState, useRef } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   BackHandler,
   Dimensions,
   Image,
   RefreshControl,
+  Animated as RNAnimated,
   ScrollView,
+  Share,
+  StatusBar,
   Text,
   TouchableOpacity,
   View,
-  StatusBar,
-  Animated as RNAnimated,
-  Share
 } from "react-native";
-import Animated, {
-  FadeInDown,
-  FadeInUp
-} from "react-native-reanimated";
-import { LinearGradient } from "expo-linear-gradient";
-import { BlurView } from "expo-blur";
-import ReportProductModal from "@/components/ReportProductModal";
-import CountdownTimer from "@/components/CountdownTimer";
-import PopupMessage from "@/components/ui/PopupMessage";
+import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const IMAGE_HEIGHT = SCREEN_HEIGHT * 0.45;
@@ -62,7 +59,7 @@ function DetailSkeleton() {
           duration: 1000,
           useNativeDriver: true,
         }),
-      ])
+      ]),
     );
     shimmer.start();
     return () => shimmer.stop();
@@ -76,14 +73,35 @@ function DetailSkeleton() {
   return (
     <View className="flex-1 bg-[#FAFBFC]">
       <StatusBar barStyle="light-content" />
-      <RNAnimated.View style={{ opacity, height: IMAGE_HEIGHT }} className="w-full bg-gray-200" />
+      <RNAnimated.View
+        style={{ opacity, height: IMAGE_HEIGHT }}
+        className="w-full bg-gray-200"
+      />
       <View className="bg-white -mt-8 rounded-t-[32px] flex-1 px-6 pt-8">
-        <RNAnimated.View style={{ opacity }} className="h-8 bg-gray-100 rounded-2xl w-3/4 mb-4" />
-        <RNAnimated.View style={{ opacity }} className="h-10 bg-gray-100 rounded-2xl w-1/2 mb-6" />
-        <RNAnimated.View style={{ opacity }} className="h-20 bg-gray-50 rounded-3xl w-full mb-6" />
-        <RNAnimated.View style={{ opacity }} className="h-4 bg-gray-100 rounded-xl w-full mb-3" />
-        <RNAnimated.View style={{ opacity }} className="h-4 bg-gray-100 rounded-xl w-full mb-3" />
-        <RNAnimated.View style={{ opacity }} className="h-4 bg-gray-100 rounded-xl w-2/3" />
+        <RNAnimated.View
+          style={{ opacity }}
+          className="h-8 bg-gray-100 rounded-2xl w-3/4 mb-4"
+        />
+        <RNAnimated.View
+          style={{ opacity }}
+          className="h-10 bg-gray-100 rounded-2xl w-1/2 mb-6"
+        />
+        <RNAnimated.View
+          style={{ opacity }}
+          className="h-20 bg-gray-50 rounded-3xl w-full mb-6"
+        />
+        <RNAnimated.View
+          style={{ opacity }}
+          className="h-4 bg-gray-100 rounded-xl w-full mb-3"
+        />
+        <RNAnimated.View
+          style={{ opacity }}
+          className="h-4 bg-gray-100 rounded-xl w-full mb-3"
+        />
+        <RNAnimated.View
+          style={{ opacity }}
+          className="h-4 bg-gray-100 rounded-xl w-2/3"
+        />
       </View>
     </View>
   );
@@ -109,7 +127,7 @@ export default function ProductDetail() {
   // Popup states
   const [showSuccess, setShowSuccess] = useState(false);
   const [showError, setShowError] = useState(false);
-  const [popupMessage, setPopupMessage] = useState('');
+  const [popupMessage, setPopupMessage] = useState("");
 
   const showSuccessPopup = (message: string) => {
     setPopupMessage(message);
@@ -124,46 +142,52 @@ export default function ProductDetail() {
   };
 
   // Load product data
-  const loadProduct = useCallback(async (isRefreshing = false) => {
-    if (!id) return;
+  const loadProduct = useCallback(
+    async (isRefreshing = false) => {
+      if (!id) return;
 
-    if (!isRefreshing) setLoading(true);
-    setError(null);
-    try {
-      const data = await fetchProductById(id);
-      setProduct(data);
+      if (!isRefreshing) setLoading(true);
+      setError(null);
+      try {
+        const data = await fetchProductById(id);
+        setProduct(data);
 
-      if (currentUser) {
-        const { data: bookmarkData } = await supabase
-          .from('user_bookmarks')
-          .select('*')
-          .eq('user_id', currentUser.id)
-          .eq('product_id', id)
-          .single();
+        if (currentUser) {
+          const { data: bookmarkData } = await supabase
+            .from("user_bookmarks")
+            .select("*")
+            .eq("user_id", currentUser.id)
+            .eq("product_id", id)
+            .single();
 
-        setIsBookmarked(!!bookmarkData);
+          setIsBookmarked(!!bookmarkData);
+        }
+      } catch (err: any) {
+        console.error("Error loading product:", err);
+        setError(err.message || "Failed to load product");
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
       }
-    } catch (err: any) {
-      console.error("Error loading product:", err);
-      setError(err.message || "Failed to load product");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [id, currentUser]);
+    },
+    [id, currentUser],
+  );
 
   useFocusEffect(
     useCallback(() => {
       loadProduct();
-    }, [loadProduct])
+    }, [loadProduct]),
   );
 
   // Handle Android back button
   useEffect(() => {
-    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
-      handleGoBack();
-      return true;
-    });
+    const backHandler = BackHandler.addEventListener(
+      "hardwareBackPress",
+      () => {
+        handleGoBack();
+        return true;
+      },
+    );
     return () => backHandler.remove();
   }, [product]);
 
@@ -173,7 +197,7 @@ export default function ProductDetail() {
     } else if (router.canGoBack()) {
       router.back();
     } else {
-      router.push('/categories');
+      router.push("/categories");
     }
   };
 
@@ -195,19 +219,17 @@ export default function ProductDetail() {
     try {
       if (previousState) {
         const { error } = await supabase
-          .from('user_bookmarks')
+          .from("user_bookmarks")
           .delete()
-          .eq('user_id', currentUser.id)
-          .eq('product_id', product.id);
+          .eq("user_id", currentUser.id)
+          .eq("product_id", product.id);
         if (error) throw error;
         showSuccessPopup("Removed from saves");
       } else {
-        const { error } = await supabase
-          .from('user_bookmarks')
-          .insert({
-            user_id: currentUser.id,
-            product_id: product.id
-          });
+        const { error } = await supabase.from("user_bookmarks").insert({
+          user_id: currentUser.id,
+          product_id: product.id,
+        });
         if (error) throw error;
         showSuccessPopup("Saved to collection");
       }
@@ -282,7 +304,11 @@ export default function ProductDetail() {
 
   return (
     <View className="flex-1 bg-[#FAFBFC]">
-      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+      <StatusBar
+        barStyle="light-content"
+        translucent
+        backgroundColor="transparent"
+      />
 
       <ScrollView
         className="flex-1"
@@ -316,7 +342,12 @@ export default function ProductDetail() {
 
           {/* Gradient Overlay */}
           <LinearGradient
-            colors={['rgba(0,0,0,0.5)', 'transparent', 'transparent', 'rgba(0,0,0,0.3)']}
+            colors={[
+              "rgba(0,0,0,0.5)",
+              "transparent",
+              "transparent",
+              "rgba(0,0,0,0.3)",
+            ]}
             locations={[0, 0.3, 0.7, 1]}
             className="absolute inset-0"
           />
@@ -330,7 +361,11 @@ export default function ProductDetail() {
                 activeOpacity={0.8}
                 className="w-11 h-11 rounded-full overflow-hidden"
               >
-                <BlurView intensity={30} tint="dark" className="flex-1 items-center justify-center">
+                <BlurView
+                  intensity={30}
+                  tint="dark"
+                  className="flex-1 items-center justify-center"
+                >
                   <ArrowLeft size={22} color="white" strokeWidth={2.5} />
                 </BlurView>
               </TouchableOpacity>
@@ -342,7 +377,11 @@ export default function ProductDetail() {
                   activeOpacity={0.8}
                   className="w-11 h-11 rounded-full overflow-hidden"
                 >
-                  <BlurView intensity={30} tint="dark" className="flex-1 items-center justify-center">
+                  <BlurView
+                    intensity={30}
+                    tint="dark"
+                    className="flex-1 items-center justify-center"
+                  >
                     <Share2 size={20} color="white" />
                   </BlurView>
                 </TouchableOpacity>
@@ -352,7 +391,11 @@ export default function ProductDetail() {
                   activeOpacity={0.8}
                   className="w-11 h-11 rounded-full overflow-hidden"
                 >
-                  <BlurView intensity={30} tint="dark" className="flex-1 items-center justify-center">
+                  <BlurView
+                    intensity={30}
+                    tint="dark"
+                    className="flex-1 items-center justify-center"
+                  >
                     <Bookmark
                       size={20}
                       color={isBookmarked ? "#FBBF24" : "white"}
@@ -376,8 +419,8 @@ export default function ProductDetail() {
                   <View
                     className={`h-2 rounded-full ${
                       activeImageIndex === index
-                        ? 'bg-white w-6'
-                        : 'bg-white/40 w-2'
+                        ? "bg-white w-6"
+                        : "bg-white/40 w-2"
                     }`}
                   />
                 </TouchableOpacity>
@@ -411,7 +454,9 @@ export default function ProductDetail() {
             >
               <View className="bg-primary/10 px-4 py-1.5 rounded-full flex-row items-center gap-1.5">
                 <Tag size={12} color="#094569" />
-                <Text className="text-xs font-semibold text-primary">{product.category}</Text>
+                <Text className="text-xs font-semibold text-primary">
+                  {product.category}
+                </Text>
               </View>
               {product.tags?.slice(0, 2).map((tag, i) => (
                 <View key={i} className="bg-gray-100 px-3 py-1.5 rounded-full">
@@ -434,7 +479,7 @@ export default function ProductDetail() {
               className="mb-6"
             >
               {product.is_currently_active ? (
-                product.category === 'food' ? (
+                product.category === "food" ? (
                   /* ========== CLOSING SALE (Food) ========== */
                   <View className="bg-gradient-to-r from-amber-50 to-orange-50 p-5 rounded-3xl border border-amber-200">
                     <View className="flex-row items-center justify-between mb-3">
@@ -458,7 +503,9 @@ export default function ProductDetail() {
 
                     <View className="flex-row items-end justify-between">
                       <View>
-                        <Text className="text-xs text-amber-600 mb-1">Closing Sale Price</Text>
+                        <Text className="text-xs text-amber-600 mb-1">
+                          Closing Sale Price
+                        </Text>
                         <Text className="text-3xl font-bold text-amber-600">
                           Nu. {product.current_price?.toLocaleString()}
                         </Text>
@@ -466,7 +513,9 @@ export default function ProductDetail() {
                       <View className="items-end">
                         <View className="flex-row items-center gap-1 mb-1">
                           <Clock size={12} color="#D97706" />
-                          <Text className="text-xs text-amber-600 font-medium">Ends in</Text>
+                          <Text className="text-xs text-amber-600 font-medium">
+                            Ends in
+                          </Text>
                         </View>
                         <CountdownTimer endsAt={product.discount_ends_at} />
                       </View>
@@ -500,7 +549,9 @@ export default function ProductDetail() {
 
                     <View className="flex-row items-end justify-between">
                       <View>
-                        <Text className="text-xs text-gray-500 mb-1">Sale Price</Text>
+                        <Text className="text-xs text-gray-500 mb-1">
+                          Sale Price
+                        </Text>
                         <Text className="text-3xl font-bold text-primary">
                           Nu. {product.current_price?.toLocaleString()}
                         </Text>
@@ -508,7 +559,9 @@ export default function ProductDetail() {
                       <View className="items-end">
                         <View className="flex-row items-center gap-1 mb-1">
                           <Clock size={12} color="#EF4444" />
-                          <Text className="text-xs text-red-500 font-medium">Ends in</Text>
+                          <Text className="text-xs text-red-500 font-medium">
+                            Ends in
+                          </Text>
                         </View>
                         <CountdownTimer endsAt={product.discount_ends_at} />
                       </View>
@@ -533,7 +586,9 @@ export default function ProductDetail() {
               >
                 <TouchableOpacity
                   activeOpacity={0.8}
-                  onPress={() => router.push(`/(users)/profile/${product.user_id}`)}
+                  onPress={() =>
+                    router.push(`/(users)/profile/${product.user_id}`)
+                  }
                   className="flex-row items-center"
                 >
                   {/* Avatar */}
@@ -566,13 +621,19 @@ export default function ProductDetail() {
                         <Text className="text-xs text-gray-600">4.9</Text>
                       </View>
                       <Text className="text-xs text-gray-400">•</Text>
-                      <Text className="text-xs text-gray-500">Active seller</Text>
+                      <Text className="text-xs text-gray-500">
+                        Active seller
+                      </Text>
                     </View>
                   </View>
 
                   {/* View Profile Arrow */}
                   <View className="bg-white w-10 h-10 rounded-xl items-center justify-center shadow-sm">
-                    <ArrowLeft size={18} color="#094569" style={{ transform: [{ rotate: '180deg' }] }} />
+                    <ArrowLeft
+                      size={18}
+                      color="#094569"
+                      style={{ transform: [{ rotate: "180deg" }] }}
+                    />
                   </View>
                 </TouchableOpacity>
               </Animated.View>
@@ -584,7 +645,8 @@ export default function ProductDetail() {
                 About this product
               </Text>
               <Text className="text-base text-gray-600 leading-7 mb-6">
-                {product.description || "No description provided for this product."}
+                {product.description ||
+                  "No description provided for this product."}
               </Text>
             </Animated.View>
 
@@ -596,10 +658,10 @@ export default function ProductDetail() {
               <View className="bg-gray-50 px-4 py-3 rounded-2xl flex-row items-center gap-2">
                 <Clock size={16} color="#6B7280" />
                 <Text className="text-sm text-gray-600">
-                  {new Date(product.created_at).toLocaleDateString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric'
+                  {new Date(product.created_at).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
                   })}
                 </Text>
               </View>
@@ -617,7 +679,9 @@ export default function ProductDetail() {
                 activeOpacity={0.7}
               >
                 <Flag size={14} color="#9CA3AF" />
-                <Text className="text-sm text-gray-400">Report this listing</Text>
+                <Text className="text-sm text-gray-400">
+                  Report this listing
+                </Text>
               </TouchableOpacity>
             </Animated.View>
           </View>
@@ -629,7 +693,11 @@ export default function ProductDetail() {
         entering={FadeInUp.duration(400).delay(300)}
         className="absolute bottom-0 left-0 right-0"
       >
-        <BlurView intensity={80} tint="light" className="border-t border-gray-100">
+        <BlurView
+          intensity={80}
+          tint="light"
+          className="border-t border-gray-100"
+        >
           <View className="px-6 py-4 pb-8 flex-row gap-4">
             {/* Message Seller Button */}
             <TouchableOpacity
@@ -645,7 +713,9 @@ export default function ProductDetail() {
               }}
             >
               <MessageCircle size={20} color="white" />
-              <Text className="text-white font-bold text-base">Message Seller</Text>
+              <Text className="text-white font-bold text-base">
+                Message Seller
+              </Text>
             </TouchableOpacity>
 
             {/* Quick Actions */}
@@ -653,7 +723,9 @@ export default function ProductDetail() {
               onPress={toggleBookmark}
               activeOpacity={0.8}
               className={`w-14 h-14 rounded-2xl items-center justify-center border-2 ${
-                isBookmarked ? 'bg-primary/10 border-primary' : 'bg-white border-gray-200'
+                isBookmarked
+                  ? "bg-primary/10 border-primary"
+                  : "bg-white border-gray-200"
               }`}
             >
               <Bookmark
@@ -683,7 +755,11 @@ export default function ProductDetail() {
       )}
 
       {/* Success/Error Popups */}
-      <PopupMessage visible={showSuccess} type="success" message={popupMessage} />
+      <PopupMessage
+        visible={showSuccess}
+        type="success"
+        message={popupMessage}
+      />
       <PopupMessage visible={showError} type="error" message={popupMessage} />
     </View>
   );

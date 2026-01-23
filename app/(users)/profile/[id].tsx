@@ -1,4 +1,4 @@
-import ReportUserModal from "@/components/ReportUserModal";
+import ReportUserModal from "@/components/modals/ReportUserModal";
 import { useUser } from "@/contexts/UserContext";
 import { blockUser, isUserBlocked, unblockUser } from "@/lib/blockService";
 import { followUser, isFollowing, unfollowUser } from "@/lib/followService";

@@ -1,6 +1,6 @@
+import React from "react";
 import { Text, View } from "react-native";
 import type { Message } from "react-native-flash-message";
-
 type Props = {
   message: Message;
 };

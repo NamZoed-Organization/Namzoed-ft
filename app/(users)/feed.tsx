@@ -1,6 +1,5 @@
-import CreatePost from "@/components/CreatePost";
 import { PostSkeleton } from "@/components/FeedPost";
-import LiveWrapper from "@/components/LiveWrapper";
+import CreatePost from "@/components/modals/CreatePost";
 import { VideoErrorBoundary } from "@/components/VideoErrorBoundary";
 import { useLiveSession } from "@/contexts/LiveSessionProvider";
 import { useUser } from "@/contexts/UserContext";
@@ -23,7 +22,7 @@ import {
   RefreshControl,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 
 import FeedPost from "@/components/FeedPost";
@@ -41,6 +40,28 @@ export default function FeedScreen() {
   const [newPosts, setNewPosts] = useState<PostData[]>([]);
   const [loadingNewPosts, setLoadingNewPosts] = useState(true);
   const [visiblePostId, setVisiblePostId] = useState<string | null>(null);
+
+  // Dynamic import for LiveWrapper to avoid WebRTC errors on app load
+  const [LiveWrapper, setLiveWrapper] = useState<React.ComponentType<{
+    onClose: () => void;
+  }> | null>(null);
+  const [liveWrapperLoading, setLiveWrapperLoading] = useState(false);
+
+  // Dynamically import LiveWrapper only when user opens Live modal
+  useEffect(() => {
+    if (showLive && !LiveWrapper && !liveWrapperLoading) {
+      setLiveWrapperLoading(true);
+      import("@/components/livestream/LiveWrapper")
+        .then((module) => {
+          setLiveWrapper(() => module.default);
+          setLiveWrapperLoading(false);
+        })
+        .catch((error) => {
+          console.warn("Failed to load LiveWrapper:", error);
+          setLiveWrapperLoading(false);
+        });
+    }
+  }, [showLive, LiveWrapper, liveWrapperLoading]);
 
   // Convert Supabase post to PostData format
   const convertToPostData = (post: PostWithUser): PostData => {
@@ -85,7 +106,7 @@ export default function FeedScreen() {
 
       // Sort by date (newest first)
       const sortedNewPosts = convertedPosts.sort(
-        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
       );
 
       setNewPosts(sortedNewPosts);
@@ -181,7 +202,7 @@ export default function FeedScreen() {
   const onViewableItemsChanged = useCallback(({ viewableItems }: any) => {
     // Find the most visible item (the one that's 50%+ visible)
     const mostVisibleItem = viewableItems.find(
-      (item: any) => item.isViewable && item.item && item.item.id
+      (item: any) => item.isViewable && item.item && item.item.id,
     );
 
     if (mostVisibleItem) {
@@ -353,7 +374,14 @@ export default function FeedScreen() {
         statusBarTranslucent={true}
         onRequestClose={() => setShowLive(false)}
       >
-        <LiveWrapper onClose={() => setShowLive(false)} />
+        {LiveWrapper ? (
+          <LiveWrapper onClose={() => setShowLive(false)} />
+        ) : (
+          <View className="flex-1 bg-white items-center justify-center">
+            <ActivityIndicator size="large" color="#DC2626" />
+            <Text className="mt-4 text-gray-600">Loading Live...</Text>
+          </View>
+        )}
       </Modal>
     </View>
   );

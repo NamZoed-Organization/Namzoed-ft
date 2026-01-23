@@ -1,4 +1,4 @@
-import AddServicesModal from "@/components/AddServicesModal";
+import AddServicesModal from "@/components/modals/AddServicesModal";
 import TopNavbar from "@/components/ui/TopNavbar";
 import { useUser } from "@/contexts/UserContext";
 import { serviceCategories } from "@/data/servicecategory";
@@ -114,7 +114,7 @@ export default function ServiceScreen() {
 
         <Text
           style={{
-            fontSize: Math.max(9, itemSize * 0.10),
+            fontSize: Math.max(9, itemSize * 0.1),
             fontWeight: "800",
             color: "#000000",
             textAlign: "center",

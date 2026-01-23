@@ -1,10 +1,18 @@
-import { serviceCategories } from '@/data/servicecategory';
-import { ProviderServiceWithDetails, updateProviderService, uploadServiceImages } from '@/lib/servicesService';
-import * as ImagePicker from 'expo-image-picker';
-import * as Haptics from 'expo-haptics';
-import { NotificationFeedbackType, ImpactFeedbackStyle } from 'expo-haptics';
-import { Check, Upload, X, Trash2 } from 'lucide-react-native';
-import React, { useState } from 'react';
+import ImageCropperOverlay from "@/components/modals/ImageCropperOverlay";
+import ImagePickerSheet from "@/components/ui/ImagePickerSheet";
+import PopupMessage from "@/components/ui/PopupMessage";
+import { serviceCategories } from "@/data/servicecategory";
+import {
+  ProviderServiceWithDetails,
+  updateProviderService,
+  uploadServiceImages,
+} from "@/lib/servicesService";
+import { BlurView } from "expo-blur";
+import * as Haptics from "expo-haptics";
+import { ImpactFeedbackStyle, NotificationFeedbackType } from "expo-haptics";
+import * as ImagePicker from "expo-image-picker";
+import { Check, Trash2, Upload, X } from "lucide-react-native";
+import React, { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -16,19 +24,15 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
-} from 'react-native';
-import PopupMessage from '@/components/ui/PopupMessage';
-import ImagePickerSheet from '@/components/ui/ImagePickerSheet';
-import ImageCropperOverlay from '@/components/ImageCropperOverlay';
+  View,
+} from "react-native";
 import Animated, {
+  FadeInDown,
+  FadeOutDown,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
-  FadeInDown,
-  FadeOutDown
-} from 'react-native-reanimated';
-import { BlurView } from 'expo-blur';
+} from "react-native-reanimated";
 
 interface EditServicesModalProps {
   isVisible: boolean;
@@ -38,13 +42,19 @@ interface EditServicesModalProps {
   onSuccess: () => void;
 }
 
-export default function EditServicesModal({ isVisible, onClose, service, userId, onSuccess }: EditServicesModalProps) {
+export default function EditServicesModal({
+  isVisible,
+  onClose,
+  service,
+  userId,
+  onSuccess,
+}: EditServicesModalProps) {
   const [loading, setLoading] = useState(false);
 
   // Popup states
   const [showSuccess, setShowSuccess] = useState(false);
   const [showError, setShowError] = useState(false);
-  const [popupMessage, setPopupMessage] = useState('');
+  const [popupMessage, setPopupMessage] = useState("");
 
   // Popup helpers
   const showErrorPopup = (message: string) => {
@@ -66,15 +76,19 @@ export default function EditServicesModal({ isVisible, onClose, service, userId,
   const [name, setName] = useState(service.name);
   const [description, setDescription] = useState(service.description);
   const [selectedCategorySlug, setSelectedCategorySlug] = useState<string>(
-    service.service_categories?.slug || ''
+    service.service_categories?.slug || "",
   );
 
   // Image State - Separate existing from new
-  const [existingImages, setExistingImages] = useState<string[]>(service.images);
+  const [existingImages, setExistingImages] = useState<string[]>(
+    service.images,
+  );
   const [newImages, setNewImages] = useState<string[]>([]);
 
   // Image selection mode for deletion
-  const [selectedImageIndices, setSelectedImageIndices] = useState<number[]>([]);
+  const [selectedImageIndices, setSelectedImageIndices] = useState<number[]>(
+    [],
+  );
   const [isImageSelectionMode, setIsImageSelectionMode] = useState(false);
 
   // Image picker and crop states
@@ -94,13 +108,16 @@ export default function EditServicesModal({ isVisible, onClose, service, userId,
   }, [isVisible]);
 
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: translateX.value }]
+    transform: [{ translateX: translateX.value }],
   }));
 
   const openCamera = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission Required', 'Camera access is needed to take photos.');
+    if (status !== "granted") {
+      Alert.alert(
+        "Permission Required",
+        "Camera access is needed to take photos.",
+      );
       return;
     }
 
@@ -117,7 +134,7 @@ export default function EditServicesModal({ isVisible, onClose, service, userId,
 
   const openGallery = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
+      mediaTypes: ["images"],
       allowsEditing: false,
       quality: 1.0,
     });
@@ -151,28 +168,30 @@ export default function EditServicesModal({ isVisible, onClose, service, userId,
 
   const toggleImageSelection = (index: number) => {
     Haptics.impactAsync(ImpactFeedbackStyle.Light);
-    setSelectedImageIndices(prev =>
-      prev.includes(index) ? prev.filter(i => i !== index) : [...prev, index]
+    setSelectedImageIndices((prev) =>
+      prev.includes(index) ? prev.filter((i) => i !== index) : [...prev, index],
     );
   };
 
   const handleDeleteSelectedImages = () => {
     Alert.alert(
-      'Delete Images',
+      "Delete Images",
       `Remove ${selectedImageIndices.length} image(s)?`,
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: "Cancel", style: "cancel" },
         {
-          text: 'Delete',
-          style: 'destructive',
+          text: "Delete",
+          style: "destructive",
           onPress: () => {
-            setExistingImages(prev => prev.filter((_, i) => !selectedImageIndices.includes(i)));
+            setExistingImages((prev) =>
+              prev.filter((_, i) => !selectedImageIndices.includes(i)),
+            );
             setIsImageSelectionMode(false);
             setSelectedImageIndices([]);
             Haptics.notificationAsync(NotificationFeedbackType.Success);
-          }
-        }
-      ]
+          },
+        },
+      ],
     );
   };
 
@@ -189,13 +208,13 @@ export default function EditServicesModal({ isVisible, onClose, service, userId,
   const handleUpdate = async () => {
     // Validation
     if (!name.trim() || !description.trim()) {
-      showErrorPopup('Please fill in all required fields.');
+      showErrorPopup("Please fill in all required fields.");
       return;
     }
 
     const totalImages = existingImages.length + newImages.length;
     if (totalImages === 0) {
-      showErrorPopup('Please add at least one image.');
+      showErrorPopup("Please add at least one image.");
       return;
     }
 
@@ -203,9 +222,10 @@ export default function EditServicesModal({ isVisible, onClose, service, userId,
 
     try {
       // Upload only new images
-      const uploadedUrls = newImages.length > 0
-        ? await uploadServiceImages(newImages, service.provider_id)
-        : [];
+      const uploadedUrls =
+        newImages.length > 0
+          ? await uploadServiceImages(newImages, service.provider_id)
+          : [];
 
       // Combine existing + newly uploaded images
       const finalImages = [...existingImages, ...uploadedUrls];
@@ -217,7 +237,7 @@ export default function EditServicesModal({ isVisible, onClose, service, userId,
         images: finalImages,
       });
 
-      showSuccessPopup('Service updated successfully!', () => {
+      showSuccessPopup("Service updated successfully!", () => {
         onSuccess();
       });
     } catch (error: any) {
@@ -230,7 +250,9 @@ export default function EditServicesModal({ isVisible, onClose, service, userId,
 
   if (!isVisible) return null;
 
-  const selectedCategory = serviceCategories.find(cat => cat.slug === selectedCategorySlug);
+  const selectedCategory = serviceCategories.find(
+    (cat) => cat.slug === selectedCategorySlug,
+  );
 
   return (
     <Modal
@@ -246,13 +268,20 @@ export default function EditServicesModal({ isVisible, onClose, service, userId,
         >
           <View className="flex-1 bg-black/50 justify-end">
             <View className="bg-white rounded-t-3xl h-[90%] w-full overflow-hidden">
-
               {/* Premium Header with BlurView */}
-              <BlurView intensity={90} tint="light" className="border-b border-gray-200/50">
+              <BlurView
+                intensity={90}
+                tint="light"
+                className="border-b border-gray-200/50"
+              >
                 <View className="flex-row justify-between items-center px-6 py-4">
                   <View>
-                    <Text className="text-2xl font-mbold text-gray-900">Edit Service</Text>
-                    <Text className="text-gray-500 text-xs font-mregular">Update your service details</Text>
+                    <Text className="text-2xl font-mbold text-gray-900">
+                      Edit Service
+                    </Text>
+                    <Text className="text-gray-500 text-xs font-mregular">
+                      Update your service details
+                    </Text>
                   </View>
                   <TouchableOpacity
                     onPress={onClose}
@@ -263,29 +292,45 @@ export default function EditServicesModal({ isVisible, onClose, service, userId,
                 </View>
               </BlurView>
 
-              <ScrollView className="flex-1 px-5" showsVerticalScrollIndicator={false}>
-
+              <ScrollView
+                className="flex-1 px-5"
+                showsVerticalScrollIndicator={false}
+              >
                 {/* Image Picker Section */}
                 <View className="mt-5">
-                  <Text className="text-sm font-semibold text-gray-700 mb-3">Photos <Text className="text-red-500">*</Text></Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row">
-
+                  <Text className="text-sm font-semibold text-gray-700 mb-3">
+                    Photos <Text className="text-red-500">*</Text>
+                  </Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    className="flex-row"
+                  >
                     {/* Existing Images */}
                     {existingImages.map((url, index) => (
                       <TouchableOpacity
                         key={`existing-${index}`}
                         onLongPress={() => handleLongPressImage(index)}
-                        onPress={() => isImageSelectionMode && toggleImageSelection(index)}
+                        onPress={() =>
+                          isImageSelectionMode && toggleImageSelection(index)
+                        }
                         activeOpacity={0.8}
                         className="relative mr-3"
                       >
-                        <Image source={{ uri: url }} className="w-24 h-24 rounded-xl" />
+                        <Image
+                          source={{ uri: url }}
+                          className="w-24 h-24 rounded-xl"
+                        />
 
                         {/* Selection overlay */}
                         {isImageSelectionMode && (
-                          <View className={`absolute inset-0 rounded-xl ${
-                            selectedImageIndices.includes(index) ? 'border-4 border-red-500 bg-red-500/20' : ''
-                          } items-center justify-center`}>
+                          <View
+                            className={`absolute inset-0 rounded-xl ${
+                              selectedImageIndices.includes(index)
+                                ? "border-4 border-red-500 bg-red-500/20"
+                                : ""
+                            } items-center justify-center`}
+                          >
                             {selectedImageIndices.includes(index) && (
                               <View className="bg-red-500 rounded-full p-2">
                                 <X size={20} color="white" strokeWidth={3} />
@@ -296,7 +341,9 @@ export default function EditServicesModal({ isVisible, onClose, service, userId,
 
                         {!isImageSelectionMode && (
                           <View className="absolute bottom-1 left-1 bg-white/80 rounded px-1">
-                            <Text className="text-[10px] text-gray-600">Existing</Text>
+                            <Text className="text-[10px] text-gray-600">
+                              Existing
+                            </Text>
                           </View>
                         )}
                       </TouchableOpacity>
@@ -305,7 +352,10 @@ export default function EditServicesModal({ isVisible, onClose, service, userId,
                     {/* New Images */}
                     {newImages.map((uri, index) => (
                       <View key={`new-${index}`} className="relative mr-3">
-                        <Image source={{ uri }} className="w-24 h-24 rounded-xl" />
+                        <Image
+                          source={{ uri }}
+                          className="w-24 h-24 rounded-xl"
+                        />
                         <TouchableOpacity
                           onPress={() => removeNewImage(index)}
                           className="absolute -top-2 -right-2 bg-red-500 rounded-full p-1 border-2 border-white"
@@ -325,7 +375,9 @@ export default function EditServicesModal({ isVisible, onClose, service, userId,
                         className="w-24 h-24 border-2 border-dashed border-gray-300 rounded-xl justify-center items-center mr-3 bg-gray-50"
                       >
                         <Upload size={24} color="#9CA3AF" />
-                        <Text className="text-xs text-gray-400 mt-1">Add Photo</Text>
+                        <Text className="text-xs text-gray-400 mt-1">
+                          Add Photo
+                        </Text>
                       </TouchableOpacity>
                     )}
                   </ScrollView>
@@ -334,7 +386,9 @@ export default function EditServicesModal({ isVisible, onClose, service, userId,
                 {/* Service Info */}
                 <View className="mt-6 gap-y-5">
                   <View>
-                    <Text className="text-sm font-medium text-gray-700 mb-1">Service Name</Text>
+                    <Text className="text-sm font-medium text-gray-700 mb-1">
+                      Service Name
+                    </Text>
                     <TextInput
                       className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900"
                       placeholder="e.g. Professional Photography Service"
@@ -344,7 +398,9 @@ export default function EditServicesModal({ isVisible, onClose, service, userId,
                   </View>
 
                   <View>
-                    <Text className="text-sm font-medium text-gray-700 mb-1">Description</Text>
+                    <Text className="text-sm font-medium text-gray-700 mb-1">
+                      Description
+                    </Text>
                     <TextInput
                       className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 min-h-[120px]"
                       placeholder="Describe your service..."
@@ -356,10 +412,12 @@ export default function EditServicesModal({ isVisible, onClose, service, userId,
                   </View>
 
                   <View>
-                    <Text className="text-sm font-medium text-gray-700 mb-1">Category</Text>
+                    <Text className="text-sm font-medium text-gray-700 mb-1">
+                      Category
+                    </Text>
                     <View className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3">
                       <Text className="text-gray-900 font-mmedium">
-                        {selectedCategory?.name || 'No category selected'}
+                        {selectedCategory?.name || "No category selected"}
                       </Text>
                       <Text className="text-xs text-gray-500 mt-0.5">
                         Category cannot be changed after creation
@@ -380,14 +438,18 @@ export default function EditServicesModal({ isVisible, onClose, service, userId,
                   className="absolute bottom-24 left-6 right-6 h-20 bg-gray-900 rounded-[35px] flex-row items-center justify-between px-8 shadow-2xl"
                 >
                   <View>
-                    <Text className="text-white font-mbold text-lg">{selectedImageIndices.length}</Text>
+                    <Text className="text-white font-mbold text-lg">
+                      {selectedImageIndices.length}
+                    </Text>
                     <Text className="text-gray-400 text-[10px] uppercase tracking-widest font-mbold">
                       Selected Images
                     </Text>
                   </View>
                   <View className="flex-row items-center gap-x-4">
                     <TouchableOpacity onPress={handleCancelImageSelection}>
-                      <Text className="text-gray-400 font-msemibold">Cancel</Text>
+                      <Text className="text-gray-400 font-msemibold">
+                        Cancel
+                      </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       onPress={handleDeleteSelectedImages}
@@ -401,7 +463,11 @@ export default function EditServicesModal({ isVisible, onClose, service, userId,
               )}
 
               {/* Fixed Footer with BlurView */}
-              <BlurView intensity={80} tint="light" className="border-t border-gray-200/50">
+              <BlurView
+                intensity={80}
+                tint="light"
+                className="border-t border-gray-200/50"
+              >
                 <View className="px-6 py-4">
                   <TouchableOpacity
                     onPress={handleUpdate}
@@ -413,7 +479,9 @@ export default function EditServicesModal({ isVisible, onClose, service, userId,
                     ) : (
                       <>
                         <Check size={20} color="white" strokeWidth={3} />
-                        <Text className="text-white font-mbold ml-2 text-base">Update Service</Text>
+                        <Text className="text-white font-mbold ml-2 text-base">
+                          Update Service
+                        </Text>
                       </>
                     )}
                   </TouchableOpacity>
@@ -424,7 +492,11 @@ export default function EditServicesModal({ isVisible, onClose, service, userId,
         </KeyboardAvoidingView>
 
         {/* Success/Error Popups */}
-        <PopupMessage visible={showSuccess} type="success" message={popupMessage} />
+        <PopupMessage
+          visible={showSuccess}
+          type="success"
+          message={popupMessage}
+        />
         <PopupMessage visible={showError} type="error" message={popupMessage} />
 
         {/* Image Picker Sheet */}

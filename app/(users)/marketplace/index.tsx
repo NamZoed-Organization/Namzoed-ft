@@ -1,37 +1,39 @@
 import Banner from "@/components/Banner";
-import MarketplacePostOverlay from "@/components/MarketplacePostOverlay";
-import SearchBar from "@/components/SearchBar";
+import MarketplacePostOverlay from "@/components/modals/MarketplacePostOverlay";
+import SearchBar from "@/components/modals/SearchBar";
 import ImageWithFallback from "@/components/ui/ImageWithFallback";
 import TopNavbar from "@/components/ui/TopNavbar";
 import { useUser } from "@/contexts/UserContext";
 import { dzongkhagCenters } from "@/data/dzongkhag";
-import { fetchMarketplaceItems, MarketplaceItemWithUser } from "@/lib/postMarketPlace";
-import { Picker } from '@react-native-picker/picker';
-import { useRouter } from 'expo-router';
 import {
-    Briefcase,
-    Filter,
-    Gift,
-    Home,
-    MapPin,
-    Plus,
-    RefreshCw,
-    ShoppingCart,
-    X
+  fetchMarketplaceItems,
+  MarketplaceItemWithUser,
+} from "@/lib/postMarketPlace";
+import { Picker } from "@react-native-picker/picker";
+import { useRouter } from "expo-router";
+import {
+  Briefcase,
+  Filter,
+  Gift,
+  Home,
+  MapPin,
+  Plus,
+  RefreshCw,
+  ShoppingCart,
+  X,
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Modal,
-    RefreshControl,
-    ScrollView,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Modal,
+  RefreshControl,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import Animated, { SlideInDown, SlideOutDown } from "react-native-reanimated";
-
 
 export default function MarketplaceScreen() {
   const { currentUser } = useUser();
@@ -42,12 +44,14 @@ export default function MarketplaceScreen() {
   const [showPostOverlay, setShowPostOverlay] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [marketplaceItems, setMarketplaceItems] = useState<MarketplaceItemWithUser[]>([]);
+  const [marketplaceItems, setMarketplaceItems] = useState<
+    MarketplaceItemWithUser[]
+  >([]);
   const [filters, setFilters] = useState({
     dzongkhag: "",
     minPrice: "",
     maxPrice: "",
-    tags: []
+    tags: [],
   });
 
   // Fetch marketplace items
@@ -57,7 +61,7 @@ export default function MarketplaceScreen() {
       const { items } = await fetchMarketplaceItems(0, 50);
       setMarketplaceItems(items || []);
     } catch (error) {
-      console.error('Error loading marketplace items:', error);
+      console.error("Error loading marketplace items:", error);
     } finally {
       setIsLoading(false);
     }
@@ -74,20 +78,24 @@ export default function MarketplaceScreen() {
   useEffect(() => {
     loadMarketplaceItems();
   }, []);
-  
+
   const handleTabChange = (newTab: string) => {
     if (newTab === activeTab) return;
     setActiveTab(newTab);
   };
 
-  const renderMarketplaceCard = ({ item }: { item: MarketplaceItemWithUser }) => (
+  const renderMarketplaceCard = ({
+    item,
+  }: {
+    item: MarketplaceItemWithUser;
+  }) => (
     <TouchableOpacity
       onPress={() => router.push(`/(users)/marketplace/${item.id}` as any)}
       className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden"
     >
       {/* Product Image */}
       <ImageWithFallback
-        source={{ uri: item.images?.[0] || '' }}
+        source={{ uri: item.images?.[0] || "" }}
         className="w-full h-32"
         resizeMode="cover"
       />
@@ -95,7 +103,10 @@ export default function MarketplaceScreen() {
       {/* Card Content */}
       <View className="p-3">
         {/* Title */}
-        <Text className="text-sm font-semibold text-gray-900 mb-2" numberOfLines={2}>
+        <Text
+          className="text-sm font-semibold text-gray-900 mb-2"
+          numberOfLines={2}
+        >
           {item.title}
         </Text>
 
@@ -108,17 +119,26 @@ export default function MarketplaceScreen() {
         )}
 
         {/* Price */}
-        {(item.type === 'rent' || item.type === 'second_hand' || item.type === 'job_vacancy') && item.price > 0 && (
-          <Text className="text-base font-bold text-primary mb-2">
-            Nu. {item.price}
-          </Text>
-        )}
+        {(item.type === "rent" ||
+          item.type === "second_hand" ||
+          item.type === "job_vacancy") &&
+          item.price > 0 && (
+            <Text className="text-base font-bold text-primary mb-2">
+              Nu. {item.price}
+            </Text>
+          )}
 
         {/* Tags */}
         {item.tags && item.tags.length > 0 && (
-          <View className="flex-row flex-wrap" style={{ alignSelf: 'flex-start' }}>
+          <View
+            className="flex-row flex-wrap"
+            style={{ alignSelf: "flex-start" }}
+          >
             {item.tags.slice(0, 2).map((tag: string, index: number) => (
-              <Text key={index} className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded mr-1 mb-1">
+              <Text
+                key={index}
+                className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded mr-1 mb-1"
+              >
                 {tag}
               </Text>
             ))}
@@ -135,12 +155,15 @@ export default function MarketplaceScreen() {
 
       // Search query filter
       if (searchQuery) {
-        const descriptionText = typeof item.description === 'string'
-          ? item.description
-          : item.description?.text || '';
+        const descriptionText =
+          typeof item.description === "string"
+            ? item.description
+            : item.description?.text || "";
 
-        if (!item.title?.toLowerCase().includes(searchQuery.toLowerCase()) &&
-            !descriptionText.toLowerCase().includes(searchQuery.toLowerCase())) {
+        if (
+          !item.title?.toLowerCase().includes(searchQuery.toLowerCase()) &&
+          !descriptionText.toLowerCase().includes(searchQuery.toLowerCase())
+        ) {
           return false;
         }
       }
@@ -162,8 +185,8 @@ export default function MarketplaceScreen() {
       if (filters.tags.length > 0) {
         const hasMatchingTag = filters.tags.some((filterTag: string) =>
           item.tags?.some((itemTag: string) =>
-            itemTag.toLowerCase().includes(filterTag.toLowerCase())
-          )
+            itemTag.toLowerCase().includes(filterTag.toLowerCase()),
+          ),
         );
         if (!hasMatchingTag) return false;
       }
@@ -179,14 +202,16 @@ export default function MarketplaceScreen() {
       swap: "Swap Options",
       second_hand: "Second Hand Buy",
       free: "Free Options",
-      job_vacancy: "Job Vacancies"
+      job_vacancy: "Job Vacancies",
     }[activeTab];
 
     if (isLoading) {
       return (
         <View className="flex-1 items-center justify-center pt-20">
           <ActivityIndicator size="large" color="#094569" />
-          <Text className="text-sm text-gray-600 mt-2">Loading marketplace...</Text>
+          <Text className="text-sm text-gray-600 mt-2">
+            Loading marketplace...
+          </Text>
         </View>
       );
     }
@@ -194,9 +219,7 @@ export default function MarketplaceScreen() {
     return (
       <View className="px-3 pb-6">
         <View className="flex-row items-center justify-between mb-3">
-          <Text className="text-lg font-semibold text-gray-900">
-            {title}
-          </Text>
+          <Text className="text-lg font-semibold text-gray-900">{title}</Text>
           <TouchableOpacity
             onPress={() => setShowFilters(true)}
             className="bg-white border border-gray-300 rounded-lg p-2 shadow-sm"
@@ -208,7 +231,9 @@ export default function MarketplaceScreen() {
         {data.length === 0 ? (
           <View className="items-center justify-center py-20">
             <Text className="text-gray-500 text-base">No items found</Text>
-            <Text className="text-gray-400 text-sm mt-2">Try adjusting your filters</Text>
+            <Text className="text-gray-400 text-sm mt-2">
+              Try adjusting your filters
+            </Text>
           </View>
         ) : (
           <View className="flex-row flex-wrap gap-2 justify-between">
@@ -223,12 +248,11 @@ export default function MarketplaceScreen() {
     );
   };
 
-
   const renderFilterModal = () => {
     const updateFilter = (key: string, value: string | string[]) => {
-      setFilters(prev => ({
+      setFilters((prev) => ({
         ...prev,
-        [key]: value
+        [key]: value,
       }));
     };
 
@@ -237,7 +261,7 @@ export default function MarketplaceScreen() {
         dzongkhag: "",
         minPrice: "",
         maxPrice: "",
-        tags: []
+        tags: [],
       });
     };
 
@@ -257,44 +281,65 @@ export default function MarketplaceScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} className="max-h-96">
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              className="max-h-96"
+            >
               {/* Dzongkhag Filter */}
               <View className="mb-4">
-                <Text className="text-sm font-msemibold text-gray-700 mb-2">Location (Dzongkhag)</Text>
+                <Text className="text-sm font-msemibold text-gray-700 mb-2">
+                  Location (Dzongkhag)
+                </Text>
                 <View className="bg-white border border-gray-200 rounded-lg overflow-hidden">
                   <Picker
                     selectedValue={filters.dzongkhag}
-                    onValueChange={(value) => updateFilter('dzongkhag', value)}
+                    onValueChange={(value) => updateFilter("dzongkhag", value)}
                     style={{ height: 50 }}
                   >
                     <Picker.Item label="All Locations" value="" />
                     {dzongkhagCenters.map((dz) => (
-                      <Picker.Item key={dz.name} label={dz.name} value={dz.name} />
+                      <Picker.Item
+                        key={dz.name}
+                        label={dz.name}
+                        value={dz.name}
+                      />
                     ))}
                   </Picker>
                 </View>
               </View>
 
               {/* Price Range Filter (for rent, second_hand, and job_vacancy) */}
-              {(activeTab === 'rent' || activeTab === 'second_hand' || activeTab === 'job_vacancy') && (
+              {(activeTab === "rent" ||
+                activeTab === "second_hand" ||
+                activeTab === "job_vacancy") && (
                 <View className="mb-4">
-                  <Text className="text-sm font-msemibold text-gray-700 mb-2">Price Range (Nu.)</Text>
+                  <Text className="text-sm font-msemibold text-gray-700 mb-2">
+                    Price Range (Nu.)
+                  </Text>
                   <View className="flex-row gap-3">
                     <View className="flex-1">
-                      <Text className="text-xs text-gray-600 mb-1">Min Price</Text>
+                      <Text className="text-xs text-gray-600 mb-1">
+                        Min Price
+                      </Text>
                       <TextInput
                         value={filters.minPrice}
-                        onChangeText={(value) => updateFilter('minPrice', value)}
+                        onChangeText={(value) =>
+                          updateFilter("minPrice", value)
+                        }
                         placeholder="Min"
                         className="border border-gray-300 rounded-lg p-3 text-gray-900"
                         keyboardType="numeric"
                       />
                     </View>
                     <View className="flex-1">
-                      <Text className="text-xs text-gray-600 mb-1">Max Price</Text>
+                      <Text className="text-xs text-gray-600 mb-1">
+                        Max Price
+                      </Text>
                       <TextInput
                         value={filters.maxPrice}
-                        onChangeText={(value) => updateFilter('maxPrice', value)}
+                        onChangeText={(value) =>
+                          updateFilter("maxPrice", value)
+                        }
                         placeholder="Max"
                         className="border border-gray-300 rounded-lg p-3 text-gray-900"
                         keyboardType="numeric"
@@ -306,17 +351,24 @@ export default function MarketplaceScreen() {
 
               {/* Tags Filter */}
               <View className="mb-4">
-                <Text className="text-sm font-msemibold text-gray-700 mb-2">Filter by Tags</Text>
+                <Text className="text-sm font-msemibold text-gray-700 mb-2">
+                  Filter by Tags
+                </Text>
                 <TextInput
-                  value={filters.tags.join(', ')}
+                  value={filters.tags.join(", ")}
                   onChangeText={(text) => {
-                    const tagsArray = text.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0);
-                    updateFilter('tags', tagsArray);
+                    const tagsArray = text
+                      .split(",")
+                      .map((tag) => tag.trim())
+                      .filter((tag) => tag.length > 0);
+                    updateFilter("tags", tagsArray);
                   }}
                   placeholder="Enter tags (comma separated)"
                   className="border border-gray-300 rounded-lg p-3 text-gray-900"
                 />
-                <Text className="text-xs text-gray-500 mt-1">Example: furniture, affordable</Text>
+                <Text className="text-xs text-gray-500 mt-1">
+                  Example: furniture, affordable
+                </Text>
               </View>
             </ScrollView>
 
@@ -340,14 +392,17 @@ export default function MarketplaceScreen() {
     );
   };
 
-
   return (
     <View className="flex-1 bg-gray-50">
       <ScrollView
         className="flex-1"
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#094569"]} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={["#094569"]}
+          />
         }
       >
         {/* Header */}
@@ -449,11 +504,14 @@ export default function MarketplaceScreen() {
           <Animated.View
             entering={SlideInDown.springify()}
             exiting={SlideOutDown}
-            style={{ height: "100%", borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: "hidden" }}
+            style={{
+              height: "100%",
+              borderTopLeftRadius: 24,
+              borderTopRightRadius: 24,
+              overflow: "hidden",
+            }}
           >
-            <MarketplacePostOverlay
-              onClose={() => setShowPostOverlay(false)}
-            />
+            <MarketplacePostOverlay onClose={() => setShowPostOverlay(false)} />
           </Animated.View>
         </Modal>
       )}

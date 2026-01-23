@@ -13,16 +13,19 @@ import {
   ScrollView,
   Text,
   TextInput,
-  View
+  View,
 } from "react-native";
-import LocationMapPicker from "./LocationMapPicker";
+import LocationMapPicker from "./location/LocationMapPicker";
 
 interface BookMongooseModalProps {
   visible: boolean;
   onClose: () => void;
 }
 
-export default function BookMongooseModal({ visible, onClose }: BookMongooseModalProps) {
+export default function BookMongooseModal({
+  visible,
+  onClose,
+}: BookMongooseModalProps) {
   const { currentUser } = useUser();
   const [isAvailable, setIsAvailable] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -71,7 +74,10 @@ export default function BookMongooseModal({ visible, onClose }: BookMongooseModa
   const handleSubmit = async () => {
     // Validation
     if (!bookingDate || !bookingTime) {
-      Alert.alert("Missing Information", "Please fill in the date and time for your booking.");
+      Alert.alert(
+        "Missing Information",
+        "Please fill in the date and time for your booking.",
+      );
       return;
     }
 
@@ -84,26 +90,32 @@ export default function BookMongooseModal({ visible, onClose }: BookMongooseModa
       setSubmitting(true);
 
       // Get the authenticated user's ID from Supabase session
-      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
-      
+      const {
+        data: { user: authUser },
+        error: authError,
+      } = await supabase.auth.getUser();
+
       if (authError || !authUser) {
         console.error("Authentication error:", authError);
-        Alert.alert("Error", "Unable to verify your authentication. Please log in again.");
+        Alert.alert(
+          "Error",
+          "Unable to verify your authentication. Please log in again.",
+        );
         setSubmitting(false);
         return;
       }
 
       // Format date and time for storage
-      const formattedDate = bookingDate.toLocaleDateString('en-US', { 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
+      const formattedDate = bookingDate.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
       });
-      
-      const formattedTime = bookingTime.toLocaleTimeString('en-US', { 
-        hour: 'numeric', 
-        minute: '2-digit',
-        hour12: true 
+
+      const formattedTime = bookingTime.toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
       });
 
       const bookingData = {
@@ -124,23 +136,31 @@ export default function BookMongooseModal({ visible, onClose }: BookMongooseModa
         delivery_address: deliveryLocation?.address || null,
       };
 
-      const { error } = await supabase.from("booking_requests").insert([bookingData]);
+      const { error } = await supabase
+        .from("booking_requests")
+        .insert([bookingData]);
 
       if (error) {
         console.error("Booking error:", error);
-        if (error.code === "PGRST205" || error.message.includes("could not find")) {
+        if (
+          error.code === "PGRST205" ||
+          error.message.includes("could not find")
+        ) {
           Alert.alert(
             "Setup Required",
-            "The booking system is not fully configured yet. Please contact the administrator to run the database migration."
+            "The booking system is not fully configured yet. Please contact the administrator to run the database migration.",
           );
         } else {
-          Alert.alert("Error", "Failed to submit booking request. Please try again.");
+          Alert.alert(
+            "Error",
+            "Failed to submit booking request. Please try again.",
+          );
         }
       } else {
         Alert.alert(
           "Booking Submitted!",
           "Your booking request has been sent to Mongoose. You will be notified once it's reviewed.",
-          [{ text: "OK", onPress: handleClose }]
+          [{ text: "OK", onPress: handleClose }],
         );
       }
     } catch (error) {
@@ -163,33 +183,33 @@ export default function BookMongooseModal({ visible, onClose }: BookMongooseModa
   };
 
   const onDateChange = (event: any, selectedDate?: Date) => {
-    setShowDatePicker(Platform.OS === 'ios');
+    setShowDatePicker(Platform.OS === "ios");
     if (selectedDate) {
       setBookingDate(selectedDate);
     }
   };
 
   const onTimeChange = (event: any, selectedTime?: Date) => {
-    setShowTimePicker(Platform.OS === 'ios');
+    setShowTimePicker(Platform.OS === "ios");
     if (selectedTime) {
       setBookingTime(selectedTime);
     }
   };
 
   const formatDisplayDate = (date: Date) => {
-    return date.toLocaleDateString('en-US', { 
-      weekday: 'short',
-      year: 'numeric', 
-      month: 'short', 
-      day: 'numeric' 
+    return date.toLocaleDateString("en-US", {
+      weekday: "short",
+      year: "numeric",
+      month: "short",
+      day: "numeric",
     });
   };
 
   const formatDisplayTime = (time: Date) => {
-    return time.toLocaleTimeString('en-US', { 
-      hour: 'numeric', 
-      minute: '2-digit',
-      hour12: true 
+    return time.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
     });
   };
 
@@ -204,7 +224,9 @@ export default function BookMongooseModal({ visible, onClose }: BookMongooseModa
         <View className="bg-white rounded-t-3xl" style={{ maxHeight: "90%" }}>
           {/* Header */}
           <View className="flex-row justify-between items-center p-5 border-b border-gray-200">
-            <Text className="text-xl font-bold text-gray-900">Book Mongoose</Text>
+            <Text className="text-xl font-bold text-gray-900">
+              Book Mongoose
+            </Text>
             <Pressable
               onPress={handleClose}
               className="bg-gray-100 p-2 rounded-full"
@@ -218,16 +240,21 @@ export default function BookMongooseModal({ visible, onClose }: BookMongooseModa
             {loading ? (
               <View className="items-center py-8">
                 <ActivityIndicator size="large" color="#10b981" />
-                <Text className="text-gray-600 mt-3">Checking availability...</Text>
+                <Text className="text-gray-600 mt-3">
+                  Checking availability...
+                </Text>
               </View>
             ) : !isAvailable ? (
               <View className="items-center py-8">
                 <View className="bg-red-100 p-4 rounded-full mb-4">
                   <Ionicons name="close-circle" size={48} color="#dc2626" />
                 </View>
-                <Text className="text-xl font-bold text-gray-900 mb-2">Not Available</Text>
+                <Text className="text-xl font-bold text-gray-900 mb-2">
+                  Not Available
+                </Text>
                 <Text className="text-gray-600 text-center">
-                  Mongoose is not currently accepting bookings. Please check back later.
+                  Mongoose is not currently accepting bookings. Please check
+                  back later.
                 </Text>
               </View>
             ) : (
@@ -255,13 +282,17 @@ export default function BookMongooseModal({ visible, onClose }: BookMongooseModa
                       <Text className="text-base text-gray-800">
                         {formatDisplayDate(bookingDate)}
                       </Text>
-                      <Ionicons name="calendar-outline" size={20} color="#6b7280" />
+                      <Ionicons
+                        name="calendar-outline"
+                        size={20}
+                        color="#6b7280"
+                      />
                     </Pressable>
                     {showDatePicker && (
                       <DateTimePicker
                         value={bookingDate}
                         mode="date"
-                        display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                        display={Platform.OS === "ios" ? "spinner" : "default"}
                         onChange={onDateChange}
                         minimumDate={new Date()}
                       />
@@ -287,7 +318,7 @@ export default function BookMongooseModal({ visible, onClose }: BookMongooseModa
                       <DateTimePicker
                         value={bookingTime}
                         mode="time"
-                        display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                        display={Platform.OS === "ios" ? "spinner" : "default"}
                         onChange={onTimeChange}
                         is24Hour={false}
                       />
@@ -348,7 +379,8 @@ export default function BookMongooseModal({ visible, onClose }: BookMongooseModa
                               </Text>
                             </View>
                             <Text className="text-xs text-green-800 ml-5">
-                              {pickupLocation.address || `${pickupLocation.latitude.toFixed(6)}, ${pickupLocation.longitude.toFixed(6)}`}
+                              {pickupLocation.address ||
+                                `${pickupLocation.latitude.toFixed(6)}, ${pickupLocation.longitude.toFixed(6)}`}
                             </Text>
                           </View>
                         )}
@@ -361,7 +393,8 @@ export default function BookMongooseModal({ visible, onClose }: BookMongooseModa
                               </Text>
                             </View>
                             <Text className="text-xs text-blue-800 ml-5">
-                              {deliveryLocation.address || `${deliveryLocation.latitude.toFixed(6)}, ${deliveryLocation.longitude.toFixed(6)}`}
+                              {deliveryLocation.address ||
+                                `${deliveryLocation.latitude.toFixed(6)}, ${deliveryLocation.longitude.toFixed(6)}`}
                             </Text>
                           </View>
                         )}
@@ -371,9 +404,14 @@ export default function BookMongooseModal({ visible, onClose }: BookMongooseModa
                     {/* Validation message */}
                     {(!pickupLocation || !deliveryLocation) && (
                       <View className="mt-2 flex-row items-start">
-                        <Ionicons name="information-circle" size={16} color="#ef4444" />
+                        <Ionicons
+                          name="information-circle"
+                          size={16}
+                          color="#ef4444"
+                        />
                         <Text className="ml-1 text-xs text-red-600 flex-1">
-                          Both pickup and delivery locations are required for booking
+                          Both pickup and delivery locations are required for
+                          booking
                         </Text>
                       </View>
                     )}
@@ -384,19 +422,35 @@ export default function BookMongooseModal({ visible, onClose }: BookMongooseModa
                     <Text className="text-sm font-medium text-gray-700 mb-2">
                       Your Contact Information
                     </Text>
-                    <Text className="text-sm text-gray-600">Name: {currentUser?.name || 'N/A'}</Text>
-                    <Text className="text-sm text-gray-600">Email: {currentUser?.email || 'N/A'}</Text>
+                    <Text className="text-sm text-gray-600">
+                      Name: {currentUser?.name || "N/A"}
+                    </Text>
+                    <Text className="text-sm text-gray-600">
+                      Email: {currentUser?.email || "N/A"}
+                    </Text>
                     {currentUser?.phone ? (
-                      <Text className="text-sm text-gray-600">Phone: {currentUser?.phone}</Text>
+                      <Text className="text-sm text-gray-600">
+                        Phone: {currentUser?.phone}
+                      </Text>
                     ) : null}
                   </View>
 
                   {/* Submit Button */}
                   <Pressable
                     onPress={handleSubmit}
-                    disabled={submitting || !bookingDate || !bookingTime || !pickupLocation || !deliveryLocation}
+                    disabled={
+                      submitting ||
+                      !bookingDate ||
+                      !bookingTime ||
+                      !pickupLocation ||
+                      !deliveryLocation
+                    }
                     className={`mt-6 py-4 rounded-lg items-center ${
-                      submitting || !bookingDate || !bookingTime || !pickupLocation || !deliveryLocation
+                      submitting ||
+                      !bookingDate ||
+                      !bookingTime ||
+                      !pickupLocation ||
+                      !deliveryLocation
                         ? "bg-gray-300"
                         : "bg-green-600"
                     }`}
@@ -404,7 +458,9 @@ export default function BookMongooseModal({ visible, onClose }: BookMongooseModa
                     {submitting ? (
                       <ActivityIndicator color="white" />
                     ) : (
-                      <Text className="text-white font-semibold text-base">Submit Booking Request</Text>
+                      <Text className="text-white font-semibold text-base">
+                        Submit Booking Request
+                      </Text>
                     )}
                   </Pressable>
                 </View>

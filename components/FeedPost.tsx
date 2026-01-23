@@ -1,6 +1,6 @@
 import FullscreenVideoPlayer from "@/components/FullscreenVideoPlayer";
-import ImageViewer from "@/components/ImageViewer";
-import ReportPostModal from "@/components/ReportPostModal";
+import ImageViewer from "@/components/modals/ImageViewer";
+import ReportPostModal from "@/components/modals/ReportPostModal";
 import { useUser } from "@/contexts/UserContext";
 import { PostData } from "@/types/post";
 import {
@@ -11,19 +11,26 @@ import {
   Play,
 } from "lucide-react-native";
 import React, { useState } from "react";
-import { Animated, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  Animated,
+  Image,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
 export { default as PostSkeleton } from "@/components/ui/PostSkeleton";
 
 interface FeedPostProps {
   post: PostData;
-  isVisible?: boolean; 
+  isVisible?: boolean;
 }
 
 const formatDate = (date: Date): string => {
   const now = new Date();
   const diffInHours = Math.floor(
-    (now.getTime() - date.getTime()) / (1000 * 60 * 60)
+    (now.getTime() - date.getTime()) / (1000 * 60 * 60),
   );
 
   if (diffInHours < 1) {
@@ -48,16 +55,30 @@ const isVideoUrl = (url: string): boolean => {
   );
 };
 
-const ImageSkeleton = ({ width, height }: { width: string; height: string }) => {
+const ImageSkeleton = ({
+  width,
+  height,
+}: {
+  width: string;
+  height: string;
+}) => {
   const shimmerOpacity = React.useRef(new Animated.Value(0.3)).current;
   const animationRef = React.useRef<Animated.CompositeAnimation | null>(null);
 
   React.useEffect(() => {
     animationRef.current = Animated.loop(
       Animated.sequence([
-        Animated.timing(shimmerOpacity, { toValue: 0.7, duration: 800, useNativeDriver: true }),
-        Animated.timing(shimmerOpacity, { toValue: 0.3, duration: 800, useNativeDriver: true }),
-      ])
+        Animated.timing(shimmerOpacity, {
+          toValue: 0.7,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+        Animated.timing(shimmerOpacity, {
+          toValue: 0.3,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+      ]),
     );
     animationRef.current.start();
 
@@ -69,13 +90,23 @@ const ImageSkeleton = ({ width, height }: { width: string; height: string }) => 
     };
   }, []); // Remove shimmerOpacity from deps to prevent recreation
 
-  return <Animated.View className="bg-gray-300 absolute inset-0 rounded-lg" style={{ opacity: shimmerOpacity }} />;
+  return (
+    <Animated.View
+      className="bg-gray-300 absolute inset-0 rounded-lg"
+      style={{ opacity: shimmerOpacity }}
+    />
+  );
 };
 
 const PostImage = ({ imageUri, onPress, className, style }: any) => {
   const [imageLoading, setImageLoading] = useState(true);
   return (
-    <TouchableOpacity onPress={onPress} activeOpacity={0.9} className={className} style={style}>
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.9}
+      className={className}
+      style={style}
+    >
       <View className="relative">
         {imageLoading && <ImageSkeleton width="100%" height="100%" />}
         <Image
@@ -154,7 +185,7 @@ const renderImages = (
   username?: string,
   likes?: number,
   comments?: number,
-  isVisible?: boolean
+  isVisible?: boolean,
 ) => {
   if (images.length === 0) return null;
 
@@ -162,7 +193,7 @@ const renderImages = (
     mediaUri: string,
     index: number,
     className: string,
-    style?: any
+    style?: any,
   ) => {
     const isVideo = isVideoUrl(mediaUri);
 
@@ -196,7 +227,11 @@ const renderImages = (
   };
 
   if (images.length === 1) {
-    return <View className="mt-3 rounded-lg overflow-hidden">{renderMediaItem(images[0], 0, "w-full h-64")}</View>;
+    return (
+      <View className="mt-3 rounded-lg overflow-hidden">
+        {renderMediaItem(images[0], 0, "w-full h-64")}
+      </View>
+    );
   }
   if (images.length === 2) {
     return (
@@ -206,7 +241,7 @@ const renderImages = (
       </View>
     );
   }
-  
+
   const remainingCount = images.length - 3;
   return (
     <View className="mt-3 gap-1 rounded-lg overflow-hidden">
@@ -217,7 +252,9 @@ const renderImages = (
           {renderMediaItem(images[2], 2, "w-full h-32")}
           {remainingCount > 0 && (
             <View className="absolute inset-0 bg-black/60 items-center justify-center z-10">
-              <Text className="text-white font-bold text-xl">+{remainingCount}</Text>
+              <Text className="text-white font-bold text-xl">
+                +{remainingCount}
+              </Text>
             </View>
           )}
         </View>
@@ -235,24 +272,39 @@ export default function FeedPost({ post, isVisible }: FeedPostProps) {
   const [showReportModal, setShowReportModal] = useState(false);
   const { currentUser } = useUser();
 
-  const handleLike = () => { setIsLiked(!isLiked); setLikesCount(isLiked ? likesCount - 1 : likesCount + 1); };
+  const handleLike = () => {
+    setIsLiked(!isLiked);
+    setLikesCount(isLiked ? likesCount - 1 : likesCount + 1);
+  };
   const handleBookmark = () => setIsBookmarked(!isBookmarked);
-  const handleImagePress = (index: number) => { setSelectedImageIndex(index); setShowImageViewer(true); };
+  const handleImagePress = (index: number) => {
+    setSelectedImageIndex(index);
+    setShowImageViewer(true);
+  };
 
   return (
     <View className="bg-white border-b border-gray-200">
       <View className="flex-row items-center justify-between p-4">
         <View className="flex-row items-center flex-1">
           <View className="w-10 h-10 rounded-full bg-gray-300 items-center justify-center mr-3 overflow-hidden">
-             {post.profilePic ? (
-               <Image source={{ uri: post.profilePic }} className="w-full h-full" />
-             ) : (
-               <Text className="text-gray-600 font-semibold">{post.username?.charAt(0) || "U"}</Text>
-             )}
+            {post.profilePic ? (
+              <Image
+                source={{ uri: post.profilePic }}
+                className="w-full h-full"
+              />
+            ) : (
+              <Text className="text-gray-600 font-semibold">
+                {post.username?.charAt(0) || "U"}
+              </Text>
+            )}
           </View>
           <View className="flex-1">
-            <Text className="font-semibold text-gray-900 text-base">{post.username || "Unknown"}</Text>
-            <Text className="text-gray-500 text-sm">{formatDate(post.date)}</Text>
+            <Text className="font-semibold text-gray-900 text-base">
+              {post.username || "Unknown"}
+            </Text>
+            <Text className="text-gray-500 text-sm">
+              {formatDate(post.date)}
+            </Text>
           </View>
         </View>
         <TouchableOpacity onPress={() => setShowReportModal(true)}>
@@ -260,7 +312,11 @@ export default function FeedPost({ post, isVisible }: FeedPostProps) {
         </TouchableOpacity>
       </View>
 
-      <View className="px-4"><Text className="text-gray-900 text-base leading-6">{post.content}</Text></View>
+      <View className="px-4">
+        <Text className="text-gray-900 text-base leading-6">
+          {post.content}
+        </Text>
+      </View>
 
       <View className="px-4">
         {renderImages(
@@ -271,25 +327,41 @@ export default function FeedPost({ post, isVisible }: FeedPostProps) {
           post.username,
           likesCount,
           post.comments,
-          isVisible
+          isVisible,
         )}
       </View>
 
       <View className="border-t border-gray-200 px-4 py-4">
         <View className="flex-row items-center justify-between">
-            <View className="flex-row items-center">
-                <TouchableOpacity onPress={handleLike} className="flex-row items-center mr-6">
-                    <Heart size={20} color={isLiked ? "#e91e63" : "#666"} fill={isLiked ? "#e91e63" : "none"} />
-                    <Text className="ml-1 font-medium text-gray-600">{likesCount}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={handleBookmark} className="flex-row items-center">
-                    <Bookmark size={20} color={isBookmarked ? "#1976d2" : "#666"} fill={isBookmarked ? "#1976d2" : "none"} />
-                </TouchableOpacity>
-            </View>
-            <TouchableOpacity className="flex-row items-center">
-                <MessageCircle size={20} color="#666" />
-                <Text className="ml-2 text-gray-600 font-medium">Message</Text>
+          <View className="flex-row items-center">
+            <TouchableOpacity
+              onPress={handleLike}
+              className="flex-row items-center mr-6"
+            >
+              <Heart
+                size={20}
+                color={isLiked ? "#e91e63" : "#666"}
+                fill={isLiked ? "#e91e63" : "none"}
+              />
+              <Text className="ml-1 font-medium text-gray-600">
+                {likesCount}
+              </Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleBookmark}
+              className="flex-row items-center"
+            >
+              <Bookmark
+                size={20}
+                color={isBookmarked ? "#1976d2" : "#666"}
+                fill={isBookmarked ? "#1976d2" : "none"}
+              />
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity className="flex-row items-center">
+            <MessageCircle size={20} color="#666" />
+            <Text className="ml-2 text-gray-600 font-medium">Message</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -310,7 +382,10 @@ export default function FeedPost({ post, isVisible }: FeedPostProps) {
           visible={showReportModal}
           onClose={() => setShowReportModal(false)}
           postId={post.id}
-          postContent={post.content.substring(0, 50) + (post.content.length > 50 ? '...' : '')}
+          postContent={
+            post.content.substring(0, 50) +
+            (post.content.length > 50 ? "..." : "")
+          }
           postOwnerId={post.userId}
           currentUserId={currentUser.id}
           onReportSuccess={() => {
@@ -324,52 +399,52 @@ export default function FeedPost({ post, isVisible }: FeedPostProps) {
 
 const videoPreviewStyles = StyleSheet.create({
   container: {
-    position: 'relative',
-    width: '100%',
+    position: "relative",
+    width: "100%",
     height: 300,
-    backgroundColor: '#000',
+    backgroundColor: "#000",
     borderRadius: 8,
-    overflow: 'hidden'
+    overflow: "hidden",
   },
   videoWrapper: {
-    width: '100%',
-    height: '100%',
-    position: 'relative'
+    width: "100%",
+    height: "100%",
+    position: "relative",
   },
   videoPlayer: {
-    position: 'absolute',
+    position: "absolute",
     top: 0,
     left: 0,
-    width: '100%',
-    height: '100%'
+    width: "100%",
+    height: "100%",
   },
   overlay: {
-    position: 'absolute',
+    position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.1)'
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.1)",
   },
   playButton: {
-    backgroundColor: 'rgba(255,255,255,0.8)',
+    backgroundColor: "rgba(255,255,255,0.8)",
     borderRadius: 50,
-    padding: 15
+    padding: 15,
   },
   videoBadge: {
-    position: 'absolute',
+    position: "absolute",
     top: 8,
     left: 8,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: "rgba(0,0,0,0.7)",
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 4
+    borderRadius: 4,
   },
   videoBadgeText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 10,
-    fontWeight: 'bold'
+    fontWeight: "bold",
   },
 });

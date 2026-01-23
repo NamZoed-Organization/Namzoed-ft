@@ -84,24 +84,24 @@ export default function LiveWrapper({ onClose }: LiveWrapperProps) {
         <Text style={styles.errorTitle}>Live Streaming Unavailable</Text>
 
         <Text style={styles.errorMessage}>
-          The live streaming feature is currently unavailable. This may be due
-          to:
+          Live streaming is not available in Expo Go. This feature requires
+          native WebRTC modules that are not included in the Expo Go app.
         </Text>
 
         <View style={styles.reasonsList}>
           <Text style={styles.reasonItem}>
-            • Missing native dependencies (WebRTC)
+            • WebRTC is not supported in Expo Go
           </Text>
           <Text style={styles.reasonItem}>
-            • App needs to be rebuilt with native modules
+            • Native modules need to be compiled
           </Text>
           <Text style={styles.reasonItem}>
-            • Platform-specific configuration required
+            • Build a development build to test this feature
           </Text>
         </View>
 
         <Text style={styles.solutionText}>
-          To fix this, please restart the app or rebuild with:
+          To test live streaming, build a development build:
         </Text>
 
         <View style={styles.codeBlock}>
