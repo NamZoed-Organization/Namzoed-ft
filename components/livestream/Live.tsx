@@ -40,6 +40,7 @@ import {
 } from "react-native-safe-area-context";
 
 import { useUser } from "@/contexts/UserContext";
+import { supabase } from "@/lib/supabase";
 import getStreamService, {
   type StreamIdentity,
 } from "@/services/getStreamService";
@@ -79,7 +80,6 @@ import Animated, {
   useSharedValue,
   withSpring,
 } from "react-native-reanimated";
-import { supabase } from "../lib/supabase";
 import { LiveChat } from "./livechat";
 
 interface LiveScreenProps {
@@ -122,7 +122,7 @@ const deriveUserIdentifier = (user: unknown) => {
 
   const candidate = candidates.find(
     (value): value is string =>
-      typeof value === "string" && value.trim().length > 0
+      typeof value === "string" && value.trim().length > 0,
   );
 
   if (!candidate) {
@@ -189,7 +189,7 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose }) => {
   const [recordingEnabled, setRecordingEnabled] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [streamClient, setStreamClient] = useState<StreamVideoClient | null>(
-    null
+    null,
   );
   const [activeCall, setActiveCall] = useState<Call | null>(null);
   const [callRole, setCallRole] = useState<ActiveCallRole>(null);
@@ -209,7 +209,7 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose }) => {
 
   const userId = useMemo(
     () => deriveUserIdentifier(currentUser),
-    [currentUser]
+    [currentUser],
   );
 
   const supabaseUserId = useMemo(() => {
@@ -350,7 +350,7 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose }) => {
 
       resetActiveCallState();
     },
-    [resetActiveCallState]
+    [resetActiveCallState],
   );
 
   const handleClose = useCallback(async () => {
@@ -374,7 +374,7 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose }) => {
       const { identity, client } = await ensureStreamClient();
 
       const callIdentifier = `namzoed-${sanitizeIdentifier(
-        identity.id
+        identity.id,
       )}-${Date.now()}`;
 
       const call = await getStreamService.createHostCall(
@@ -382,7 +382,7 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose }) => {
         callIdentifier,
         {
           title: liveTitle.trim().length > 0 ? liveTitle.trim() : liveTitle,
-        }
+        },
       );
 
       const record = await createLivestreamRecord({
@@ -392,8 +392,8 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose }) => {
           typeof currentUser.profileImg === "string"
             ? currentUser.profileImg
             : typeof currentUser.avatar_url === "string"
-            ? currentUser.avatar_url
-            : null,
+              ? currentUser.avatar_url
+              : null,
         title: liveTitle,
         description: null,
         stream_provider_id: callIdentifier,
@@ -455,7 +455,7 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose }) => {
       const callId = resolveCallIdentifier(stream);
       if (!callId) {
         setErrorMessage(
-          "This livestream is not ready. Please try again later."
+          "This livestream is not ready. Please try again later.",
         );
         return;
       }
@@ -484,7 +484,7 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose }) => {
         setInitializingCall(false);
       }
     },
-    [ensureStreamClient, resolveCallIdentifier]
+    [ensureStreamClient, resolveCallIdentifier],
   );
 
   useEffect(() => {
@@ -496,7 +496,7 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose }) => {
     return () => {
       // Decrement viewer count when leaving
       incrementLivestreamViewerCountAtomic(selectedStream.id, -1).catch(
-        () => {}
+        () => {},
       );
     };
   }, [selectedStream?.id, callRole, activeCall?.id]);
@@ -552,7 +552,7 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose }) => {
 
       await endLivestreamRecord(hostRecord.id, ownerId);
       setLivestreams((prev) =>
-        prev.filter((item) => item.id !== hostRecord.id)
+        prev.filter((item) => item.id !== hostRecord.id),
       );
     } catch (error) {
       console.error("Failed to end livestream", error);
@@ -585,7 +585,7 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose }) => {
       return prev.map((item) =>
         item.id === hostingRecordRef.current?.id
           ? { ...item, started_at: new Date().toISOString(), is_active: true }
-          : item
+          : item,
       );
     });
   }, []);
@@ -831,7 +831,7 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose }) => {
               filterType === "all"
                 ? livestreams
                 : livestreams.filter(
-                    (stream) => (stream as any)?.stream_type === filterType
+                    (stream) => (stream as any)?.stream_type === filterType,
                   );
 
             if (livestreams.length === 0) {
@@ -1420,7 +1420,7 @@ const HostCallContainer: React.FC<HostCallContainerProps> = ({
         },
         () => {
           fetchAcceptedCoHosts();
-        }
+        },
       )
       .subscribe();
 
@@ -1476,7 +1476,7 @@ const HostCallContainer: React.FC<HostCallContainerProps> = ({
         (p.roles ?? []).includes("admin") ||
         (p.publishedTracks && p.publishedTracks.length > 0) ||
         p.audioStream ||
-        p.videoStream)
+        p.videoStream),
   );
 
   const handleToggleLive = () => {
@@ -1545,7 +1545,7 @@ const HostCallContainer: React.FC<HostCallContainerProps> = ({
         } catch (e) {
           return { ...row, product: null };
         }
-      })
+      }),
     );
     setSharedProducts(detailed);
   }, [livestreamId]);
@@ -1565,7 +1565,7 @@ const HostCallContainer: React.FC<HostCallContainerProps> = ({
         },
         async () => {
           await fetchSharedProducts();
-        }
+        },
       )
       .on(
         "postgres_changes",
@@ -1577,7 +1577,7 @@ const HostCallContainer: React.FC<HostCallContainerProps> = ({
         },
         async () => {
           await fetchSharedProducts();
-        }
+        },
       )
       .on(
         "postgres_changes",
@@ -1589,7 +1589,7 @@ const HostCallContainer: React.FC<HostCallContainerProps> = ({
         },
         async () => {
           await fetchSharedProducts();
-        }
+        },
       )
       .subscribe();
 
@@ -1601,7 +1601,7 @@ const HostCallContainer: React.FC<HostCallContainerProps> = ({
     const existing = sharedProducts.find(
       (s) =>
         String(s.product_id) === String(product.id) ||
-        String(s.product?.id) === String(product.id)
+        String(s.product?.id) === String(product.id),
     );
     if (existing) {
       await supabase
@@ -1612,7 +1612,7 @@ const HostCallContainer: React.FC<HostCallContainerProps> = ({
           product_id: existing.product_id || product.id,
         });
       setSharedProducts((prev) =>
-        prev.filter((p) => String(p.product_id) !== String(product.id))
+        prev.filter((p) => String(p.product_id) !== String(product.id)),
       );
     } else {
       await supabase
@@ -1762,7 +1762,7 @@ const HostCallContainer: React.FC<HostCallContainerProps> = ({
                           {sharedProducts.some(
                             (s) =>
                               String(s.product_id) ===
-                              String(selectedProduct?.id)
+                              String(selectedProduct?.id),
                           )
                             ? "Unshare"
                             : "Share"}
@@ -2069,7 +2069,7 @@ const HostCallContainer: React.FC<HostCallContainerProps> = ({
                               const isShared = sharedProducts.some(
                                 (s) =>
                                   String(s.product_id) === String(item.id) ||
-                                  String(s.product?.id) === String(item.id)
+                                  String(s.product?.id) === String(item.id),
                               );
                               return (
                                 <TouchableOpacity
@@ -2141,7 +2141,7 @@ const HostCallContainer: React.FC<HostCallContainerProps> = ({
                               const isShared = sharedProducts.some(
                                 (s) =>
                                   String(s.product_id) === String(item.id) ||
-                                  String(s.product?.id) === String(item.id)
+                                  String(s.product?.id) === String(item.id),
                               );
                               return (
                                 <TouchableOpacity
@@ -2454,7 +2454,7 @@ const ViewerCallContainer: React.FC<ViewerCallContainerProps> = ({
         livestreamId,
         currentUserId,
         currentUsername,
-        currentProfileImage
+        currentProfileImage,
       );
       setHasRequestedJoin(true);
       setRequestStatus("pending");
@@ -2579,7 +2579,7 @@ const ViewerCallContainer: React.FC<ViewerCallContainerProps> = ({
         },
         () => {
           checkRequestStatus();
-        }
+        },
       )
       .subscribe();
 
@@ -2618,7 +2618,7 @@ const ViewerCallContainer: React.FC<ViewerCallContainerProps> = ({
         },
         () => {
           fetchAcceptedCoHosts();
-        }
+        },
       )
       .subscribe();
 
@@ -2692,7 +2692,7 @@ const ViewerCallContainer: React.FC<ViewerCallContainerProps> = ({
         if (s === "idle") {
           joinPromiseRef.current = null;
         }
-      }
+      },
     );
 
     return () => {
@@ -2712,7 +2712,7 @@ const ViewerCallContainer: React.FC<ViewerCallContainerProps> = ({
       p.userId === hostId ||
       (p.roles ?? []).includes("host") ||
       (p.roles ?? []).includes("admin") ||
-      p.userId === call?.state.createdBy?.id
+      p.userId === call?.state.createdBy?.id,
   );
 
   // Get all speakers (host + accepted co-hosts)
@@ -2726,7 +2726,7 @@ const ViewerCallContainer: React.FC<ViewerCallContainerProps> = ({
       acceptedCoHostIds.includes(p.userId ?? "") ||
       (p.publishedTracks && p.publishedTracks.length > 0) ||
       p.audioStream ||
-      p.videoStream
+      p.videoStream,
   );
 
   // Build final allSpeakers list ensuring:
@@ -2940,8 +2940,8 @@ const ViewerCallContainer: React.FC<ViewerCallContainerProps> = ({
                                 isHost
                                   ? "bg-black/60"
                                   : isMe
-                                  ? "bg-green-500/80"
-                                  : "bg-purple-500/80"
+                                    ? "bg-green-500/80"
+                                    : "bg-purple-500/80"
                               }`}
                             >
                               <Text className="text-white text-xs font-semibold">

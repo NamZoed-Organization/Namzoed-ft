@@ -19,7 +19,7 @@ let importError: Error | null = null;
 
 try {
   // Attempt to load the Live component
-  const LiveModule = require("@/components/Live");
+  const LiveModule = require("@/components/livestream/Live");
   LiveScreen = LiveModule.default || LiveModule;
 } catch (error) {
   console.warn("Live streaming module unavailable:", error);
@@ -45,8 +45,8 @@ export default function LiveWrapper({ onClose }: LiveWrapperProps) {
     // Attempt to reload the module
     setTimeout(() => {
       try {
-        delete require.cache[require.resolve("@/components/Live")];
-        const LiveModule = require("@/components/Live");
+        delete require.cache[require.resolve("@/components/livestream/Live")];
+        const LiveModule = require("@/components/livestream/Live");
         LiveScreen = LiveModule.default || LiveModule;
 
         if (LiveScreen) {

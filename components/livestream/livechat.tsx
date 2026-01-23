@@ -1,3 +1,4 @@
+import { supabase } from "@/lib/supabase";
 import MaskedView from "@react-native-masked-view/masked-view";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
@@ -21,7 +22,6 @@ import Animated, {
   LinearTransition,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { supabase } from "../lib/supabase";
 
 interface Comment {
   id: string;
@@ -105,7 +105,7 @@ export const LiveChat = ({
         ...g,
         id: `${g.id}-${liveStreamId}`,
         created_at: new Date(
-          Date.now() - (COMMUNITY_GUIDELINES.length - index) * 1000
+          Date.now() - (COMMUNITY_GUIDELINES.length - index) * 1000,
         ).toISOString(),
       }));
       setSystemMessages(guidelineMessages);
@@ -152,7 +152,7 @@ export const LiveChat = ({
           if (payload.new && typeof payload.new.viewer_count === "number") {
             setViewerCount(payload.new.viewer_count);
           }
-        }
+        },
       )
       .subscribe();
 
@@ -205,10 +205,10 @@ export const LiveChat = ({
           // Remove join message after 5 seconds
           setTimeout(() => {
             setSystemMessages((prev) =>
-              prev.filter((m) => m.id !== joinMessage.id)
+              prev.filter((m) => m.id !== joinMessage.id),
             );
           }, 5000);
-        }
+        },
       )
       .subscribe();
 
@@ -249,7 +249,7 @@ export const LiveChat = ({
         } catch (e) {
           return { ...row, product: null };
         }
-      })
+      }),
     );
 
     setSharedProducts(detailed);
@@ -272,7 +272,7 @@ export const LiveChat = ({
         },
         async (payload) => {
           await fetchSharedProducts();
-        }
+        },
       )
       .on(
         "postgres_changes",
@@ -284,7 +284,7 @@ export const LiveChat = ({
         },
         async (payload) => {
           await fetchSharedProducts();
-        }
+        },
       )
       .on(
         "postgres_changes",
@@ -296,7 +296,7 @@ export const LiveChat = ({
         },
         async (payload) => {
           await fetchSharedProducts();
-        }
+        },
       )
       .subscribe();
 
@@ -348,7 +348,7 @@ export const LiveChat = ({
             },
           } as Comment;
           setComments((prev) => [newComment, ...prev]);
-        }
+        },
       )
       .subscribe();
 
@@ -382,7 +382,7 @@ export const LiveChat = ({
 
     return [...commentItems, ...systemItems].sort(
       (a, b) =>
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
     );
   }, [comments, systemMessages]);
 
@@ -503,8 +503,8 @@ export const LiveChat = ({
             ? 0
             : 20
           : Platform.OS === "ios"
-          ? insets.bottom + 60
-          : 0
+            ? insets.bottom + 60
+            : 0
       }
       style={{ flex: 1 }}
       pointerEvents="auto"
