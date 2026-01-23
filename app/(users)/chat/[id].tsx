@@ -1,14 +1,19 @@
 // app/(users)/chat/[id].tsx
+import ChatImagePicker from "@/components/chat/ChatImagePicker";
 import { useUser } from "@/contexts/UserContext";
 import users from "@/data/UserData";
 import { supabase } from "@/lib/supabase";
 import { Ionicons } from "@expo/vector-icons";
+import * as Location from 'expo-location';
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Animated,
   Image,
   KeyboardAvoidingView,
+  Linking,
+  Modal,
   Platform,
   ScrollView,
   Text,
@@ -16,6 +21,21 @@ import {
   TouchableOpacity,
   View
 } from "react-native";
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+
+// Add this User type extension if not already present
+type User = {
+  id: string;
+  username?: string;
+  name?: string;
+  full_name?: string;
+  display_name?: string;
+  phone?: string;
+  phoneNumber?: string;
+  mobile?: string;
+  phone_number?: string; // <-- Add this line
+  profileImg?: string | null;
+};
 
 // Enhanced function to get user data from multiple sources
 const getUserData = async (identifier: string) => {
@@ -196,9 +216,20 @@ export default function ChatScreen() {
   const [currentUserUUID, setCurrentUserUUID] = useState<string | null>(null);
   const [chatPartnerData, setChatPartnerData] = useState<any>(null);
   const [isLoadingPartner, setIsLoadingPartner] = useState(true);
+  const [isAnimatingMongoose, setIsAnimatingMongoose] = useState(false);
+  const [isSharingLocation, setIsSharingLocation] = useState(false);
+  const [showMapModal, setShowMapModal] = useState(false);
+  const [selectedLocation, setSelectedLocation] = useState<{latitude: number, longitude: number} | null>(null);
+  const [selectedMessage, setSelectedMessage] = useState<any>(null);
+  const [showMessageActions, setShowMessageActions] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [showImagePreview, setShowImagePreview] = useState(false);
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
   const channelRef = useRef<any>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bikeAnimationX = useRef(new Animated.Value(0)).current;
 
   const isMongooseChat = typeof id === 'string' && id.startsWith('mongoose-');
   const mongooseName = isMongooseChat ? id.replace('mongoose-', '') : null;
@@ -232,135 +263,159 @@ export default function ChatScreen() {
   // Fetch initial messages and subscribe to real-time updates
   useEffect(() => {
     const userPhone = currentUser?.phone_number || (currentUser as any)?.phone || (currentUser as any)?.phoneNumber || (currentUser as any)?.mobile;
-    const userId = (currentUser as any)?.id || (currentUser as any)?.user_id || userPhone;
     
-    console.log('=== FETCH MESSAGES DEBUG ===');
-    console.log('currentUser:', currentUser);
-    console.log('Available currentUser properties:', currentUser ? Object.keys(currentUser) : 'No currentUser');
-    console.log('userPhone detected:', userPhone);
-    console.log('userId detected:', userId);
-    console.log('chatPartnerId:', chatPartnerId);
-    
-    if (!userId || !chatPartnerId) {
-      console.log('Missing userId or chatPartnerId');
+    if (!userPhone || !chatPartnerId) {
+      console.log('⚠️ Missing user phone or chat partner ID');
       return;
     }
 
-    // Only fetch a limited number of recent messages for performance
-    const MESSAGE_LIMIT = 200;
+    let isSubscribed = true;
+    const channelName = `chat_${chatPartnerId}_${Date.now()}`;
 
-    const fetchInitialMessages = async () => {
+    const setupChatRealtime = async () => {
       try {
-        // Try to get the user's UUID from profiles table first. Cache it to avoid repeated fetches.
-        if (!currentUserUUID) {
-          const { data: profileData, error: profileError } = await supabase
-            .from('profiles')
-            .select('id')
-            .eq('phone', userPhone)
-            .maybeSingle();
+        // Get user UUID from profiles
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('phone', userPhone)
+          .maybeSingle();
 
-          if (profileError) {
-            console.error('Error fetching user profile:', profileError);
-          } else {
-            const userUUID = profileData?.id;
-            console.log('User UUID from profiles:', userUUID);
-            if (userUUID) setCurrentUserUUID(userUUID);
-          }
+        if (profileError) {
+          console.error('❌ Error fetching user profile:', profileError);
+          return;
         }
 
-        const sender = currentUserUUID || userId;
+        const userUUID = profileData?.id;
+        if (!userUUID) {
+          console.error('❌ No UUID found for user');
+          return;
+        }
 
-        // Fetch only the most recent messages between the two users
-        const { data, error } = await supabase
+        console.log('✅ User UUID:', userUUID.substring(0, 8));
+        if (isSubscribed) setCurrentUserUUID(userUUID);
+
+        // Fetch initial messages
+        const { data: messagesData, error: messagesError } = await supabase
           .from('messages')
           .select('*')
-          .or(`and(sender_id.eq.${sender},receiver_id.eq.${chatPartnerId}),and(sender_id.eq.${chatPartnerId},receiver_id.eq.${sender})`)
+          .or(`and(sender_id.eq.${userUUID},receiver_id.eq.${chatPartnerId}),and(sender_id.eq.${chatPartnerId},receiver_id.eq.${userUUID})`)
           .order('created_at', { ascending: true })
-          .limit(MESSAGE_LIMIT);
+          .limit(200);
 
-        if (error) {
-          console.error('Error fetching messages:', error);
-        } else {
-          console.log('Messages fetched:', data?.length || 0);
-          setMessages(data || []);
+        if (messagesError) {
+          console.error('❌ Error fetching messages:', messagesError);
+        } else if (isSubscribed) {
+          console.log('✅ Fetched', messagesData?.length || 0, 'messages');
+          setMessages(messagesData || []);
         }
-      } catch (e) {
-        console.error('An exception occurred:', e);
+
+        // Clean up previous channel
+        if (channelRef.current) {
+          await supabase.removeChannel(channelRef.current);
+          channelRef.current = null;
+        }
+
+        // Set up real-time subscription - listen to ALL messages and filter in callback
+        channelRef.current = supabase
+          .channel(channelName)
+          .on('postgres_changes', {
+            event: '*',
+            schema: 'public',
+            table: 'messages'
+          }, (payload) => {
+            if (!isSubscribed) return;
+            
+            const message = payload.new as any;
+            const oldMessage = payload.old as any;
+            
+            // Check if this message involves current conversation
+            const isRelevant = message && (
+              (message.sender_id === userUUID && message.receiver_id === chatPartnerId) ||
+              (message.sender_id === chatPartnerId && message.receiver_id === userUUID)
+            );
+
+            if (!isRelevant && payload.eventType !== 'DELETE') return;
+
+            if (payload.eventType === 'INSERT') {
+              console.log('⚡ New message:', message.content?.substring(0, 30));
+
+              // Add to messages if not duplicate
+              setMessages(prev => {
+                if (prev.some(m => m.id === message.id)) {
+                  console.log('⚠️ Duplicate message ignored');
+                  return prev;
+                }
+                return [...prev, message];
+              });
+
+              // Remove matching optimistic message
+              setLocalMessages(prev => {
+                const filtered = prev.filter(m => {
+                  if (!m.isOptimistic) return true;
+                  const isSameContent = m.content === message.content;
+                  const timeDiff = Math.abs(
+                    new Date(m.created_at).getTime() - new Date(message.created_at).getTime()
+                  );
+                  if (isSameContent && timeDiff < 5000) {
+                    console.log('✅ Removed optimistic message');
+                    return false;
+                  }
+                  return true;
+                });
+                return filtered;
+              });
+            } else if (payload.eventType === 'UPDATE') {
+              console.log('🔄 Message updated:', message.id?.substring(0, 8));
+              
+              setMessages(prev => prev.map(m => 
+                m.id === message.id ? { ...m, ...message } : m
+              ));
+              setLocalMessages(prev => prev.map(m => 
+                m.id === message.id ? { ...m, ...message } : m
+              ));
+            } else if (payload.eventType === 'DELETE') {
+              const deleteId = oldMessage?.id;
+              if (deleteId) {
+                console.log('🗑️ Message deleted:', deleteId?.substring(0, 8));
+                
+                setMessages(prev => prev.filter(m => m.id !== deleteId));
+                setLocalMessages(prev => prev.filter(m => m.id !== deleteId));
+              }
+            }
+          })
+          .subscribe((status) => {
+            console.log('📡 Chat subscription status:', status);
+            
+            if (status === 'SUBSCRIBED') {
+              console.log('✅ Real-time chat ACTIVE');
+            } else if (status === 'CHANNEL_ERROR') {
+              console.error('❌ Chat subscription ERROR');
+            }
+          });
+
+      } catch (error) {
+        console.error('❌ Setup error:', error);
       }
     };
 
-  fetchInitialMessages();
-
-    // Clean up previous channel before creating new one
-    if (channelRef.current) {
-      supabase.removeChannel(channelRef.current);
-      channelRef.current = null;
-    }
-
-    // Use incremental updates from realtime events instead of refetching all messages
-    channelRef.current = supabase
-      .channel(`messages:${chatPartnerId}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
-        try {
-          const newMessage = payload.new;
-
-          // Only handle messages that involve this conversation
-          if (!newMessage) return;
-
-          const involvesUsers = (
-            newMessage.sender_id === currentUserUUID || newMessage.receiver_id === currentUserUUID ||
-            newMessage.sender_id === chatPartnerId || newMessage.receiver_id === chatPartnerId
-          );
-
-          if (!involvesUsers) return;
-
-          // Append new message if not already present
-          setMessages(prev => {
-            if (prev.some(m => m.id === newMessage.id)) return prev;
-            return [...prev, newMessage];
-          });
-
-          // Remove matching optimistic local message, if any. Best-effort match by content + created_at
-          setLocalMessages(prev => {
-            const hasExact = prev.some(m => m.id === newMessage.id);
-            if (hasExact) return prev;
-
-            const filtered = prev.filter(m => {
-              if (!m.isOptimistic) return true;
-              // If content and timestamp are same-ish, drop optimistic
-              if (m.content === newMessage.content && Math.abs(new Date(m.created_at).getTime() - new Date(newMessage.created_at).getTime()) < 2000) {
-                return false;
-              }
-              return true;
-            });
-
-            return filtered;
-          });
-        } catch (e) {
-          console.error('Error processing realtime payload:', e);
-        }
-      })
-      // Also listen for UPDATE so edits/read receipts can be applied incrementally
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, (payload) => {
-        const updated = payload.new;
-        if (!updated) return;
-        setMessages(prev => prev.map(m => m.id === updated.id ? { ...m, ...updated } : m));
-      })
-      .subscribe();
+    setupChatRealtime();
 
     return () => {
+      console.log('🔌 Cleaning up chat subscription:', channelName);
+      isSubscribed = false;
+      
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current);
         channelRef.current = null;
       }
 
-      // Clean up typing timeout
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
         typingTimeoutRef.current = null;
       }
     };
-  }, [currentUser, chatPartnerId, currentUserUUID]);
+  }, [currentUser?.phone_number, chatPartnerId]);
 
   const chatPartnerName = useMemo(() => {
     if (isLoadingPartner) {
@@ -493,31 +548,17 @@ export default function ChatScreen() {
   }
 
   const handleSendMessage = async () => {
-    console.log('=== SEND MESSAGE DEBUG ===');
-    console.log('messageText:', messageText?.trim());
-    console.log('currentUser object:', currentUser);
-    console.log('chatPartnerData:', chatPartnerData);
-    console.log('chatPartnerId:', chatPartnerId);
+    const messageContent = messageText.trim();
     
-    // Try different possible phone number properties
-    const userPhone = currentUser?.phone_number || (currentUser as any)?.phone || (currentUser as any)?.phoneNumber || (currentUser as any)?.mobile;
-    console.log('Detected userPhone:', userPhone);
-    
-    if (!messageText.trim() || !userPhone || !chatPartnerId) {
-      console.log('Missing required fields for sending message');
-      console.log('messageText exists:', !!messageText.trim());
-      console.log('userPhone exists:', !!userPhone);
-      console.log('chatPartnerId exists:', !!chatPartnerId);
+    if (!messageContent || !currentUserUUID || !chatPartnerId) {
+      console.log('⚠️ Cannot send: missing content, userUUID, or partnerId');
       return;
     }
 
-    console.log('Attempting to send message...');
-    
-    const messageContent = messageText.trim();
-    
-    // Create optimistic message for immediate UI update
+    // Create optimistic message for instant UI feedback
+    const optimisticId = `temp-${Date.now()}-${Math.random()}`;
     const optimisticMessage = {
-      id: `temp-${Date.now()}`,
+      id: optimisticId,
       sender_id: currentUserUUID,
       receiver_id: chatPartnerId,
       content: messageContent,
@@ -526,69 +567,50 @@ export default function ChatScreen() {
       isOptimistic: true
     };
 
-  // Add to local messages immediately for better UX
-  setLocalMessages(prev => [...prev, optimisticMessage]);
-  setMessageText("");
+    // Add to local messages immediately
+    setLocalMessages(prev => [...prev, optimisticMessage]);
+    setMessageText('');
 
     try {
-      // Reuse cached UUID when available to avoid extra DB roundtrip
-      let senderUUID = currentUserUUID;
-
-      if (!senderUUID) {
-        const { data: profileData, error: profileError } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('phone', userPhone)
-          .maybeSingle();
-
-        if (profileError) {
-          console.error('Error fetching user profile for sending:', profileError);
-        } else {
-          senderUUID = profileData?.id;
-          if (senderUUID) setCurrentUserUUID(senderUUID);
-        }
-      }
-
-      if (!senderUUID) {
-        console.error('No UUID found for sender phone:', userPhone);
-        // Remove optimistic message on error
-        setLocalMessages(prev => prev.filter(msg => msg.id !== optimisticMessage.id));
-        return;
-      }
-
-      const messageData = {
-        sender_id: senderUUID,
-        receiver_id: chatPartnerId,
-        content: messageContent,
-        is_read: false,
-      };
-
-      console.log('Message data:', messageData);
-
-      const { data, error } = await supabase.from('messages').insert([messageData]).select();
+      const { data, error } = await supabase
+        .from('messages')
+        .insert([{
+          sender_id: currentUserUUID,
+          receiver_id: chatPartnerId,
+          content: messageContent,
+          is_read: false
+        }])
+        .select()
+        .single();
 
       if (error) {
-        console.error('Error sending message:', error);
-        console.error('Error details:', JSON.stringify(error, null, 2));
+        console.error('❌ Send error:', error.message);
         // Remove optimistic message on error
-        setLocalMessages(prev => prev.filter(msg => msg.id !== optimisticMessage.id));
-      } else if (Array.isArray(data) && data[0]) {
-        const serverMsg = data[0];
-        console.log('Message sent successfully:', serverMsg);
-
-        // Remove the optimistic message from localMessages (do not keep server message in both lists)
-        setLocalMessages(prev => prev.filter(m => m.id !== optimisticMessage.id));
-
-        // Ensure the server message is present in the main messages list (dedupe)
-        setMessages(prev => {
-          if (prev.some(m => m.id === serverMsg.id)) return prev;
-          return [...prev, serverMsg];
-        });
+        setLocalMessages(prev => prev.filter(m => m.id !== optimisticId));
+        alert('Failed to send message. Please try again.');
+      } else {
+        console.log('✅ Message sent to DB:', data.id.substring(0, 8));
+        
+        // Fallback: If realtime doesn't pick it up within 2 seconds, add it manually
+        setTimeout(() => {
+          setMessages(prev => {
+            // Only add if not already present (realtime didn't pick it up)
+            if (prev.some(m => m.id === data.id)) {
+              console.log('✅ Realtime already added message');
+              return prev;
+            }
+            console.log('⚡ Fallback: manually adding sent message');
+            return [...prev, data];
+          });
+          
+          // Remove optimistic message
+          setLocalMessages(prev => prev.filter(m => m.id !== optimisticId));
+        }, 2000);
       }
-    } catch (e) {
-      console.error('An exception occurred:', e);
-      // Remove optimistic message on error
-      setLocalMessages(prev => prev.filter(msg => msg.id !== optimisticMessage.id));
+    } catch (error) {
+      console.error('❌ Exception:', error);
+      setLocalMessages(prev => prev.filter(m => m.id !== optimisticId));
+      alert('Failed to send message. Please try again.');
     }
   };
 
@@ -615,17 +637,354 @@ export default function ChatScreen() {
       setIsTyping(false);
     }
   };
+  const handleShareLocation = async () => {
+    if (isSharingLocation || !currentUserUUID || !chatPartnerId) return;
+    
+    setIsSharingLocation(true);
+    
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      
+      if (status !== 'granted') {
+        alert('Location permission is required to share your location');
+        setIsSharingLocation(false);
+        return;
+      }
 
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High
+      });
+
+      const { latitude, longitude } = location.coords;
+      const locationMessage = `📍 My Location: https://maps.google.com/?q=${latitude},${longitude}`;
+      
+      console.log('📍 Sharing location:', latitude.toFixed(4), longitude.toFixed(4));
+
+      // Optimistic message
+      const optimisticId = `temp-${Date.now()}-${Math.random()}`;
+      const optimisticMessage = {
+        id: optimisticId,
+        sender_id: currentUserUUID,
+        receiver_id: chatPartnerId,
+        content: locationMessage,
+        created_at: new Date().toISOString(),
+        is_read: false,
+        isOptimistic: true,
+        isLocation: true
+      };
+
+      setLocalMessages(prev => [...prev, optimisticMessage]);
+
+      const { data, error } = await supabase
+        .from('messages')
+        .insert([{
+          sender_id: currentUserUUID,
+          receiver_id: chatPartnerId,
+          content: locationMessage,
+          is_read: false
+        }])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('❌ Location send error:', error.message);
+        setLocalMessages(prev => prev.filter(m => m.id !== optimisticId));
+        alert('Failed to share location');
+      } else {
+        console.log('✅ Location sent to DB');
+        
+        // Fallback: add manually if realtime doesn't pick it up
+        setTimeout(() => {
+          setMessages(prev => {
+            if (prev.some(m => m.id === data.id)) return prev;
+            console.log('⚡ Fallback: manually adding location');
+            return [...prev, data];
+          });
+          setLocalMessages(prev => prev.filter(m => m.id !== optimisticId));
+        }, 2000);
+      }
+    } catch (error) {
+      console.error('❌ Location error:', error);
+      alert('Failed to get location. Please check your permissions.');
+    } finally {
+      setIsSharingLocation(false);
+    }
+  };
+
+  const handleDeleteMessage = async () => {
+    if (!selectedMessage) return;
+    
+    try {
+      const { error } = await supabase
+        .from('messages')
+        .delete()
+        .eq('id', selectedMessage.id);
+      
+      if (error) {
+        console.error('Error deleting message:', error);
+        alert('Failed to delete message');
+      } else {
+        // Remove from local state
+        setMessages(prev => prev.filter(m => m.id !== selectedMessage.id));
+        setLocalMessages(prev => prev.filter(m => m.id !== selectedMessage.id));
+        console.log('Message deleted successfully');
+      }
+    } catch (e) {
+      console.error('Exception deleting message:', e);
+      alert('Failed to delete message');
+    } finally {
+      setShowMessageActions(false);
+      setSelectedMessage(null);
+    }
+  };
+
+  const handleEditMessage = () => {
+    if (!selectedMessage) return;
+    
+    setIsEditMode(true);
+    setEditingMessageId(selectedMessage.id);
+    setMessageText(selectedMessage.content);
+    setShowMessageActions(false);
+    setSelectedMessage(null);
+  };
+
+  const handleUpdateMessage = async () => {
+    if (!editingMessageId || !messageText.trim()) return;
+    
+    const updatedContent = messageText.trim();
+    
+    try {
+      const { error } = await supabase
+        .from('messages')
+        .update({ content: updatedContent, updated_at: new Date().toISOString() })
+        .eq('id', editingMessageId);
+      
+      if (error) {
+        console.error('Error updating message:', error);
+        alert('Failed to update message');
+      } else {
+        // Update local state
+        setMessages(prev => prev.map(m => 
+          m.id === editingMessageId ? { ...m, content: updatedContent, updated_at: new Date().toISOString() } : m
+        ));
+        setLocalMessages(prev => prev.map(m => 
+          m.id === editingMessageId ? { ...m, content: updatedContent, updated_at: new Date().toISOString() } : m
+        ));
+        console.log('Message updated successfully');
+      }
+    } catch (e) {
+      console.error('Exception updating message:', e);
+      alert('Failed to update message');
+    } finally {
+      setIsEditMode(false);
+      setEditingMessageId(null);
+      setMessageText('');
+    }
+  };
+
+  // Image picker handlers
+  const handleOptimisticImage = (optimisticMsg: any) => {
+    setLocalMessages(prev => [...prev, optimisticMsg]);
+  };
+
+  const handleImageUploadSuccess = (finalMsg: any, optimisticId: string) => {
+    // Fallback: add manually if realtime doesn't pick it up
+    setTimeout(() => {
+      setMessages(prev => {
+        if (prev.some(m => m.id === finalMsg.id)) {
+          console.log('✅ Realtime already added image message');
+          return prev;
+        }
+        console.log('⚡ Fallback: manually adding image message');
+        return [...prev, finalMsg];
+      });
+      // Remove optimistic message
+      setLocalMessages(prev => prev.filter(m => m.id !== optimisticId));
+    }, 2000);
+  };
+
+  const handleImageUploadError = (optimisticId: string) => {
+    setLocalMessages(prev => prev.filter(m => m.id !== optimisticId));
+  };
+
+  const handleMongooseClick = () => {
+    if (isAnimatingMongoose) return;
+    
+    console.log('Mongoose button clicked, starting animation...');
+    setIsAnimatingMongoose(true);
+    bikeAnimationX.setValue(0);
+
+    // Animate the bike across the button
+    Animated.timing(bikeAnimationX, {
+      toValue: 1,
+      duration: 800,
+      useNativeDriver: true,
+    }).start(() => {
+      // Navigate to messages screen with mongoose tab active
+      console.log('Animation complete, navigating to messages with tab=1');
+      router.push('/(users)/messages?tab=1');
+      // Reset animation state after navigation
+      setTimeout(() => {
+        setIsAnimatingMongoose(false);
+        bikeAnimationX.setValue(0);
+      }, 300);
+    });
+  };
   const renderMessage = (message: any, index: number) => {
     const isCurrentUser = currentUserUUID && message.sender_id === currentUserUUID;
     const isOptimistic = message.isOptimistic;
     const key = message.id != null ? String(message.id) : `idx-${index}`;
+    const messageType = message.message_type || 'text';
+    const isLocation = message.content?.includes('📍 My Location:');
+    const isImage = messageType === 'image' || message.image_url;
 
+    // Extract coordinates from location message
+    let coordinates = null;
+    if (isLocation) {
+      const urlMatch = message.content.match(/https:\/\/maps\.google\.com\/\?q=([0-9.-]+),([0-9.-]+)/);
+      if (urlMatch) {
+        coordinates = {
+          latitude: parseFloat(urlMatch[1]),
+          longitude: parseFloat(urlMatch[2])
+        };
+      }
+    }
+
+    const handleLocationPress = () => {
+      if (isLocation && coordinates) {
+        setSelectedLocation(coordinates);
+        setShowMapModal(true);
+      }
+    };
+
+    const handleImagePress = () => {
+      if (isImage && message.image_url) {
+        setPreviewImageUrl(message.image_url);
+        setShowImagePreview(true);
+      }
+    };
+
+    // Render image message
+    if (isImage) {
+      return (
+        <View key={key} className={`mb-3 ${isCurrentUser ? 'items-end' : 'items-start'}`}>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={handleImagePress}
+            onLongPress={() => {
+              if (isCurrentUser && !isOptimistic) {
+                setSelectedMessage(message);
+                setShowMessageActions(true);
+              }
+            }}
+            delayLongPress={500}
+            className={`max-w-[70%] rounded-2xl overflow-hidden ${isCurrentUser ? 'mr-2' : 'ml-2'} ${isOptimistic ? 'opacity-70' : ''}`}
+          >
+            <Image
+              source={{ uri: message.image_url }}
+              style={{ width: 200, height: 200 }}
+              resizeMode="cover"
+            />
+            {isOptimistic && (
+              <View className="absolute inset-0 bg-black/30 items-center justify-center">
+                <ActivityIndicator color="white" />
+                <Text className="text-white text-xs mt-2">Uploading...</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+          <Text className="text-xs text-gray-500 mt-1 mx-2">
+            {message.created_at ? new Date(message.created_at).toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit'
+            }) : new Date().toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit'
+            })}
+          </Text>
+        </View>
+      );
+    }
+
+    // Render location message
+    if (isLocation && coordinates) {
+      return (
+        <View key={key} className={`mb-3 ${isCurrentUser ? 'items-end' : 'items-start'}`}>
+          <TouchableOpacity 
+            activeOpacity={0.8}
+            onPress={handleLocationPress}
+            onLongPress={() => {
+              if (isCurrentUser && !isOptimistic) {
+                setSelectedMessage(message);
+                setShowMessageActions(true);
+              }
+            }}
+            delayLongPress={500}
+            className={`max-w-[80%] rounded-2xl overflow-hidden ${
+              isCurrentUser ? 'mr-2' : 'ml-2'
+            } ${isOptimistic ? 'opacity-70' : ''}`}
+          >
+            <MapView
+              style={{ width: 250, height: 150 }}
+              provider={PROVIDER_GOOGLE}
+              initialRegion={{
+                latitude: coordinates.latitude,
+                longitude: coordinates.longitude,
+                latitudeDelta: 0.01,
+                longitudeDelta: 0.01,
+              }}
+              scrollEnabled={false}
+              zoomEnabled={false}
+              rotateEnabled={false}
+              pitchEnabled={false}
+            >
+              <Marker
+                coordinate={coordinates}
+                title="Shared Location"
+              />
+            </MapView>
+            <View className={`px-3 py-2 ${isCurrentUser ? 'bg-primary' : 'bg-gray-200'}`}>
+              <View className="flex-row items-center">
+                <Ionicons 
+                  name="location" 
+                  size={14} 
+                  color={isCurrentUser ? 'white' : '#007AFF'} 
+                  style={{ marginRight: 4 }}
+                />
+                <Text className={`text-xs ${isCurrentUser ? 'text-white' : 'text-gray-700'}`}>
+                  Tap to view full map
+                </Text>
+              </View>
+            </View>
+          </TouchableOpacity>
+          <Text className="text-xs text-gray-500 mt-1 mx-2">
+            {message.created_at ? new Date(message.created_at).toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit'
+            }) : new Date().toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit'
+            })}
+          </Text>
+        </View>
+      );
+    }
+
+    // Render text message
     return (
       <View key={key} className={`mb-3 ${isCurrentUser ? 'items-end' : 'items-start'}`}>
-        <View className={`max-w-[80%] px-4 py-2 rounded-2xl ${
-          isCurrentUser ? 'bg-primary mr-2' : 'bg-gray-200 ml-2'
-        } ${isOptimistic ? 'opacity-70' : ''}`}>
+        <TouchableOpacity 
+          activeOpacity={1}
+          onLongPress={() => {
+            if (isCurrentUser && !isOptimistic) {
+              setSelectedMessage(message);
+              setShowMessageActions(true);
+            }
+          }}
+          delayLongPress={500}
+          className={`max-w-[80%] px-4 py-2 rounded-2xl ${
+            isCurrentUser ? 'bg-primary mr-2' : 'bg-gray-200 ml-2'
+          } ${isOptimistic ? 'opacity-70' : ''}`}
+        >
           <Text className={isCurrentUser ? 'text-white' : 'text-gray-800'}>
             {message.content}
           </Text>
@@ -634,7 +993,7 @@ export default function ChatScreen() {
               Sending...
             </Text>
           )}
-        </View>
+        </TouchableOpacity>
         <Text className="text-xs text-gray-500 mt-1 mx-2">
           {message.created_at ? new Date(message.created_at).toLocaleTimeString([], {
             hour: '2-digit',
@@ -697,8 +1056,32 @@ export default function ChatScreen() {
         </View>
         
         {/* Optional: Add call or video call buttons */}
-        <TouchableOpacity className="ml-2 p-2">
-          <Ionicons name="call" size={20} color="#007AFF" />
+        <TouchableOpacity 
+          className="ml-2 px-3 py-2 bg-blue-600 rounded-full overflow-hidden"
+          onPress={handleMongooseClick}
+          disabled={isAnimatingMongoose}
+          style={{ position: 'relative', minWidth: 100 }}
+        >
+          {isAnimatingMongoose ? (
+            <View className="flex-row items-center justify-center">
+              <Animated.View
+                style={{
+                  transform: [
+                    {
+                      translateX: bikeAnimationX.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [-30, 30]
+                      })
+                    }
+                  ]
+                }}
+              >
+                <Ionicons name="bicycle" size={20} color="#edc06c" />
+              </Animated.View>
+            </View>
+          ) : (
+            <Text className="text-white font-semibold">Mongoose</Text>
+          )}
         </TouchableOpacity>
       </View>
 
@@ -740,6 +1123,24 @@ export default function ChatScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View className="flex-row items-center p-4 border-t border-gray-200 bg-white mb-20">
+          <ChatImagePicker
+            currentUserUUID={currentUserUUID || ''}
+            chatPartnerId={chatPartnerId as string}
+            onOptimisticImage={handleOptimisticImage}
+            onUploadSuccess={handleImageUploadSuccess}
+            onUploadError={handleImageUploadError}
+          />
+          <TouchableOpacity
+            onPress={handleShareLocation}
+            disabled={isSharingLocation}
+            className="mr-2 w-10 h-10 rounded-full items-center justify-center bg-blue-100"
+          >
+            {isSharingLocation ? (
+              <Text className="text-xs text-blue-600">...</Text>
+            ) : (
+              <Ionicons name="location" size={22} color="#007AFF" />
+            )}
+          </TouchableOpacity>
           <TextInput
             className="flex-1 border border-gray-300 rounded-full px-4 py-2 mr-3 min-h-[40px] max-h-[100px]"
             placeholder="Type a message..."
@@ -749,20 +1150,159 @@ export default function ChatScreen() {
             maxLength={500}
             textAlignVertical="center"
           />
+          {isEditMode && (
+            <TouchableOpacity
+              onPress={() => {
+                setIsEditMode(false);
+                setEditingMessageId(null);
+                setMessageText('');
+              }}
+              className="mr-2 w-10 h-10 rounded-full items-center justify-center bg-gray-300"
+            >
+              <Ionicons name="close" size={20} color="#666" />
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             onPress={() => {
-              console.log('Send button pressed!');
-              handleSendMessage();
+              if (isEditMode) {
+                handleUpdateMessage();
+              } else {
+                console.log('Send button pressed!');
+                handleSendMessage();
+              }
             }}
             className={`w-10 h-10 rounded-full items-center justify-center ${
-              messageText.trim() ? 'bg-primary' : 'bg-gray-300'
+              messageText.trim() ? (isEditMode ? 'bg-green-600' : 'bg-primary') : 'bg-gray-300'
             }`}
             disabled={!messageText.trim()}
           >
-            <Ionicons name="send" size={20} color="white" />
+            <Ionicons name={isEditMode ? "checkmark" : "send"} size={20} color="white" />
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+
+      {/* Full-Screen Map Modal */}
+      <Modal
+        visible={showMapModal}
+        animationType="slide"
+        onRequestClose={() => setShowMapModal(false)}
+      >
+        <View className="flex-1">
+          {/* Header */}
+          <View className="bg-white px-4 py-4 border-b border-gray-200" style={{ paddingTop: Platform.OS === 'ios' ? 50 : 20 }}>
+            <View className="flex-row items-center justify-between">
+              <TouchableOpacity onPress={() => setShowMapModal(false)} className="p-2">
+                <Ionicons name="close" size={28} color="#007AFF" />
+              </TouchableOpacity>
+              <Text className="text-lg font-semibold text-gray-800">Location</Text>
+              <TouchableOpacity 
+                onPress={() => {
+                  if (selectedLocation) {
+                    const url = `https://maps.google.com/?q=${selectedLocation.latitude},${selectedLocation.longitude}`;
+                    Linking.openURL(url);
+                  }
+                }}
+                className="p-2"
+              >
+                <Ionicons name="navigate" size={24} color="#007AFF" />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Full Map */}
+          {selectedLocation && (
+            <MapView
+              style={{ flex: 1 }}
+              provider={PROVIDER_GOOGLE}
+              initialRegion={{
+                latitude: selectedLocation.latitude,
+                longitude: selectedLocation.longitude,
+                latitudeDelta: 0.01,
+                longitudeDelta: 0.01,
+              }}
+            >
+              <Marker
+                coordinate={selectedLocation}
+                title="Shared Location"
+                description="Tap navigate icon to open in Maps app"
+              />
+            </MapView>
+          )}
+        </View>
+      </Modal>
+
+      {/* Message Actions Modal */}
+      <Modal
+        visible={showMessageActions}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowMessageActions(false)}
+      >
+        <TouchableOpacity 
+          activeOpacity={1}
+          onPress={() => setShowMessageActions(false)}
+          className="flex-1 bg-black/50 justify-center items-center"
+        >
+          <View className="bg-white rounded-2xl w-64 overflow-hidden" style={{ elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4 }}>
+            {selectedMessage?.message_type !== 'image' && (
+              <TouchableOpacity
+                onPress={handleEditMessage}
+                className="flex-row items-center px-6 py-4 border-b border-gray-200 active:bg-gray-50"
+              >
+                <Ionicons name="create-outline" size={22} color="#007AFF" />
+                <Text className="ml-4 text-base text-gray-800 font-medium">Edit Message</Text>
+              </TouchableOpacity>
+            )}
+            
+            <TouchableOpacity
+              onPress={handleDeleteMessage}
+              className="flex-row items-center px-6 py-4 active:bg-gray-50"
+            >
+              <Ionicons name="trash-outline" size={22} color="#FF3B30" />
+              <Text className="ml-4 text-base text-red-600 font-medium">Delete Message</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              onPress={() => setShowMessageActions(false)}
+              className="flex-row items-center px-6 py-4 border-t border-gray-200 bg-gray-50 active:bg-gray-100"
+            >
+              <Ionicons name="close-circle-outline" size={22} color="#666" />
+              <Text className="ml-4 text-base text-gray-600 font-medium">Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Image Preview Modal */}
+      <Modal
+        visible={showImagePreview}
+        animationType="fade"
+        onRequestClose={() => setShowImagePreview(false)}
+      >
+        <View className="flex-1 bg-black">
+          {/* Header */}
+          <View className="bg-black px-4 py-4 border-b border-gray-800" style={{ paddingTop: Platform.OS === 'ios' ? 50 : 20 }}>
+            <View className="flex-row items-center justify-between">
+              <TouchableOpacity onPress={() => setShowImagePreview(false)} className="p-2">
+                <Ionicons name="close" size={28} color="white" />
+              </TouchableOpacity>
+              <Text className="text-lg font-semibold text-white">Image</Text>
+              <View className="w-10" />
+            </View>
+          </View>
+
+          {/* Image */}
+          <View className="flex-1 items-center justify-center">
+            {previewImageUrl && (
+              <Image
+                source={{ uri: previewImageUrl }}
+                style={{ width: '100%', height: '100%' }}
+                resizeMode="contain"
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
