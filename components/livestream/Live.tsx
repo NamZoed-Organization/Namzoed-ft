@@ -1297,7 +1297,7 @@ const HostCallContainer: React.FC<HostCallContainerProps> = ({
     useCallStateHooks();
   const participants = useParticipants();
 
-  const { camera, isMute: isCameraMuted } = useCameraState();
+  const { camera, isMute: isCameraMuted, direction } = useCameraState();
   const { microphone, isMute: isMicMuted } = useMicrophoneState();
 
   const [showEndConfirm, setShowEndConfirm] = useState(false);
@@ -2244,6 +2244,35 @@ const HostCallContainer: React.FC<HostCallContainerProps> = ({
               </TouchableOpacity>
 
               <TouchableOpacity
+                disabled={isCameraMuted}
+                onPress={async () => {
+                  if (isCameraMuted) return;
+                  const cameraGranted = await ensureCameraPermission();
+                  if (!cameraGranted) return;
+                  try {
+                    await camera.flip();
+                  } catch (error) {
+                    console.warn("Failed to switch camera:", error);
+                  }
+                }}
+                className={`p-3 rounded-full ${
+                  isCameraMuted ? "bg-zinc-700" : "bg-zinc-600"
+                }`}
+              >
+                <Ionicons
+                  name="camera-reverse"
+                  size={24}
+                  color={
+                    isCameraMuted
+                      ? "#9CA3AF"
+                      : direction === "back"
+                        ? "#ef4444"
+                        : "#fff"
+                  }
+                />
+              </TouchableOpacity>
+
+              <TouchableOpacity
                 onPress={handleToggleLive}
                 disabled={countdown !== null}
                 className={`${
@@ -3100,3 +3129,4 @@ async function ensureCameraPermission(): Promise<boolean> {
   }
   return true;
 }
+
