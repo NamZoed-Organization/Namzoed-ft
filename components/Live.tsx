@@ -2764,9 +2764,9 @@ const ViewerCallContainer: React.FC<ViewerCallContainerProps> = ({
   })();
 
   // Check if current user is a speaker (accepted co-host)
-  const isSpeaker = requestStatus === "accepted" || allSpeakers.some(
-    (p) => p.userId === currentUserId
-  );
+  const isSpeaker =
+    requestStatus === "accepted" ||
+    allSpeakers.some((p) => p.userId === currentUserId);
 
   const handleLeaveAfterHostEnd = async () => {
     setShowHostEndedModal(false);
@@ -2882,7 +2882,9 @@ const ViewerCallContainer: React.FC<ViewerCallContainerProps> = ({
                   </View>
                 ) : allSpeakers.length > 0 ? (
                   /* Multi-speaker grid layout - TikTok style for viewers */
-                  <View style={{ flex: 1, flexDirection: "row", flexWrap: "wrap" }}>
+                  <View
+                    style={{ flex: 1, flexDirection: "row", flexWrap: "wrap" }}
+                  >
                     {(() => {
                       const totalParticipants = allSpeakers.length;
                       let gridCols = 1;
@@ -2938,8 +2940,8 @@ const ViewerCallContainer: React.FC<ViewerCallContainerProps> = ({
                                 isHost
                                   ? "bg-black/60"
                                   : isMe
-                                    ? "bg-green-500/80"
-                                    : "bg-purple-500/80"
+                                  ? "bg-green-500/80"
+                                  : "bg-purple-500/80"
                               }`}
                             >
                               <Text className="text-white text-xs font-semibold">
@@ -2992,7 +2994,8 @@ const ViewerCallContainer: React.FC<ViewerCallContainerProps> = ({
               </View>
 
               {/* LAYER 4: REQUEST TO JOIN BUTTON */}
-              {(!hasRequestedJoin || (requestStatus === "rejected" && requestCooldown === 0)) &&
+              {(!hasRequestedJoin ||
+                (requestStatus === "rejected" && requestCooldown === 0)) &&
                 requestStatus !== "accepted" && (
                   <TouchableOpacity
                     onPress={handleRequestToJoin}
@@ -3007,7 +3010,9 @@ const ViewerCallContainer: React.FC<ViewerCallContainerProps> = ({
                     }}
                   >
                     <Ionicons name="hand-left" size={18} color="white" />
-                    <Text className="text-white font-semibold ml-2">Request</Text>
+                    <Text className="text-white font-semibold ml-2">
+                      Request
+                    </Text>
                   </TouchableOpacity>
                 )}
 
@@ -3021,7 +3026,9 @@ const ViewerCallContainer: React.FC<ViewerCallContainerProps> = ({
                   <Ionicons name="time" size={18} color="white" />
                   <Text className="text-white font-medium ml-2">Requested</Text>
                   <View className="ml-2 bg-white/20 rounded-full px-2 py-0.5">
-                    <Text className="text-white text-xs font-medium">Cancel</Text>
+                    <Text className="text-white text-xs font-medium">
+                      Cancel
+                    </Text>
                   </View>
                 </TouchableOpacity>
               )}

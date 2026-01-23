@@ -450,7 +450,9 @@ export const LiveChat = ({
         layout={LinearTransition.springify?.()}
         style={[styles.animatedRow, !isHostView && styles.viewerCommentRow]}
       >
-        <View style={[styles.commentRow, !isHostView && styles.viewerCommentBubble]}>
+        <View
+          style={[styles.commentRow, !isHostView && styles.viewerCommentBubble]}
+        >
           <Image
             source={{
               uri:
