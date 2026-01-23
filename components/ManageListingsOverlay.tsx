@@ -284,13 +284,13 @@ export default function ManageListingsOverlay({ onClose, userId }: ManageListing
                   onClose();
                   let path;
                   if (activeTab === 'marketplace') {
-                    path = `/marketplace/${item.id}`;
+                    path = `/(users)/marketplace/${item.id}`;
                   } else if (activeTab === 'bookmarks') {
                     // For bookmarks, check if it's a product or marketplace item
                     if (item.product_id) {
                       path = `/(users)/product/${item.product_id}`;
                     } else if (item.marketplace_id) {
-                      path = `/marketplace/${item.marketplace_id}`;
+                      path = `/(users)/marketplace/${item.marketplace_id}`;
                     }
                   } else {
                     path = `/(users)/product/${item.id}`;

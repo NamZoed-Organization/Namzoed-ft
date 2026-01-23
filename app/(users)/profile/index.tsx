@@ -9,7 +9,11 @@ import { useUser } from "@/contexts/UserContext";
 import { fetchUserPosts, Post } from "@/lib/postsService";
 import { fetchUserProducts, Product } from "@/lib/productsService";
 // Added import for profile services
-import { fetchUserProfile, updateUserProfile, uploadAvatar } from "@/lib/profileService";
+import {
+  fetchUserProfile,
+  updateUserProfile,
+  uploadAvatar,
+} from "@/lib/profileService";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -27,7 +31,6 @@ import {
   User,
   UserPlus,
   Wrench,
-  X
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useState } from "react";
 import {
@@ -69,9 +72,9 @@ const isVideoUrl = (url: string): boolean => {
 export default function ProfileScreen() {
   const { currentUser, setCurrentUser, logout } = useUser();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"images" | "products" | "services">(
-    "images"
-  );
+  const [activeTab, setActiveTab] = useState<
+    "images" | "products" | "services"
+  >("images");
 
   // UI State
   const [showImagePicker, setShowImagePicker] = useState(false);
@@ -79,7 +82,9 @@ export default function ProfileScreen() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showFollowRequests, setShowFollowRequests] = useState(false);
   const [showPendingRequests, setShowPendingRequests] = useState(false);
-  const [followRequestsTab, setFollowRequestsTab] = useState<'following' | 'followers'>('following');
+  const [followRequestsTab, setFollowRequestsTab] = useState<
+    "following" | "followers"
+  >("following");
   const [showManageListings, setShowManageListings] = useState(false);
   const [showCropOverlay, setShowCropOverlay] = useState(false);
   const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
@@ -128,18 +133,28 @@ export default function ProfileScreen() {
     })
     .onEnd((e) => {
       if (pickerTranslateY.value > 100 || e.velocityY > 500) {
-        pickerTranslateY.value = withTiming(1000, { duration: 250 }, (finished) => {
-          if (finished) runOnJS(setShowImagePicker)(false);
-        });
+        pickerTranslateY.value = withTiming(
+          1000,
+          { duration: 250 },
+          (finished) => {
+            if (finished) runOnJS(setShowImagePicker)(false);
+          }
+        );
       } else {
         pickerTranslateY.value = withSpring(0, { damping: 15, stiffness: 150 });
       }
     });
 
-  useEffect(() => { if (showImagePicker) pickerTranslateY.value = 0; }, [showImagePicker]);
+  useEffect(() => {
+    if (showImagePicker) pickerTranslateY.value = 0;
+  }, [showImagePicker]);
 
-  const rPickerStyle = useAnimatedStyle(() => ({ transform: [{ translateY: pickerTranslateY.value }] }));
-  const rPickerBackdrop = useAnimatedStyle(() => ({ opacity: Math.max(0, Math.min(1, 1 - pickerTranslateY.value / 500)) }));
+  const rPickerStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: pickerTranslateY.value }],
+  }));
+  const rPickerBackdrop = useAnimatedStyle(() => ({
+    opacity: Math.max(0, Math.min(1, 1 - pickerTranslateY.value / 500)),
+  }));
 
   // ------------------------------------------------------
   // END ANIMATION LOGIC
@@ -159,8 +174,14 @@ export default function ProfileScreen() {
 
           // If context doesn't have avatar_url but DB does, sync it
           if (!currentUser?.avatar_url) {
-            const updatedUser = { ...currentUser, avatar_url: profile.avatar_url };
-            await AsyncStorage.setItem('currentUser', JSON.stringify(updatedUser));
+            const updatedUser = {
+              ...currentUser,
+              avatar_url: profile.avatar_url,
+            };
+            await AsyncStorage.setItem(
+              "currentUser",
+              JSON.stringify(updatedUser)
+            );
             setCurrentUser(updatedUser);
           }
         } else {
@@ -258,7 +279,7 @@ export default function ProfileScreen() {
   // Refresh handler
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    setRefreshKey(prev => prev + 1);
+    setRefreshKey((prev) => prev + 1);
     setTimeout(() => setRefreshing(false), 1000);
   }, []);
 
@@ -291,7 +312,7 @@ export default function ProfileScreen() {
 
       // 4. Update UserContext and AsyncStorage to sync across app
       const updatedUser = { ...currentUser, avatar_url: publicUrl };
-      await AsyncStorage.setItem('currentUser', JSON.stringify(updatedUser));
+      await AsyncStorage.setItem("currentUser", JSON.stringify(updatedUser));
       setCurrentUser(updatedUser);
 
       console.log("Profile image updated successfully:", publicUrl);
@@ -306,7 +327,7 @@ export default function ProfileScreen() {
   const handleCropCancel = () => {
     setShowCropOverlay(false);
     setSelectedImageUri(null);
-    setRefreshKey(prev => prev + 1);
+    setRefreshKey((prev) => prev + 1);
   };
 
   const handleMediaClick = (imageUrl: string) => {
@@ -319,38 +340,51 @@ export default function ProfileScreen() {
   };
 
   const handleImageOption = async (option: "camera" | "gallery") => {
-    pickerTranslateY.value = withTiming(1000, {}, () =>
-      runOnJS(setShowImagePicker)(false)
-    );
+    // Close picker first to avoid UI freeze when camera modal opens
+    setShowImagePicker(false);
+    pickerTranslateY.value = 0;
+
+    // Small delay so modal finishes closing before camera opens
+    await new Promise((resolve) => setTimeout(resolve, 120));
 
     try {
-      let result;
+      let result: ImagePicker.ImagePickerResult;
+
       if (option === "camera") {
-        const cameraPermission = await ImagePicker.requestCameraPermissionsAsync();
+        const cameraPermission =
+          await ImagePicker.requestCameraPermissionsAsync();
         if (!cameraPermission.granted) {
           Alert.alert("Permission Required", "Camera access is needed.");
           return;
         }
+
         result = await ImagePicker.launchCameraAsync({
-          mediaTypes: ['images'],
-          allowsEditing: false, // We use our own cropper
-          quality: 1.0,
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: false,
+          quality: 1,
         });
       } else {
-        const galleryPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        const galleryPermission =
+          await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!galleryPermission.granted) {
           Alert.alert("Permission Required", "Gallery access is needed.");
           return;
         }
+
         result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ['images'],
-          allowsEditing: false, // We use our own cropper
-          quality: 1.0,
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: false,
+          quality: 1,
         });
       }
 
-      if (!result.canceled && result.assets[0]) {
-        setSelectedImageUri(result.assets[0].uri);
+      if (result?.canceled || !result?.assets?.length) {
+        return;
+      }
+
+      const uri = result.assets[0]?.uri;
+      if (uri) {
+        setSelectedImageUri(uri);
         setShowCropOverlay(true);
       }
     } catch (error) {
@@ -363,8 +397,13 @@ export default function ProfileScreen() {
     return (
       <View className="flex-1 bg-background items-center justify-center px-4">
         <User size={72} className="text-gray-700 mb-4" />
-        <Text className="text-xl font-mbold text-gray-700 mb-2">Not Logged In</Text>
-        <TouchableOpacity onPress={() => router.replace("/login")} className="bg-primary rounded-xl py-3 px-6">
+        <Text className="text-xl font-mbold text-gray-700 mb-2">
+          Not Logged In
+        </Text>
+        <TouchableOpacity
+          onPress={() => router.replace("/login")}
+          className="bg-primary rounded-xl py-3 px-6"
+        >
           <Text className="text-white font-msemibold">Go to Login</Text>
         </TouchableOpacity>
       </View>
@@ -380,22 +419,34 @@ export default function ProfileScreen() {
         {/* Left Icons */}
         <View className="flex-row items-center gap-2">
           {/* Follow Requests Icon */}
-          <TouchableOpacity onPress={handleFollowRequests} className="w-10 h-10 items-center justify-center">
+          <TouchableOpacity
+            onPress={handleFollowRequests}
+            className="w-10 h-10 items-center justify-center"
+          >
             <UserPlus size={24} className="text-primary" />
           </TouchableOpacity>
 
           {/* Manage Listings Icon */}
-          <TouchableOpacity onPress={handleManageListings} className="w-10 h-10 items-center justify-center">
+          <TouchableOpacity
+            onPress={handleManageListings}
+            className="w-10 h-10 items-center justify-center"
+          >
             <Package size={24} className="text-primary" />
           </TouchableOpacity>
         </View>
 
         {/* Notification and Settings Icons on Right */}
         <View className="flex-row items-center">
-          <TouchableOpacity onPress={handleNotifications} className="w-10 h-10 items-center justify-center mr-2">
+          <TouchableOpacity
+            onPress={handleNotifications}
+            className="w-10 h-10 items-center justify-center mr-2"
+          >
             <Bell size={24} className="text-gray-700" />
           </TouchableOpacity>
-          <TouchableOpacity onPress={handleSettings} className="w-10 h-10 items-center justify-center">
+          <TouchableOpacity
+            onPress={handleSettings}
+            className="w-10 h-10 items-center justify-center"
+          >
             <Settings size={24} className="text-gray-700" />
           </TouchableOpacity>
         </View>
@@ -422,29 +473,42 @@ export default function ProfileScreen() {
                 className="w-24 h-24 rounded-full bg-gray-200 items-center justify-center overflow-hidden"
               >
                 {profileImage ? (
-                  <Image source={{ uri: profileImage }} className="w-24 h-24 rounded-full" resizeMode="cover" />
+                  <Image
+                    source={{ uri: profileImage }}
+                    className="w-24 h-24 rounded-full"
+                    resizeMode="cover"
+                  />
                 ) : (
                   <User size={32} className="text-gray-400" />
                 )}
               </TouchableOpacity>
-              <TouchableOpacity onPress={handleEditProfile} className="absolute -bottom-1 -right-1 w-8 h-8 bg-primary rounded-full items-center justify-center border-2 border-white">
+              <TouchableOpacity
+                onPress={handleEditProfile}
+                className="absolute -bottom-1 -right-1 w-8 h-8 bg-primary rounded-full items-center justify-center border-2 border-white"
+              >
                 <Edit3 size={16} className="text-white" />
               </TouchableOpacity>
             </View>
 
-            {currentUser.name && <Text className="text-2xl font-mbold text-gray-900 mb-1">{currentUser.name}</Text>}
+            {currentUser.name && (
+              <Text className="text-2xl font-mbold text-gray-900 mb-1">
+                {currentUser.name}
+              </Text>
+            )}
             {currentUser.email && (
               <View className="flex-row items-center mb-2">
                 <Mail size={16} color="#6B7280" />
-                <Text className="text-sm font-regular text-gray-500 ml-1">{currentUser.email}</Text>
+                <Text className="text-sm font-regular text-gray-500 ml-1">
+                  {currentUser.email}
+                </Text>
               </View>
             )}
-            
+
             <View className="flex-row items-center space-x-6 mt-4">
               <TouchableOpacity
                 className="items-center"
                 onPress={() => {
-                  setFollowRequestsTab('following');
+                  setFollowRequestsTab("following");
                   setShowFollowRequests(true);
                 }}
               >
@@ -453,13 +517,15 @@ export default function ProfileScreen() {
                     ? `${(followingCount / 1000).toFixed(1)}k`
                     : followingCount}
                 </Text>
-                <Text className="text-sm font-regular text-gray-500">Following</Text>
+                <Text className="text-sm font-regular text-gray-500">
+                  Following
+                </Text>
               </TouchableOpacity>
               <Text className="text-gray-300 text-xl font-light">|</Text>
               <TouchableOpacity
                 className="items-center"
                 onPress={() => {
-                  setFollowRequestsTab('followers');
+                  setFollowRequestsTab("followers");
                   setShowFollowRequests(true);
                 }}
               >
@@ -468,7 +534,9 @@ export default function ProfileScreen() {
                     ? `${(followerCount / 1000).toFixed(1)}k`
                     : followerCount}
                 </Text>
-                <Text className="text-sm font-regular text-gray-500">Followers</Text>
+                <Text className="text-sm font-regular text-gray-500">
+                  Followers
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -477,17 +545,69 @@ export default function ProfileScreen() {
         {/* Tab Navigation */}
         <View className="bg-white border-b border-gray-100">
           <View className="flex-row">
-            <TouchableOpacity className={`flex-1 py-4 items-center border-b-2 ${activeTab === "images" ? "border-primary" : "border-transparent"}`} onPress={() => setActiveTab("images")}>
-              <ImageLucide size={24} className={`mb-1 ${activeTab === "images" ? "text-primary" : "text-gray-500"}`} />
-              <Text className={`font-msemibold text-xs ${activeTab === "images" ? "text-primary" : "text-gray-500"}`}>Images</Text>
+            <TouchableOpacity
+              className={`flex-1 py-4 items-center border-b-2 ${
+                activeTab === "images" ? "border-primary" : "border-transparent"
+              }`}
+              onPress={() => setActiveTab("images")}
+            >
+              <ImageLucide
+                size={24}
+                className={`mb-1 ${
+                  activeTab === "images" ? "text-primary" : "text-gray-500"
+                }`}
+              />
+              <Text
+                className={`font-msemibold text-xs ${
+                  activeTab === "images" ? "text-primary" : "text-gray-500"
+                }`}
+              >
+                Images
+              </Text>
             </TouchableOpacity>
-            <TouchableOpacity className={`flex-1 py-4 items-center border-b-2 ${activeTab === "products" ? "border-primary" : "border-transparent"}`} onPress={() => setActiveTab("products")}>
-              <ShoppingBag size={24} className={`mb-1 ${activeTab === "products" ? "text-primary" : "text-gray-500"}`} />
-              <Text className={`font-msemibold text-xs ${activeTab === "products" ? "text-primary" : "text-gray-500"}`}>Products</Text>
+            <TouchableOpacity
+              className={`flex-1 py-4 items-center border-b-2 ${
+                activeTab === "products"
+                  ? "border-primary"
+                  : "border-transparent"
+              }`}
+              onPress={() => setActiveTab("products")}
+            >
+              <ShoppingBag
+                size={24}
+                className={`mb-1 ${
+                  activeTab === "products" ? "text-primary" : "text-gray-500"
+                }`}
+              />
+              <Text
+                className={`font-msemibold text-xs ${
+                  activeTab === "products" ? "text-primary" : "text-gray-500"
+                }`}
+              >
+                Products
+              </Text>
             </TouchableOpacity>
-            <TouchableOpacity className={`flex-1 py-4 items-center border-b-2 ${activeTab === "services" ? "border-primary" : "border-transparent"}`} onPress={() => setActiveTab("services")}>
-              <Wrench size={24} className={`mb-1 ${activeTab === "services" ? "text-primary" : "text-gray-500"}`} />
-              <Text className={`font-msemibold text-xs ${activeTab === "services" ? "text-primary" : "text-gray-500"}`}>services</Text>
+            <TouchableOpacity
+              className={`flex-1 py-4 items-center border-b-2 ${
+                activeTab === "services"
+                  ? "border-primary"
+                  : "border-transparent"
+              }`}
+              onPress={() => setActiveTab("services")}
+            >
+              <Wrench
+                size={24}
+                className={`mb-1 ${
+                  activeTab === "services" ? "text-primary" : "text-gray-500"
+                }`}
+              />
+              <Text
+                className={`font-msemibold text-xs ${
+                  activeTab === "services" ? "text-primary" : "text-gray-500"
+                }`}
+              >
+                services
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -497,15 +617,29 @@ export default function ProfileScreen() {
           {activeTab === "images" && (
             <>
               {loadingPosts ? (
-                <ActivityIndicator size="large" color="#059669" className="py-12" />
+                <ActivityIndicator
+                  size="large"
+                  color="#059669"
+                  className="py-12"
+                />
               ) : userImages.length > 0 ? (
                 <View className="flex-row flex-wrap">
                   {userImages.map((imageUrl, index) => {
                     const isVideo = isVideoUrl(imageUrl);
                     return (
-                      <View key={index} className="w-[33.33%] aspect-square p-1">
-                        <TouchableOpacity className="flex-1 bg-gray-200 rounded-lg overflow-hidden relative" onPress={() => handleMediaClick(imageUrl)}>
-                          <Image source={{ uri: imageUrl }} className="w-full h-full" resizeMode="cover" />
+                      <View
+                        key={index}
+                        className="w-[33.33%] aspect-square p-1"
+                      >
+                        <TouchableOpacity
+                          className="flex-1 bg-gray-200 rounded-lg overflow-hidden relative"
+                          onPress={() => handleMediaClick(imageUrl)}
+                        >
+                          <Image
+                            source={{ uri: imageUrl }}
+                            className="w-full h-full"
+                            resizeMode="cover"
+                          />
                           {isVideo && (
                             <View className="absolute inset-0 items-center justify-center bg-black/30">
                               <View className="bg-white rounded-full p-2">
@@ -521,7 +655,9 @@ export default function ProfileScreen() {
               ) : (
                 <View className="items-center justify-center py-12">
                   <ImageLucide size={48} className="text-gray-400 mb-4" />
-                  <Text className="text-lg font-msemibold text-gray-700">No Images Yet</Text>
+                  <Text className="text-lg font-msemibold text-gray-700">
+                    No Images Yet
+                  </Text>
                 </View>
               )}
             </>
@@ -529,14 +665,23 @@ export default function ProfileScreen() {
           {activeTab === "products" && (
             <>
               {loadingProducts ? (
-                <ActivityIndicator size="large" color="#059669" className="py-12" />
+                <ActivityIndicator
+                  size="large"
+                  color="#059669"
+                  className="py-12"
+                />
               ) : userProducts.length > 0 ? (
                 <View className="flex-row flex-wrap">
                   {userProducts.map((product, index) => (
-                    <View key={product.id || index} className="w-[33.33%] aspect-square p-1">
+                    <View
+                      key={product.id || index}
+                      className="w-[33.33%] aspect-square p-1"
+                    >
                       <TouchableOpacity
                         className="flex-1 bg-gray-200 rounded-lg overflow-hidden"
-                        onPress={() => router.push(`/(users)/product/${product.id}` as any)}
+                        onPress={() =>
+                          router.push(`/(users)/product/${product.id}` as any)
+                        }
                       >
                         {product.images && product.images.length > 0 ? (
                           <Image
@@ -551,7 +696,10 @@ export default function ProfileScreen() {
                         )}
                         {/* Price tag overlay */}
                         <View className="absolute bottom-0 left-0 right-0 bg-black/60 px-2 py-1">
-                          <Text className="text-white text-xs font-semibold" numberOfLines={1}>
+                          <Text
+                            className="text-white text-xs font-semibold"
+                            numberOfLines={1}
+                          >
                             {product.name}
                           </Text>
                           <Text className="text-white text-xs font-bold">
@@ -565,13 +713,21 @@ export default function ProfileScreen() {
               ) : (
                 <View className="items-center justify-center py-12">
                   <ShoppingBag size={48} className="text-gray-400 mb-4" />
-                  <Text className="text-lg font-msemibold text-gray-700">No Products Yet</Text>
-                  <Text className="text-sm text-gray-500 mt-2">Start selling to see your products here</Text>
+                  <Text className="text-lg font-msemibold text-gray-700">
+                    No Products Yet
+                  </Text>
+                  <Text className="text-sm text-gray-500 mt-2">
+                    Start selling to see your products here
+                  </Text>
                 </View>
               )}
             </>
           )}
-          {activeTab === "services" && <Text className="text-center py-8 text-gray-500">services Tab Placeholder</Text>}
+          {activeTab === "services" && (
+            <Text className="text-center py-8 text-gray-500">
+              services Tab Placeholder
+            </Text>
+          )}
         </View>
         <View className="h-8" />
       </ScrollView>
@@ -580,13 +736,48 @@ export default function ProfileScreen() {
       {/* SMOOTH IMAGE PICKER MODAL */}
       {/* ------------------------------------------------------ */}
       {showImagePicker && (
-        <Modal transparent statusBarTranslucent animationType="none" visible={showImagePicker} onRequestClose={() => setShowImagePicker(false)}>
+        <Modal
+          transparent
+          statusBarTranslucent
+          animationType="none"
+          visible={showImagePicker}
+          onRequestClose={() => setShowImagePicker(false)}
+        >
           <View className="flex-1 justify-end">
-            <Animated.View entering={FadeIn} exiting={FadeOut} style={[{ position: "absolute", top: 0, bottom: 0, left: 0, right: 0, backgroundColor: "rgba(0,0,0,0.5)" }, rPickerBackdrop]}>
-              <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setShowImagePicker(false)} />
+            <Animated.View
+              entering={FadeIn}
+              exiting={FadeOut}
+              style={[
+                {
+                  position: "absolute",
+                  top: 0,
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  backgroundColor: "rgba(0,0,0,0.5)",
+                },
+                rPickerBackdrop,
+              ]}
+            >
+              <TouchableOpacity
+                style={{ flex: 1 }}
+                activeOpacity={1}
+                onPress={() => setShowImagePicker(false)}
+              />
             </Animated.View>
 
-            <Animated.View entering={SlideInDown.springify()} exiting={SlideOutDown} style={[{ backgroundColor: "white", borderTopLeftRadius: 24, borderTopRightRadius: 24 }, rPickerStyle]}>
+            <Animated.View
+              entering={SlideInDown.springify()}
+              exiting={SlideOutDown}
+              style={[
+                {
+                  backgroundColor: "white",
+                  borderTopLeftRadius: 24,
+                  borderTopRightRadius: 24,
+                },
+                rPickerStyle,
+              ]}
+            >
               {/* --- DRAG HANDLE START --- */}
               <GestureDetector gesture={pickerGesture}>
                 <View className="w-full items-center pt-5 pb-4 bg-white rounded-t-3xl">
@@ -596,21 +787,37 @@ export default function ProfileScreen() {
               {/* --- DRAG HANDLE END --- */}
 
               <View className="px-6 pb-6">
-                <Text className="text-xl font-mbold text-gray-900 mb-6 text-center">Change Profile Picture</Text>
+                <Text className="text-xl font-mbold text-gray-900 mb-6 text-center">
+                  Change Profile Picture
+                </Text>
 
-                <TouchableOpacity onPress={() => handleImageOption("camera")} className="flex-row items-center bg-gray-50 rounded-xl px-4 py-4 mb-3">
+                <TouchableOpacity
+                  onPress={() => handleImageOption("camera")}
+                  className="flex-row items-center bg-gray-50 rounded-xl px-4 py-4 mb-3"
+                >
                   <Camera size={24} className="text-gray-700 mr-4" />
                   <View>
-                    <Text className="text-base font-msemibold text-gray-900">Take Photo</Text>
-                    <Text className="text-sm font-regular text-gray-500">Use camera to take a new photo</Text>
+                    <Text className="text-base font-msemibold text-gray-900">
+                      Take Photo
+                    </Text>
+                    <Text className="text-sm font-regular text-gray-500">
+                      Use camera to take a new photo
+                    </Text>
                   </View>
                 </TouchableOpacity>
 
-                <TouchableOpacity onPress={() => handleImageOption("gallery")} className="flex-row items-center bg-gray-50 rounded-xl px-4 py-4 mb-6">
+                <TouchableOpacity
+                  onPress={() => handleImageOption("gallery")}
+                  className="flex-row items-center bg-gray-50 rounded-xl px-4 py-4 mb-6"
+                >
                   <ImageIcon size={24} className="text-gray-700 mr-4" />
                   <View>
-                    <Text className="text-base font-msemibold text-gray-900">Choose from Gallery</Text>
-                    <Text className="text-sm font-regular text-gray-500">Select from your photo library</Text>
+                    <Text className="text-base font-msemibold text-gray-900">
+                      Choose from Gallery
+                    </Text>
+                    <Text className="text-sm font-regular text-gray-500">
+                      Select from your photo library
+                    </Text>
                   </View>
                 </TouchableOpacity>
 
@@ -635,8 +842,23 @@ export default function ProfileScreen() {
       {/* SMOOTH SETTINGS MODAL */}
       {/* ------------------------------------------------------ */}
       {showSettings && (
-        <Modal transparent statusBarTranslucent animationType="none" visible={showSettings} onRequestClose={() => setShowSettings(false)}>
-          <Animated.View entering={SlideInDown.springify()} exiting={SlideOutDown} style={{ height: "100%",  borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: "hidden" }}>
+        <Modal
+          transparent
+          statusBarTranslucent
+          animationType="none"
+          visible={showSettings}
+          onRequestClose={() => setShowSettings(false)}
+        >
+          <Animated.View
+            entering={SlideInDown.springify()}
+            exiting={SlideOutDown}
+            style={{
+              height: "100%",
+              borderTopLeftRadius: 24,
+              borderTopRightRadius: 24,
+              overflow: "hidden",
+            }}
+          >
             <ProfileSettings
               onClose={() => setShowSettings(false)}
               currentUser={currentUser}
@@ -654,12 +876,27 @@ export default function ProfileScreen() {
       {/* FOLLOW REQUESTS MODAL */}
       {/* ------------------------------------------------------ */}
       {showFollowRequests && currentUser?.id && (
-        <Modal transparent statusBarTranslucent animationType="none" visible={showFollowRequests} onRequestClose={() => setShowFollowRequests(false)}>
-          <Animated.View entering={SlideInDown.springify()} exiting={SlideOutDown} style={{ height: "100%",  borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: "hidden" }}>
+        <Modal
+          transparent
+          statusBarTranslucent
+          animationType="none"
+          visible={showFollowRequests}
+          onRequestClose={() => setShowFollowRequests(false)}
+        >
+          <Animated.View
+            entering={SlideInDown.springify()}
+            exiting={SlideOutDown}
+            style={{
+              height: "100%",
+              borderTopLeftRadius: 24,
+              borderTopRightRadius: 24,
+              overflow: "hidden",
+            }}
+          >
             <FollowRequestsOverlay
               onClose={() => {
                 setShowFollowRequests(false);
-                setRefreshKey(prev => prev + 1);
+                setRefreshKey((prev) => prev + 1);
               }}
               userId={currentUser.id}
               initialTab={followRequestsTab}
@@ -672,12 +909,27 @@ export default function ProfileScreen() {
       {/* PENDING FOLLOW REQUESTS MODAL */}
       {/* ------------------------------------------------------ */}
       {showPendingRequests && currentUser?.id && (
-        <Modal transparent statusBarTranslucent animationType="none" visible={showPendingRequests} onRequestClose={() => setShowPendingRequests(false)}>
-          <Animated.View entering={SlideInDown.springify()} exiting={SlideOutDown} style={{ height: "100%", borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: "hidden" }}>
+        <Modal
+          transparent
+          statusBarTranslucent
+          animationType="none"
+          visible={showPendingRequests}
+          onRequestClose={() => setShowPendingRequests(false)}
+        >
+          <Animated.View
+            entering={SlideInDown.springify()}
+            exiting={SlideOutDown}
+            style={{
+              height: "100%",
+              borderTopLeftRadius: 24,
+              borderTopRightRadius: 24,
+              overflow: "hidden",
+            }}
+          >
             <FollowRequests
               onClose={() => {
                 setShowPendingRequests(false);
-                setRefreshKey(prev => prev + 1);
+                setRefreshKey((prev) => prev + 1);
               }}
               userId={currentUser.id}
             />
@@ -689,12 +941,27 @@ export default function ProfileScreen() {
       {/* MANAGE LISTINGS MODAL */}
       {/* ------------------------------------------------------ */}
       {showManageListings && currentUser?.id && (
-        <Modal transparent statusBarTranslucent animationType="none" visible={showManageListings} onRequestClose={() => setShowManageListings(false)}>
-          <Animated.View entering={SlideInDown.springify()} exiting={SlideOutDown} style={{ height: "100%", borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: "hidden" }}>
+        <Modal
+          transparent
+          statusBarTranslucent
+          animationType="none"
+          visible={showManageListings}
+          onRequestClose={() => setShowManageListings(false)}
+        >
+          <Animated.View
+            entering={SlideInDown.springify()}
+            exiting={SlideOutDown}
+            style={{
+              height: "100%",
+              borderTopLeftRadius: 24,
+              borderTopRightRadius: 24,
+              overflow: "hidden",
+            }}
+          >
             <ManageListingsOverlay
               onClose={() => {
                 setShowManageListings(false);
-                setRefreshKey(prev => prev + 1);
+                setRefreshKey((prev) => prev + 1);
               }}
               userId={currentUser.id}
             />
@@ -727,7 +994,7 @@ export default function ProfileScreen() {
           initialIndex={selectedMediaIndex}
           onClose={() => {
             setShowImageViewer(false);
-            setRefreshKey(prev => prev + 1);
+            setRefreshKey((prev) => prev + 1);
           }}
           postContent={selectedPost.content}
           username={currentUser?.name || "User"}
@@ -743,7 +1010,7 @@ export default function ProfileScreen() {
           imageUri={profileImage}
           onClose={() => {
             setShowProfileImageViewer(false);
-            setRefreshKey(prev => prev + 1);
+            setRefreshKey((prev) => prev + 1);
           }}
         />
       )}

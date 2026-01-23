@@ -32,14 +32,14 @@ export default function TopNavbar() {
           <DetectDzongkhag />
           
           <TabBarButton
-            onPress={() => router.push("/messages")}
+            onPress={() => router.push("/(users)/messages")}
             android_ripple={null}
           >
             <ChatIcon/>
           </TabBarButton>
 
           <TabBarButton
-            onPress={() => router.push("/profile")}
+            onPress={() => router.push("/(users)/profile")}
             android_ripple={null}
           >
             {currentUser?.avatar_url ? (

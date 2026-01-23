@@ -1,5 +1,7 @@
 import { supabase } from "@/lib/supabase";
 
+export type LivestreamType = "business" | "entertainment";
+
 export interface Livestream {
   id: string;
   user_id: string | null;
@@ -24,6 +26,18 @@ export interface Livestream {
   recording_enabled?: boolean | null;
   external_metadata?: Record<string, unknown> | null;
   thumbnail?: string | null;
+  stream_type?: LivestreamType | null;
+  co_hosts?: string[] | null; // Array of user IDs who are co-hosts
+}
+
+export interface CoHostRequest {
+  id: string;
+  livestream_id: string;
+  user_id: string;
+  username: string;
+  profile_image?: string | null;
+  status: "pending" | "accepted" | "rejected";
+  created_at: string;
 }
 
 const TABLE_NAME = "live_streams";
@@ -188,6 +202,7 @@ interface CreateLivestreamPayload {
   call_id?: string | null;
   call_cid?: string | null;
   call_type?: string | null;
+  stream_type?: LivestreamType | null;
 }
 
 export async function createLivestreamRecord(
@@ -234,6 +249,8 @@ export async function createLivestreamRecord(
       recording_enabled: payload.recording_enabled ?? false,
       external_metadata: mergedMetadata,
       thumbnail: payload.thumbnail ?? null,
+      stream_type: payload.stream_type ?? "entertainment",
+      co_hosts: [],
       created_at: now,
       updated_at: now,
     })
@@ -314,4 +331,205 @@ export async function adjustLivestreamViewerCount(
   } catch (error) {
     console.error("Unexpected error adjusting viewer count", error);
   }
+}
+
+// Co-host request management
+const COHOST_REQUESTS_TABLE = "cohost_requests";
+
+export async function createCoHostRequest(
+  livestreamId: string,
+  userId: string,
+  username: string,
+  profileImage?: string | null
+): Promise<CoHostRequest> {
+  const now = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from(COHOST_REQUESTS_TABLE)
+    .insert({
+      livestream_id: livestreamId,
+      user_id: userId,
+      username,
+      profile_image: profileImage ?? null,
+      status: "pending",
+      created_at: now,
+    })
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    console.error("Failed to create co-host request", error);
+    throw error ?? new Error("Unable to create co-host request");
+  }
+
+  return data as CoHostRequest;
+}
+
+export async function fetchPendingCoHostRequests(
+  livestreamId: string
+): Promise<CoHostRequest[]> {
+  const { data, error } = await supabase
+    .from(COHOST_REQUESTS_TABLE)
+    .select("*")
+    .eq("livestream_id", livestreamId)
+    .eq("status", "pending")
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    console.error("Failed to fetch co-host requests", error);
+    throw error;
+  }
+
+  return (data ?? []) as CoHostRequest[];
+}
+
+export async function updateCoHostRequestStatus(
+  requestId: string,
+  status: "accepted" | "rejected"
+): Promise<void> {
+  const { error } = await supabase
+    .from(COHOST_REQUESTS_TABLE)
+    .update({ status })
+    .eq("id", requestId);
+
+  if (error) {
+    console.error("Failed to update co-host request status", error);
+    throw error;
+  }
+}
+
+export async function cancelCoHostRequest(
+  livestreamId: string,
+  userId: string
+): Promise<void> {
+  const { error } = await supabase
+    .from(COHOST_REQUESTS_TABLE)
+    .delete()
+    .eq("livestream_id", livestreamId)
+    .eq("user_id", userId)
+    .eq("status", "pending");
+
+  if (error) {
+    console.error("Failed to cancel co-host request", error);
+    throw error;
+  }
+}
+
+export async function addCoHostToLivestream(
+  livestreamId: string,
+  coHostUserId: string
+): Promise<void> {
+  // First get the current co_hosts array
+  const { data: stream, error: fetchError } = await supabase
+    .from(TABLE_NAME)
+    .select("co_hosts")
+    .eq("id", livestreamId)
+    .single();
+
+  if (fetchError) {
+    console.error("Failed to fetch livestream for co-host update", fetchError);
+    throw fetchError;
+  }
+
+  const currentCoHosts = (stream?.co_hosts as string[]) ?? [];
+  if (!currentCoHosts.includes(coHostUserId)) {
+    const updatedCoHosts = [...currentCoHosts, coHostUserId];
+
+    const { error: updateError } = await supabase
+      .from(TABLE_NAME)
+      .update({
+        co_hosts: updatedCoHosts,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", livestreamId);
+
+    if (updateError) {
+      console.error("Failed to add co-host to livestream", updateError);
+      throw updateError;
+    }
+  }
+}
+
+export async function removeCoHostFromLivestream(
+  livestreamId: string,
+  coHostUserId: string
+): Promise<void> {
+  const { data: stream, error: fetchError } = await supabase
+    .from(TABLE_NAME)
+    .select("co_hosts")
+    .eq("id", livestreamId)
+    .single();
+
+  if (fetchError) {
+    console.error("Failed to fetch livestream for co-host removal", fetchError);
+    throw fetchError;
+  }
+
+  const currentCoHosts = (stream?.co_hosts as string[]) ?? [];
+  const updatedCoHosts = currentCoHosts.filter((id) => id !== coHostUserId);
+
+  const { error: updateError } = await supabase
+    .from(TABLE_NAME)
+    .update({
+      co_hosts: updatedCoHosts,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", livestreamId);
+
+  if (updateError) {
+    console.error("Failed to remove co-host from livestream", updateError);
+    throw updateError;
+  }
+}
+
+export function subscribeToCoHostRequests(
+  livestreamId: string,
+  onChange: () => void
+): () => void {
+  const channel = supabase
+    .channel(`cohost-requests-${livestreamId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: COHOST_REQUESTS_TABLE,
+        filter: `livestream_id=eq.${livestreamId}`,
+      },
+      () => {
+        onChange();
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+export function subscribeToViewerCount(
+  livestreamId: string,
+  onCountChange: (count: number) => void
+): () => void {
+  const channel = supabase
+    .channel(`viewer-count-${livestreamId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "UPDATE",
+        schema: "public",
+        table: TABLE_NAME,
+        filter: `id=eq.${livestreamId}`,
+      },
+      (payload) => {
+        if (payload.new && typeof payload.new.viewer_count === "number") {
+          onCountChange(payload.new.viewer_count);
+        }
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }

@@ -564,7 +564,7 @@ export default function PublicProfileScreen() {
                   <View key={product.id} className="w-[50%] p-2">
                     <TouchableOpacity
                       onPress={() =>
-                        router.push(`/product/${product.id}` as any)
+                        router.push(`/(users)/product/${product.id}` as any)
                       }
                       className="bg-white rounded-xl overflow-hidden border border-gray-100"
                     >

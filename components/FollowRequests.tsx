@@ -97,7 +97,7 @@ export default function FollowRequests({ onClose, userId }: FollowRequestsProps)
           className="flex-row items-center bg-white p-4 rounded-2xl border border-gray-100"
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            router.push(`/profile/${item.id}`);
+            router.push(`/(users)/profile/${item.id}`);
           }}
           activeOpacity={0.7}
         >
