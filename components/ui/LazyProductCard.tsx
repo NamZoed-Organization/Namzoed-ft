@@ -96,7 +96,7 @@ const LazyProductCard = memo(({
 
   return (
     <Link
-      href={{ pathname: "/product/[id]", params: { id: product.id } }}
+      href={{ pathname: "/(users)/product/[id]", params: { id: product.id } }}
       asChild
     >
       <TouchableOpacity

@@ -17,12 +17,19 @@ import {
   Plane,
   Shield,
   Sparkles,
-  Wrench
+  Wrench,
 } from "lucide-react-native";
 import React, { useMemo } from "react";
-import { Dimensions, FlatList, Image, Text, TouchableOpacity, View } from "react-native";
+import {
+  Dimensions,
+  FlatList,
+  Image,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 export default function ServiceScreen() {
   // Calculate responsive columns and sizes
@@ -47,7 +54,7 @@ export default function ServiceScreen() {
     return {
       numColumns: cols,
       itemSize: Math.floor(size),
-      gap: gapSize
+      gap: gapSize,
     };
   }, []);
 
@@ -57,30 +64,36 @@ export default function ServiceScreen() {
 
   const getIconComponent = (iconName: string) => {
     const iconMap: Record<string, any> = {
-      'taxi': Car,
-      'home': Home,
-      'hotel': Building2,
-      'spa': Sparkles,
-      'tools': Wrench,
-      'graduation-cap': GraduationCap,
-      'palette': Palette,
-      'briefcase': Briefcase,
-      'map-pin': MapPin,
-      'heart': Heart,
-      'activity': Activity,
-      'calendar': Calendar,
-      'shield': Shield,
-      'plane': Plane,
+      taxi: Car,
+      home: Home,
+      hotel: Building2,
+      spa: Sparkles,
+      tools: Wrench,
+      "graduation-cap": GraduationCap,
+      palette: Palette,
+      briefcase: Briefcase,
+      "map-pin": MapPin,
+      heart: Heart,
+      activity: Activity,
+      calendar: Calendar,
+      shield: Shield,
+      plane: Plane,
     };
 
     const IconComponent = iconMap[iconName] || Home;
     return <IconComponent size={Math.min(48, itemSize * 0.5)} color="black" />;
   };
 
-  const renderCategoryItem = ({ item, index }: { item: any, index: number }) => {
+  const renderCategoryItem = ({
+    item,
+    index,
+  }: {
+    item: any;
+    index: number;
+  }) => {
     const columnIndex = index % numColumns;
     const isFirstInRow = columnIndex === 0;
-    const hasLocalImage = typeof item.image === 'number';
+    const hasLocalImage = typeof item.image === "number";
 
     return (
       <TouchableOpacity
@@ -89,7 +102,7 @@ export default function ServiceScreen() {
           width: itemSize,
           height: itemSize,
           marginLeft: isFirstInRow ? 0 : gap,
-          marginBottom: gap
+          marginBottom: gap,
         }}
         onPress={() => handleCategoryPress(item)}
         activeOpacity={0.7}
@@ -100,7 +113,7 @@ export default function ServiceScreen() {
               source={item.image}
               style={{
                 width: Math.min(56, itemSize * 0.55),
-                height: Math.min(56, itemSize * 0.55)
+                height: Math.min(56, itemSize * 0.55),
               }}
               resizeMode="contain"
             />
@@ -141,15 +154,16 @@ export default function ServiceScreen() {
           keyExtractor={(item) => item.id}
           numColumns={numColumns}
           showsVerticalScrollIndicator={false}
+          style={{ alignSelf: "center" }}
           contentContainerStyle={{
             paddingBottom: 120,
             paddingTop: 20,
-            paddingHorizontal: 16
+            paddingHorizontal: 0,
           }}
           columnWrapperStyle={{
-            justifyContent: 'flex-start',
-            alignItems: 'flex-start',
-            flexDirection: 'row'
+            justifyContent: "flex-start",
+            alignItems: "flex-start",
+            flexDirection: "row",
           }}
           key={numColumns} // Force re-render when columns change
         />

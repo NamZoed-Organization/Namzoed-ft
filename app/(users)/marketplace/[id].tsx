@@ -99,7 +99,7 @@ export default function MarketplaceDetailScreen() {
     }
 
     if (item?.user_id) {
-      router.push(`/chat/${item.user_id}` as any);
+      router.push(`/(users)/chat/${item.user_id}` as any);
     }
   };
 

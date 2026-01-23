@@ -8,14 +8,22 @@ import SearchBar from "@/components/SearchBar";
 import TopNavbar from "@/components/ui/TopNavbar";
 import { Coins, Heart, Radio, Ticket, Users } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
-import { FlatList, Image, ListRenderItem, RefreshControl, Text, TouchableOpacity, View } from "react-native";
+import {
+  FlatList,
+  Image,
+  ListRenderItem,
+  RefreshControl,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import Animated, { SlideInLeft, SlideInRight } from "react-native-reanimated";
 
 type TabType = "foryou" | "featured" | "live" | "bidding" | "norbu";
 
 interface HeaderDataItem {
   key: string;
-  component: 'header' | 'content' | 'footer';
+  component: "header" | "content" | "footer";
 }
 
 export default function HomeScreen() {
@@ -25,14 +33,14 @@ export default function HomeScreen() {
   const [isLoaded, setIsLoaded] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
-  console.log(" home screen" )
+  console.log(" home screen");
 
   // Map tab names to positions for directional animations
   // Use ref for immediate direction tracking
-  const animationDirection = useRef<'right' | 'left'>('right');
+  const animationDirection = useRef<"right" | "left">("right");
   const tabPressTime = useRef<number>(0);
 
-  console.log(" home screen" )
+  console.log(" home screen");
 
   // Map tab names to positions
   const getTabPosition = (tab: TabType): number => {
@@ -41,13 +49,13 @@ export default function HomeScreen() {
       featured: 1,
       live: 2,
       norbu: 3,
-      bidding: 4
+      bidding: 4,
     };
     return positions[tab];
   };
 
   // Force re-render after initial mount
-   useEffect(() => {
+  useEffect(() => {
     const timer = setTimeout(() => {
       setIsLoaded(true);
     }, 50);
@@ -65,7 +73,7 @@ export default function HomeScreen() {
     const newPos = getTabPosition(tab);
 
     // Set animation direction
-    animationDirection.current = newPos > currentPos ? 'right' : 'left';
+    animationDirection.current = newPos > currentPos ? "right" : "left";
 
     setActiveTab(tab);
   };
@@ -73,7 +81,7 @@ export default function HomeScreen() {
   const onRefresh = async () => {
     setRefreshing(true);
     // Increment refresh key to force component remount
-    setRefreshKey(prev => prev + 1);
+    setRefreshKey((prev) => prev + 1);
     // Simulate refresh delay
     setTimeout(() => {
       setRefreshing(false);
@@ -136,31 +144,29 @@ export default function HomeScreen() {
   };
 
   const headerData: HeaderDataItem[] = [
-    { key: 'header', component: 'header' },
-    { key: 'content', component: 'content' },
-    { key: 'footer', component: 'footer' }
+    { key: "header", component: "header" },
+    { key: "content", component: "content" },
+    { key: "footer", component: "footer" },
   ];
 
   const renderItem: ListRenderItem<HeaderDataItem> = ({ item }) => {
-    if (item.component === 'header') {
+    if (item.component === "header") {
       return (
         <View className="px-4 gap-2">
           <TopNavbar />
           <SearchBar value={searchQuery} onChangeText={setSearchQuery} />
           <Banner />
-          
+
           {/* Tab Navigation - Updated styling */}
           <View className="flex-row items-center w-full mx-auto mt-2 gap-2">
             <TouchableOpacity
               onPress={() => handleTabPress("foryou")}
               className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm ${
-                activeTab === "foryou"
-                  ? "bg-primary"
-                  : "bg-white"
+                activeTab === "foryou" ? "bg-primary" : "bg-white"
               }`}
             >
-              <Heart 
-                size={20} 
+              <Heart
+                size={20}
                 color={activeTab === "foryou" ? "white" : "black"}
                 fill={activeTab === "foryou" ? "white" : "none"}
               />
@@ -169,13 +175,11 @@ export default function HomeScreen() {
             <TouchableOpacity
               onPress={() => handleTabPress("featured")}
               className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm ${
-                activeTab === "featured"
-                  ? "bg-primary"
-                  : "bg-white"
+                activeTab === "featured" ? "bg-primary" : "bg-white"
               }`}
             >
-              <Users 
-                size={20} 
+              <Users
+                size={20}
                 color={activeTab === "featured" ? "white" : "black"}
               />
             </TouchableOpacity>
@@ -183,13 +187,11 @@ export default function HomeScreen() {
             <TouchableOpacity
               onPress={() => handleTabPress("live")}
               className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm ${
-                activeTab === "live"
-                  ? "bg-primary"
-                  : "bg-white"
+                activeTab === "live" ? "bg-primary" : "bg-white"
               }`}
             >
-              <Radio 
-                size={20} 
+              <Radio
+                size={20}
                 color={activeTab === "live" ? "white" : "black"}
               />
             </TouchableOpacity>
@@ -197,13 +199,11 @@ export default function HomeScreen() {
             <TouchableOpacity
               onPress={() => handleTabPress("norbu")}
               className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm ${
-                activeTab === "norbu"
-                  ? "bg-primary"
-                  : "bg-white"
+                activeTab === "norbu" ? "bg-primary" : "bg-white"
               }`}
             >
-              <Coins 
-                size={20} 
+              <Coins
+                size={20}
                 color={activeTab === "norbu" ? "white" : "black"}
               />
             </TouchableOpacity>
@@ -211,13 +211,11 @@ export default function HomeScreen() {
             <TouchableOpacity
               onPress={() => handleTabPress("bidding")}
               className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm ${
-                activeTab === "bidding"
-                  ? "bg-primary"
-                  : "bg-white"
+                activeTab === "bidding" ? "bg-primary" : "bg-white"
               }`}
             >
-              <Ticket 
-                size={20} 
+              <Ticket
+                size={20}
                 color={activeTab === "bidding" ? "white" : "black"}
               />
             </TouchableOpacity>
@@ -225,16 +223,16 @@ export default function HomeScreen() {
         </View>
       );
     }
-    
-      if (item.component === 'content') {
-      const isMovingRight = animationDirection.current === 'right';
-      
+
+    if (item.component === "content") {
+      const isMovingRight = animationDirection.current === "right";
+
       return (
         <View className="px-4 mt-2" style={{ minHeight: 400 }}>
           <Animated.View
             key={activeTab}
             entering={
-              isMovingRight 
+              isMovingRight
                 ? SlideInRight.duration(180)
                 : SlideInLeft.duration(180)
             }
@@ -245,10 +243,9 @@ export default function HomeScreen() {
       );
     }
 
-    
-    if (item.component === 'footer') {
+    if (item.component === "footer") {
       // Only show footer cards in "For You" tab
-      if (activeTab !== 'foryou') {
+      if (activeTab !== "foryou") {
         return <View className="mb-10" />;
       }
 
@@ -285,7 +282,9 @@ export default function HomeScreen() {
                 Stand a chance to get rewarded
               </Text>
               <TouchableOpacity className="self-start px-4 py-2 bg-primary rounded-full flex-row items-center">
-                <Text className="text-white text-sm font-medium">Visit now</Text>
+                <Text className="text-white text-sm font-medium">
+                  Visit now
+                </Text>
                 <Text className="ml-1 text-white text-lg">→</Text>
               </TouchableOpacity>
             </View>

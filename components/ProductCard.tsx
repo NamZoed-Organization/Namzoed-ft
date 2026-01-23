@@ -22,7 +22,7 @@ export default function ProductCard({ product, isLeftColumn = true }: Props) {
       className={`bg-white rounded-xl mb-3 shadow-sm border border-gray-100 flex-1 overflow-hidden ${
         isLeftColumn ? "mr-2" : "ml-2"
       }`}
-      onPress={() => router.push(`/product/${product.id}`)}
+      onPress={() => router.push(`/(users)/product/${product.id}`)}
       activeOpacity={0.9}
     >
       <View className="relative">

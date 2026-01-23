@@ -234,7 +234,7 @@ export default function SearchBar({
                   <Link
                     key={`${item.id}-${index}`}
                     href={{
-                      pathname: "/product/[id]",
+                      pathname: "/(users)/product/[id]",
                       params: { id: item.id },
                     }}
                     asChild

@@ -1,5 +1,7 @@
 import MaskedView from "@react-native-masked-view/masked-view";
 import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
+import { ShoppingBag } from "lucide-react-native";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   FlatList,
@@ -29,6 +31,40 @@ interface Comment {
   profiles: { name: string; avatar_url: string };
 }
 
+interface SystemMessage {
+  id: string;
+  type: "guideline" | "join" | "system";
+  text: string;
+  username?: string;
+  avatar_url?: string;
+  created_at: string;
+}
+
+type ChatItem =
+  | (Comment & { itemType: "comment" })
+  | (SystemMessage & { itemType: "system" });
+
+const COMMUNITY_GUIDELINES: SystemMessage[] = [
+  {
+    id: "guideline-1",
+    type: "guideline",
+    text: "Welcome to the live! Be respectful and kind to others.",
+    created_at: new Date().toISOString(),
+  },
+  {
+    id: "guideline-2",
+    type: "guideline",
+    text: "No spam, hate speech, or harassment.",
+    created_at: new Date().toISOString(),
+  },
+  {
+    id: "guideline-3",
+    type: "guideline",
+    text: "Keep comments relevant to the stream.",
+    created_at: new Date().toISOString(),
+  },
+];
+
 export const LiveChat = ({
   liveStreamId,
   hostId,
@@ -38,11 +74,16 @@ export const LiveChat = ({
   hostId?: string | null;
   isHostView: boolean;
 }) => {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const [comments, setComments] = useState<Comment[]>([]);
+  const [systemMessages, setSystemMessages] = useState<SystemMessage[]>([]);
   const [inputText, setInputText] = useState("");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [sharedProducts, setSharedProducts] = useState<any[]>([]);
+  const [viewerCount, setViewerCount] = useState<number>(0);
+  const [showGuidelines, setShowGuidelines] = useState(true);
+  const joinedUsersRef = React.useRef<Set<string>>(new Set());
 
   const { height: windowHeight } = useWindowDimensions();
   const maxPanelHeight = Math.round(windowHeight * 0.45);
@@ -55,6 +96,127 @@ export const LiveChat = ({
       setCurrentUserId(user?.id ?? null);
     })();
   }, []);
+
+  // Show community guidelines when stream starts
+  useEffect(() => {
+    if (liveStreamId && showGuidelines) {
+      // Add guidelines as system messages with staggered timing
+      const guidelineMessages = COMMUNITY_GUIDELINES.map((g, index) => ({
+        ...g,
+        id: `${g.id}-${liveStreamId}`,
+        created_at: new Date(
+          Date.now() - (COMMUNITY_GUIDELINES.length - index) * 1000
+        ).toISOString(),
+      }));
+      setSystemMessages(guidelineMessages);
+
+      // Auto-hide guidelines after 30 seconds
+      const timer = setTimeout(() => {
+        setShowGuidelines(false);
+      }, 30000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [liveStreamId]);
+
+  // Real-time viewer count subscription
+  useEffect(() => {
+    if (!liveStreamId) return;
+
+    // Initial fetch
+    const fetchViewerCount = async () => {
+      const { data, error } = await supabase
+        .from("live_streams")
+        .select("viewer_count")
+        .eq("id", liveStreamId)
+        .single();
+
+      if (data && !error) {
+        setViewerCount(data.viewer_count || 0);
+      }
+    };
+    fetchViewerCount();
+
+    // Subscribe to real-time updates
+    const channel = supabase
+      .channel(`viewer-count-${liveStreamId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "live_streams",
+          filter: `id=eq.${liveStreamId}`,
+        },
+        (payload) => {
+          if (payload.new && typeof payload.new.viewer_count === "number") {
+            setViewerCount(payload.new.viewer_count);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [liveStreamId]);
+
+  // Track user joins via new comments (when someone sends their first message, show join notification)
+  // This approach doesn't require a separate stream_viewers table
+  useEffect(() => {
+    if (!liveStreamId) return;
+
+    // Listen for new comments and show join message for first-time commenters
+    const channel = supabase
+      .channel(`stream-joins-${liveStreamId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "stream_comments",
+          filter: `live_stream_id=eq.${liveStreamId}`,
+        },
+        async (payload) => {
+          const userId = payload.new?.user_id;
+          if (!userId || joinedUsersRef.current.has(userId)) return;
+
+          // Mark as seen to only show join once per user
+          joinedUsersRef.current.add(userId);
+
+          // Fetch user profile for the join message
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("name, avatar_url")
+            .eq("id", userId)
+            .single();
+
+          const joinMessage: SystemMessage = {
+            id: `join-${userId}-${Date.now()}`,
+            type: "join",
+            text: "joined the live",
+            username: profile?.name || "Someone",
+            avatar_url: profile?.avatar_url,
+            created_at: new Date().toISOString(),
+          };
+
+          setSystemMessages((prev) => [joinMessage, ...prev]);
+
+          // Remove join message after 5 seconds
+          setTimeout(() => {
+            setSystemMessages((prev) =>
+              prev.filter((m) => m.id !== joinMessage.id)
+            );
+          }, 5000);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+      joinedUsersRef.current.clear();
+    };
+  }, [liveStreamId]);
 
   // host products are displayed in the host UI (Live.tsx); viewers only need shared products here
 
@@ -207,47 +369,128 @@ export const LiveChat = ({
     });
   };
 
-  const renderItem = ({ item }: { item: Comment }) => {
-    const isHost = !!hostId && String(hostId) === String(item.user_id);
-    const bubbleMaxWidth = isCurrentUserHost ? "100%" : "50%";
+  // Combine comments and system messages into a single sorted list
+  const chatItems: ChatItem[] = React.useMemo(() => {
+    const commentItems: ChatItem[] = comments.map((c) => ({
+      ...c,
+      itemType: "comment" as const,
+    }));
+    const systemItems: ChatItem[] = systemMessages.map((s) => ({
+      ...s,
+      itemType: "system" as const,
+    }));
+
+    return [...commentItems, ...systemItems].sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+  }, [comments, systemMessages]);
+
+  const renderItem = ({ item }: { item: ChatItem }) => {
+    // Render system messages (guidelines, join notifications)
+    if (item.itemType === "system") {
+      const sysItem = item as SystemMessage & { itemType: "system" };
+
+      if (sysItem.type === "guideline") {
+        return (
+          <Animated.View
+            entering={FadeInRight.springify().damping(20).stiffness(100)}
+            layout={LinearTransition.springify?.()}
+            style={styles.animatedRow}
+          >
+            <View style={styles.guidelineRow}>
+              <View style={styles.guidelineIcon}>
+                <Text style={styles.guidelineIconText}>📋</Text>
+              </View>
+              <Text style={styles.guidelineText}>{sysItem.text}</Text>
+            </View>
+          </Animated.View>
+        );
+      }
+
+      if (sysItem.type === "join") {
+        return (
+          <Animated.View
+            entering={FadeInRight.springify().damping(20).stiffness(100)}
+            layout={LinearTransition.springify?.()}
+            style={styles.animatedRow}
+          >
+            <View style={styles.joinRow}>
+              {sysItem.avatar_url ? (
+                <Image
+                  source={{ uri: sysItem.avatar_url }}
+                  style={styles.joinAvatar}
+                />
+              ) : (
+                <View style={styles.joinAvatarPlaceholder}>
+                  <Text style={styles.joinAvatarText}>
+                    {sysItem.username?.charAt(0)?.toUpperCase() || "?"}
+                  </Text>
+                </View>
+              )}
+              <Text style={styles.joinText}>
+                <Text style={styles.joinUsername}>{sysItem.username}</Text>{" "}
+                {sysItem.text}
+              </Text>
+            </View>
+          </Animated.View>
+        );
+      }
+
+      return null;
+    }
+
+    // Render regular comments
+    const commentItem = item as Comment & { itemType: "comment" };
+    const isHost = !!hostId && String(hostId) === String(commentItem.user_id);
 
     return (
       <Animated.View
         entering={FadeInRight.springify().damping(20).stiffness(100)}
         layout={LinearTransition.springify?.()}
-        style={styles.animatedRow}
+        style={[styles.animatedRow, !isHostView && styles.viewerCommentRow]}
       >
-        <View
-          style={[
-            styles.commentBubble,
-            isHost ? styles.hostBubble : styles.viewerBubble,
-            { maxWidth: bubbleMaxWidth },
-          ]}
-        >
+        <View style={[styles.commentRow, !isHostView && styles.viewerCommentBubble]}>
           <Image
             source={{
               uri:
-                item.profiles?.avatar_url ||
+                commentItem.profiles?.avatar_url ||
                 "https://www.gravatar.com/avatar/?d=mp",
             }}
             style={styles.avatar}
           />
-          <View style={styles.bubbleContent}>
-            <Text
-              style={[
-                styles.nameText,
-                isHost ? styles.hostName : styles.viewerName,
-              ]}
-              numberOfLines={2}
-            >
-              {item.profiles?.name || "user"} {isHost ? "• Host" : ""}
-            </Text>
-            <Text style={styles.messageText}>{item.text}</Text>
+          <View style={styles.commentContent}>
+            <View style={styles.nameRow}>
+              <Text
+                style={[styles.nameText, isHost && styles.hostName]}
+                numberOfLines={1}
+              >
+                {commentItem.profiles?.name || "user"}
+              </Text>
+              {isHost && (
+                <View style={styles.hostBadge}>
+                  <Text style={styles.hostBadgeText}>Host</Text>
+                </View>
+              )}
+            </View>
+            <Text style={styles.messageText}>{commentItem.text}</Text>
           </View>
         </View>
       </Animated.View>
     );
   };
+
+  // Render viewer count badge
+  const renderViewerCount = () => (
+    <View style={styles.viewerCountContainer}>
+      <View style={styles.viewerCountBadge}>
+        <View style={styles.liveDot} />
+        <Text style={styles.viewerCountText}>
+          {viewerCount} {viewerCount === 1 ? "watching" : "watching"}
+        </Text>
+      </View>
+    </View>
+  );
 
   return (
     <KeyboardAvoidingView
@@ -262,13 +505,16 @@ export const LiveChat = ({
           : 0
       }
       style={{ flex: 1 }}
-      pointerEvents="box-none"
+      pointerEvents="auto"
     >
       <View
         style={[styles.panelContainer, { height: maxPanelHeight }]}
-        pointerEvents="box-none"
+        pointerEvents="auto"
       >
         {/* Mask to fade out top area */}
+        {/* Viewer count badge */}
+        {!isHostView && renderViewerCount()}
+
         <MaskedView
           style={{ flex: 1 }}
           maskElement={
@@ -280,53 +526,70 @@ export const LiveChat = ({
           }
         >
           <FlatList
-            data={comments}
+            data={chatItems}
             inverted
             keyExtractor={(item) => item.id}
             renderItem={renderItem}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: 8, paddingTop: 8 }}
             style={{ flex: 1 }}
-            pointerEvents="box-none"
             onScrollBeginDrag={Keyboard.dismiss}
           />
         </MaskedView>
 
-        {/* INPUT AREA */}
-        {/* SHARED PRODUCTS (viewers) & HOST PRODUCT STACK */}
-        <View style={styles.sharedProductsWrapper} pointerEvents="box-none">
-          {/* For viewers: show currently shared products */}
-          {sharedProducts.length > 0 && (
-            <View style={styles.sharedRow}>
-              <FlatList
-                horizontal
-                data={sharedProducts}
-                keyExtractor={(item) => item.id || item.product_id}
-                showsHorizontalScrollIndicator={false}
-                renderItem={({ item }) => (
-                  <View style={styles.sharedCard}>
-                    <Image
-                      source={{
-                        uri:
-                          item.product?.image_url ||
-                          item.product?.image ||
-                          item.product?.thumbnail ||
-                          item.product?.images?.[0] ||
-                          "https://picsum.photos/100/100",
-                      }}
-                      style={styles.sharedImage}
-                    />
-                    <Text numberOfLines={1} style={styles.sharedTitle}>
-                      {item.product?.name || item.product?.title || "Product"}
-                    </Text>
-                  </View>
-                )}
-              />
+        {!isHostView && sharedProducts.length > 0 && (
+          <Animated.View
+            entering={FadeInRight.springify().damping(20).stiffness(100)}
+            style={styles.viewerProductsContainer}
+            pointerEvents="box-none"
+          >
+            <View style={styles.productStackHeader}>
+              <ShoppingBag color="#fff" size={14} />
+              <Text style={styles.productStackTitle}>
+                {sharedProducts.length}
+              </Text>
             </View>
-          )}
+            <FlatList
+              data={sharedProducts}
+              keyExtractor={(item) => item.id || item.product_id}
+              showsVerticalScrollIndicator={false}
+              inverted
+              contentContainerStyle={{ paddingBottom: 8 }}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  onPress={() => {
+                    const productId = item.product?.id || item.product_id;
+                    if (productId) {
+                      router.push(`/(users)/marketplace/${productId}` as any);
+                    }
+                  }}
+                  activeOpacity={0.8}
+                  style={styles.viewerProductCard}
+                >
+                  <Image
+                    source={{
+                      uri:
+                        item.product?.image_url ||
+                        item.product?.image ||
+                        item.product?.thumbnail ||
+                        item.product?.images?.[0] ||
+                        "https://picsum.photos/100/100",
+                    }}
+                    style={styles.viewerProductImage}
+                  />
+                  {item.product?.price && (
+                    <View style={styles.viewerPriceBadge}>
+                      <Text style={styles.viewerPriceText}>
+                        Nu {item.product.price}
+                      </Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              )}
+            />
+          </Animated.View>
+        )}
 
-          {/* Host product controls are displayed in the host area (Live.tsx) — not in the chat panel */}
-        </View>
         <View style={styles.inputWrapper}>
           <View style={styles.inputInner}>
             <TextInput
@@ -372,63 +635,89 @@ const styles = StyleSheet.create({
     zIndex: 50,
   },
   animatedRow: {
-    marginBottom: 8,
-    paddingHorizontal: 6,
+    marginBottom: 6,
+    paddingHorizontal: 4,
   },
+  viewerCommentRow: {
+    maxWidth: "55%",
+  },
+  viewerCommentBubble: {
+    backgroundColor: "rgba(0,0,0,0.5)",
+    borderRadius: 16,
+  },
+  commentRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    backgroundColor: "transparent",
+    paddingVertical: 6,
+    paddingHorizontal: 6,
+    paddingRight: 12,
+  },
+  avatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    marginRight: 8,
+  },
+  commentContent: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  nameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 1,
+  },
+  nameText: {
+    fontWeight: "600",
+    fontSize: 13,
+    color: "rgba(255,255,255,0.7)",
+  },
+  hostName: {
+    color: "#FFD700",
+    fontWeight: "700",
+  },
+  hostBadge: {
+    backgroundColor: "rgba(255,215,0,0.2)",
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 8,
+    marginLeft: 6,
+  },
+  hostBadgeText: {
+    color: "#FFD700",
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  messageText: {
+    color: "#fff",
+    fontSize: 14,
+    lineHeight: 18,
+  },
+  // Legacy styles kept for compatibility
   commentBubble: {
     flexDirection: "row",
     alignItems: "flex-start",
     borderRadius: 18,
     paddingVertical: 8,
     paddingHorizontal: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.12,
-    shadowRadius: 1,
     flexShrink: 1,
   },
   hostBubble: {
-    borderWidth: 1,
-    borderColor: "rgba(245, 158, 11, 0.45)", // yellow-ish
-    backgroundColor: "rgba(245,158,11,0.14)",
+    backgroundColor: "transparent",
   },
   viewerBubble: {
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-  },
-  avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    marginRight: 8,
-    borderWidth: 0.6,
-    borderColor: "rgba(255,255,255,0.12)",
-    flexShrink: 0,
+    backgroundColor: "transparent",
   },
   bubbleContent: {
     flex: 1,
     flexShrink: 1,
   },
-  nameText: {
-    fontWeight: "700",
-    fontSize: 12,
-    flexShrink: 1,
-    flexWrap: "wrap",
-  },
-  hostName: {
+  legacyHostName: {
     color: "rgb(234,179,8)",
   },
   viewerName: {
     color: "rgba(255,255,255,0.65)",
-  },
-  messageText: {
-    color: "#fff",
-    fontSize: 14,
-    lineHeight: 18,
-    marginTop: 4,
-    flexWrap: "wrap",
-    flexShrink: 1,
   },
   inputWrapper: {
     paddingVertical: 10,
@@ -463,6 +752,170 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     fontSize: 14,
   },
+  // Viewer products - vertical list on RIGHT side (opposite of chat)
+  viewerProductsContainer: {
+    position: "absolute",
+    right: 0,
+    top: 0,
+    bottom: 100,
+    width: 70,
+    zIndex: 60,
+  },
+  productStackHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.5)",
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginBottom: 8,
+    alignSelf: "center",
+  },
+  productStackTitle: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "700",
+    marginLeft: 4,
+  },
+  viewerProductCard: {
+    width: 60,
+    height: 60,
+    borderRadius: 12,
+    marginBottom: 10,
+    overflow: "hidden",
+    backgroundColor: "rgba(0,0,0,0.4)",
+    alignSelf: "center",
+  },
+  viewerProductImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 12,
+  },
+  viewerProductInfo: {
+    display: "none",
+  },
+  viewerProductTitle: {
+    display: "none",
+  },
+  viewerPriceBadge: {
+    position: "absolute",
+    bottom: 2,
+    left: 2,
+    right: 2,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    paddingVertical: 2,
+    borderRadius: 6,
+    alignItems: "center",
+  },
+  viewerPriceText: {
+    color: "#fff",
+    fontSize: 9,
+    fontWeight: "700",
+  },
+  viewerProductPrice: {
+    color: "rgba(255,255,255,0.8)",
+    fontSize: 10,
+    marginTop: 2,
+  },
+  viewProductBadge: {
+    display: "none",
+  },
+  viewProductBadgeText: {
+    display: "none",
+  },
+  // Viewer count styles
+  viewerCountContainer: {
+    position: "absolute",
+    top: -40,
+    left: 0,
+    right: 0,
+    alignItems: "flex-start",
+    zIndex: 100,
+  },
+  viewerCountBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.6)",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 16,
+  },
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#EF4444",
+    marginRight: 6,
+  },
+  viewerCountText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  // Guideline styles
+  guidelineRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "transparent",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  guidelineIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "rgba(59, 130, 246, 0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 8,
+  },
+  guidelineIconText: {
+    fontSize: 12,
+  },
+  guidelineText: {
+    color: "rgba(147, 197, 253, 1)",
+    fontSize: 13,
+    flex: 1,
+  },
+  // Join notification styles
+  joinRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "transparent",
+    borderRadius: 16,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  joinAvatar: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    marginRight: 8,
+  },
+  joinAvatarPlaceholder: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "transparent",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 8,
+  },
+  joinAvatarText: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  joinText: {
+    color: "rgba(216, 180, 254, 1)",
+    fontSize: 13,
+  },
+  joinUsername: {
+    fontWeight: "700",
+    color: "rgba(216, 180, 254, 1)",
+  },
+  // Legacy styles kept for compatibility
   sharedProductsWrapper: {
     paddingHorizontal: 6,
     paddingBottom: 8,

@@ -14,6 +14,8 @@
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "This app uses the camera to enable live streaming and video recording features for content creation and sharing.",
         "NSMicrophoneUsageDescription": "This app uses the microphone to capture audio for live streams and video recordings.",
+        "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to let you choose and update your profile picture.",
+        "NSPhotoLibraryAddUsageDescription": "This app needs permission to save photos you take when updating your profile picture.",
         "NSLocationWhenInUseUsageDescription": "This app uses your location to show nearby services and sellers in your area.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "This app uses your location to show nearby services and sellers in your area."
       }
