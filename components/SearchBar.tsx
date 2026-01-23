@@ -1,5 +1,8 @@
-
+import ImageViewer from "@/components/ImageViewer";
+import { useUser } from "@/contexts/UserContext";
+import { searchAll, SearchResult, SearchResults } from "@/lib/searchService";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -13,12 +16,8 @@ import {
   TextInput,
   TouchableOpacity,
   TouchableWithoutFeedback,
-  View
+  View,
 } from "react-native";
-import { useRouter } from "expo-router";
-import { useUser } from "@/contexts/UserContext";
-import { searchAll, SearchResult, SearchResults } from "@/lib/searchService";
-import ImageViewer from "@/components/ImageViewer";
 
 export default function SearchBar({
   value,
@@ -32,9 +31,13 @@ export default function SearchBar({
   const [isFocused, setIsFocused] = useState(false);
   const [throttledValue, setThrottledValue] = useState(value);
   const [isLoading, setIsLoading] = useState(false);
-  const [searchResults, setSearchResults] = useState<SearchResults | null>(null);
+  const [searchResults, setSearchResults] = useState<SearchResults | null>(
+    null,
+  );
   const [isSearching, setIsSearching] = useState(false);
-  const [activeTab, setActiveTab] = useState<'all' | 'users' | 'services' | 'products' | 'marketplace'>('all');
+  const [activeTab, setActiveTab] = useState<
+    "all" | "users" | "services" | "products" | "marketplace"
+  >("all");
   const [selectedPost, setSelectedPost] = useState<any | null>(null);
   const [showImageViewer, setShowImageViewer] = useState(false);
   const opacityAnim = useRef(new Animated.Value(0)).current;
@@ -69,7 +72,7 @@ export default function SearchBar({
         const results = await searchAll(throttledValue, currentUser?.id);
         setSearchResults(results);
       } catch (error) {
-        console.error('Search error:', error);
+        console.error("Search error:", error);
         setSearchResults(null);
       } finally {
         setIsSearching(false);
@@ -90,7 +93,7 @@ export default function SearchBar({
 
     const backHandler = BackHandler.addEventListener(
       "hardwareBackPress",
-      onBackPress
+      onBackPress,
     );
 
     if (isFocused) {
@@ -118,7 +121,7 @@ export default function SearchBar({
   // Auto-scroll tab bar when active tab changes
   useEffect(() => {
     if (tabScrollRef.current && searchResults) {
-      const tabIndex = tabs.findIndex(tab => tab.key === activeTab);
+      const tabIndex = tabs.findIndex((tab) => tab.key === activeTab);
       // Scroll to show the active tab (approximate position)
       tabScrollRef.current.scrollTo({ x: tabIndex * 100, animated: true });
     }
@@ -145,25 +148,27 @@ export default function SearchBar({
 
   const handleResultPress = (result: SearchResult) => {
     switch (result.type) {
-      case 'user':
+      case "user":
         // Navigate to user profile (own profile or other user's profile)
-        router.push(result.id === currentUser?.id
-          ? '/(users)/profile'
-          : `/(users)/profile/${result.id}` as any);
+        router.push(
+          result.id === currentUser?.id
+            ? "/(users)/profile"
+            : (`/(users)/profile/${result.id}` as any),
+        );
         break;
-      case 'service':
+      case "service":
         // Navigate to service detail page
         router.push(`/(users)/servicedetail/${result.id}` as any);
         break;
-      case 'product':
+      case "product":
         // Navigate to product detail page
         router.push(`/(users)/product/${result.id}` as any);
         break;
-      case 'marketplace':
+      case "marketplace":
         // Navigate to marketplace detail page
         router.push(`/(users)/marketplace/${result.id}` as any);
         break;
-      case 'post':
+      case "post":
         // Open ImageViewer modal instead of navigating
         setSelectedPost({
           id: result.id,
@@ -173,7 +178,7 @@ export default function SearchBar({
           likes: result.metadata.likes || 0,
           comments: result.metadata.comments || 0,
           shares: result.metadata.shares || 0,
-          userName: result.metadata.userName || result.title
+          userName: result.metadata.userName || result.title,
         });
         setShowImageViewer(true);
         return; // Don't close overlay yet
@@ -183,7 +188,7 @@ export default function SearchBar({
 
   const levenshtein = (a: string, b: string): number => {
     const matrix = Array.from({ length: b.length + 1 }, (_, i) =>
-      Array.from({ length: a.length + 1 }, (_, j) => 0)
+      Array.from({ length: a.length + 1 }, (_, j) => 0),
     );
 
     for (let i = 0; i <= b.length; i++) matrix[i][0] = i;
@@ -197,7 +202,7 @@ export default function SearchBar({
             : Math.min(
                 matrix[i - 1][j - 1] + 1,
                 matrix[i][j - 1] + 1,
-                matrix[i - 1][j] + 1
+                matrix[i - 1][j] + 1,
               );
       }
     }
@@ -207,7 +212,7 @@ export default function SearchBar({
 
   const fuzzyMatch = (
     query: string,
-    item: { name: string; category: string }
+    item: { name: string; category: string },
   ): boolean => {
     const q = query.toLowerCase().trim();
     const name = item.name.toLowerCase();
@@ -219,7 +224,7 @@ export default function SearchBar({
     const categoryWords = category.split(" ");
 
     return [...nameWords, ...categoryWords].some(
-      (word) => word.startsWith(q) || levenshtein(q, word) <= 2
+      (word) => word.startsWith(q) || levenshtein(q, word) <= 2,
     );
   };
 
@@ -243,7 +248,15 @@ export default function SearchBar({
   };
 
   // Section Header Component
-  const SectionHeader = ({ title, count, icon }: { title: string; count: number; icon: string }) => (
+  const SectionHeader = ({
+    title,
+    count,
+    icon,
+  }: {
+    title: string;
+    count: number;
+    icon: string;
+  }) => (
     <View className="flex-row items-center py-2 px-2 mt-3 mb-1 border-b border-gray-200">
       <Ionicons name={icon as any} size={16} color="#6B7280" />
       <Text className="ml-2 text-sm font-semibold text-gray-600 uppercase">
@@ -274,7 +287,10 @@ export default function SearchBar({
 
           {/* Post Info */}
           <View className={hasImage ? "p-2.5" : "p-3"}>
-            <Text className="text-xs font-semibold text-gray-900" numberOfLines={1}>
+            <Text
+              className="text-xs font-semibold text-gray-900"
+              numberOfLines={1}
+            >
               {result.title}
             </Text>
             {result.subtitle && (
@@ -292,29 +308,49 @@ export default function SearchBar({
   };
 
   // Search Result Item Component (for other types)
-  const SearchResultItem = ({ result, query, showTypeTag = false }: { result: SearchResult; query: string; showTypeTag?: boolean }) => {
-    const isUser = result.type === 'user';
-    const imageStyle = isUser ? 'rounded-full' : 'rounded-lg';
+  const SearchResultItem = ({
+    result,
+    query,
+    showTypeTag = false,
+  }: {
+    result: SearchResult;
+    query: string;
+    showTypeTag?: boolean;
+  }) => {
+    const isUser = result.type === "user";
+    const imageStyle = isUser ? "rounded-full" : "rounded-lg";
 
     const getTypeLabel = () => {
       switch (result.type) {
-        case 'user': return 'User';
-        case 'service': return 'Service';
-        case 'product': return 'Product';
-        case 'marketplace': return 'Marketplace';
-        case 'post': return 'Post';
-        default: return '';
+        case "user":
+          return "User";
+        case "service":
+          return "Service";
+        case "product":
+          return "Product";
+        case "marketplace":
+          return "Marketplace";
+        case "post":
+          return "Post";
+        default:
+          return "";
       }
     };
 
     const getTypeColor = () => {
       switch (result.type) {
-        case 'user': return 'bg-blue-100 text-blue-700';
-        case 'service': return 'bg-purple-100 text-purple-700';
-        case 'product': return 'bg-green-100 text-green-700';
-        case 'marketplace': return 'bg-orange-100 text-orange-700';
-        case 'post': return 'bg-pink-100 text-pink-700';
-        default: return 'bg-gray-100 text-gray-700';
+        case "user":
+          return "bg-blue-100 text-blue-700";
+        case "service":
+          return "bg-purple-100 text-purple-700";
+        case "product":
+          return "bg-green-100 text-green-700";
+        case "marketplace":
+          return "bg-orange-100 text-orange-700";
+        case "post":
+          return "bg-pink-100 text-pink-700";
+        default:
+          return "bg-gray-100 text-gray-700";
       }
     };
 
@@ -325,7 +361,9 @@ export default function SearchBar({
         activeOpacity={0.7}
       >
         {/* Avatar/Image */}
-        <View className={`w-14 h-14 ${imageStyle} bg-gray-200 overflow-hidden mr-3`}>
+        <View
+          className={`w-14 h-14 ${imageStyle} bg-gray-200 overflow-hidden mr-3`}
+        >
           {result.imageUrl ? (
             <Image
               source={{ uri: result.imageUrl }}
@@ -336,11 +374,15 @@ export default function SearchBar({
             <View className="w-full h-full items-center justify-center bg-gray-300">
               <Ionicons
                 name={
-                  result.type === 'user' ? 'person' :
-                  result.type === 'service' ? 'construct' :
-                  result.type === 'product' ? 'pricetag' :
-                  result.type === 'marketplace' ? 'storefront' :
-                  'chatbubble'
+                  result.type === "user"
+                    ? "person"
+                    : result.type === "service"
+                      ? "construct"
+                      : result.type === "product"
+                        ? "pricetag"
+                        : result.type === "marketplace"
+                          ? "storefront"
+                          : "chatbubble"
                 }
                 size={24}
                 color="#9CA3AF"
@@ -352,11 +394,16 @@ export default function SearchBar({
         {/* Content */}
         <View className="flex-1">
           <View className="flex-row items-center">
-            <Text className="text-base font-semibold text-gray-900 flex-1" numberOfLines={1}>
+            <Text
+              className="text-base font-semibold text-gray-900 flex-1"
+              numberOfLines={1}
+            >
               {highlightMatch(result.title, query)}
             </Text>
             {showTypeTag && (
-              <View className={`ml-2 px-2 py-0.5 rounded-full ${getTypeColor()}`}>
+              <View
+                className={`ml-2 px-2 py-0.5 rounded-full ${getTypeColor()}`}
+              >
                 <Text className={`text-xs font-medium ${getTypeColor()}`}>
                   {getTypeLabel()}
                 </Text>
@@ -380,14 +427,14 @@ export default function SearchBar({
   const getFilteredResults = (): SearchResult[] => {
     if (!searchResults) return [];
 
-    if (activeTab === 'all') {
+    if (activeTab === "all") {
       // Posts only show in "All" tab
       return [
         ...searchResults.users,
         ...searchResults.services,
         ...searchResults.products,
         ...searchResults.marketplace,
-        ...searchResults.posts
+        ...searchResults.posts,
       ];
     }
 
@@ -397,13 +444,15 @@ export default function SearchBar({
 
   const getTabCount = (tab: string): number => {
     if (!searchResults) return 0;
-    if (tab === 'all') {
+    if (tab === "all") {
       // Include posts in "All" count
-      return searchResults.users.length +
+      return (
+        searchResults.users.length +
         searchResults.services.length +
         searchResults.products.length +
         searchResults.marketplace.length +
-        searchResults.posts.length;
+        searchResults.posts.length
+      );
     }
     // Individual tabs don't count posts
     return searchResults[tab as keyof SearchResults]?.length || 0;
@@ -411,20 +460,20 @@ export default function SearchBar({
 
   // Swipe handling for tab navigation
   const tabs = [
-    { key: 'all', label: 'All', icon: 'apps' },
-    { key: 'users', label: 'Users', icon: 'people' },
-    { key: 'services', label: 'Services', icon: 'construct' },
-    { key: 'products', label: 'Products', icon: 'pricetag' },
-    { key: 'marketplace', label: 'Market', icon: 'storefront' }
+    { key: "all", label: "All", icon: "apps" },
+    { key: "users", label: "Users", icon: "people" },
+    { key: "services", label: "Services", icon: "construct" },
+    { key: "products", label: "Products", icon: "pricetag" },
+    { key: "marketplace", label: "Market", icon: "storefront" },
   ];
 
-  const handleSwipe = (direction: 'left' | 'right') => {
-    const currentIndex = tabs.findIndex(tab => tab.key === activeTab);
+  const handleSwipe = (direction: "left" | "right") => {
+    const currentIndex = tabs.findIndex((tab) => tab.key === activeTab);
 
-    if (direction === 'left' && currentIndex < tabs.length - 1) {
+    if (direction === "left" && currentIndex < tabs.length - 1) {
       // Swipe left = next tab
       setActiveTab(tabs[currentIndex + 1].key as any);
-    } else if (direction === 'right' && currentIndex > 0) {
+    } else if (direction === "right" && currentIndex > 0) {
       // Swipe right = previous tab
       setActiveTab(tabs[currentIndex - 1].key as any);
     }
@@ -441,9 +490,9 @@ export default function SearchBar({
 
     if (Math.abs(diff) > threshold) {
       if (diff > 0) {
-        handleSwipe('left');
+        handleSwipe("left");
       } else {
-        handleSwipe('right');
+        handleSwipe("right");
       }
     }
   };
@@ -466,24 +515,34 @@ export default function SearchBar({
             <TouchableOpacity
               key={tab.key}
               onPress={() => setActiveTab(tab.key as any)}
-              className={`mr-2 px-4 py-2 rounded-full flex-row items-center ${isActive ? 'bg-primary' : 'bg-white border border-gray-200'
-                }`}
+              className={`mr-2 px-4 py-2 rounded-full flex-row items-center ${
+                isActive ? "bg-primary" : "bg-white border border-gray-200"
+              }`}
               activeOpacity={0.7}
             >
               <Ionicons
                 name={tab.icon as any}
                 size={16}
-                color={isActive ? 'white' : '#6B7280'}
+                color={isActive ? "white" : "#6B7280"}
               />
-              <Text className={`ml-1.5 text-sm font-msemibold ${isActive ? 'text-white' : 'text-gray-700'
-                }`}>
+              <Text
+                className={`ml-1.5 text-sm font-msemibold ${
+                  isActive ? "text-white" : "text-gray-700"
+                }`}
+              >
                 {tab.label}
               </Text>
               {count > 0 && (
-                <View className={`ml-1.5 px-1.5 py-0.5 rounded-full min-w-[18px] items-center ${isActive ? 'bg-white/20' : 'bg-gray-200'
-                  }`}>
-                  <Text className={`text-xs font-semibold ${isActive ? 'text-white' : 'text-gray-600'
-                    }`}>
+                <View
+                  className={`ml-1.5 px-1.5 py-0.5 rounded-full min-w-[18px] items-center ${
+                    isActive ? "bg-white/20" : "bg-gray-200"
+                  }`}
+                >
+                  <Text
+                    className={`text-xs font-semibold ${
+                      isActive ? "text-white" : "text-gray-600"
+                    }`}
+                  >
                     {count}
                   </Text>
                 </View>
@@ -502,7 +561,12 @@ export default function SearchBar({
         activeOpacity={0.9}
         onPress={() => setIsFocused(true)}
       >
-        <Ionicons name="search" size={18} color="#888" style={{ marginRight: 8 }} />
+        <Ionicons
+          name="search"
+          size={18}
+          color="#888"
+          style={{ marginRight: 8 }}
+        />
         <TextInput
           pointerEvents="none"
           editable={false}
@@ -567,26 +631,35 @@ export default function SearchBar({
               )}
 
               {/* Initial State */}
-              {!isSearching && !searchResults && throttledValue.length === 0 && (
-                <View className="py-4">
-                  <View className="items-center">
-                    <Ionicons name="search" size={48} color="#9CA3AF" />
-                    <Text className="text-gray-500 mt-4 text-center">
-                      Search for users, services, products, marketplace items, or posts
-                    </Text>
+              {!isSearching &&
+                !searchResults &&
+                throttledValue.length === 0 && (
+                  <View className="py-4">
+                    <View className="items-center">
+                      <Ionicons name="search" size={48} color="#9CA3AF" />
+                      <Text className="text-gray-500 mt-4 text-center">
+                        Search for users, services, products, marketplace items,
+                        or posts
+                      </Text>
+                    </View>
                   </View>
-                </View>
-              )}
+                )}
 
               {/* Empty State - Too Short Query */}
-              {!isSearching && throttledValue.length > 0 && throttledValue.length < 2 && (
-                <View className="py-8 items-center">
-                  <Ionicons name="information-circle-outline" size={48} color="#9CA3AF" />
-                  <Text className="text-gray-500 mt-4 text-center">
-                    Type at least 2 characters to search
-                  </Text>
-                </View>
-              )}
+              {!isSearching &&
+                throttledValue.length > 0 &&
+                throttledValue.length < 2 && (
+                  <View className="py-8 items-center">
+                    <Ionicons
+                      name="information-circle-outline"
+                      size={48}
+                      color="#9CA3AF"
+                    />
+                    <Text className="text-gray-500 mt-4 text-center">
+                      Type at least 2 characters to search
+                    </Text>
+                  </View>
+                )}
 
               {/* Results Display with Tabs */}
               {!isSearching && searchResults && throttledValue.length >= 2 && (
@@ -595,20 +668,24 @@ export default function SearchBar({
                   <TabBar />
 
                   {/* Filtered Results */}
-                  {activeTab === 'all' ? (
+                  {activeTab === "all" ? (
                     // Show all results with type tags
                     <>
                       {getFilteredResults().length > 0 ? (
                         <>
                           {/* Separate posts from other results */}
                           {(() => {
-                            const posts = getFilteredResults().filter(r => r.type === 'post');
-                            const otherResults = getFilteredResults().filter(r => r.type !== 'post');
+                            const posts = getFilteredResults().filter(
+                              (r) => r.type === "post",
+                            );
+                            const otherResults = getFilteredResults().filter(
+                              (r) => r.type !== "post",
+                            );
 
                             return (
                               <>
                                 {/* Other Results (non-posts) */}
-                                {otherResults.map(result => (
+                                {otherResults.map((result) => (
                                   <SearchResultItem
                                     key={result.id}
                                     result={result}
@@ -627,7 +704,7 @@ export default function SearchBar({
                                       {posts.map((result, index) => (
                                         <View
                                           key={result.id}
-                                          style={{ width: '48%' }}
+                                          style={{ width: "48%" }}
                                         >
                                           <PostCard result={result} />
                                         </View>
@@ -641,7 +718,11 @@ export default function SearchBar({
                         </>
                       ) : (
                         <View className="py-8 items-center">
-                          <Ionicons name="search-outline" size={48} color="#9CA3AF" />
+                          <Ionicons
+                            name="search-outline"
+                            size={48}
+                            color="#9CA3AF"
+                          />
                           <Text className="text-gray-500 mt-4 text-center">
                             No results found for "{throttledValue}"
                           </Text>
@@ -655,7 +736,7 @@ export default function SearchBar({
                     // Show filtered results for specific tab
                     <View>
                       {getFilteredResults().length > 0 ? (
-                        getFilteredResults().map(result => (
+                        getFilteredResults().map((result) => (
                           <SearchResultItem
                             key={result.id}
                             result={result}
@@ -665,7 +746,11 @@ export default function SearchBar({
                         ))
                       ) : (
                         <View className="py-8 items-center">
-                          <Ionicons name="search-outline" size={48} color="#9CA3AF" />
+                          <Ionicons
+                            name="search-outline"
+                            size={48}
+                            color="#9CA3AF"
+                          />
                           <Text className="text-gray-500 mt-4 text-center">
                             No {activeTab} found for "{throttledValue}"
                           </Text>

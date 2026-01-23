@@ -192,7 +192,7 @@ export default function TabLayout() {
             href: null,
           }}
         />
-         <Tabs.Screen
+        <Tabs.Screen
           name="marketplace/[id]"
           options={{
             href: null,

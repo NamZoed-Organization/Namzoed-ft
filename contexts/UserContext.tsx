@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
 interface User {
+  phone_number: any;
   id?: string;
   username?: string;
   name?: string;

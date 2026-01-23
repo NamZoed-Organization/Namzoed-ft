@@ -2,13 +2,20 @@ import CreatePost from "@/components/CreatePost";
 import { PostSkeleton } from "@/components/FeedPost";
 import LiveWrapper from "@/components/LiveWrapper";
 import { VideoErrorBoundary } from "@/components/VideoErrorBoundary";
+import { useLiveSession } from "@/contexts/LiveSessionProvider";
 import { useUser } from "@/contexts/UserContext";
 import { useFeedPagination } from "@/hooks/usePagination";
 import { useVirtualizedList } from "@/hooks/useVirtualizedList";
 import { fetchPosts, PostWithUser } from "@/lib/postsService";
 import { PostData } from "@/types/post";
 import { useRouter } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -25,6 +32,8 @@ import { Plus, Radio } from "lucide-react-native";
 
 export default function FeedScreen() {
   const { currentUser } = useUser();
+  const { setRestoreHandler, pendingRestore, consumePendingRestore } =
+    useLiveSession();
   const router = useRouter();
   const [showCreatePost, setShowCreatePost] = useState(false);
   const [showLive, setShowLive] = useState(false);
@@ -92,6 +101,26 @@ export default function FeedScreen() {
   useEffect(() => {
     loadNewPosts();
   }, []);
+
+  // Register restore handler so mini overlay can reopen the live modal (ensures navigation to feed first)
+  useEffect(() => {
+    setRestoreHandler(() => () => {
+      router.push("/(users)/feed");
+      // slight delay to allow navigation stack to settle
+      setTimeout(() => setShowLive(true), 30);
+    });
+  }, [setRestoreHandler, router]);
+
+  // If a restore was requested without a handler (e.g., from another screen), open live and consume flag
+  useEffect(() => {
+    if (pendingRestore) {
+      router.push("/(users)/feed");
+      setTimeout(() => {
+        setShowLive(true);
+        consumePendingRestore();
+      }, 30);
+    }
+  }, [pendingRestore, consumePendingRestore, router]);
 
   // Use only Supabase posts
   const allPosts = useMemo(() => {

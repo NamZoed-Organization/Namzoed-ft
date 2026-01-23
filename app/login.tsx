@@ -1,5 +1,6 @@
 import { useUser } from "@/contexts/UserContext";
 import { supabase } from "@/lib/supabase";
+import { isMongooseUser } from "@/utils/roleCheck";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Link, useRouter } from "expo-router";
@@ -159,11 +160,18 @@ export default function Login() {
             setCurrentUser(userData);
             console.log("Context updated with user data");
             
-            // Clear form and redirect
+            // Clear form
             setEmail("");
             setPassword("");
-            console.log("Redirecting to user area");
-            router.replace("/(users)");
+            
+            // Check if user is mongoose@gmail.com and redirect accordingly
+            if (isMongooseUser(authEmail)) {
+              console.log("Redirecting to Mongoose Dashboard");
+              router.replace("/mongoose-dashboard");
+            } else {
+              console.log("Redirecting to user area");
+              router.replace("/(users)");
+            }
           } catch (storageError: any) {
             console.error("Storage/Context Error:", {
               message: storageError.message,

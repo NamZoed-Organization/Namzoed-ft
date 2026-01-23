@@ -1,16 +1,16 @@
 // app/(tabs)/messages.tsx
+import BookMongooseModal from "@/components/BookMongooseModal";
 import FollowRequests from "@/components/FollowRequests";
-import MongooseMessages from "@/components/MongooseMessages";
-import RequestMessages from "@/components/RequestMessages";
+import TrackMongooseModal from "@/components/TrackMongooseModal";
 import { useUser } from "@/contexts/UserContext";
 import userData17123456 from "@/data/17123456";
-import mongooses from "@/data/mongoose";
 import users from "@/data/UserData";
 import { supabase } from "@/lib/supabase";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  Alert,
   FlatList,
   ScrollView,
   Text,
@@ -56,6 +56,7 @@ const getUserData = (phoneNumber: string): IUserData | null => {
 export default function MessageScreen() {
   const { currentUser } = useUser();
   const router = useRouter();
+  const { tab } = useLocalSearchParams();
   const [activeTab, setActiveTab] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [showFollowRequests, setShowFollowRequests] = useState(false);
@@ -64,6 +65,24 @@ export default function MessageScreen() {
   const [conversations, setConversations] = useState<any[]>([]);
   const [isLoadingConversations, setIsLoadingConversations] = useState(false);
   const [debugInfo, setDebugInfo] = useState<string>("");
+  const [mongooseUsers, setMongooseUsers] = useState<any[]>([]);
+  const [isLoadingMongoose, setIsLoadingMongoose] = useState(false);
+  const [showBookingModal, setShowBookingModal] = useState(false);
+  const [mongooseBookings, setMongooseBookings] = useState<any[]>([]);
+  const [showTrackingModal, setShowTrackingModal] = useState(false);
+  const [selectedBookingForTracking, setSelectedBookingForTracking] = useState<any>(null);
+
+  // Handle tab navigation from URL parameters
+  useEffect(() => {
+    if (tab) {
+      const tabIndex = parseInt(tab as string, 10);
+      console.log('Tab parameter detected:', tab, 'Parsed index:', tabIndex);
+      if (!isNaN(tabIndex) && tabIndex >= 0 && tabIndex <= 2) {
+        console.log('Setting active tab to:', tabIndex);
+        setActiveTab(tabIndex);
+      }
+    }
+  }, [tab]);
 
   if (!currentUser) {
     return (
@@ -292,6 +311,140 @@ export default function MessageScreen() {
     fetchConversations();
   }, [currentUser?.phone_number]);
 
+  // Fetch mongoose users (users with email starting with mongoose@gmail.com)
+  const fetchMongooseUsers = async () => {
+    setIsLoadingMongoose(true);
+    try {
+      console.log('=== FETCHING MONGOOSE USERS ===');
+      
+      const { data: mongooseProfiles, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .ilike('email', 'mongoose@gmail.com%')
+        .order('name', { ascending: true });
+
+      if (error) {
+        console.error('❌ Error fetching mongoose users:', error);
+        setMongooseUsers([]);
+      } else {
+        console.log('✅ Mongoose users found:', mongooseProfiles?.length || 0);
+        setMongooseUsers(mongooseProfiles || []);
+      }
+    } catch (e) {
+      console.error('Error fetching mongoose users:', e);
+      setMongooseUsers([]);
+    } finally {
+      setIsLoadingMongoose(false);
+    }
+  };
+
+  useEffect(() => {
+    // Fetch mongoose users when component mounts
+    fetchMongooseUsers();
+  }, []);
+
+  // Fetch ALL mongoose bookings to properly determine mongoose availability
+  const fetchMongooseBookings = useCallback(async () => {
+    if (!currentUser?.id) return;
+    
+    try {
+      // Fetch ALL bookings (not just current user's) to determine mongoose availability
+      const { data: allBookings, error: allError } = await supabase
+        .from('booking_requests')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (allError) {
+        console.error('Error fetching all bookings:', allError);
+      } else {
+        console.log('✅ Fetched all bookings:', allBookings?.length);
+        // Store ALL bookings to properly calculate mongoose availability
+        setMongooseBookings(allBookings || []);
+      }
+    } catch (e) {
+      console.error('Error fetching mongoose bookings:', e);
+    }
+  }, [currentUser?.id]);
+
+  useEffect(() => {
+    // Fetch bookings when component mounts
+    if (currentUser?.id) {
+      fetchMongooseBookings();
+    }
+  }, [currentUser?.id]);
+
+  // Subscribe to real-time booking updates (listen to ALL bookings to detect when mongoose becomes available)
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    console.log('🔔 Setting up booking real-time subscription for user:', currentUser.id);
+
+    // Use unique channel name to prevent conflicts on reload
+    const channelName = `all_bookings_${Date.now()}`;
+    let isSubscribed = true;
+
+    // Subscribe to ALL booking changes to get instant updates for all mongooses
+    const bookingsChannel = supabase
+      .channel(channelName)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'booking_requests'
+      }, (payload) => {
+        if (!isSubscribed) return; // Ignore if already unsubscribed
+        
+        console.log('⚡ INSTANT booking update:', {
+          eventType: payload.eventType,
+          userId: (payload.new as any)?.user_id || (payload.old as any)?.user_id,
+          status: (payload.new as any)?.status || (payload.old as any)?.status,
+          mongoose: (payload.new as any)?.mongoose_email || (payload.old as any)?.mongoose_email
+        });
+        
+        // Handle different event types
+        if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+          const newBooking = payload.new as any;
+          
+          // Update bookings immediately (optimistic update)
+          setMongooseBookings(prev => {
+            const filtered = prev.filter(b => b.id !== newBooking.id);
+            const updated = [newBooking, ...filtered].sort((a, b) => 
+              new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+            );
+            console.log('✅ INSTANT bookings update, total:', updated.length);
+            return updated;
+          });
+          
+        } else if (payload.eventType === 'DELETE') {
+          const deletedBooking = payload.old as any;
+          
+          setMongooseBookings(prev => {
+            const updated = prev.filter(b => b.id !== deletedBooking.id);
+            console.log('✅ Removed deleted booking, total:', updated.length);
+            return updated;
+          });
+        }
+      })
+      .subscribe((status) => {
+        console.log('📡 Bookings subscription status:', status);
+        
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Real-time subscription ACTIVE');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ Real-time subscription ERROR');
+        } else if (status === 'TIMED_OUT') {
+          console.error('⏱️ Real-time subscription TIMED OUT');
+        } else if (status === 'CLOSED') {
+          console.log('🔒 Real-time subscription CLOSED');
+        }
+      });
+
+    return () => {
+      console.log('🔌 Cleaning up booking subscription:', channelName);
+      isSubscribed = false;
+      supabase.removeChannel(bookingsChannel);
+    };
+  }, [currentUser?.id]);
+
   // Subscribe to real-time updates for new messages
   useEffect(() => {
     const userPhone = currentUser?.phone_number || 
@@ -342,21 +495,6 @@ export default function MessageScreen() {
     setupRealtimeSubscription();
   }, [currentUser]);
 
-  // Get mongoose chats for current user
-  const mongooseChats = useMemo(() => {
-    const chats: { mongooseName: string; messages: any[] }[] = [];
-    Object.entries(mongooses).forEach(([mongooseName, mongooseData]) => {
-      const currentUserPhone = `+975${currentUser.phone_number}`;
-      if ((mongooseData.clientChats as any)[currentUserPhone]) {
-        chats.push({
-          mongooseName,
-          messages: (mongooseData.clientChats as any)[currentUserPhone]
-        });
-      }
-    });
-    return chats;
-  }, [currentUser.phone_number]);
-
   const getUserByPhone = (phoneNumber: string) => {
     const cleanPhone = phoneNumber.replace('+975', '');
     return Object.values(users).find(u => u.phone_number === cleanPhone);
@@ -406,45 +544,64 @@ export default function MessageScreen() {
   };
 
   const handleDeleteConversation = async (partnerId: string, partnerName: string) => {
-    try {
-      // Get current user's UUID
-      const userPhone = currentUser?.phone_number || 
-                       (currentUser as any)?.phone || 
-                       (currentUser as any)?.phoneNumber ||
-                       (currentUser as any)?.mobile;
-      
-      if (!userPhone) {
-        console.log('❌ No phone number found for deletion');
-        return;
-      }
-      
-      const { data: currentUserProfile } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('phone', userPhone)
-        .maybeSingle();
+    Alert.alert(
+      "Delete Conversation",
+      `Are you sure you want to delete all messages with ${partnerName}? This action cannot be undone.`,
+      [
+        {
+          text: "Cancel",
+          style: "cancel"
+        },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              // Get current user's UUID
+              const userPhone = currentUser?.phone_number || 
+                               (currentUser as any)?.phone || 
+                               (currentUser as any)?.phoneNumber ||
+                               (currentUser as any)?.mobile;
+              
+              if (!userPhone) {
+                console.log('❌ No phone number found for deletion');
+                return;
+              }
+              
+              const { data: currentUserProfile } = await supabase
+                .from('profiles')
+                .select('id')
+                .eq('phone', userPhone)
+                .maybeSingle();
 
-      if (!currentUserProfile) {
-        console.log('❌ User profile not found');
-        return;
-      }
+              if (!currentUserProfile) {
+                console.log('❌ User profile not found');
+                return;
+              }
 
-      // Delete all messages between current user and partner
-      const { error } = await supabase
-        .from('messages')
-        .delete()
-        .or(`and(sender_id.eq.${currentUserProfile.id},receiver_id.eq.${partnerId}),and(sender_id.eq.${partnerId},receiver_id.eq.${currentUserProfile.id})`);
+              // Delete all messages between current user and partner
+              const { error } = await supabase
+                .from('messages')
+                .delete()
+                .or(`and(sender_id.eq.${currentUserProfile.id},receiver_id.eq.${partnerId}),and(sender_id.eq.${partnerId},receiver_id.eq.${currentUserProfile.id})`);
 
-      if (error) {
-        console.error('Error deleting conversation:', error);
-      } else {
-        console.log(`✅ Deleted conversation with ${partnerName}`);
-        // Remove from local state immediately
-        setConversations(prev => prev.filter(c => c.partnerId !== partnerId));
-      }
-    } catch (e) {
-      console.error('Error deleting conversation:', e);
-    }
+              if (error) {
+                console.error('Error deleting conversation:', error);
+                Alert.alert('Error', 'Failed to delete conversation. Please try again.');
+              } else {
+                console.log(`✅ Deleted conversation with ${partnerName}`);
+                // Remove from local state immediately
+                setConversations(prev => prev.filter(c => c.partnerId !== partnerId));
+                Alert.alert('Success', `Conversation with ${partnerName} has been deleted.`);
+              }
+            } catch (e) {
+              console.error('Error deleting conversation:', e);
+              Alert.alert('Error', 'An unexpected error occurred.');
+            }
+          }
+        }
+      ]
+    );
   };
 
   const renderConversationItem = ({ item: conversation }: { item: any }) => {
@@ -523,6 +680,89 @@ export default function MessageScreen() {
     );
   };
 
+  const renderMongooseUserItem = ({ item: user }: { item: any }) => {
+    const userName = user.name || user.username || user.full_name || 'Mongoose User';
+    const userEmail = user.email || 'No email';
+    const userId = user.id;
+    
+    // Find latest booking for this mongoose user (from current user)
+    const userBooking = mongooseBookings
+      .filter(booking => booking.mongoose_email === userEmail && booking.user_id === currentUser?.id)
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+    
+    // Check if mongoose has ANY accepted booking from ANY user (to show if busy)
+    const hasActiveBooking = mongooseBookings
+      .some(booking => booking.mongoose_email === userEmail && booking.status === 'accepted');
+    
+    const latestBooking = userBooking;
+    
+    const getStatusBadge = () => {
+      if (!latestBooking) return null;
+      
+      const statusConfig = {
+        pending: { color: 'bg-yellow-500', text: 'Pending', icon: 'time' },
+        accepted: { color: 'bg-green-500', text: 'Accepted', icon: 'checkmark-circle' },
+        rejected: { color: 'bg-red-500', text: 'Rejected', icon: 'close-circle' }
+      };
+      
+      const config = statusConfig[latestBooking.status as keyof typeof statusConfig];
+      if (!config) return null;
+      
+      return (
+        <View className={`${config.color} px-2 py-1 rounded-full flex-row items-center mr-2`}>
+          <Ionicons name={config.icon as any} size={14} color="white" />
+          <Text className="text-white text-xs font-semibold ml-1">{config.text}</Text>
+        </View>
+      );
+    };
+    
+    // Check if booking is disabled (has accepted booking)
+    const isBookingDisabled = latestBooking?.status === 'accepted';
+    const hasLocationData = latestBooking?.pickup_latitude && latestBooking?.delivery_latitude;
+    
+    const handleTrackPress = () => {
+      if (latestBooking && hasLocationData) {
+        setSelectedBookingForTracking(latestBooking);
+        setShowTrackingModal(true);
+      }
+    };
+    
+    return (
+      <View className="flex-row items-center p-4 border-b border-gray-200">
+        <View className="w-12 h-12 bg-green-600 rounded-full items-center justify-center mr-3">
+          <Text className="text-white font-bold text-lg">🦡</Text>
+        </View>
+        <View className="flex-1">
+          <Text className="font-semibold text-gray-800">
+            {userName}
+          </Text>
+          <Text className="text-sm text-gray-500 mt-1">
+            {userEmail}
+          </Text>
+        </View>
+        {getStatusBadge()}
+        {latestBooking?.status === 'accepted' && hasLocationData ? (
+          <TouchableOpacity 
+            className="bg-orange-500 px-4 py-2 rounded-lg flex-row items-center"
+            onPress={handleTrackPress}
+          >
+            <Ionicons name="navigate" size={18} color="white" />
+            <Text className="text-white font-semibold ml-2">Track</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity 
+            className={`${isBookingDisabled ? 'bg-gray-400' : 'bg-green-600'} px-4 py-2 rounded-lg flex-row items-center`}
+            onPress={() => !isBookingDisabled && setShowBookingModal(true)}
+            disabled={isBookingDisabled}
+          >
+            <Ionicons name="calendar" size={18} color="white" />
+            <Text className="text-white font-semibold ml-2">{isBookingDisabled ? 'In Progress' : 'Book'}</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  };
+
   // If showing follow requests, render the FollowRequests component
   if (showFollowRequests) {
     return (
@@ -552,15 +792,14 @@ export default function MessageScreen() {
         </View>
 
         <FollowRequests 
-          followRequests={followRequests}
-          onFollowBack={handleFollowBack}
-          onReject={handleReject}
+          onClose={() => setShowFollowRequests(false)}
+          userId={currentUser.id || ''}
         />
       </View>
     );
   }
 
-  const tabs = ['Messages', 'Mongoose', 'Requests'];
+  const tabs = ['Messages', 'Mongoose'];
 
   return (
     <View className="flex-1 bg-background">
@@ -576,19 +815,6 @@ export default function MessageScreen() {
               {currentUser.username}
             </Text>
           </View>
-          <TouchableOpacity 
-            className="relative"
-            onPress={() => setShowFollowRequests(true)}
-          >
-            <Ionicons name="person-add" size={24} color="#007AFF" />
-            {followRequests.length > 0 && (
-              <View className="absolute -top-2 -right-2 bg-red-500 rounded-full w-5 h-5 items-center justify-center">
-                <Text className="text-white text-xs font-bold">
-                  {followRequests.length}
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
         </View>
       </View>
 
@@ -612,9 +838,6 @@ export default function MessageScreen() {
                 activeTab === index ? 'text-primary' : 'text-gray-500'
               }`}>
                 {tab}
-                {index === 2 && userData.requests.length > 0 && (
-                  <Text className="text-red-500"> ({userData.requests.length})</Text>
-                )}
               </Text>
             </TouchableOpacity>
           ))}
@@ -692,7 +915,10 @@ export default function MessageScreen() {
                   ) : (
                     <View className="flex-1 items-center justify-center py-8">
                       <Text className="text-gray-500 text-center">
-                        No conversations yet.{"\n"}Search for users to start chatting!
+                        No conversations yet.
+                      </Text>
+                      <Text className="text-gray-500 text-center mt-1">
+                        Search for users to start chatting!
                       </Text>
                     </View>
                   )}
@@ -702,14 +928,61 @@ export default function MessageScreen() {
           )}
 
           {activeTab === 1 && (
-            <MongooseMessages mongooseChats={mongooseChats} />
-          )}
-
-          {activeTab === 2 && (
-            <RequestMessages requests={userData.requests} />
+            <>
+              {isLoadingMongoose ? (
+                <View className="flex-1 items-center justify-center py-8">
+                  <Text className="text-gray-500">Loading mongoose users...</Text>
+                </View>
+              ) : mongooseUsers.length > 0 ? (
+                <>
+                  <View className="px-4 py-2 bg-gray-50 border-b border-gray-200">
+                    <Text className="text-sm font-medium text-gray-600">
+                      Mongoose Support ({mongooseUsers.length})
+                    </Text>
+                  </View>
+                  <FlatList
+                    data={mongooseUsers}
+                    renderItem={renderMongooseUserItem}
+                    keyExtractor={(item) => item.id}
+                    scrollEnabled={false}
+                    showsVerticalScrollIndicator={false}
+                  />
+                </>
+              ) : (
+                <View className="flex-1 items-center justify-center py-8">
+                  <Text className="text-gray-500 text-center">
+                    No mongoose support users found.
+                  </Text>
+                  <Text className="text-gray-500 text-center mt-1">
+                    Contact admin to add mongoose support.
+                  </Text>
+                </View>
+              )}
+            </>
           )}
         </View>
       </ScrollView>
+
+      {/* Booking Modal */}
+      <BookMongooseModal 
+        visible={showBookingModal}
+        onClose={() => {
+          setShowBookingModal(false);
+          fetchMongooseBookings(); // Refresh bookings when modal closes
+        }}
+      />
+
+      {/* Tracking Modal */}
+      {selectedBookingForTracking && (
+        <TrackMongooseModal
+          visible={showTrackingModal}
+          onClose={() => {
+            setShowTrackingModal(false);
+            setSelectedBookingForTracking(null);
+          }}
+          booking={selectedBookingForTracking}
+        />
+      )}
     </View>
   );
 }

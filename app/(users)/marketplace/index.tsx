@@ -82,7 +82,7 @@ export default function MarketplaceScreen() {
 
   const renderMarketplaceCard = ({ item }: { item: MarketplaceItemWithUser }) => (
     <TouchableOpacity
-      onPress={() => router.push(`/marketplace/${item.id}` as any)}
+      onPress={() => router.push(`/(users)/marketplace/${item.id}` as any)}
       className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden"
     >
       {/* Product Image */}

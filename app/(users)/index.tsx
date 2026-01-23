@@ -46,6 +46,7 @@ type TabType = "foryou" | "featured" | "live" | "bidding" | "norbu";
 interface HeaderDataItem {
   key: string;
   component: "header" | "content" | "footer";
+  component: "header" | "content" | "footer";
 }
 
 export default function HomeScreen() {
@@ -72,6 +73,7 @@ export default function HomeScreen() {
       featured: 1,
       live: 2,
       norbu: 3,
+      bidding: 4,
       bidding: 4,
     };
     return positions[tab];
@@ -219,9 +221,13 @@ export default function HomeScreen() {
     { key: "header", component: "header" },
     { key: "content", component: "content" },
     { key: "footer", component: "footer" },
+    { key: "header", component: "header" },
+    { key: "content", component: "content" },
+    { key: "footer", component: "footer" },
   ];
 
   const renderItem: ListRenderItem<HeaderDataItem> = ({ item }) => {
+    if (item.component === "header") {
     if (item.component === "header") {
       return (
         <View className="px-4 gap-2">
@@ -290,8 +296,11 @@ export default function HomeScreen() {
               onPress={() => handleTabPress("foryou")}
               className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm ${
                 activeTab === "foryou" ? "bg-primary" : "bg-white"
+                activeTab === "foryou" ? "bg-primary" : "bg-white"
               }`}
             >
+              <Heart
+                size={20}
               <Heart
                 size={20}
                 color={activeTab === "foryou" ? "white" : "black"}
@@ -303,8 +312,11 @@ export default function HomeScreen() {
               onPress={() => handleTabPress("featured")}
               className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm ${
                 activeTab === "featured" ? "bg-primary" : "bg-white"
+                activeTab === "featured" ? "bg-primary" : "bg-white"
               }`}
             >
+              <Users
+                size={20}
               <Users
                 size={20}
                 color={activeTab === "featured" ? "white" : "black"}
@@ -315,8 +327,11 @@ export default function HomeScreen() {
               onPress={() => handleTabPress("live")}
               className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm ${
                 activeTab === "live" ? "bg-primary" : "bg-white"
+                activeTab === "live" ? "bg-primary" : "bg-white"
               }`}
             >
+              <Radio
+                size={20}
               <Radio
                 size={20}
                 color={activeTab === "live" ? "white" : "black"}
@@ -327,8 +342,11 @@ export default function HomeScreen() {
               onPress={() => handleTabPress("norbu")}
               className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm ${
                 activeTab === "norbu" ? "bg-primary" : "bg-white"
+                activeTab === "norbu" ? "bg-primary" : "bg-white"
               }`}
             >
+              <Coins
+                size={20}
               <Coins
                 size={20}
                 color={activeTab === "norbu" ? "white" : "black"}
@@ -339,8 +357,11 @@ export default function HomeScreen() {
               onPress={() => handleTabPress("bidding")}
               className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm ${
                 activeTab === "bidding" ? "bg-primary" : "bg-white"
+                activeTab === "bidding" ? "bg-primary" : "bg-white"
               }`}
             >
+              <Ticket
+                size={20}
               <Ticket
                 size={20}
                 color={activeTab === "bidding" ? "white" : "black"}
@@ -354,11 +375,16 @@ export default function HomeScreen() {
     if (item.component === "content") {
       const isMovingRight = animationDirection.current === "right";
 
+
+    if (item.component === "content") {
+      const isMovingRight = animationDirection.current === "right";
+
       return (
         <View className="px-4 mt-2" style={{ minHeight: 400 }}>
           <Animated.View
             key={activeTab}
             entering={
+              isMovingRight
               isMovingRight
                 ? SlideInRight.duration(180)
                 : SlideInLeft.duration(180)
@@ -496,3 +522,4 @@ export default function HomeScreen() {
     </>
   );
 }
+

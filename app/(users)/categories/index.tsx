@@ -135,7 +135,7 @@ export default function CategoriesScreen() {
   const handleCategoryPress = (categoryKey: string) => {
     const slug = slugify(categoryKey);
     router.push({
-      pathname: "/categories/[slug]",
+      pathname: "/(users)/categories/[slug]",
       params: { slug },
     });
   };
@@ -143,7 +143,7 @@ export default function CategoriesScreen() {
   const handleSubcategoryPress = (categoryKey: string, subcategoryName: string) => {
     const slug = slugify(categoryKey);
     router.push({
-      pathname: "/categories/[slug]",
+      pathname: "/(users)/categories/[slug]",
       params: { 
         slug, 
         filter: subcategoryName 

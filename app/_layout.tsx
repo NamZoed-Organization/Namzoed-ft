@@ -3,7 +3,6 @@
 import CustomFlashMessage from "@/components/CustomFlashMessage";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { NavigationLogger } from "@/components/NavigationLogger";
-import StatusBarBlur from "@/components/ui/StatusBarBlur";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import {
   DarkTheme,
@@ -21,6 +20,7 @@ import "../global.css";
 
 // 1. import your Dzongkhag provider
 import { DzongkhagProvider } from "@/contexts/DzongkhagContext";
+import { LiveSessionProvider } from "@/contexts/LiveSessionProvider";
 import { UserProvider } from "@/contexts/UserContext";
 import { VideoCacheProvider } from "@/contexts/VideoCacheContext";
 import { VideoPlaybackProvider } from "@/contexts/VideoPlaybackContext";
@@ -54,25 +54,37 @@ export default function RootLayout() {
   return (
     <ErrorBoundary>
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
+        <ThemeProvider
+          value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
+        >
           {/* 2. wrap your entire app in the provider */}
           <UserProvider>
             <DzongkhagProvider>
               <VideoPlaybackProvider>
                 <VideoCacheProvider>
-                  {/* Global Navigation Logger */}
-                  <NavigationLogger />
-                  <View className="flex-1 bg-background">
-                    <StatusBarBlur />
-                    <Stack screenOptions={{ headerShown: false }} />
-                    <StatusBar style="dark" translucent />
-                    <FlashMessage
-                      position="top"
-                      renderCustomContent={(msg) => (
-                        <CustomFlashMessage message={msg} />
-                      )}
-                    />
-                  </View>
+                  <LiveSessionProvider>
+                    {/* Global Navigation Logger */}
+                    <NavigationLogger />
+                    <View className="flex-1 bg-background">
+                      <Stack
+                        screenOptions={{
+                          headerShown: false,
+                          // Enable iOS-style swipe back for all stack screens
+                          gestureEnabled: true,
+                          fullScreenGestureEnabled: true,
+                          gestureDirection: "horizontal",
+                          animation: "default",
+                        }}
+                      />
+                      <StatusBar style="dark" />
+                      <FlashMessage
+                        position="top"
+                        renderCustomContent={(msg) => (
+                          <CustomFlashMessage message={msg} />
+                        )}
+                      />
+                    </View>
+                  </LiveSessionProvider>
                 </VideoCacheProvider>
               </VideoPlaybackProvider>
             </DzongkhagProvider>

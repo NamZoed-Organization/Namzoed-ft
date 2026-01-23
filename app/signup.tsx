@@ -21,6 +21,7 @@ import {
   View,
 } from "react-native";
 import { supabase } from '../lib/supabase';
+import { sendWelcomeSMS } from '../services/smsService';
 
 const dzongkhags = [
   "Bumthang",
@@ -72,10 +73,14 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
       const { data, error } = await supabase
         .from('profiles')
         .select('phone')
-        .eq('phone', phoneNumber)
-        .maybeSingle();
+        .eq('phone', phoneNumber);
 
-      return !!data;
+      if (error) {
+        console.error("Phone lookup error:", error);
+        return false; // Allow signup to proceed if check fails
+      }
+
+      return data && data.length > 0;
     } catch (err) {
       console.error("Error checking phone:", err);
       return false; // Allow signup to proceed if check fails
@@ -130,16 +135,9 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
 
       if (data?.user) {
         try {
-          // Create profile data
-          const profileData = {
-            id: data.user.id,
-            name,
-            phone,
-            dzongkhag,
-            email,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          };
+          // Profile will be created automatically by database trigger
+          // Store phone before clearing form
+          const userPhone = phone;
 
           // Clear form fields
           setName("");
@@ -148,6 +146,17 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
           setPhone("");
           setConfirmPassword("");
           setDzongkhag("");
+
+          // Send welcome SMS (non-blocking, only for 97517 numbers)
+          sendWelcomeSMS(userPhone).then((success) => {
+            if (success) {
+              console.log('Welcome SMS sent successfully to:', userPhone);
+            } else {
+              console.warn('SMS not sent or failed, but signup was successful');
+            }
+          }).catch((err) => {
+            console.error('SMS sending error:', err);
+          });
 
           // Show success message and navigate
           alert("Signup successful! Please check your email to verify your account.");

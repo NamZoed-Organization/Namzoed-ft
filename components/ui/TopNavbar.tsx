@@ -1,13 +1,11 @@
 // components/ui/TopNavbar.tsx
 import DetectDzongkhag from "@/components/DetectDzongkhag";
-import {
-  ChatIcon,
-} from "@/components/icons/index";
+import { ChatIcon } from "@/components/icons/index";
 import TabBarButton from "@/components/ui/TabBarButton";
 import { useUser } from "@/contexts/UserContext";
 import { useRouter } from "expo-router";
 import { UserCircle } from "lucide-react-native";
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { Image, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -45,7 +43,7 @@ export default function TopNavbar() {
           onPress={() => router.push("/messages")}
           android_ripple={null}
         >
-          <ChatIcon/>
+          <ChatIcon />
         </TabBarButton>
 
         <TabBarButton

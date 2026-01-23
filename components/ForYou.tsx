@@ -60,7 +60,7 @@ export default function ForYou() {
         if (activeFilter === "all") {
           // Navigate to fashion category page
           router.push({
-            pathname: "/categories/[slug]",
+            pathname: "/(users)/categories/[slug]",
             params: { slug: "fashion" },
           });
         } else {
@@ -95,12 +95,12 @@ export default function ForYou() {
       case "toys":
         // Navigate to toys category
         router.push({
-          pathname: "/categories/[slug]",
+          pathname: "/(users)/categories/[slug]",
           params: { slug: "kids-toys" },
         });
         break;
       default:
-        router.push("/categories");
+        router.push("/(users)/categories");
     }
   };
 

@@ -40,8 +40,8 @@ export default function MongooseMessages({ mongooseChats }: MongooseMessagesProp
       <TouchableOpacity 
         className="flex-row items-center p-4 border-b border-gray-200"
         onPress={() => {
-          console.log('Navigating to:', `/mongoose-chat/${mongooseName}`);
-          router.push(`/mongoose-chat/${mongooseName}` as any);
+          console.log('Navigating to:', `/(users)/mongoose-chat/${mongooseName}`);
+          router.push(`/(users)/mongoose-chat/${mongooseName}` as any);
         }}
       >
         <View className="w-12 h-12 bg-primary rounded-full items-center justify-center mr-3">

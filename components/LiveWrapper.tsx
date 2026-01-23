@@ -1,6 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
-import { X, AlertCircle, Radio } from 'lucide-react-native';
+import { AlertCircle, Radio, X } from "lucide-react-native";
+import React, { useState } from "react";
+import {
+  ActivityIndicator,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 interface LiveWrapperProps {
   onClose: () => void;
@@ -12,10 +19,10 @@ let importError: Error | null = null;
 
 try {
   // Attempt to load the Live component
-  const LiveModule = require('@/components/Live');
+  const LiveModule = require("@/components/Live");
   LiveScreen = LiveModule.default || LiveModule;
 } catch (error) {
-  console.warn('Live streaming module unavailable:', error);
+  console.warn("Live streaming module unavailable:", error);
   importError = error as Error;
 }
 
@@ -38,8 +45,8 @@ export default function LiveWrapper({ onClose }: LiveWrapperProps) {
     // Attempt to reload the module
     setTimeout(() => {
       try {
-        delete require.cache[require.resolve('@/components/Live')];
-        const LiveModule = require('@/components/Live');
+        delete require.cache[require.resolve("@/components/Live")];
+        const LiveModule = require("@/components/Live");
         LiveScreen = LiveModule.default || LiveModule;
 
         if (LiveScreen) {
@@ -51,7 +58,7 @@ export default function LiveWrapper({ onClose }: LiveWrapperProps) {
           setIsRetrying(false);
         }
       } catch (error) {
-        console.warn('Retry failed:', error);
+        console.warn("Retry failed:", error);
         setIsRetrying(false);
       }
     }, 1000);
@@ -59,7 +66,7 @@ export default function LiveWrapper({ onClose }: LiveWrapperProps) {
 
   // Show error UI if Live component failed to load
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       {/* Header with close button */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Live</Text>
@@ -77,13 +84,20 @@ export default function LiveWrapper({ onClose }: LiveWrapperProps) {
         <Text style={styles.errorTitle}>Live Streaming Unavailable</Text>
 
         <Text style={styles.errorMessage}>
-          The live streaming feature is currently unavailable. This may be due to:
+          The live streaming feature is currently unavailable. This may be due
+          to:
         </Text>
 
         <View style={styles.reasonsList}>
-          <Text style={styles.reasonItem}>• Missing native dependencies (WebRTC)</Text>
-          <Text style={styles.reasonItem}>• App needs to be rebuilt with native modules</Text>
-          <Text style={styles.reasonItem}>• Platform-specific configuration required</Text>
+          <Text style={styles.reasonItem}>
+            • Missing native dependencies (WebRTC)
+          </Text>
+          <Text style={styles.reasonItem}>
+            • App needs to be rebuilt with native modules
+          </Text>
+          <Text style={styles.reasonItem}>
+            • Platform-specific configuration required
+          </Text>
         </View>
 
         <Text style={styles.solutionText}>
@@ -117,42 +131,42 @@ export default function LiveWrapper({ onClose }: LiveWrapperProps) {
           <View style={styles.technicalDetails}>
             <Text style={styles.technicalTitle}>Technical Details:</Text>
             <Text style={styles.technicalText}>
-              {importError.message || 'Unknown error'}
+              {importError.message || "Unknown error"}
             </Text>
           </View>
         )}
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingVertical: 12,
-    paddingTop: 48,
+    paddingTop: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: "#E5E7EB",
   },
   headerTitle: {
     fontSize: 20,
-    fontWeight: '600',
-    color: '#111',
+    fontWeight: "600",
+    color: "#111",
   },
   closeButton: {
     padding: 8,
   },
   content: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     paddingHorizontal: 24,
   },
   errorIcon: {
@@ -160,57 +174,57 @@ const styles = StyleSheet.create({
   },
   errorTitle: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: '#111',
+    fontWeight: "bold",
+    color: "#111",
     marginBottom: 12,
-    textAlign: 'center',
+    textAlign: "center",
   },
   errorMessage: {
     fontSize: 16,
-    color: '#6B7280',
-    textAlign: 'center',
+    color: "#6B7280",
+    textAlign: "center",
     marginBottom: 16,
     lineHeight: 24,
   },
   reasonsList: {
-    alignSelf: 'stretch',
-    backgroundColor: '#FEF2F2',
+    alignSelf: "stretch",
+    backgroundColor: "#FEF2F2",
     borderRadius: 12,
     padding: 16,
     marginBottom: 20,
   },
   reasonItem: {
     fontSize: 14,
-    color: '#991B1B',
+    color: "#991B1B",
     marginBottom: 8,
     lineHeight: 20,
   },
   solutionText: {
     fontSize: 15,
-    fontWeight: '600',
-    color: '#374151',
+    fontWeight: "600",
+    color: "#374151",
     marginBottom: 12,
-    textAlign: 'center',
+    textAlign: "center",
   },
   codeBlock: {
-    backgroundColor: '#1F2937',
+    backgroundColor: "#1F2937",
     borderRadius: 8,
     padding: 16,
     marginBottom: 24,
-    alignSelf: 'stretch',
+    alignSelf: "stretch",
   },
   codeText: {
     fontSize: 13,
-    color: '#10B981',
-    fontFamily: 'monospace',
-    textAlign: 'center',
+    color: "#10B981",
+    fontFamily: "monospace",
+    textAlign: "center",
     marginVertical: 2,
   },
   retryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#DC2626',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#DC2626",
     paddingHorizontal: 32,
     paddingVertical: 14,
     borderRadius: 25,
@@ -218,26 +232,26 @@ const styles = StyleSheet.create({
     minWidth: 160,
   },
   retryButtonText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   technicalDetails: {
     marginTop: 32,
     padding: 16,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: "#F3F4F6",
     borderRadius: 8,
-    alignSelf: 'stretch',
+    alignSelf: "stretch",
   },
   technicalTitle: {
     fontSize: 12,
-    fontWeight: '600',
-    color: '#6B7280',
+    fontWeight: "600",
+    color: "#6B7280",
     marginBottom: 8,
   },
   technicalText: {
     fontSize: 11,
-    color: '#9CA3AF',
-    fontFamily: 'monospace',
+    color: "#9CA3AF",
+    fontFamily: "monospace",
   },
 });
