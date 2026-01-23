@@ -1,10 +1,13 @@
-import { ArrowLeft, Camera, Gift, Home, RefreshCw, ShoppingCart, Trash2 } from 'lucide-react-native';
-import React, { useRef, useState } from "react";
-import { ActivityIndicator, Alert, Animated, Dimensions, Image, Modal, PanResponder, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ArrowLeft, Briefcase, Camera, Gift, Home, RefreshCw, ShoppingCart, Trash2 } from 'lucide-react-native';
+import React, { useEffect, useRef, useState } from "react";
+import { ActivityIndicator, Animated, Dimensions, Image, Modal, PanResponder, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
+import PopupMessage from "@/components/ui/PopupMessage";
 import { Picker } from '@react-native-picker/picker';
 import * as ImagePicker from 'expo-image-picker';
 import { useUser } from '@/contexts/UserContext';
-import ImageCropOverlay from './ImageCropOverlay';
+import { useDzongkhag } from '@/contexts/DzongkhagContext';
+import ImageCropperOverlay from './ImageCropperOverlay';
+import ImagePickerSheet from '@/components/ui/ImagePickerSheet';
 import { createMarketplaceItem, uploadMarketplaceImages } from '@/lib/postMarketPlace';
 import { dzongkhagCenters } from '@/data/dzongkhag';
 
@@ -13,18 +16,20 @@ interface MarketplacePostOverlayProps {
   onCategorySelect?: (category: string) => void;
 }
 
-type Category = "rent" | "swap" | "secondhand" | "free" | null;
+type Category = "rent" | "swap" | "second_hand" | "free" | "job_vacancy" | null;
 
 const CATEGORY_LABELS = {
   rent: "Rent",
   swap: "Swap",
-  secondhand: "Second Hand",
-  free: "Free"
+  second_hand: "Second Hand",
+  free: "Free",
+  job_vacancy: "Job Vacancy"
 };
 
 export default function MarketplacePostOverlay({ onClose, onCategorySelect }: MarketplacePostOverlayProps) {
   const [selectedCategory, setSelectedCategory] = useState<Category>(null);
   const { currentUser } = useUser();
+  const { name: userDzongkhag } = useDzongkhag();
 
   // Form fields
   const [title, setTitle] = useState('');
@@ -35,8 +40,51 @@ export default function MarketplacePostOverlay({ onClose, onCategorySelect }: Ma
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Job-specific fields
+  const [jobDescription, setJobDescription] = useState('');
+  const [jobRequirements, setJobRequirements] = useState('');
+  const [jobResponsibilities, setJobResponsibilities] = useState('');
+
+  // Prefill location from context
+  useEffect(() => {
+    if (userDzongkhag && !dzongkhag) {
+      setDzongkhag(userDzongkhag);
+    }
+  }, [userDzongkhag]);
+
+  // Popup states
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [showError, setShowError] = useState(false);
+  const [showWarning, setShowWarning] = useState(false);
+  const [popupMessage, setPopupMessage] = useState('');
+
+  // Image picker sheet
+  const [showPickerSheet, setShowPickerSheet] = useState(false);
+
+  // Popup helpers
+  const showErrorPopup = (message: string) => {
+    setPopupMessage(message);
+    setShowError(true);
+    setTimeout(() => setShowError(false), 2500);
+  };
+
+  const showWarningPopup = (message: string) => {
+    setPopupMessage(message);
+    setShowWarning(true);
+    setTimeout(() => setShowWarning(false), 2500);
+  };
+
+  const showSuccessPopup = (message: string, callback?: () => void) => {
+    setPopupMessage(message);
+    setShowSuccess(true);
+    setTimeout(() => {
+      setShowSuccess(false);
+      callback?.();
+    }, 2000);
+  };
+
   // Image crop overlay
-  const [showCropOverlay, setShowCropOverlay] = useState(false);
+  const [showCropper, setShowCropper] = useState(false);
   const [pendingImageUri, setPendingImageUri] = useState<string | null>(null);
 
   // Vertical slide for drag-to-close
@@ -83,15 +131,28 @@ export default function MarketplacePostOverlay({ onClose, onCategorySelect }: Ma
     }
   };
 
-  const handleAddImage = async () => {
-    if (selectedImages.length >= 5) {
-      Alert.alert('Limit Reached', 'You can upload up to 5 images only.');
+  const openCamera = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      showErrorPopup('Camera access is needed to take photos.');
       return;
     }
 
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: false,
+      quality: 1.0,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      setPendingImageUri(result.assets[0].uri);
+      setShowCropper(true);
+    }
+  };
+
+  const openGallery = async () => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permissionResult.granted) {
-      Alert.alert('Permission Required', 'Please allow access to your photos.');
+      showErrorPopup('Please allow access to your photos.');
       return;
     }
 
@@ -103,18 +164,26 @@ export default function MarketplacePostOverlay({ onClose, onCategorySelect }: Ma
 
     if (!result.canceled && result.assets[0]) {
       setPendingImageUri(result.assets[0].uri);
-      setShowCropOverlay(true);
+      setShowCropper(true);
     }
+  };
+
+  const handleAddImage = () => {
+    if (selectedImages.length >= 5) {
+      showWarningPopup('You can upload up to 5 images only.');
+      return;
+    }
+    setShowPickerSheet(true);
   };
 
   const handleCropSave = (croppedUri: string) => {
     setSelectedImages([...selectedImages, croppedUri]);
-    setShowCropOverlay(false);
+    setShowCropper(false);
     setPendingImageUri(null);
   };
 
   const handleCropCancel = () => {
-    setShowCropOverlay(false);
+    setShowCropper(false);
     setPendingImageUri(null);
   };
 
@@ -126,11 +195,21 @@ export default function MarketplacePostOverlay({ onClose, onCategorySelect }: Ma
     if (!selectedCategory) return 'Please select a category';
     if (!title.trim()) return 'Please enter a title';
     if (title.length > 100) return 'Title must be 100 characters or less';
-    if (!description.trim()) return 'Please enter a description';
-    if (description.length > 500) return 'Description must be 500 characters or less';
 
-    // Price is only required for rent and secondhand
-    if ((selectedCategory === 'rent' || selectedCategory === 'secondhand')) {
+    // For job_vacancy, validate description (requirements and responsibilities are optional)
+    if (selectedCategory === 'job_vacancy') {
+      if (!jobDescription.trim()) return 'Please enter a job description';
+      if (jobDescription.length > 500) return 'Job description must be 500 characters or less';
+      if (jobRequirements.length > 500) return 'Job requirements must be 500 characters or less';
+      if (jobResponsibilities.length > 500) return 'Job responsibilities must be 500 characters or less';
+    } else {
+      // For other categories, validate regular description
+      if (!description.trim()) return 'Please enter a description';
+      if (description.length > 500) return 'Description must be 500 characters or less';
+    }
+
+    // Price is only required for rent and second_hand
+    if ((selectedCategory === 'rent' || selectedCategory === 'second_hand')) {
       if (!price.trim()) return 'Please enter a price';
       if (isNaN(Number(price)) || Number(price) < 0) return 'Please enter a valid price';
     }
@@ -142,12 +221,12 @@ export default function MarketplacePostOverlay({ onClose, onCategorySelect }: Ma
   const handleSubmit = async () => {
     const error = validateForm();
     if (error) {
-      Alert.alert('Validation Error', error);
+      showErrorPopup(error);
       return;
     }
 
     if (!currentUser?.id) {
-      Alert.alert('Error', 'User not logged in');
+      showErrorPopup('User not logged in');
       return;
     }
 
@@ -157,21 +236,43 @@ export default function MarketplacePostOverlay({ onClose, onCategorySelect }: Ma
       // Upload images
       const uploadedUrls = await uploadMarketplaceImages(selectedImages);
 
-      // Price is 0 for swap and free, otherwise use the entered value
-      const finalPrice = (selectedCategory === 'swap' || selectedCategory === 'free')
-        ? 0
-        : Number(price);
+      // Price handling:
+      // - swap/free: Always 0
+      // - job_vacancy: Use entered value or 0 if empty
+      // - rent/second_hand: Use entered value (validated above)
+      let finalPrice = 0;
+      if (selectedCategory === 'swap' || selectedCategory === 'free') {
+        finalPrice = 0;
+      } else if (selectedCategory === 'job_vacancy') {
+        finalPrice = price.trim() ? Number(price) : 0;
+      } else {
+        finalPrice = Number(price);
+      }
 
       // Parse tags from comma-separated string
       const parsedTags = tags.trim()
         ? tags.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0)
         : [];
 
+      // Build description based on category
+      let descriptionData;
+      if (selectedCategory === 'job_vacancy') {
+        // Structured JSONB for job vacancies (requirements and responsibilities are optional)
+        descriptionData = {
+          description: jobDescription.trim(),
+          ...(jobRequirements.trim() && { requirements: jobRequirements.trim() }),
+          ...(jobResponsibilities.trim() && { responsibilities: jobResponsibilities.trim() }),
+        };
+      } else {
+        // Simple text format for other categories
+        descriptionData = { text: description.trim() };
+      }
+
       // Create marketplace item with category name as type
       await createMarketplaceItem({
-        type: selectedCategory as any, // Use category name directly: rent, swap, secondhand, free
+        type: selectedCategory as any,
         title: title.trim(),
-        description: description.trim(),
+        description: descriptionData,
         price: finalPrice,
         images: uploadedUrls,
         dzongkhag: dzongkhag || undefined,
@@ -179,17 +280,19 @@ export default function MarketplacePostOverlay({ onClose, onCategorySelect }: Ma
         userId: currentUser.id,
       });
 
-      Alert.alert('Success', 'Your post has been created!');
-      onClose();
+      showSuccessPopup('Your post has been created!', () => {
+        onClose();
+      });
     } catch (error) {
       console.error('Error creating post:', error);
-      Alert.alert('Error', 'Failed to create post. Please try again.');
+      showErrorPopup('Failed to create post. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
+    <>
     <View className="flex-1 justify-end">
       {/* Backdrop Tap Zone */}
       <TouchableOpacity
@@ -242,8 +345,23 @@ export default function MarketplacePostOverlay({ onClose, onCategorySelect }: Ma
                 Select Category
               </Text>
 
-              {/* 4 Tab Buttons */}
+              {/* 5 Tab Buttons */}
               <View className="flex-row items-center w-full gap-2 mb-6">
+                {/* Job Vacancy Tab - FIRST */}
+                <TouchableOpacity
+                  onPress={() => handleCategorySelect("job_vacancy")}
+                  className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm bg-white ${
+                    selectedCategory === "job_vacancy"
+                      ? "border-2 border-black"
+                      : ""
+                  }`}
+                >
+                  <Briefcase
+                    size={20}
+                    color="black"
+                  />
+                </TouchableOpacity>
+
                 {/* Rent Tab */}
                 <TouchableOpacity
                   onPress={() => handleCategorySelect("rent")}
@@ -259,6 +377,21 @@ export default function MarketplacePostOverlay({ onClose, onCategorySelect }: Ma
                   />
                 </TouchableOpacity>
 
+                {/* Second Hand Tab */}
+                <TouchableOpacity
+                  onPress={() => handleCategorySelect("second_hand")}
+                  className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm bg-white ${
+                    selectedCategory === "second_hand"
+                      ? "border-2 border-black"
+                      : ""
+                  }`}
+                >
+                  <ShoppingCart
+                    size={20}
+                    color="black"
+                  />
+                </TouchableOpacity>
+
                 {/* Swap Tab */}
                 <TouchableOpacity
                   onPress={() => handleCategorySelect("swap")}
@@ -269,21 +402,6 @@ export default function MarketplacePostOverlay({ onClose, onCategorySelect }: Ma
                   }`}
                 >
                   <RefreshCw
-                    size={20}
-                    color="black"
-                  />
-                </TouchableOpacity>
-
-                {/* Second Hand Tab */}
-                <TouchableOpacity
-                  onPress={() => handleCategorySelect("secondhand")}
-                  className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm bg-white ${
-                    selectedCategory === "secondhand"
-                      ? "border-2 border-black"
-                      : ""
-                  }`}
-                >
-                  <ShoppingCart
                     size={20}
                     color="black"
                   />
@@ -339,34 +457,96 @@ export default function MarketplacePostOverlay({ onClose, onCategorySelect }: Ma
                   <Text className="text-xs text-gray-500 mt-1">{title.length}/100</Text>
                 </View>
 
-                {/* Description Input */}
-                <View className="mb-4">
-                  <Text className="text-sm font-msemibold text-gray-900 mb-2">
-                    Description <Text className="text-red-500">*</Text>
-                  </Text>
-                  <TextInput
-                    value={description}
-                    onChangeText={setDescription}
-                    placeholder="Enter description (max 500 characters)"
-                    maxLength={500}
-                    multiline
-                    numberOfLines={4}
-                    textAlignVertical="top"
-                    className="bg-white border border-gray-200 rounded-lg px-4 py-3 text-base font-regular min-h-[100px]"
-                  />
-                  <Text className="text-xs text-gray-500 mt-1">{description.length}/500</Text>
-                </View>
+                {/* Conditional Description/Job Fields */}
+                {selectedCategory === 'job_vacancy' ? (
+                  // Job-specific fields
+                  <>
+                    {/* Job Description */}
+                    <View className="mb-4">
+                      <Text className="text-sm font-msemibold text-gray-900 mb-2">
+                        Job Description <Text className="text-red-500">*</Text>
+                      </Text>
+                      <TextInput
+                        value={jobDescription}
+                        onChangeText={setJobDescription}
+                        placeholder="Describe the role and what makes it unique"
+                        maxLength={500}
+                        multiline
+                        numberOfLines={4}
+                        textAlignVertical="top"
+                        className="bg-white border border-gray-200 rounded-lg px-4 py-3 text-base font-regular min-h-[100px]"
+                      />
+                      <Text className="text-xs text-gray-500 mt-1">{jobDescription.length}/500</Text>
+                    </View>
 
-                {/* Price Input - Only for rent and secondhand */}
-                {(selectedCategory === 'rent' || selectedCategory === 'secondhand') && (
+                    {/* Job Requirements */}
+                    <View className="mb-4">
+                      <Text className="text-sm font-msemibold text-gray-900 mb-2">
+                        Requirements <Text className="text-gray-400 text-xs">(Optional)</Text>
+                      </Text>
+                      <TextInput
+                        value={jobRequirements}
+                        onChangeText={setJobRequirements}
+                        placeholder="List required qualifications and skills"
+                        maxLength={500}
+                        multiline
+                        numberOfLines={4}
+                        textAlignVertical="top"
+                        className="bg-white border border-gray-200 rounded-lg px-4 py-3 text-base font-regular min-h-[100px]"
+                      />
+                      <Text className="text-xs text-gray-500 mt-1">{jobRequirements.length}/500</Text>
+                    </View>
+
+                    {/* Job Responsibilities */}
+                    <View className="mb-4">
+                      <Text className="text-sm font-msemibold text-gray-900 mb-2">
+                        Responsibilities <Text className="text-gray-400 text-xs">(Optional)</Text>
+                      </Text>
+                      <TextInput
+                        value={jobResponsibilities}
+                        onChangeText={setJobResponsibilities}
+                        placeholder="List key responsibilities and duties"
+                        maxLength={500}
+                        multiline
+                        numberOfLines={4}
+                        textAlignVertical="top"
+                        className="bg-white border border-gray-200 rounded-lg px-4 py-3 text-base font-regular min-h-[100px]"
+                      />
+                      <Text className="text-xs text-gray-500 mt-1">{jobResponsibilities.length}/500</Text>
+                    </View>
+                  </>
+                ) : (
+                  // Regular description field for other categories
                   <View className="mb-4">
                     <Text className="text-sm font-msemibold text-gray-900 mb-2">
-                      Price (Nu.) <Text className="text-red-500">*</Text>
+                      Description <Text className="text-red-500">*</Text>
+                    </Text>
+                    <TextInput
+                      value={description}
+                      onChangeText={setDescription}
+                      placeholder="Enter description (max 500 characters)"
+                      maxLength={500}
+                      multiline
+                      numberOfLines={4}
+                      textAlignVertical="top"
+                      className="bg-white border border-gray-200 rounded-lg px-4 py-3 text-base font-regular min-h-[100px]"
+                    />
+                    <Text className="text-xs text-gray-500 mt-1">{description.length}/500</Text>
+                  </View>
+                )}
+
+                {/* Price Input - For rent, second_hand (required), and job_vacancy (optional) */}
+                {(selectedCategory === 'rent' || selectedCategory === 'second_hand' || selectedCategory === 'job_vacancy') && (
+                  <View className="mb-4">
+                    <Text className="text-sm font-msemibold text-gray-900 mb-2">
+                      {selectedCategory === 'job_vacancy' ? 'Salary (Nu.)' : 'Price (Nu.)'}
+                      {(selectedCategory === 'rent' || selectedCategory === 'second_hand') && <Text className="text-red-500">*</Text>}
+                      {selectedCategory === 'job_vacancy' && <Text className="text-gray-400 text-xs ml-1">(Optional)</Text>}
                     </Text>
                     <TextInput
                       value={price}
                       onChangeText={setPrice}
-                      placeholder="Enter price"
+                      placeholder={selectedCategory === 'job_vacancy' ? 'Enter salary or leave empty' : 'Enter price'}
                       keyboardType="numeric"
                       className="bg-white border border-gray-200 rounded-lg px-4 py-3 text-base font-regular"
                     />
@@ -461,21 +641,31 @@ export default function MarketplacePostOverlay({ onClose, onCategorySelect }: Ma
         </View>
       </Animated.View>
 
-      {/* Image Crop Overlay Modal */}
-      {showCropOverlay && pendingImageUri && (
-        <Modal
-          visible={showCropOverlay}
-          animationType="slide"
-          statusBarTranslucent
-          onRequestClose={handleCropCancel}
-        >
-          <ImageCropOverlay
-            imageUri={pendingImageUri}
-            onSave={handleCropSave}
-            onCancel={handleCropCancel}
-          />
-        </Modal>
-      )}
+      {/* Image Picker Sheet */}
+      <ImagePickerSheet
+        visible={showPickerSheet}
+        onClose={() => setShowPickerSheet(false)}
+        onCameraPress={openCamera}
+        onGalleryPress={openGallery}
+      />
+
+      {/* Success/Error/Warning Popups */}
+      <PopupMessage visible={showSuccess} type="success" message={popupMessage} />
+      <PopupMessage visible={showError} type="error" message={popupMessage} />
+      <PopupMessage visible={showWarning} type="warning" message={popupMessage} />
     </View>
+
+    {/* Image Cropper */}
+    {showCropper && pendingImageUri && (
+      <Modal visible={showCropper} animationType="slide">
+        <ImageCropperOverlay
+          imageUri={pendingImageUri}
+          onSave={handleCropSave}
+          onCancel={handleCropCancel}
+          initialAspectRatio="1:1"
+        />
+      </Modal>
+    )}
+    </>
   );
 }

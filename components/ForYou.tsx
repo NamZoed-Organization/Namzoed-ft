@@ -1,4 +1,3 @@
-import ProductCard from "@/components/ui/ProductCard";
 import LazyProductCard from "@/components/ui/LazyProductCard";
 import { products } from "@/data/products";
 import { useRouter } from "expo-router";
@@ -25,7 +24,9 @@ export default function ForYou() {
   const router = useRouter();
   const screenWidth = Dimensions.get("window").width;
   const [activeFilter, setActiveFilter] = useState<string>("all");
-  const [visibleIndices, setVisibleIndices] = useState<{[key: string]: {start: number, end: number}}>({});
+  const [visibleIndices, setVisibleIndices] = useState<{
+    [key: string]: { start: number; end: number };
+  }>({});
 
   const getFilteredProducts = useCallback(
     (sectionKey: string) => {
@@ -33,12 +34,12 @@ export default function ForYou() {
         return products.filter(
           (product) =>
             product.category?.toLowerCase() === activeFilter ||
-            product.tags?.some((tag) => tag.toLowerCase() === activeFilter)
+            product.tags?.some((tag) => tag.toLowerCase() === activeFilter),
         );
       }
       return products;
     },
-    [activeFilter]
+    [activeFilter],
   );
 
   const getScrollLimits = useCallback(
@@ -50,7 +51,7 @@ export default function ForYou() {
       const maxScrollX = Math.max(0, totalContentWidth - visibleWidth);
       return { totalContentWidth, maxScrollX };
     },
-    [screenWidth]
+    [screenWidth],
   );
 
   const handleGoToPage = (sectionKey: string) => {
@@ -64,16 +65,25 @@ export default function ForYou() {
           });
         } else {
           // Navigate to specific category with filter
-          const categorySlug = activeFilter === "kids" ? "kids-toys" : 
-                              activeFilter === "mens" || activeFilter === "womens" ? "fashion" : 
-                              activeFilter;
-          const slug = categorySlug.toLowerCase().replace(/ & /g, "-").replace(/ /g, "-");
-          
+          const categorySlug =
+            activeFilter === "kids"
+              ? "kids-toys"
+              : activeFilter === "mens" || activeFilter === "womens"
+                ? "fashion"
+                : activeFilter;
+          const slug = categorySlug
+            .toLowerCase()
+            .replace(/ & /g, "-")
+            .replace(/ /g, "-");
+
           router.push({
             pathname: "/categories/[slug]",
-            params: { 
+            params: {
               slug,
-              filter: activeFilter === "mens" || activeFilter === "womens" ? activeFilter : undefined
+              filter:
+                activeFilter === "mens" || activeFilter === "womens"
+                  ? activeFilter
+                  : undefined,
             },
           });
         }
@@ -97,7 +107,7 @@ export default function ForYou() {
   const getSectionTitle = (sectionKey: string) => {
     switch (sectionKey) {
       case "clothes":
-        return activeFilter !== "all" 
+        return activeFilter !== "all"
           ? `${activeFilter.charAt(0).toUpperCase() + activeFilter.slice(1)} Clothes`
           : "Clothes";
       case "live":
@@ -112,7 +122,7 @@ export default function ForYou() {
   const getGoToPageText = (sectionKey: string) => {
     switch (sectionKey) {
       case "clothes":
-        return activeFilter !== "all" 
+        return activeFilter !== "all"
           ? `View All ${activeFilter.charAt(0).toUpperCase() + activeFilter.slice(1)}`
           : "View All Clothes";
       case "live":
@@ -188,14 +198,21 @@ export default function ForYou() {
 
         // Calculate visible items based on scroll position
         const updateVisibleItems = (offsetX: number) => {
-          const cardsPerScreen = Math.ceil(screenWidth / (CARD_WIDTH + CARD_SPACING));
-          const firstVisibleIndex = Math.floor(offsetX / (CARD_WIDTH + CARD_SPACING));
+          const cardsPerScreen = Math.ceil(
+            screenWidth / (CARD_WIDTH + CARD_SPACING),
+          );
+          const firstVisibleIndex = Math.floor(
+            offsetX / (CARD_WIDTH + CARD_SPACING),
+          );
           const start = Math.max(0, firstVisibleIndex - BUFFER_SIZE);
-          const end = Math.min(displayProducts.length - 1, firstVisibleIndex + cardsPerScreen + BUFFER_SIZE);
+          const end = Math.min(
+            displayProducts.length - 1,
+            firstVisibleIndex + cardsPerScreen + BUFFER_SIZE,
+          );
 
-          setVisibleIndices(prev => ({
+          setVisibleIndices((prev) => ({
             ...prev,
-            [section.key]: { start, end }
+            [section.key]: { start, end },
           }));
         };
 
@@ -211,7 +228,7 @@ export default function ForYou() {
                 scrollRef.current.scrollTo({ x: maxScrollX, animated: false });
               }
             },
-          }
+          },
         );
 
         // Initialize visible range
@@ -249,9 +266,10 @@ export default function ForYou() {
               }}
             >
               {displayProducts.map((product, index) => {
-                const isVisible = visibleIndices[section.key] ?
-                  (index >= visibleIndices[section.key].start && index <= visibleIndices[section.key].end) :
-                  index < 5; // Default to first 5 items visible
+                const isVisible = visibleIndices[section.key]
+                  ? index >= visibleIndices[section.key].start &&
+                    index <= visibleIndices[section.key].end
+                  : index < 5; // Default to first 5 items visible
 
                 return (
                   <LazyProductCard

@@ -37,7 +37,7 @@ export const categories: Record<string, SubCategory[]> = {
     { name: "wellness", count: 80 },
   ],
 
-  "kids & toys": [
+  "kids-and-toys": [
     { name: "toys", count: 210 },
     { name: "games", count: 170 },
     { name: "clothes", count: 90 },
@@ -54,7 +54,7 @@ export const categories: Record<string, SubCategory[]> = {
     { name: "smart devices", count: 110 },
   ],
 
-  "home & living": [
+  "home-and-living": [
     { name: "furniture", count: 95 },
     { name: "kitchenware", count: 140 },
     { name: "home decor", count: 160 },

@@ -4,27 +4,38 @@ import SearchBar from "@/components/SearchBar";
 import TopNavbar from "@/components/ui/TopNavbar";
 import { categories as categoryData, SubCategory } from "@/data/categories";
 import { fetchProductsByCategory, ProductWithUser } from "@/lib/productsService";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Modal, RefreshControl, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { ArrowUpDown, ChevronLeft } from "lucide-react-native";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Animated, BackHandler, RefreshControl, ScrollView, Text, TouchableOpacity, View } from "react-native";
 
 export default function CategoryDetailScreen() {
   const router = useRouter();
   const { slug, filter } = useLocalSearchParams<{ slug: string; filter?: string }>();
-  
+
   const [products, setProducts] = useState<ProductWithUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [sortBy, setSortBy] = useState<"date" | "price" | "none">("none");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
-  const [showSortDropdown, setShowSortDropdown] = useState(false);
+  const [sortMode, setSortMode] = useState<"latest" | "oldest" | "cheapest" | "priciest">("latest");
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
-  const categoryKey = slug ? slug.replace(/-/g, " ") : "";
+  // Category key is now the same as the slug (both use slug format)
+  const categoryKey = slug || "";
   const subcategories: SubCategory[] = categoryData[categoryKey] || [];
   const activeFilter = filter ?? null;
+
+  // Category taglines
+  const categoryTaglines: Record<string, string> = {
+    fashion: "Dress to impress. Style that speaks.",
+    food: "Fresh flavors, local taste. Eat well, live well.",
+    beauty: "Glow different. Be unapologetically you.",
+    "kids-and-toys": "Play, learn, grow. Joy in every moment.",
+    electronics: "Smart tech for smarter lives.",
+    "home-and-living": "Make your space truly yours.",
+  };
+  const tagline = categoryTaglines[categoryKey] || "Discover something amazing.";
 
   const loadProducts = async () => {
     setLoading(true);
@@ -42,6 +53,27 @@ export default function CategoryDetailScreen() {
     if (!categoryKey) return;
     loadProducts();
   }, [categoryKey, activeFilter]);
+
+  // Handle Android back button - re-register on focus
+  useFocusEffect(
+    useCallback(() => {
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+        handleBackPress();
+        return true; // Prevent default back behavior
+      });
+
+      return () => backHandler.remove();
+    }, [])
+  );
+
+  // Refresh data when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      if (categoryKey) {
+        loadProducts();
+      }
+    }, [categoryKey, activeFilter])
+  );
 
   // Fade-in animation when data loads
   useEffect(() => {
@@ -89,18 +121,19 @@ export default function CategoryDetailScreen() {
       );
     }
 
-    if (sortBy === "price") {
-      result.sort((a, b) => sortOrder === "asc" ? a.price - b.price : b.price - a.price);
-    } else if (sortBy === "date") {
-      result.sort((a, b) => {
-        const dateA = new Date(a.created_at).getTime();
-        const dateB = new Date(b.created_at).getTime();
-        return sortOrder === "asc" ? dateA - dateB : dateB - dateA;
-      });
+    // Sort based on sortMode
+    if (sortMode === "latest") {
+      result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    } else if (sortMode === "oldest") {
+      result.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    } else if (sortMode === "cheapest") {
+      result.sort((a, b) => a.price - b.price);
+    } else if (sortMode === "priciest") {
+      result.sort((a, b) => b.price - a.price);
     }
 
     return result;
-  }, [products, searchQuery, sortBy, sortOrder]);
+  }, [products, searchQuery, sortMode]);
 
   const handleFilterPress = (subcategoryName: string) => {
     if (activeFilter === subcategoryName) {
@@ -110,14 +143,34 @@ export default function CategoryDetailScreen() {
     }
   };
 
+  const handleBackPress = () => {
+    router.push('/categories');
+  };
+
   if (!slug) return null;
 
   return (
     <View className="flex-1 bg-gray-50">
       <TopNavbar />
-      
-      <View className="px-4 py-2 bg-white border-b border-gray-100 shadow-sm z-10">
-        <SearchBar value={searchQuery} onChangeText={setSearchQuery} />
+
+      <View className="flex-row items-center gap-2 px-4 py-2">
+        <TouchableOpacity
+          onPress={handleBackPress}
+          activeOpacity={0.7}
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: 12,
+            backgroundColor: '#f5f5f5',
+            justifyContent: 'center',
+            alignItems: 'center',
+          }}
+        >
+          <ChevronLeft size={24} color="#1a1a1a" strokeWidth={2.5} />
+        </TouchableOpacity>
+        <View style={{ flex: 1 }}>
+          <SearchBar value={searchQuery} onChangeText={setSearchQuery} />
+        </View>
       </View>
 
       <ScrollView
@@ -134,9 +187,15 @@ export default function CategoryDetailScreen() {
         }
       >
         <View className="mb-4">
-          <Text className="text-2xl font-bold text-gray-900 capitalize mb-3">
-            {categoryKey}
-          </Text>
+          {/* Category Header */}
+          <View className="mb-4">
+            <Text className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-1">
+              {categoryKey.replace(/-/g, " ")}
+            </Text>
+            <Text className="text-xl font-bold text-gray-900">
+              {tagline}
+            </Text>
+          </View>
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-1">
             <TouchableOpacity
@@ -165,12 +224,21 @@ export default function CategoryDetailScreen() {
             {displayedProducts.length} items found
           </Text>
           <TouchableOpacity
-            onPress={() => setShowSortDropdown(true)}
-            className="flex-row items-center space-x-1 px-2 py-1 bg-white border border-gray-200 rounded-lg"
+            onPress={() => {
+              // Cycle: latest → oldest → cheapest → priciest → latest
+              const order: Array<"latest" | "oldest" | "cheapest" | "priciest"> = ["latest", "oldest", "cheapest", "priciest"];
+              const currentIndex = order.indexOf(sortMode);
+              const nextIndex = (currentIndex + 1) % order.length;
+              setSortMode(order[nextIndex]);
+            }}
+            className="bg-white p-2 rounded-xl shadow-sm border border-gray-100"
           >
-            <Text className="text-sm font-semibold text-gray-700">
-              {sortBy === "none" ? "Sort by" : sortBy === "price" ? "Price" : "Date"}
-            </Text>
+            <View className="flex-row items-center gap-1">
+              <ArrowUpDown size={14} color="#1F2937" />
+              <Text className="text-xs font-semibold text-gray-700 capitalize">
+                {sortMode}
+              </Text>
+            </View>
           </TouchableOpacity>
         </View>
 
@@ -178,55 +246,6 @@ export default function CategoryDetailScreen() {
           <ProductGrid products={displayedProducts} loading={loading} />
         </Animated.View>
       </ScrollView>
-
-      <Modal
-        visible={showSortDropdown}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowSortDropdown(false)}
-      >
-        <TouchableOpacity 
-          className="flex-1 bg-black/40 justify-end"
-          activeOpacity={1}
-          onPress={() => setShowSortDropdown(false)}
-        >
-          <View className="bg-white rounded-t-3xl p-6 pb-10">
-            <View className="w-12 h-1 bg-gray-300 rounded-full self-center mb-6" />
-            <Text className="text-xl font-bold text-gray-900 mb-4">Sort Products</Text>
-            
-            {[
-              { label: "Newest First", value: "date", order: "desc" },
-              { label: "Oldest First", value: "date", order: "asc" },
-              { label: "Price: Low to High", value: "price", order: "asc" },
-              { label: "Price: High to Low", value: "price", order: "desc" },
-            ].map((option, idx) => (
-              <TouchableOpacity
-                key={idx}
-                className="py-4 border-b border-gray-100 flex-row justify-between items-center"
-                onPress={() => {
-                  setSortBy(option.value as any);
-                  setSortOrder(option.order as any);
-                  setShowSortDropdown(false);
-                }}
-              >
-                <Text className={`text-base ${sortBy === option.value && sortOrder === option.order ? "text-primary font-bold" : "text-gray-700"}`}>
-                  {option.label}
-                </Text>
-                {sortBy === option.value && sortOrder === option.order && (
-                  <View className="w-2 h-2 bg-primary rounded-full" />
-                )}
-              </TouchableOpacity>
-            ))}
-            
-            <TouchableOpacity 
-              className="mt-6 py-4 bg-gray-100 rounded-xl items-center"
-              onPress={() => setShowSortDropdown(false)}
-            >
-              <Text className="text-gray-900 font-semibold">Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>
     </View>
   );
 }

@@ -8,11 +8,11 @@ import {
   Image,
   Modal,
   FlatList,
-  Alert,
   ActivityIndicator,
   StatusBar,
   Pressable,
 } from "react-native";
+import PopupMessage from "@/components/ui/PopupMessage";
 import {
   ArrowLeft,
   Camera,
@@ -85,6 +85,28 @@ export default function CreatePost({ onClose }: CreatePostProps) {
   const [showVideoPicker, setShowVideoPickerModal] = useState(false);
   const [pickerContext, setPickerContext] = useState<{ isForSell: boolean }>({ isForSell: false });
   const [isUploading, setIsUploading] = useState(false);
+
+  // Popup states
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [showError, setShowError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+
+  // Popup helpers
+  const showErrorPopup = (message: string) => {
+    setErrorMessage(message);
+    setShowError(true);
+    setTimeout(() => setShowError(false), 2500);
+  };
+
+  const showSuccessPopup = (message: string, callback?: () => void) => {
+    setSuccessMessage(message);
+    setShowSuccess(true);
+    setTimeout(() => {
+      setShowSuccess(false);
+      callback?.();
+    }, 2000);
+  };
 
   // Debug logging for state changes
   useEffect(() => {
@@ -352,7 +374,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
   const handleSharePost = async () => {
     // Validate user is logged in
     if (!currentUser) {
-      Alert.alert('Error', 'You must be logged in to create a post');
+      showErrorPopup('You must be logged in to create a post');
       return;
     }
 
@@ -361,13 +383,13 @@ export default function CreatePost({ onClose }: CreatePostProps) {
 
     // Validate user has ID
     if (!userId) {
-      Alert.alert('Error', 'User information is incomplete. Please log in again.');
+      showErrorPopup('User information is incomplete. Please log in again.');
       return;
     }
 
     // Validate at least one field is filled
     if (!postText.trim() && postMedia.length === 0) {
-      Alert.alert('Error', 'Please add some text or media to your post');
+      showErrorPopup('Please add some text or media to your post');
       return;
     }
 
@@ -400,7 +422,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
           uploadedMediaUrls.push(...uploadedImageUrls);
         } catch (uploadError) {
           console.error('Image upload error:', uploadError);
-          Alert.alert('Error', `Failed to upload images: ${uploadError.message || uploadError}`);
+          showErrorPopup(`Failed to upload images: ${uploadError.message || uploadError}`);
           return;
         }
       }
@@ -414,7 +436,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
           uploadedMediaUrls.push(...uploadedVideoUrls);
         } catch (uploadError) {
           console.error('Video upload error:', uploadError);
-          Alert.alert('Error', `Failed to upload videos: ${uploadError.message || uploadError}`);
+          showErrorPopup(`Failed to upload videos: ${uploadError.message || uploadError}`);
           return;
         }
       }
@@ -435,27 +457,22 @@ export default function CreatePost({ onClose }: CreatePostProps) {
 
         console.log('Post created successfully:', newPost);
 
-        // Show success message briefly
-        Alert.alert('Success', 'Your post has been published!', [
-          {
-            text: 'OK',
-            onPress: () => {
-              // Reset form
-              setPostText('');
-              setPostMedia([]);
+        // Show success message and reset form after
+        showSuccessPopup('Your post has been published!', () => {
+          // Reset form
+          setPostText('');
+          setPostMedia([]);
 
-              // Close modal and go back to feed
-              onClose?.();
-            }
-          }
-        ]);
+          // Close modal and go back to feed
+          onClose?.();
+        });
       } catch (postError) {
         console.error('Post creation error:', postError);
-        Alert.alert('Error', `Failed to create post: ${postError.message || postError}`);
+        showErrorPopup(`Failed to create post: ${postError.message || postError}`);
       }
     } catch (error) {
       console.error('Unexpected error:', error);
-      Alert.alert('Error', `An unexpected error occurred: ${error.message || error}`);
+      showErrorPopup(`An unexpected error occurred: ${error.message || error}`);
     } finally {
       setIsUploading(false);
     }
@@ -880,6 +897,10 @@ export default function CreatePost({ onClose }: CreatePostProps) {
       {renderCategoryModal()}
       {renderImagePickerModal()}
       {renderVideoPickerModal()}
+
+      {/* Success/Error Popups */}
+      <PopupMessage visible={showSuccess} type="success" message={successMessage} />
+      <PopupMessage visible={showError} type="error" message={errorMessage} />
     </View>
   );
 }

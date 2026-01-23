@@ -1,28 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(powershell:*)",
-      "Bash(npm run typecheck:*)",
-      "Bash(npm run:*)",
-      "Bash(npx tsc:*)",
-      "Bash(npx eslint:*)",
-      "Bash(npx expo:*)",
-      "Bash(npm uninstall:*)",
-      "Bash(npm start)",
       "Bash(ls:*)",
-      "Bash(find:*)",
-      "Bash(npm install:*)",
-      "Bash(npm i:*)",
-      "Bash(npx react-native log-android:*)",
-      "Bash(cat:*)",
-      "Bash(wc:*)",
-      "Bash(netstat:*)",
-      "Bash(findstr:*)",
-      "Bash(taskkill:*)",
-      "Bash(cmd.exe /c \"taskkill /F /PID 77112\")",
-      "Bash(grep:*)"
-    ],
-    "deny": [],
-    "ask": []
+      "Bash(git -C \"c:\\\\Users\\\\sonam\\\\Desktop\\\\namzoed\\\\Namzoed-ft\" log --all --oneline --grep=\"profile\\\\|bucket\" -i)",
+      "Bash(git -C \"c:\\\\Users\\\\sonam\\\\Desktop\\\\namzoed\\\\Namzoed-ft\" log --all --oneline -n 30)"
+    ]
   }
 }

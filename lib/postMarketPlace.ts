@@ -3,9 +3,9 @@ import { supabase } from './supabase';
 export interface MarketplaceItem {
   id: string;
   user_id: string;
-  type: 'rent' | 'swap' | 'secondhand' | 'free';
+  type: 'rent' | 'swap' | 'second_hand' | 'free' | 'job_vacancy';
   title: string;
-  description: string;
+  description: string | { text: string } | { description: string; requirements?: string; responsibilities?: string };
   price: number;
   images: string[];
   dzongkhag?: string;
@@ -49,7 +49,7 @@ export const fetchMarketplaceItems = async (page: number = 0, pageSize: number =
 };
 
 // Fetch marketplace items by type
-export const fetchMarketplaceByType = async (type: 'rent' | 'swap' | 'secondhand' | 'free', page: number = 0, pageSize: number = 10) => {
+export const fetchMarketplaceByType = async (type: 'rent' | 'swap' | 'second_hand' | 'free' | 'job_vacancy', page: number = 0, pageSize: number = 10) => {
   const from = page * pageSize;
   const to = from + pageSize - 1;
 
@@ -116,9 +116,9 @@ export const fetchMarketplaceItemById = async (itemId: string) => {
 
 // Create a new marketplace item
 export const createMarketplaceItem = async (itemData: {
-  type: 'rent' | 'swap' | 'secondhand' | 'free';
+  type: 'rent' | 'swap' | 'second_hand' | 'free' | 'job_vacancy';
   title: string;
-  description: string;
+  description: string | { text: string } | { description: string; requirements?: string; responsibilities?: string };
   price: number;
   images: string[];
   dzongkhag?: string;

@@ -1,14 +1,20 @@
 import { categories } from '@/data/categories';
 import { createProduct, uploadProductImages } from '@/lib/productsService';
+import PopupMessage from '@/components/ui/PopupMessage';
+import ImagePickerSheet from '@/components/ui/ImagePickerSheet';
+import ImageCropperOverlay from '@/components/ImageCropperOverlay';
 import * as ImagePicker from 'expo-image-picker';
-import { Check, DollarSign, Upload, X } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import { Camera, Check, ChevronDown, ImageIcon, Upload, X } from 'lucide-react-native';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
+  Dimensions,
   Image,
   KeyboardAvoidingView,
   Modal,
+  PanResponder,
   Platform,
   ScrollView,
   Text,
@@ -16,6 +22,8 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import ReAnimated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
+import { BlurView } from 'expo-blur';
 
 interface CreateProductModalProps {
   isVisible: boolean;
@@ -25,18 +33,74 @@ interface CreateProductModalProps {
 
 export default function CreateProductModal({ isVisible, onClose, userId }: CreateProductModalProps) {
   const [loading, setLoading] = useState(false);
-  
+
   // Form State
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [images, setImages] = useState<string[]>([]);
-  
+
   // Tag State (Selected tags)
   const [tags, setTags] = useState<string[]>([]);
 
+  // Success popup state
+  const [showSuccess, setShowSuccess] = useState(false);
+
+  // Error popup state
+  const [showError, setShowError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+
+  // Category dropdown state
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+
+  // Image picker and crop states
+  const [showPickerSheet, setShowPickerSheet] = useState(false);
+  const [showCropper, setShowCropper] = useState(false);
+  const [pendingImageUri, setPendingImageUri] = useState<string | null>(null);
+
   const categoryKeys = Object.keys(categories);
+
+  // Drag-to-close animation
+  const screenHeight = Dimensions.get('window').height;
+  const panY = useRef(new Animated.Value(0)).current;
+
+  // Reset panY when modal opens
+  useEffect(() => {
+    if (isVisible) {
+      panY.setValue(0);
+    }
+  }, [isVisible]);
+
+  // PanResponder for drag-to-close
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dy) > Math.abs(gestureState.dx) && gestureState.dy > 5;
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (gestureState.dy > 0) {
+          panY.setValue(gestureState.dy);
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dy > 100) {
+          Animated.timing(panY, {
+            toValue: screenHeight,
+            duration: 200,
+            useNativeDriver: false,
+          }).start(() => onClose());
+        } else {
+          Animated.spring(panY, {
+            toValue: 0,
+            useNativeDriver: false,
+            bounciness: 4
+          }).start();
+        }
+      },
+    })
+  ).current;
 
   // Derive available tags (subcategories) based on selection
   const availableTags = selectedCategory 
@@ -48,17 +112,50 @@ export default function CreateProductModal({ isVisible, onClose, userId }: Creat
     setTags([]);
   }, [selectedCategory]);
 
-  const pickImage = async () => {
-    let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 0.8,
+  const openCamera = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Required', 'Camera access is needed to take photos.');
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: false,
+      quality: 1.0,
     });
 
-    if (!result.canceled) {
-      setImages([...images, result.assets[0].uri]);
+    if (!result.canceled && result.assets[0]) {
+      setPendingImageUri(result.assets[0].uri);
+      setShowCropper(true);
     }
+  };
+
+  const openGallery = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: false,
+      quality: 1.0,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      setPendingImageUri(result.assets[0].uri);
+      setShowCropper(true);
+    }
+  };
+
+  const pickImage = () => {
+    setShowPickerSheet(true);
+  };
+
+  const handleCropSave = (croppedUri: string) => {
+    setImages([...images, croppedUri]);
+    setShowCropper(false);
+    setPendingImageUri(null);
+  };
+
+  const handleCropCancel = () => {
+    setShowCropper(false);
+    setPendingImageUri(null);
   };
 
   const removeImage = (index: number) => {
@@ -82,17 +179,29 @@ export default function CreateProductModal({ isVisible, onClose, userId }: Creat
   };
 
   
-// In handlePost:
-const handlePost = async () => {
-  if (!name || !price || !selectedCategory) {
-    Alert.alert('Missing Fields', 'Please fill in the Name, Price, and Category.');
-    return;
-  }
+  // Show error popup helper
+  const showErrorPopup = (message: string) => {
+    setErrorMessage(message);
+    setShowError(true);
+    setTimeout(() => setShowError(false), 2500);
+  };
 
-  if (tags.length === 0) {
-    Alert.alert('Missing Tags', 'Please select at least one tag.');
-    return;
-  }
+  // In handlePost:
+  const handlePost = async () => {
+    if (!name || !price || !selectedCategory) {
+      showErrorPopup('Please fill in the Name, Price, and Category.');
+      return;
+    }
+
+    if (tags.length === 0) {
+      showErrorPopup('Please select at least one tag.');
+      return;
+    }
+
+    if (images.length === 0) {
+      showErrorPopup('Please add at least one image.');
+      return;
+    }
 
   setLoading(true);
 
@@ -113,8 +222,6 @@ const handlePost = async () => {
       userId,
     });
 
-    Alert.alert('Success', 'Product posted successfully!');
-    
     // Reset form
     setName('');
     setDescription('');
@@ -122,11 +229,19 @@ const handlePost = async () => {
     setTags([]);
     setImages([]);
     setSelectedCategory(null);
-    onClose();
+
+    // Show success popup
+    setShowSuccess(true);
+
+    // Auto close after animation
+    setTimeout(() => {
+      setShowSuccess(false);
+      onClose();
+    }, 2000);
 
   } catch (error: any) {
     console.error("Post error:", error);
-    Alert.alert('Error', error.message || "Failed to create post");
+    showErrorPopup(error.message || "Failed to create post. Please try again.");
   } finally {
     setLoading(false);
   }
@@ -134,20 +249,58 @@ const handlePost = async () => {
 
   return (
     <Modal
-      animationType="slide"
+      animationType="none"
       transparent={true}
+      statusBarTranslucent
       visible={isVisible}
       onRequestClose={onClose}
     >
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         className="flex-1 justify-end"
       >
-        <View className="flex-1 bg-black/50 justify-end">
-          <View className="bg-white rounded-t-3xl h-[90%] w-full overflow-hidden">
-            
+        {/* Backdrop - blur with fade in/out */}
+        <ReAnimated.View
+          entering={FadeIn.duration(300)}
+          exiting={FadeOut.duration(200)}
+          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+        >
+          <BlurView
+            intensity={50}
+            tint="dark"
+            experimentalBlurMethod="dimezisBlurView"
+            style={{ flex: 1 }}
+          >
+            <TouchableOpacity
+              activeOpacity={1}
+              onPress={onClose}
+              style={{ flex: 1 }}
+            />
+          </BlurView>
+        </ReAnimated.View>
+
+        {/* Main Sheet - slides up */}
+        <ReAnimated.View
+          entering={SlideInDown.springify()}
+          exiting={SlideOutDown}
+          className="justify-end"
+          style={{ height: '90%' }}
+        >
+          {/* Sheet Content */}
+          <Animated.View
+            className="bg-white rounded-t-3xl flex-1 w-full overflow-hidden shadow-xl"
+            style={{ transform: [{ translateY: panY }] }}
+          >
+            {/* Drag Bar */}
+            <View
+              {...panResponder.panHandlers}
+              className="w-full items-center justify-center py-3 bg-white z-50"
+            >
+              <View className="w-16 h-1.5 bg-gray-300 rounded-full" />
+            </View>
+
             {/* Header */}
-            <View className="flex-row justify-between items-center px-5 py-4 border-b border-gray-100">
+            <View className="flex-row justify-between items-center px-5 pb-4 border-b border-gray-100">
               <Text className="text-xl font-bold text-gray-900">Sell an Item</Text>
               <TouchableOpacity onPress={onClose} className="p-2 bg-gray-100 rounded-full">
                 <X size={20} color="#374151" />
@@ -158,7 +311,7 @@ const handlePost = async () => {
               
               {/* Image Picker Section */}
               <View className="mt-5">
-                <Text className="text-sm font-semibold text-gray-700 mb-3">Photos</Text>
+                <Text className="text-sm font-semibold text-gray-700 mb-3">Photos <Text className="text-red-500">*</Text></Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row">
                   <TouchableOpacity 
                     onPress={pickImage}
@@ -197,11 +350,11 @@ const handlePost = async () => {
                 <View>
                   <Text className="text-sm font-medium text-gray-700 mb-1">Price</Text>
                   <View className="relative">
-                    <View className="absolute left-4 top-3.5 z-10">
-                       <DollarSign size={16} color="#6B7280" />
+                    <View className="absolute left-4 top-3 z-10">
+                      <Text style={{ fontSize: 14, fontWeight: '600', color: '#6B7280' }}>Nu.</Text>
                     </View>
                     <TextInput
-                      className="bg-gray-50 border border-gray-200 rounded-xl pl-10 pr-4 py-3 text-gray-900"
+                      className="bg-gray-50 border border-gray-200 rounded-xl pl-12 pr-4 py-3 text-gray-900"
                       placeholder="0.00"
                       keyboardType="numeric"
                       value={price}
@@ -210,26 +363,80 @@ const handlePost = async () => {
                   </View>
                 </View>
 
-                {/* Category Selection */}
+                {/* Category Selection - Dropdown */}
                 <View>
                   <Text className="text-sm font-medium text-gray-700 mb-2">Category</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row gap-2">
-                    {categoryKeys.map((cat) => (
-                      <TouchableOpacity
-                        key={cat}
-                        onPress={() => setSelectedCategory(cat)}
-                        className={`px-4 py-2 rounded-full border ${
-                          selectedCategory === cat 
-                            ? 'bg-primary border-primary' 
-                            : 'bg-white border-gray-200'
-                        }`}
-                      >
-                        <Text className={selectedCategory === cat ? 'text-white font-medium' : 'text-gray-600'}>
-                          {cat}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
+
+                  {/* Dropdown Trigger */}
+                  <TouchableOpacity
+                    onPress={() => setShowCategoryDropdown(!showCategoryDropdown)}
+                    className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 flex-row items-center justify-between"
+                  >
+                    <Text className={selectedCategory ? 'text-gray-900 font-medium capitalize' : 'text-gray-400'}>
+                      {selectedCategory ? selectedCategory.replace('-', ' & ') : 'Select a category'}
+                    </Text>
+                    <ReAnimated.View
+                      style={{
+                        transform: [{ rotate: showCategoryDropdown ? '180deg' : '0deg' }]
+                      }}
+                    >
+                      <ChevronDown size={20} color="#6B7280" />
+                    </ReAnimated.View>
+                  </TouchableOpacity>
+
+                  {/* Dropdown Content */}
+                  {showCategoryDropdown && (
+                    <ReAnimated.View
+                      entering={FadeIn.duration(200)}
+                      className="bg-white border border-gray-200 rounded-xl mt-2 p-3 shadow-lg"
+                      style={{
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 4 },
+                        shadowOpacity: 0.1,
+                        shadowRadius: 8,
+                        elevation: 5,
+                      }}
+                    >
+                      <View className="flex-row flex-wrap gap-2">
+                        {categoryKeys.map((cat) => {
+                          const isSelected = selectedCategory === cat;
+                          return (
+                            <TouchableOpacity
+                              key={cat}
+                              onPress={() => {
+                                setSelectedCategory(cat);
+                                setShowCategoryDropdown(false);
+                              }}
+                              className={`flex-row items-center px-3 py-2.5 rounded-full border ${
+                                isSelected
+                                  ? 'bg-primary/10 border-primary'
+                                  : 'bg-gray-50 border-gray-200'
+                              }`}
+                              style={{ minWidth: '45%' }}
+                            >
+                              {/* Radio Button */}
+                              <View
+                                className={`w-5 h-5 rounded-full border-2 mr-2 items-center justify-center ${
+                                  isSelected ? 'border-primary' : 'border-gray-300'
+                                }`}
+                              >
+                                {isSelected && (
+                                  <View className="w-2.5 h-2.5 rounded-full bg-primary" />
+                                )}
+                              </View>
+                              <Text
+                                className={`text-sm capitalize ${
+                                  isSelected ? 'text-primary font-semibold' : 'text-gray-700'
+                                }`}
+                              >
+                                {cat.replace('-', ' & ')}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    </ReAnimated.View>
+                  )}
                 </View>
 
                 {/* Tags Section (Bubbles) */}
@@ -321,9 +528,43 @@ const handlePost = async () => {
               </TouchableOpacity>
             </View>
 
-          </View>
-        </View>
+          </Animated.View>
+        </ReAnimated.View>
+
+        {/* Success Popup */}
+        <PopupMessage
+          visible={showSuccess}
+          type="success"
+          message="Your product is now live and ready for buyers!"
+        />
+
+        {/* Error Popup */}
+        <PopupMessage
+          visible={showError}
+          type="error"
+          message={errorMessage}
+        />
+
+        {/* Image Picker Sheet */}
+        <ImagePickerSheet
+          visible={showPickerSheet}
+          onClose={() => setShowPickerSheet(false)}
+          onCameraPress={openCamera}
+          onGalleryPress={openGallery}
+        />
       </KeyboardAvoidingView>
+
+      {/* Image Cropper */}
+      {showCropper && pendingImageUri && (
+        <Modal visible={showCropper} animationType="slide">
+          <ImageCropperOverlay
+            imageUri={pendingImageUri}
+            onSave={handleCropSave}
+            onCancel={handleCropCancel}
+            initialAspectRatio="1:1"
+          />
+        </Modal>
+      )}
     </Modal>
   );
 }

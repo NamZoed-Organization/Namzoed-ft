@@ -3,6 +3,7 @@
 import CustomFlashMessage from "@/components/CustomFlashMessage";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { NavigationLogger } from "@/components/NavigationLogger";
+import StatusBarBlur from "@/components/ui/StatusBarBlur";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import {
   DarkTheme,
@@ -62,8 +63,9 @@ export default function RootLayout() {
                   {/* Global Navigation Logger */}
                   <NavigationLogger />
                   <View className="flex-1 bg-background">
+                    <StatusBarBlur />
                     <Stack screenOptions={{ headerShown: false }} />
-                    <StatusBar style="dark" />
+                    <StatusBar style="dark" translucent />
                     <FlashMessage
                       position="top"
                       renderCustomContent={(msg) => (

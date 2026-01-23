@@ -35,6 +35,7 @@ import Animated, {
   Layout
 } from "react-native-reanimated";
 import EditProductModal from '@/components/EditProductModal';
+import EditMarketplaceModal from '@/components/EditMarketplaceModal';
 import CountdownTimer from '@/components/CountdownTimer';
 
 interface BookmarkedItem {
@@ -83,6 +84,7 @@ export default function ManageListingsOverlay({ onClose, userId }: ManageListing
 
   // Edit States
   const [productToEdit, setProductToEdit] = useState<Product | null>(null);
+  const [marketplaceItemToEdit, setMarketplaceItemToEdit] = useState<MarketplaceItem | null>(null);
   const [previousTab, setPreviousTab] = useState<TabType>('products');
 
   useEffect(() => {
@@ -111,9 +113,17 @@ export default function ManageListingsOverlay({ onClose, userId }: ManageListing
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   };
 
+  const handleEditMarketplaceItem = (item: MarketplaceItem) => {
+    setPreviousTab(activeTab); // Remember current tab (usually 'marketplace')
+    setMarketplaceItemToEdit(item);
+    setActiveTab('edit'); // Switch to hidden edit tab
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  };
+
   const handleExitEdit = () => {
     setActiveTab(previousTab); // Return to previous tab
     setProductToEdit(null);
+    setMarketplaceItemToEdit(null); // Reset marketplace edit state
     loadData(); // Refresh data
   };
 
@@ -136,6 +146,14 @@ export default function ManageListingsOverlay({ onClose, userId }: ManageListing
           .eq('user_id', userId)
           .order('created_at', { ascending: false })
       ]);
+
+      // Debug: Log products with discount info
+      console.log('ManageListingsOverlay loaded products:', productsData?.map(p => ({
+        name: p.name,
+        is_currently_active: p.is_currently_active,
+        discount_percent: p.discount_percent,
+        current_price: p.current_price
+      })));
 
       setProducts(productsData || []);
       setMarketplaceItems(marketplaceData || []);
@@ -256,20 +274,34 @@ export default function ManageListingsOverlay({ onClose, userId }: ManageListing
             {/* Price with Discount Info - only for products tab */}
             {activeTab === 'products' && item.is_currently_active ? (
               <View className="gap-1">
-                <Text className="text-xs text-gray-400 line-through">
-                  Nu. {item.price?.toLocaleString()}
-                </Text>
-                <View className="flex-row items-center gap-2 flex-wrap">
-                  <Text className="text-base font-mbold text-primary">
-                    Nu. {item.current_price?.toLocaleString()}
-                  </Text>
-                  <View className="bg-red-500 px-1.5 py-0.5 rounded">
+                {/* Conditional Badge: Closing Sale (Food) vs Discount (Non-Food) */}
+                {item.category === 'food' ? (
+                  <View className="bg-amber-500 px-1.5 py-0.5 rounded self-start flex-row items-center gap-1">
+                    <Text className="text-white text-[10px]">🌙</Text>
                     <Text className="text-white text-[10px] font-bold">
-                      -{item.discount_percent}%
+                      CLOSING SALE -{item.discount_percent}%
                     </Text>
                   </View>
-                  <CountdownTimer endsAt={item.discount_ends_at} compact={true} />
+                ) : (
+                  <View className="bg-green-500 px-1.5 py-0.5 rounded self-start">
+                    <Text className="text-white text-[10px] font-bold">
+                      -{item.discount_percent}% OFF
+                    </Text>
+                  </View>
+                )}
+
+                {/* Prices in one row */}
+                <View className="flex-row items-center gap-2 flex-wrap">
+                  <Text className="text-xs text-gray-400 line-through">
+                    Nu. {item.price?.toLocaleString()}
+                  </Text>
+                  <Text className={`text-base font-mbold ${item.category === 'food' ? 'text-amber-600' : 'text-primary'}`}>
+                    Nu. {item.current_price?.toLocaleString()}
+                  </Text>
                 </View>
+
+                {/* Countdown Timer */}
+                <CountdownTimer endsAt={item.discount_ends_at} compact={true} />
               </View>
             ) : (
               <Text className="text-primary font-mbold text-lg">Nu. {price?.toLocaleString()}</Text>
@@ -304,6 +336,14 @@ export default function ManageListingsOverlay({ onClose, userId }: ManageListing
               {activeTab === 'products' && (
                 <TouchableOpacity
                   onPress={() => handleEditProduct(item)}
+                  className="w-9 h-9 bg-gray-50 items-center justify-center rounded-full border border-gray-100"
+                >
+                  <Edit3 size={16} color="#4B5563" />
+                </TouchableOpacity>
+              )}
+              {activeTab === 'marketplace' && (
+                <TouchableOpacity
+                  onPress={() => handleEditMarketplaceItem(item)}
                   className="w-9 h-9 bg-gray-50 items-center justify-center rounded-full border border-gray-100"
                 >
                   <Edit3 size={16} color="#4B5563" />
@@ -468,6 +508,17 @@ export default function ManageListingsOverlay({ onClose, userId }: ManageListing
           isVisible={true}
           onClose={handleExitEdit}
           product={productToEdit}
+          userId={userId}
+          onSuccess={handleExitEdit}
+        />
+      )}
+
+      {/* Edit Marketplace Modal - Shows when activeTab is 'edit' */}
+      {activeTab === 'edit' && marketplaceItemToEdit && (
+        <EditMarketplaceModal
+          isVisible={true}
+          onClose={handleExitEdit}
+          item={marketplaceItemToEdit}
           userId={userId}
           onSuccess={handleExitEdit}
         />

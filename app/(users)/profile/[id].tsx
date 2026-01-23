@@ -3,6 +3,7 @@ import { followUser, unfollowUser, isFollowing } from "@/lib/followService";
 import { fetchUserPosts, Post } from "@/lib/postsService";
 import { fetchUserProducts, Product } from "@/lib/productsService";
 import { fetchUserProfile } from "@/lib/profileService";
+import { fetchServiceProviderProfile, fetchUserProviderServices, ProviderServiceWithDetails } from "@/lib/servicesService";
 import { blockUser, isUserBlocked, unblockUser } from "@/lib/blockService";
 import ReportUserModal from "@/components/ReportUserModal";
 import { Redirect, Stack, useLocalSearchParams, useRouter } from "expo-router";
@@ -11,6 +12,7 @@ import {
   AlertCircle,
   ArrowLeft,
   Ban,
+  CheckCircle2,
   Grid,
   Image as ImageLucide,
   MoreHorizontal,
@@ -25,6 +27,7 @@ import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Dimensions,
   Image,
   Modal,
   RefreshControl,
@@ -34,6 +37,8 @@ import {
   View,
 } from "react-native";
 import Animated, { SlideInDown, SlideOutDown } from "react-native-reanimated";
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 
 // Helper to check if URL is a video
@@ -48,22 +53,30 @@ const isVideoUrl = (url: string): boolean => {
 };
 
 export default function PublicProfileScreen() {
-  const { id } = useLocalSearchParams(); // Get user ID from route: /user/123
+  const { id, tab } = useLocalSearchParams(); // Get user ID from route: /user/123
   const { currentUser } = useUser();
   const router = useRouter();
-  
+
   // Guard: If viewing own profile, redirect to the main profile tab
   if (currentUser?.id === id) {
     return <Redirect href="/(tabs)/profile" />;
   }
 
   // State
+  const [mainTab, setMainTab] = useState<"main" | "work">(
+    (tab === "work" ? "work" : "main")
+  );
   const [activeTab, setActiveTab] = useState<"images" | "products" | "services">("images");
   const [loading, setLoading] = useState(true);
   const [userProfile, setUserProfile] = useState<any>(null);
   const [userPosts, setUserPosts] = useState<Post[]>([]);
   const [userImages, setUserImages] = useState<string[]>([]);
   const [userProducts, setUserProducts] = useState<Product[]>([]);
+
+  // Service provider state
+  const [serviceProvider, setServiceProvider] = useState<any>(null);
+  const [providerServices, setProviderServices] = useState<ProviderServiceWithDetails[]>([]);
+  const [loadingServiceProvider, setLoadingServiceProvider] = useState(false);
 
   // Follow/Message State
   const [isFollowingUser, setIsFollowingUser] = useState(false);
@@ -74,6 +87,9 @@ export default function PublicProfileScreen() {
   const [showReportModal, setShowReportModal] = useState(false);
   const [showBlockMenu, setShowBlockMenu] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Horizontal scroll ref
+  const horizontalScrollRef = React.useRef<ScrollView>(null);
 
   // Fetch Data on Mount
   useEffect(() => {
@@ -113,6 +129,18 @@ export default function PublicProfileScreen() {
           setIsBlocked(blocked);
         }
 
+        // 7. Fetch Service Provider Profile
+        setLoadingServiceProvider(true);
+        const providerData = await fetchServiceProviderProfile(id);
+        setServiceProvider(providerData);
+
+        // 8. Fetch Provider Services
+        if (providerData) {
+          const services = await fetchUserProviderServices(id);
+          setProviderServices(services);
+        }
+        setLoadingServiceProvider(false);
+
       } catch (error) {
         console.error("Error loading public profile:", error);
         Alert.alert("Error", "Could not load user profile");
@@ -124,6 +152,15 @@ export default function PublicProfileScreen() {
 
     loadData();
   }, [id, currentUser?.id]);
+
+  // Scroll to Work tab if tab parameter is "work"
+  useEffect(() => {
+    if (tab === "work" && horizontalScrollRef.current) {
+      setTimeout(() => {
+        horizontalScrollRef.current?.scrollTo({ x: SCREEN_WIDTH, animated: true });
+      }, 100);
+    }
+  }, [tab]);
 
   // Refresh Handler
   const handleRefresh = () => {
@@ -163,6 +200,18 @@ export default function PublicProfileScreen() {
           setIsBlocked(blocked);
         }
 
+        // 7. Fetch Service Provider Profile
+        setLoadingServiceProvider(true);
+        const providerData = await fetchServiceProviderProfile(id);
+        setServiceProvider(providerData);
+
+        // 8. Fetch Provider Services
+        if (providerData) {
+          const services = await fetchUserProviderServices(id);
+          setProviderServices(services);
+        }
+        setLoadingServiceProvider(false);
+
       } catch (error) {
         console.error("Error loading public profile:", error);
       } finally {
@@ -170,6 +219,24 @@ export default function PublicProfileScreen() {
       }
     };
     loadData();
+  };
+
+  // Handle main tab change with scroll
+  const handleMainTabChange = (tab: "main" | "work") => {
+    setMainTab(tab);
+    if (horizontalScrollRef.current) {
+      const offset = tab === "main" ? 0 : SCREEN_WIDTH;
+      horizontalScrollRef.current.scrollTo({ x: offset, animated: true });
+    }
+  };
+
+  // Handle scroll event to update active tab
+  const handleScroll = (event: any) => {
+    const offsetX = event.nativeEvent.contentOffset.x;
+    const newTab = offsetX > SCREEN_WIDTH / 2 ? "work" : "main";
+    if (newTab !== mainTab) {
+      setMainTab(newTab);
+    }
   };
 
   // Action Handlers
@@ -311,39 +378,75 @@ export default function PublicProfileScreen() {
       {/* Set Header Title dynamically if needed, or hide default header */}
       <Stack.Screen options={{ headerShown: false }} />
 
-      {/* Custom Header */}
-      <View className="flex-row items-center justify-between px-4 pt-12 pb-3 bg-white border-b border-gray-100">
-        <TouchableOpacity onPress={() => router.back()} className="w-10 h-10 items-center justify-center -ml-2">
-          <ArrowLeft size={24} className="text-gray-800" />
-        </TouchableOpacity>
-        
-        <Text className="text-lg font-mbold text-gray-900" numberOfLines={1}>
-          {userProfile.username || userProfile.name || "Profile"}
-        </Text>
+      {/* Fixed Header */}
+      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100 }} className="bg-white">
+        {/* Custom Header */}
+        <View className="flex-row items-center justify-between px-4 pt-12 pb-3 bg-white border-b border-gray-100">
+          <TouchableOpacity onPress={() => router.back()} className="w-10 h-10 items-center justify-center -ml-2">
+            <ArrowLeft size={24} className="text-gray-800" />
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            setShowBlockMenu(true);
-          }}
-          className="w-10 h-10 items-center justify-center"
-        >
-          <AlertCircle size={24} color="#EF4444" />
-        </TouchableOpacity>
+          <Text className="text-lg font-mbold text-gray-900" numberOfLines={1}>
+            {userProfile.username || userProfile.name || "Profile"}
+          </Text>
+
+          <TouchableOpacity
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setShowBlockMenu(true);
+            }}
+            className="w-10 h-10 items-center justify-center"
+          >
+            <AlertCircle size={24} color="#EF4444" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Main/Work Tabs - Floating Bubbles */}
+        <View className="bg-white px-4 py-2">
+          <View className="flex-row gap-2 justify-center">
+            <TouchableOpacity
+              className={`px-8 py-1.5 items-center rounded-full ${mainTab === "main" ? "bg-primary" : "bg-gray-100"}`}
+              onPress={() => handleMainTabChange("main")}
+            >
+              <Text className={`font-msemibold text-sm ${mainTab === "main" ? "text-white" : "text-gray-600"}`}>Main</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              className={`px-8 py-1.5 items-center rounded-full ${mainTab === "work" ? "bg-primary" : "bg-gray-100"}`}
+              onPress={() => handleMainTabChange("work")}
+            >
+              <Text className={`font-msemibold text-sm ${mainTab === "work" ? "text-white" : "text-gray-600"}`}>Work</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </View>
 
-      <ScrollView
-        className="flex-1"
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor="#094569"
-            colors={["#094569"]}
-          />
-        }
-      >
+      {/* Content with Top Padding for Fixed Header */}
+      <View style={{ paddingTop: 120 }} className="flex-1">
+        {/* Horizontal Scrollable Content */}
+        <ScrollView
+          ref={horizontalScrollRef}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          scrollEventThrottle={16}
+          onScroll={handleScroll}
+          className="flex-1"
+        >
+          {/* Main Profile Page */}
+          <View style={{ width: SCREEN_WIDTH }}>
+            <ScrollView
+              className="flex-1"
+              showsVerticalScrollIndicator={false}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={handleRefresh}
+                  tintColor="#094569"
+                  colors={["#094569"]}
+                  progressViewOffset={0}
+                />
+              }
+            >
         {/* Profile Info Section */}
         <View className="px-4 py-6 items-center">
           {/* Avatar */}
@@ -568,7 +671,165 @@ export default function PublicProfileScreen() {
         
         {/* Bottom spacer */}
         <View className="h-8" />
-      </ScrollView>
+            </ScrollView>
+          </View>
+
+          {/* Work Profile Page (Service Provider) */}
+          <View style={{ width: SCREEN_WIDTH }}>
+            <ScrollView
+              className="flex-1"
+              showsVerticalScrollIndicator={false}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={handleRefresh}
+                  tintColor="#094569"
+                  colors={["#094569"]}
+                  progressViewOffset={0}
+                />
+              }
+            >
+              {loadingServiceProvider ? (
+                <ActivityIndicator size="large" color="#094569" className="py-12" />
+              ) : serviceProvider ? (
+                <View className="px-4 py-6">
+                  {/* Service Provider Header */}
+                  <View className="bg-white rounded-2xl p-6 mb-4 shadow-sm">
+                    <Text className="text-xl font-mbold text-gray-900 mb-6">Service Provider Profile</Text>
+
+                    {/* Avatar Section */}
+                    <View className="items-center mb-6">
+                      <View className="relative">
+                        <View className="w-24 h-24 rounded-full bg-gray-200 items-center justify-center overflow-hidden">
+                          {serviceProvider.profile_url ? (
+                            <Image source={{ uri: serviceProvider.profile_url }} className="w-24 h-24 rounded-full" resizeMode="cover" />
+                          ) : (
+                            <Wrench size={40} className="text-gray-400" />
+                          )}
+                        </View>
+                        {/* Verified Badge */}
+                        {serviceProvider.status === 'verified' && (
+                          <View className="absolute top-0 right-0 w-7 h-7 bg-blue-500 rounded-full items-center justify-center border-2 border-white">
+                            <CheckCircle2 size={16} color="white" fill="white" />
+                          </View>
+                        )}
+                      </View>
+                    </View>
+
+                    {/* Form Fields */}
+                    <View className="space-y-4">
+                      {/* Two Column Layout - Email & Phone */}
+                      <View className="flex-row gap-3 mb-4">
+                        {/* Contact Email */}
+                        <View className="flex-1">
+                          <Text className="text-sm font-msemibold text-gray-700 mb-2">Email</Text>
+                          <View className="bg-gray-50 rounded-xl px-4 py-3 border border-gray-200">
+                            <Text className="text-base font-regular text-gray-900" numberOfLines={1}>
+                              {serviceProvider.profiles?.email || "Not set"}
+                            </Text>
+                          </View>
+                        </View>
+
+                        {/* Contact Phone */}
+                        <View className="flex-1">
+                          <Text className="text-sm font-msemibold text-gray-700 mb-2">Phone</Text>
+                          <View className="bg-gray-50 rounded-xl px-4 py-3 border border-gray-200">
+                            <Text className="text-base font-regular text-gray-900" numberOfLines={1}>
+                              {serviceProvider.profiles?.phone || "Not set"}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+
+                      {/* Business Bio - Full Width */}
+                      <View className="mb-4">
+                        <Text className="text-sm font-msemibold text-gray-700 mb-2">Business Bio</Text>
+                        <View className="bg-gray-50 rounded-xl px-4 py-3">
+                          <Text className="text-base font-regular text-gray-900">
+                            {serviceProvider.master_bio || <Text className="italic text-gray-400">Not set</Text>}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Services Section */}
+                  <View className="bg-white rounded-2xl p-6 shadow-sm">
+                    <Text className="text-lg font-mbold text-gray-900 mb-2">Services Offered</Text>
+                    <Text className="text-sm text-gray-500 mb-4">
+                      {providerServices.length > 0
+                        ? `${providerServices.length} service${providerServices.length > 1 ? 's' : ''} offered`
+                        : 'No services listed'}
+                    </Text>
+
+                    {providerServices.length > 0 ? (
+                      <View className="space-y-3">
+                        {providerServices.map((service) => (
+                          <TouchableOpacity
+                            key={service.id}
+                            className="bg-gray-50 rounded-xl p-4 border border-gray-200"
+                            onPress={() => router.push(`/(users)/servicedetail/${service.id}` as any)}
+                          >
+                            <View className="flex-row">
+                              {/* Service Image */}
+                              {service.images && service.images.length > 0 ? (
+                                <Image
+                                  source={{ uri: service.images[0] }}
+                                  className="w-20 h-20 rounded-lg"
+                                  resizeMode="cover"
+                                />
+                              ) : (
+                                <View className="w-20 h-20 rounded-lg bg-gray-200 items-center justify-center">
+                                  <Wrench size={32} className="text-gray-400" />
+                                </View>
+                              )}
+
+                              {/* Service Info */}
+                              <View className="flex-1 ml-4">
+                                <View className="flex-row items-center justify-between mb-1">
+                                  <Text className="text-base font-mbold text-gray-900 flex-1" numberOfLines={1}>
+                                    {service.name}
+                                  </Text>
+                                  <View className={`px-2 py-1 rounded-full ${service.status ? 'bg-green-100' : 'bg-red-100'}`}>
+                                    <Text className={`text-xs font-msemibold ${service.status ? 'text-green-700' : 'text-red-700'}`}>
+                                      {service.status ? 'Active' : 'Inactive'}
+                                    </Text>
+                                  </View>
+                                </View>
+
+                                {service.service_categories && (
+                                  <Text className="text-xs font-regular text-primary mb-1">
+                                    {service.service_categories.name}
+                                  </Text>
+                                )}
+
+                                <Text className="text-sm font-regular text-gray-600" numberOfLines={2}>
+                                  {service.description}
+                                </Text>
+                              </View>
+                            </View>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    ) : (
+                      <View className="items-center justify-center py-8 bg-gray-50 rounded-xl">
+                        <Wrench size={48} className="text-gray-400 mb-4" />
+                        <Text className="text-base text-gray-500">No services listed yet</Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              ) : (
+                <View className="items-center justify-center py-12 px-4">
+                  <User size={48} className="text-gray-400 mb-4" />
+                  <Text className="text-base text-gray-500">Not a service provider</Text>
+                </View>
+              )}
+              <View className="h-8" />
+            </ScrollView>
+          </View>
+        </ScrollView>
+      </View>
 
       {/* Block/Report Menu Modal */}
       {showBlockMenu && (

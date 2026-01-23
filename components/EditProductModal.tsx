@@ -1,7 +1,7 @@
 import { categories } from '@/data/categories';
 import { Product, updateProduct, uploadProductImages } from '@/lib/productsService';
 import * as ImagePicker from 'expo-image-picker';
-import { Check, DollarSign, Upload, X } from 'lucide-react-native';
+import { Check, DollarSign, Moon, Upload, X } from 'lucide-react-native';
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import {
   ActivityIndicator,
@@ -17,6 +17,9 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import PopupMessage from '@/components/ui/PopupMessage';
+import ImagePickerSheet from '@/components/ui/ImagePickerSheet';
+import ImageCropperOverlay from '@/components/ImageCropperOverlay';
 import { Picker } from '@react-native-picker/picker';
 import Animated, {
   useAnimatedStyle,
@@ -36,6 +39,27 @@ interface EditProductModalProps {
 
 export default function EditProductModal({ isVisible, onClose, product, userId, onSuccess }: EditProductModalProps) {
   const [loading, setLoading] = useState(false);
+
+  // Popup states
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [showError, setShowError] = useState(false);
+  const [popupMessage, setPopupMessage] = useState('');
+
+  // Popup helpers
+  const showErrorPopup = (message: string) => {
+    setPopupMessage(message);
+    setShowError(true);
+    setTimeout(() => setShowError(false), 2500);
+  };
+
+  const showSuccessPopup = (message: string, callback?: () => void) => {
+    setPopupMessage(message);
+    setShowSuccess(true);
+    setTimeout(() => {
+      setShowSuccess(false);
+      callback?.();
+    }, 2000);
+  };
 
   // Form State - Pre-populated from product
   const [name, setName] = useState(product.name);
@@ -61,6 +85,11 @@ export default function EditProductModal({ isVisible, onClose, product, userId, 
   // Date picker state
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [datePickerMode, setDatePickerMode] = useState<'date' | 'time'>('date');
+
+  // Image picker and crop states
+  const [showPickerSheet, setShowPickerSheet] = useState(false);
+  const [showCropper, setShowCropper] = useState(false);
+  const [pendingImageUri, setPendingImageUri] = useState<string | null>(null);
 
   // Ref to track initial mount for tags
   const isInitialMount = useRef(true);
@@ -90,8 +119,12 @@ export default function EditProductModal({ isVisible, onClose, product, userId, 
 
   const categoryKeys = Object.keys(categories);
 
+  // Check if selected category is food (for Closing Sale UI)
+  const isFood = selectedCategory === 'food';
+
   // Derive available tags based on selection
-  const availableTags = selectedCategory
+  // Defensive check: ensure category exists in categories object
+  const availableTags = selectedCategory && categories[selectedCategory]
     ? categories[selectedCategory].map(sub => sub.name)
     : [];
 
@@ -107,17 +140,50 @@ export default function EditProductModal({ isVisible, onClose, product, userId, 
     setTags([]);
   }, [selectedCategory]);
 
-  const pickImage = async () => {
-    let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 0.8,
+  const openCamera = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Required', 'Camera access is needed to take photos.');
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: false,
+      quality: 1.0,
     });
 
-    if (!result.canceled) {
-      setNewImages([...newImages, result.assets[0].uri]);
+    if (!result.canceled && result.assets[0]) {
+      setPendingImageUri(result.assets[0].uri);
+      setShowCropper(true);
     }
+  };
+
+  const openGallery = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: false,
+      quality: 1.0,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      setPendingImageUri(result.assets[0].uri);
+      setShowCropper(true);
+    }
+  };
+
+  const pickImage = () => {
+    setShowPickerSheet(true);
+  };
+
+  const handleCropSave = (croppedUri: string) => {
+    setNewImages([...newImages, croppedUri]);
+    setShowCropper(false);
+    setPendingImageUri(null);
+  };
+
+  const handleCropCancel = () => {
+    setShowCropper(false);
+    setPendingImageUri(null);
   };
 
   const removeExistingImage = (index: number) => {
@@ -147,25 +213,30 @@ export default function EditProductModal({ isVisible, onClose, product, userId, 
   const handleUpdate = async () => {
     // Validation
     if (!name || !price || !selectedCategory) {
-      Alert.alert('Missing Fields', 'Please fill in the Name, Price, and Category.');
+      showErrorPopup('Please fill in the Name, Price, and Category.');
       return;
     }
 
     if (tags.length === 0) {
-      Alert.alert('Missing Tags', 'Please select at least one tag.');
+      showErrorPopup('Please select at least one tag.');
       return;
     }
 
     const totalImages = existingImages.length + newImages.length;
     if (totalImages === 0) {
-      Alert.alert('No Images', 'Please add at least one image.');
+      showErrorPopup('Please add at least one image.');
       return;
     }
 
-    // Discount validation - start time is required when discount is active
-    if (isDiscountActive && !discountStartedAt) {
-      Alert.alert('Discount Start Time Required', 'Please select when the discount should start.');
+    // Discount validation - start time is required when discount is active (except for food - auto-starts)
+    if (isDiscountActive && !discountStartedAt && !isFood) {
+      showErrorPopup('Please select when the discount should start.');
       return;
+    }
+
+    // For food Closing Sale, ensure start time is set to now if not already
+    if (isFood && isDiscountActive && !discountStartedAt) {
+      setDiscountStartedAt(new Date());
     }
 
     setLoading(true);
@@ -178,6 +249,18 @@ export default function EditProductModal({ isVisible, onClose, product, userId, 
 
       // Combine existing + newly uploaded images
       const finalImages = [...existingImages, ...uploadedUrls];
+
+      // Debug discount fields before saving
+      if (isDiscountActive) {
+        console.log('Saving discount with:', {
+          is_discount_active: isDiscountActive,
+          discount_percent: discountPercent,
+          discount_started_at_raw: discountStartedAt,
+          discount_started_at_iso: discountStartedAt?.toISOString(),
+          discount_duration_hrs: parseFloat(discountDurationHrs),
+          current_time: new Date().toISOString()
+        });
+      }
 
       // Update product
       await updateProduct(product.id, {
@@ -194,11 +277,12 @@ export default function EditProductModal({ isVisible, onClose, product, userId, 
         discount_duration_hrs: parseFloat(discountDurationHrs),
       });
 
-      Alert.alert('Success', 'Product updated successfully!');
-      onSuccess();
+      showSuccessPopup('Product updated successfully!', () => {
+        onSuccess();
+      });
     } catch (error: any) {
       console.error("Update error:", error);
-      Alert.alert('Error', error.message || "Failed to update product");
+      showErrorPopup(error.message || "Failed to update product");
     } finally {
       setLoading(false);
     }
@@ -241,7 +325,7 @@ export default function EditProductModal({ isVisible, onClose, product, userId, 
 
                 {/* Image Picker Section */}
                 <View className="mt-5">
-                  <Text className="text-sm font-semibold text-gray-700 mb-3">Photos</Text>
+                  <Text className="text-sm font-semibold text-gray-700 mb-3">Photos <Text className="text-red-500">*</Text></Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row">
 
                     {/* Existing Images */}
@@ -315,187 +399,292 @@ export default function EditProductModal({ isVisible, onClose, product, userId, 
                     </View>
                   </View>
 
-                  {/* Discount Section - OPTIONAL with Premium Styling */}
-                  <View className="bg-gray-50 border border-gray-200 rounded-[24px] p-5 shadow-sm">
-                    <View className="flex-row items-center justify-between mb-4">
-                      <Text className="text-sm font-semibold text-gray-700">
-                        Discount Settings <Text className="text-gray-400 font-normal">(Optional)</Text>
-                      </Text>
-
-                      {/* Toggle Switch */}
-                      <View className="flex-row items-center">
-                        <Text className="text-xs text-gray-600 mr-2">
-                          {isDiscountActive ? 'Active' : 'Inactive'}
-                        </Text>
-                        <Switch
-                          value={isDiscountActive}
-                          onValueChange={setIsDiscountActive}
-                          trackColor={{ false: '#D1D5DB', true: '#10B981' }}
-                          thumbColor={isDiscountActive ? '#059669' : '#F3F4F6'}
-                        />
-                      </View>
-                    </View>
-
-                    {/* Discount Percent Dropdown */}
-                    <View className="mb-4">
-                      <Text className="text-sm font-medium text-gray-700 mb-2">Discount Percentage</Text>
-                      <View className="bg-white border border-gray-200 rounded-xl">
-                        <Picker
-                          selectedValue={discountPercent}
-                          onValueChange={(value) => setDiscountPercent(value)}
-                          enabled={isDiscountActive}
-                          style={{ opacity: isDiscountActive ? 1 : 0.5 }}
-                        >
-                          <Picker.Item label="No Discount" value={0} />
-                          <Picker.Item label="5% Off" value={5} />
-                          <Picker.Item label="10% Off" value={10} />
-                          <Picker.Item label="15% Off" value={15} />
-                          <Picker.Item label="20% Off" value={20} />
-                          <Picker.Item label="25% Off" value={25} />
-                          <Picker.Item label="30% Off" value={30} />
-                          <Picker.Item label="35% Off" value={35} />
-                          <Picker.Item label="40% Off" value={40} />
-                          <Picker.Item label="50% Off" value={50} />
-                        </Picker>
-                      </View>
-                    </View>
-
-                    {/* Discounted Price Display (Read-only) */}
-                    {isDiscountActive && discountedPrice !== null && (
-                      <View className="mb-4 bg-primary/10 border border-primary/30 rounded-xl p-3">
-                        <Text className="text-xs text-gray-600 mb-1">Discounted Price:</Text>
-                        <View className="flex-row items-baseline">
-                          <Text className="text-gray-400 line-through text-sm mr-2">
-                            Nu. {parseFloat(price).toLocaleString()}
-                          </Text>
-                          <Text className="text-primary font-bold text-lg">
-                            Nu. {discountedPrice.toLocaleString()}
-                          </Text>
-                          <Text className="text-primary text-xs ml-2">
-                            ({discountPercent}% off)
+                  {/* CONDITIONAL: Closing Sale (Food) vs Discount (Non-Food) */}
+                  {isFood ? (
+                    /* ========== CLOSING SALE UI (Food Only) ========== */
+                    <View className="bg-amber-50 border border-amber-200 rounded-[24px] p-5 shadow-sm">
+                      <View className="flex-row items-center justify-between mb-4">
+                        <View className="flex-row items-center gap-2">
+                          <Moon size={18} color="#D97706" />
+                          <Text className="text-sm font-semibold text-amber-800">
+                            Closing Sale
                           </Text>
                         </View>
-                      </View>
-                    )}
 
-                    {/* Discount Start Time - Two Options */}
-                    <View className="mb-4">
-                      <Text className="text-sm font-medium text-gray-700 mb-2">
-                        Start Time {isDiscountActive && <Text className="text-red-500">*</Text>}
+                        {/* Toggle Switch */}
+                        <View className="flex-row items-center">
+                          <Text className="text-xs text-amber-700 mr-2">
+                            {isDiscountActive ? 'Active' : 'Off'}
+                          </Text>
+                          <Switch
+                            value={isDiscountActive}
+                            onValueChange={(newValue) => {
+                              setIsDiscountActive(newValue);
+                              // Auto-set start time to NOW when toggled on
+                              if (newValue) {
+                                setDiscountStartedAt(new Date());
+                              }
+                            }}
+                            trackColor={{ false: '#D1D5DB', true: '#F59E0B' }}
+                            thumbColor={isDiscountActive ? '#D97706' : '#F3F4F6'}
+                          />
+                        </View>
+                      </View>
+
+                      <Text className="text-xs text-amber-600 mb-4">
+                        Clear your leftover food quickly with a time-limited offer
                       </Text>
 
-                      <View className="flex-row gap-2">
-                        {/* Start Now Button */}
-                        <TouchableOpacity
-                          onPress={() => {
-                            if (isDiscountActive) {
-                              setDiscountStartedAt(new Date());
-                            }
-                          }}
-                          disabled={!isDiscountActive}
-                          className={`flex-1 py-3 rounded-xl border ${
-                            !isDiscountActive
-                              ? 'bg-gray-100 border-gray-200 opacity-50'
-                              : discountStartedAt && Math.abs(discountStartedAt.getTime() - new Date().getTime()) < 60000
-                                ? 'border-primary border-2'
-                                : 'bg-white border-gray-300'
-                          }`}
-                        >
-                          <Text className={`text-center font-medium ${
-                            !isDiscountActive
-                              ? 'text-gray-400'
-                              : discountStartedAt && Math.abs(discountStartedAt.getTime() - new Date().getTime()) < 60000
-                                ? 'text-primary'
-                                : 'text-gray-700'
-                          }`}>
-                            Start Now
-                          </Text>
-                        </TouchableOpacity>
-
-                        {/* Choose Date Button */}
-                        <TouchableOpacity
-                          onPress={() => {
-                            if (isDiscountActive) {
-                              setDatePickerMode('date');
-                              setShowDatePicker(true);
-                            }
-                          }}
-                          disabled={!isDiscountActive}
-                          className={`flex-1 py-3 rounded-xl border ${
-                            !isDiscountActive
-                              ? 'bg-gray-100 border-gray-200 opacity-50'
-                              : discountStartedAt && Math.abs(discountStartedAt.getTime() - new Date().getTime()) >= 60000
-                                ? 'border-primary border-2'
-                                : 'bg-white border-gray-300'
-                          }`}
-                        >
-                          <Text className={`text-center font-medium ${
-                            !isDiscountActive
-                              ? 'text-gray-400'
-                              : discountStartedAt && Math.abs(discountStartedAt.getTime() - new Date().getTime()) >= 60000
-                                ? 'text-primary'
-                                : 'text-gray-700'
-                          }`}>
-                            Choose Date
-                          </Text>
-                        </TouchableOpacity>
+                      {/* Closing Sale Percent Dropdown - Higher discounts */}
+                      <View className="mb-4">
+                        <Text className="text-sm font-medium text-amber-800 mb-2">Discount</Text>
+                        <View className="bg-white border border-amber-200 rounded-xl">
+                          <Picker
+                            selectedValue={discountPercent}
+                            onValueChange={(value) => setDiscountPercent(value)}
+                            enabled={isDiscountActive}
+                            style={{ opacity: isDiscountActive ? 1 : 0.5 }}
+                          >
+                            <Picker.Item label="Select discount..." value={0} />
+                            <Picker.Item label="20% Off" value={20} />
+                            <Picker.Item label="30% Off" value={30} />
+                            <Picker.Item label="40% Off" value={40} />
+                            <Picker.Item label="50% Off" value={50} />
+                            <Picker.Item label="60% Off" value={60} />
+                            <Picker.Item label="70% Off" value={70} />
+                          </Picker>
+                        </View>
                       </View>
 
-                      {/* Selected Date Display */}
-                      {discountStartedAt && (
-                        <View className="mt-2 bg-gray-50 border border-gray-200 rounded-lg p-2.5 flex-row items-center justify-between">
-                          <View className="flex-1">
-                            <Text className="text-xs text-gray-500 mb-0.5">Selected:</Text>
-                            <Text className="text-sm font-medium text-gray-900">
-                              {discountStartedAt.toLocaleString('en-US', {
-                                month: 'short',
-                                day: 'numeric',
-                                year: 'numeric',
-                                hour: 'numeric',
-                                minute: '2-digit',
-                                hour12: true
-                              })}
+                      {/* Closing Sale Price Display */}
+                      {isDiscountActive && discountedPrice !== null && (
+                        <View className="mb-4 bg-amber-100 border border-amber-300 rounded-xl p-3">
+                          <Text className="text-xs text-amber-700 mb-1">Closing Sale Price:</Text>
+                          <View className="flex-row items-baseline">
+                            <Text className="text-amber-500 line-through text-sm mr-2">
+                              Nu. {parseFloat(price).toLocaleString()}
+                            </Text>
+                            <Text className="text-amber-700 font-bold text-lg">
+                              Nu. {discountedPrice.toLocaleString()}
+                            </Text>
+                            <Text className="text-amber-600 text-xs ml-2">
+                              ({discountPercent}% off)
                             </Text>
                           </View>
+                        </View>
+                      )}
+
+                      {/* Duration - Shorter options for food */}
+                      <View>
+                        <Text className="text-sm font-medium text-amber-800 mb-2">Duration</Text>
+                        <View className="bg-white border border-amber-200 rounded-xl overflow-hidden">
+                          <Picker
+                            selectedValue={discountDurationHrs}
+                            onValueChange={(value) => setDiscountDurationHrs(value)}
+                            enabled={isDiscountActive}
+                            style={{ opacity: isDiscountActive ? 1 : 0.5 }}
+                          >
+                            <Picker.Item label="1 hour" value="1" />
+                            <Picker.Item label="2 hours" value="2" />
+                            <Picker.Item label="3 hours" value="3" />
+                            <Picker.Item label="4 hours" value="4" />
+                            <Picker.Item label="6 hours" value="6" />
+                          </Picker>
+                        </View>
+                        <Text className="text-xs text-amber-600 mt-1">
+                          Starts immediately when activated
+                        </Text>
+                      </View>
+                    </View>
+                  ) : (
+                    /* ========== REGULAR DISCOUNT UI (Non-Food) ========== */
+                    <View className="bg-gray-50 border border-gray-200 rounded-[24px] p-5 shadow-sm">
+                      <View className="flex-row items-center justify-between mb-4">
+                        <Text className="text-sm font-semibold text-gray-700">
+                          Discount Settings <Text className="text-gray-400 font-normal">(Optional)</Text>
+                        </Text>
+
+                        {/* Toggle Switch */}
+                        <View className="flex-row items-center">
+                          <Text className="text-xs text-gray-600 mr-2">
+                            {isDiscountActive ? 'Active' : 'Inactive'}
+                          </Text>
+                          <Switch
+                            value={isDiscountActive}
+                            onValueChange={setIsDiscountActive}
+                            trackColor={{ false: '#D1D5DB', true: '#10B981' }}
+                            thumbColor={isDiscountActive ? '#059669' : '#F3F4F6'}
+                          />
+                        </View>
+                      </View>
+
+                      {/* Discount Percent Dropdown */}
+                      <View className="mb-4">
+                        <Text className="text-sm font-medium text-gray-700 mb-2">Discount Percentage</Text>
+                        <View className="bg-white border border-gray-200 rounded-xl">
+                          <Picker
+                            selectedValue={discountPercent}
+                            onValueChange={(value) => setDiscountPercent(value)}
+                            enabled={isDiscountActive}
+                            style={{ opacity: isDiscountActive ? 1 : 0.5 }}
+                          >
+                            <Picker.Item label="No Discount" value={0} />
+                            <Picker.Item label="5% Off" value={5} />
+                            <Picker.Item label="10% Off" value={10} />
+                            <Picker.Item label="15% Off" value={15} />
+                            <Picker.Item label="20% Off" value={20} />
+                            <Picker.Item label="25% Off" value={25} />
+                            <Picker.Item label="30% Off" value={30} />
+                            <Picker.Item label="35% Off" value={35} />
+                            <Picker.Item label="40% Off" value={40} />
+                            <Picker.Item label="50% Off" value={50} />
+                          </Picker>
+                        </View>
+                      </View>
+
+                      {/* Discounted Price Display (Read-only) */}
+                      {isDiscountActive && discountedPrice !== null && (
+                        <View className="mb-4 bg-primary/10 border border-primary/30 rounded-xl p-3">
+                          <Text className="text-xs text-gray-600 mb-1">Discounted Price:</Text>
+                          <View className="flex-row items-baseline">
+                            <Text className="text-gray-400 line-through text-sm mr-2">
+                              Nu. {parseFloat(price).toLocaleString()}
+                            </Text>
+                            <Text className="text-primary font-bold text-lg">
+                              Nu. {discountedPrice.toLocaleString()}
+                            </Text>
+                            <Text className="text-primary text-xs ml-2">
+                              ({discountPercent}% off)
+                            </Text>
+                          </View>
+                        </View>
+                      )}
+
+                      {/* Discount Start Time - Two Options */}
+                      <View className="mb-4">
+                        <Text className="text-sm font-medium text-gray-700 mb-2">
+                          Start Time {isDiscountActive && <Text className="text-red-500">*</Text>}
+                        </Text>
+
+                        <View className="flex-row gap-2">
+                          {/* Start Now Button */}
                           <TouchableOpacity
                             onPress={() => {
                               if (isDiscountActive) {
-                                setDiscountStartedAt(undefined);
+                                const now = new Date();
+                                console.log('Start Now clicked:', {
+                                  localTime: now.toString(),
+                                  isoTime: now.toISOString(),
+                                  timestamp: now.getTime()
+                                });
+                                setDiscountStartedAt(now);
                               }
                             }}
                             disabled={!isDiscountActive}
-                            className="p-1"
+                            className={`flex-1 py-3 rounded-xl border ${
+                              !isDiscountActive
+                                ? 'bg-gray-100 border-gray-200 opacity-50'
+                                : discountStartedAt && Math.abs(discountStartedAt.getTime() - new Date().getTime()) < 60000
+                                  ? 'border-primary border-2'
+                                  : 'bg-white border-gray-300'
+                            }`}
                           >
-                            <X size={18} color="#6B7280" />
+                            <Text className={`text-center font-medium ${
+                              !isDiscountActive
+                                ? 'text-gray-400'
+                                : discountStartedAt && Math.abs(discountStartedAt.getTime() - new Date().getTime()) < 60000
+                                  ? 'text-primary'
+                                  : 'text-gray-700'
+                            }`}>
+                              Start Now
+                            </Text>
+                          </TouchableOpacity>
+
+                          {/* Choose Date Button */}
+                          <TouchableOpacity
+                            onPress={() => {
+                              if (isDiscountActive) {
+                                setDatePickerMode('date');
+                                setShowDatePicker(true);
+                              }
+                            }}
+                            disabled={!isDiscountActive}
+                            className={`flex-1 py-3 rounded-xl border ${
+                              !isDiscountActive
+                                ? 'bg-gray-100 border-gray-200 opacity-50'
+                                : discountStartedAt && Math.abs(discountStartedAt.getTime() - new Date().getTime()) >= 60000
+                                  ? 'border-primary border-2'
+                                  : 'bg-white border-gray-300'
+                            }`}
+                          >
+                            <Text className={`text-center font-medium ${
+                              !isDiscountActive
+                                ? 'text-gray-400'
+                                : discountStartedAt && Math.abs(discountStartedAt.getTime() - new Date().getTime()) >= 60000
+                                  ? 'text-primary'
+                                  : 'text-gray-700'
+                            }`}>
+                              Choose Date
+                            </Text>
                           </TouchableOpacity>
                         </View>
-                      )}
-                    </View>
 
-                    {/* Discount Duration - Dropdown */}
-                    <View>
-                      <Text className="text-sm font-medium text-gray-700 mb-2">Duration</Text>
-                      <View className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-                        <Picker
-                          selectedValue={discountDurationHrs}
-                          onValueChange={(value) => setDiscountDurationHrs(value)}
-                          enabled={isDiscountActive}
-                          style={{ opacity: isDiscountActive ? 1 : 0.5 }}
-                        >
-                          <Picker.Item label="6 hours" value="6" />
-                          <Picker.Item label="12 hours" value="12" />
-                          <Picker.Item label="18 hours" value="18" />
-                          <Picker.Item label="24 hours / 1 day" value="24" />
-                          <Picker.Item label="2 days" value="48" />
-                          <Picker.Item label="3 days" value="72" />
-                          <Picker.Item label="4 days" value="96" />
-                        </Picker>
+                        {/* Selected Date Display */}
+                        {discountStartedAt && (
+                          <View className="mt-2 bg-gray-50 border border-gray-200 rounded-lg p-2.5 flex-row items-center justify-between">
+                            <View className="flex-1">
+                              <Text className="text-xs text-gray-500 mb-0.5">Selected:</Text>
+                              <Text className="text-sm font-medium text-gray-900">
+                                {discountStartedAt.toLocaleString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric',
+                                  hour: 'numeric',
+                                  minute: '2-digit',
+                                  hour12: true
+                                })}
+                              </Text>
+                            </View>
+                            <TouchableOpacity
+                              onPress={() => {
+                                if (isDiscountActive) {
+                                  setDiscountStartedAt(undefined);
+                                }
+                              }}
+                              disabled={!isDiscountActive}
+                              className="p-1"
+                            >
+                              <X size={18} color="#6B7280" />
+                            </TouchableOpacity>
+                          </View>
+                        )}
                       </View>
-                      <Text className="text-xs text-gray-500 mt-1">
-                        How long the discount will last after it starts
-                      </Text>
+
+                      {/* Discount Duration - Dropdown */}
+                      <View>
+                        <Text className="text-sm font-medium text-gray-700 mb-2">Duration</Text>
+                        <View className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                          <Picker
+                            selectedValue={discountDurationHrs}
+                            onValueChange={(value) => setDiscountDurationHrs(value)}
+                            enabled={isDiscountActive}
+                            style={{ opacity: isDiscountActive ? 1 : 0.5 }}
+                          >
+                            <Picker.Item label="6 hours" value="6" />
+                            <Picker.Item label="12 hours" value="12" />
+                            <Picker.Item label="18 hours" value="18" />
+                            <Picker.Item label="24 hours / 1 day" value="24" />
+                            <Picker.Item label="2 days" value="48" />
+                            <Picker.Item label="3 days" value="72" />
+                            <Picker.Item label="4 days" value="96" />
+                          </Picker>
+                        </View>
+                        <Text className="text-xs text-gray-500 mt-1">
+                          How long the discount will last after it starts
+                        </Text>
+                      </View>
                     </View>
-                  </View>
+                  )}
 
                   {/* Category Selection */}
                   <View>
@@ -654,6 +843,12 @@ export default function EditProductModal({ isVisible, onClose, product, userId, 
                 minimumDate={new Date()}
                 onChange={(event, selectedDate) => {
                   if (selectedDate) {
+                    console.log('iOS DatePicker selected:', {
+                      mode: datePickerMode,
+                      localTime: selectedDate.toString(),
+                      isoTime: selectedDate.toISOString(),
+                      timestamp: selectedDate.getTime()
+                    });
                     setDiscountStartedAt(selectedDate);
                   }
                 }}
@@ -675,6 +870,12 @@ export default function EditProductModal({ isVisible, onClose, product, userId, 
           onChange={(event, selectedDate) => {
             setShowDatePicker(false);
             if (event.type === 'set' && selectedDate) {
+              console.log('Android DatePicker selected:', {
+                mode: datePickerMode,
+                localTime: selectedDate.toString(),
+                isoTime: selectedDate.toISOString(),
+                timestamp: selectedDate.getTime()
+              });
               if (datePickerMode === 'date') {
                 setDiscountStartedAt(selectedDate);
                 // Immediately show time picker
@@ -691,6 +892,30 @@ export default function EditProductModal({ isVisible, onClose, product, userId, 
             }
           }}
         />
+      )}
+
+      {/* Success/Error Popups */}
+      <PopupMessage visible={showSuccess} type="success" message={popupMessage} />
+      <PopupMessage visible={showError} type="error" message={popupMessage} />
+
+      {/* Image Picker Sheet */}
+      <ImagePickerSheet
+        visible={showPickerSheet}
+        onClose={() => setShowPickerSheet(false)}
+        onCameraPress={openCamera}
+        onGalleryPress={openGallery}
+      />
+
+      {/* Image Cropper */}
+      {showCropper && pendingImageUri && (
+        <Modal visible={showCropper} animationType="slide">
+          <ImageCropperOverlay
+            imageUri={pendingImageUri}
+            onSave={handleCropSave}
+            onCancel={handleCropCancel}
+            initialAspectRatio="1:1"
+          />
+        </Modal>
       )}
     </Modal>
   );

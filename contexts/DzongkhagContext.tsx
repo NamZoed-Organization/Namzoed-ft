@@ -18,6 +18,7 @@ interface DzongkhagState {
   name: string | null;
   loading: boolean;
   accessDenied: boolean;
+  location: { latitude: number; longitude: number } | null;
   refresh: () => void;
 }
 
@@ -27,7 +28,8 @@ export const DzongkhagProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const { currentUser, setCurrentUser } = useUser();
-  const [name, setName] = useState<string | null>(null);
+  const [name, setName] = useState<string | null>(currentUser?.dzongkhag || null);
+  const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [loading, setLoading] = useState(false);
   const [accessDenied, setAccessDenied] = useState(false);
   const throttleRef = useRef(false);
@@ -47,80 +49,111 @@ export const DzongkhagProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   const lookup = useCallback(async () => {
-    if (throttleRef.current) return;
-    throttleRef.current = true;
-    setLoading(true);
+  if (throttleRef.current) return;
+  throttleRef.current = true;
+  setLoading(true);
 
-    // simulate UX delay
-    setTimeout(async () => {
-      // reset loading & throttle
-      setLoading(false);
-      throttleRef.current = false;
+  setAccessDenied(false);
 
-      // real geolocation
-      const services = await Location.hasServicesEnabledAsync();
-      if (!services) {
-        setAccessDenied(true);
-        return;
+  try {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== "granted") {
+      setAccessDenied(true);
+      return;
+    }
+
+    const { coords } = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Balanced,
+    });
+
+    setAccessDenied(false);
+    setLocation({ latitude: coords.latitude, longitude: coords.longitude });
+
+    let nearest = dzongkhagCenters[0];
+    let minDist = Infinity;
+
+    for (const dz of dzongkhagCenters) {
+      const d = getDistance(coords.latitude, coords.longitude, dz.lat, dz.lon);
+      if (d < minDist) {
+        minDist = d;
+        nearest = dz;
       }
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        setAccessDenied(true);
-        return;
+    }
+
+    let detectedName = nearest.name;
+    if (detectedName === "Phuentsholing") detectedName = "Chhukha";
+    if (detectedName === "Gelephu") detectedName = "Sarpang";
+
+    setName(detectedName);
+
+    if (currentUser?.id) {
+      const locationData = {
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        accuracy: coords.accuracy,
+        timestamp: new Date().toISOString(),
+      };
+
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          dzongkhag: detectedName,
+          location: locationData,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', currentUser.id);
+
+      if (!error) {
+        // Always update local cache, not just when dzongkhag changes
+        const updatedUser = { ...currentUser, dzongkhag: detectedName };
+        await AsyncStorage.setItem('currentUser', JSON.stringify(updatedUser));
+        setCurrentUser(updatedUser);
       }
-      setAccessDenied(false);
+    }
+  } catch (err: any) {
+    setAccessDenied(true);
+    setName(null);
+  } finally {
+    setLoading(false);
+    throttleRef.current = false;
+  }
+}, [currentUser, setCurrentUser]); // Add currentUser as dependency
 
-      const { coords } = await Location.getCurrentPositionAsync();
-      let nearest = dzongkhagCenters[0];
-      let minDist = Infinity;
-      for (const dz of dzongkhagCenters) {
-        const d = getDistance(
-          coords.latitude,
-          coords.longitude,
-          dz.lat,
-          dz.lon
-        );
-        if (d < minDist) {
-          minDist = d;
-          nearest = dz;
-        }
-      }
-      setName(nearest.name);
-
-      // Update Supabase if user is logged in
-      if (currentUser?.id && nearest.name) {
-        try {
-          const { error } = await supabase
-            .from('profiles')
-            .update({
-              dzongkhag: nearest.name,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', currentUser.id);
-
-          if (error) {
-            console.error('Failed to update dzongkhag:', error);
-          } else {
-            // Update local user data (context + AsyncStorage)
-            const updatedUser = { ...currentUser, dzongkhag: nearest.name };
-            await AsyncStorage.setItem('currentUser', JSON.stringify(updatedUser));
-            setCurrentUser(updatedUser);
-          }
-        } catch (err) {
-          console.error('Error updating dzongkhag in Supabase:', err);
-        }
-      }
-    }, 3000);
-  }, [currentUser, setCurrentUser]);
-
-  // run once on mount
   useEffect(() => {
-    lookup();
-  }, [lookup]);
+    if (currentUser?.dzongkhag) {
+      setName(currentUser.dzongkhag);
+    }
+  }, [currentUser?.dzongkhag]);
+
+  // Load saved location from database on mount for fast initial render
+  useEffect(() => {
+    const loadSavedLocation = async () => {
+      if (currentUser?.id) {
+        try {
+          const { data } = await supabase
+            .from('profiles')
+            .select('location')
+            .eq('id', currentUser.id)
+            .single();
+
+          if (data?.location) {
+            setLocation({
+              latitude: data.location.latitude,
+              longitude: data.location.longitude,
+            });
+          }
+        } catch (error) {
+          console.log('Could not load saved location');
+        }
+      }
+    };
+
+    loadSavedLocation();
+  }, [currentUser?.id]);
 
   return (
     <DzongkhagContext.Provider
-      value={{ name, loading, accessDenied, refresh: lookup }}
+      value={{ name, loading, accessDenied, location, refresh: lookup }}
     >
       {children}
     </DzongkhagContext.Provider>

@@ -83,9 +83,11 @@ export const fetchProductById = async (productId: string): Promise<ProductWithUs
 };
 
 // Fetch products by user ID
+// Uses products_with_discounts view for real-time discount calculations
+// Note: Expired discounts are automatically cleaned up by database cron job every minute
 export const fetchUserProducts = async (userId: string) => {
   const { data, error } = await supabase
-    .from('products')
+    .from('products_with_discounts')  // Query the view for discount fields
     .select('*')
     .eq('user_id', userId)
     .order('created_at', { ascending: false });

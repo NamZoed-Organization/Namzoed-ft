@@ -1,4 +1,3 @@
-import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { AlertCircle, X } from 'lucide-react-native';
 import React, { useState } from 'react';
@@ -125,9 +124,9 @@ export default function ReportProductModal({
           <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           >
-            <BlurView intensity={90} tint="light" className="rounded-t-3xl overflow-hidden">
+            <View className="bg-white rounded-t-3xl overflow-hidden">
               {/* Header */}
-              <View className="px-6 pt-6 pb-4 border-b border-gray-200">
+              <View className="px-6 pt-6 pb-4 border-b border-gray-200 bg-white">
                 <View className="flex-row items-center justify-between mb-2">
                   <View className="flex-row items-center">
                     <AlertCircle size={24} color="#EF4444" />
@@ -215,7 +214,7 @@ export default function ReportProductModal({
                   )}
                 </TouchableOpacity>
               </ScrollView>
-            </BlurView>
+            </View>
           </KeyboardAvoidingView>
         </Animated.View>
       </View>

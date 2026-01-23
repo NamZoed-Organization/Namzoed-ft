@@ -10,6 +10,7 @@ import {
   Alert,
   Linking,
   RefreshControl,
+  BackHandler,
 } from 'react-native';
 import {
   ArrowLeft,
@@ -79,6 +80,22 @@ export default function MarketplaceDetailScreen() {
     }, [loadItem])
   );
 
+  // Handle Android back button
+  useFocusEffect(
+    useCallback(() => {
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+        handleGoBack();
+        return true;
+      });
+
+      return () => backHandler.remove();
+    }, [])
+  );
+
+  const handleGoBack = () => {
+    router.push('/marketplace');
+  };
+
   const handleRefresh = () => {
     setRefreshing(true);
     loadItem(true);
@@ -99,7 +116,7 @@ export default function MarketplaceDetailScreen() {
     }
 
     if (item?.user_id) {
-      router.push(`/chat/${item.user_id}` as any);
+      router.push(`/(users)/chat/${item.user_id}` as any);
     }
   };
 
@@ -183,7 +200,7 @@ export default function MarketplaceDetailScreen() {
       <View className="flex-1 bg-white items-center justify-center">
         <Text className="text-lg text-gray-600">Item not found</Text>
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={handleGoBack}
           className="mt-4 px-6 py-3 bg-primary rounded-lg"
         >
           <Text className="text-white font-semibold">Go Back</Text>
@@ -200,7 +217,7 @@ export default function MarketplaceDetailScreen() {
         <View className="bg-white border-b border-gray-200 pt-12 pb-4 px-4">
           <View className="flex-row items-center">
             <TouchableOpacity
-              onPress={() => router.back()}
+              onPress={handleGoBack}
               className="mr-4 p-2 -ml-2"
             >
               <ArrowLeft size={24} color="#000" />
@@ -308,7 +325,7 @@ export default function MarketplaceDetailScreen() {
             </Text>
 
             {/* Price */}
-            {(item.type === 'rent' || item.type === 'secondhand') && item.price > 0 && (
+            {(item.type === 'rent' || item.type === 'second_hand' || item.type === 'job_vacancy') && item.price > 0 && (
               <Text className="text-3xl font-bold text-primary mb-4">
                 Nu. {item.price.toLocaleString()}
               </Text>
@@ -330,15 +347,52 @@ export default function MarketplaceDetailScreen() {
               </View>
             </View>
 
-            {/* Description */}
-            <View className="mb-6">
-              <Text className="text-lg font-semibold text-gray-900 mb-2">
-                Description
-              </Text>
-              <Text className="text-base text-gray-700 leading-6">
-                {item.description}
-              </Text>
-            </View>
+            {/* Description Section - Format depends on item type */}
+            {item.type === 'job_vacancy' && typeof item.description === 'object' && 'description' in item.description ? (
+              // Job Vacancy Structure
+              <>
+                <View className="mb-6">
+                  <Text className="text-lg font-semibold text-gray-900 mb-2">
+                    Job Description
+                  </Text>
+                  <Text className="text-base text-gray-700 leading-6">
+                    {item.description.description}
+                  </Text>
+                </View>
+
+                {item.description.requirements && (
+                  <View className="mb-6">
+                    <Text className="text-lg font-semibold text-gray-900 mb-2">
+                      Requirements
+                    </Text>
+                    <Text className="text-base text-gray-700 leading-6">
+                      {item.description.requirements}
+                    </Text>
+                  </View>
+                )}
+
+                {item.description.responsibilities && (
+                  <View className="mb-6">
+                    <Text className="text-lg font-semibold text-gray-900 mb-2">
+                      Responsibilities
+                    </Text>
+                    <Text className="text-base text-gray-700 leading-6">
+                      {item.description.responsibilities}
+                    </Text>
+                  </View>
+                )}
+              </>
+            ) : (
+              // Simple Text Format for other categories
+              <View className="mb-6">
+                <Text className="text-lg font-semibold text-gray-900 mb-2">
+                  Description
+                </Text>
+                <Text className="text-base text-gray-700 leading-6">
+                  {typeof item.description === 'string' ? item.description : item.description?.text || ''}
+                </Text>
+              </View>
+            )}
 
             {/* Tags */}
             {item.tags && item.tags.length > 0 && (

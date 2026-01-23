@@ -85,6 +85,27 @@ export const uploadAvatar = async (imageUri: string, userId: string): Promise<st
   }
 };
 
+// Delete avatar image from Supabase storage ('profile' bucket)
+export const deleteAvatar = async (avatarUrl: string): Promise<void> => {
+  try {
+    // Extract the file path from the public URL
+    const urlParts = avatarUrl.split('/profile/');
+    const filePath = urlParts[1] || avatarUrl;
+
+    const { error } = await supabase.storage
+      .from('profile')
+      .remove([filePath]);
+
+    if (error) {
+      console.error('Error deleting avatar:', error);
+      throw error;
+    }
+  } catch (error) {
+    console.error('Error deleting avatar:', error);
+    throw error;
+  }
+};
+
 // Interface for Featured Seller Profile
 export interface FeaturedSellerProfile extends Profile {
   id: string;

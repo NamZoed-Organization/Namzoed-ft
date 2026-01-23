@@ -119,7 +119,7 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
-          name="services"
+          name="services/index"
           options={{
             title: "Services",
             tabBarButton: (props) => (
@@ -147,6 +147,12 @@ export default function TabLayout() {
             href: null,
           }}
         />
+          <Tabs.Screen
+          name="servicedetail/[id]"
+          options={{
+            href: null,
+          }}
+        />
 
         <Tabs.Screen
           name="profile/[id]"
@@ -166,18 +172,14 @@ export default function TabLayout() {
             href: null,
           }}
         />
+     
         <Tabs.Screen
-          name="providerdetail/[id]"
+          name="services/[slug]"
           options={{
             href: null,
           }}
         />
-        <Tabs.Screen
-          name="servicedetail/[slug]"
-          options={{
-            href: null,
-          }}
-        />
+     
         <Tabs.Screen
           name="categories/[slug]"
           options={{

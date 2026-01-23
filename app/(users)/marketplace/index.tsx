@@ -9,6 +9,7 @@ import { fetchMarketplaceItems, MarketplaceItemWithUser } from "@/lib/postMarket
 import { Picker } from '@react-native-picker/picker';
 import { useRouter } from 'expo-router';
 import {
+    Briefcase,
     Filter,
     Gift,
     Home,
@@ -36,7 +37,7 @@ export default function MarketplaceScreen() {
   const { currentUser } = useUser();
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeTab, setActiveTab] = useState("rent");
+  const [activeTab, setActiveTab] = useState("job_vacancy");
   const [showFilters, setShowFilters] = useState(false);
   const [showPostOverlay, setShowPostOverlay] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -107,7 +108,7 @@ export default function MarketplaceScreen() {
         )}
 
         {/* Price */}
-        {(item.type === 'rent' || item.type === 'secondhand') && item.price > 0 && (
+        {(item.type === 'rent' || item.type === 'second_hand' || item.type === 'job_vacancy') && item.price > 0 && (
           <Text className="text-base font-bold text-primary mb-2">
             Nu. {item.price}
           </Text>
@@ -133,10 +134,15 @@ export default function MarketplaceScreen() {
       if (item.type !== activeTab) return false;
 
       // Search query filter
-      if (searchQuery &&
-          !item.title?.toLowerCase().includes(searchQuery.toLowerCase()) &&
-          !item.description?.toLowerCase().includes(searchQuery.toLowerCase())) {
-        return false;
+      if (searchQuery) {
+        const descriptionText = typeof item.description === 'string'
+          ? item.description
+          : item.description?.text || '';
+
+        if (!item.title?.toLowerCase().includes(searchQuery.toLowerCase()) &&
+            !descriptionText.toLowerCase().includes(searchQuery.toLowerCase())) {
+          return false;
+        }
       }
 
       // Dzongkhag filter
@@ -171,8 +177,9 @@ export default function MarketplaceScreen() {
     const title = {
       rent: "Rent Options",
       swap: "Swap Options",
-      secondhand: "Second Hand Buy",
-      free: "Free Options"
+      second_hand: "Second Hand Buy",
+      free: "Free Options",
+      job_vacancy: "Job Vacancies"
     }[activeTab];
 
     if (isLoading) {
@@ -268,8 +275,8 @@ export default function MarketplaceScreen() {
                 </View>
               </View>
 
-              {/* Price Range Filter (for rent and secondhand) */}
-              {(activeTab === 'rent' || activeTab === 'secondhand') && (
+              {/* Price Range Filter (for rent, second_hand, and job_vacancy) */}
+              {(activeTab === 'rent' || activeTab === 'second_hand' || activeTab === 'job_vacancy') && (
                 <View className="mb-4">
                   <Text className="text-sm font-msemibold text-gray-700 mb-2">Price Range (Nu.)</Text>
                   <View className="flex-row gap-3">
@@ -370,6 +377,16 @@ export default function MarketplaceScreen() {
           {/* Tab Navigation */}
           <View className="flex-row items-center w-full mx-auto mt-2 gap-2 mb-4">
             <TouchableOpacity
+              onPress={() => handleTabChange("job_vacancy")}
+              className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm bg-white ${
+                activeTab === "job_vacancy" ? "border-2 border-black" : ""
+              }`}
+              disabled={isLoading}
+            >
+              <Briefcase size={20} color={isLoading ? "#ccc" : "black"} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
               onPress={() => handleTabChange("rent")}
               className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm bg-white ${
                 activeTab === "rent" ? "border-2 border-black" : ""
@@ -380,6 +397,16 @@ export default function MarketplaceScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
+              onPress={() => handleTabChange("second_hand")}
+              className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm bg-white ${
+                activeTab === "second_hand" ? "border-2 border-black" : ""
+              }`}
+              disabled={isLoading}
+            >
+              <ShoppingCart size={20} color={isLoading ? "#ccc" : "black"} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
               onPress={() => handleTabChange("swap")}
               className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm bg-white ${
                 activeTab === "swap" ? "border-2 border-black" : ""
@@ -387,16 +414,6 @@ export default function MarketplaceScreen() {
               disabled={isLoading}
             >
               <RefreshCw size={20} color={isLoading ? "#ccc" : "black"} />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => handleTabChange("secondhand")}
-              className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm bg-white ${
-                activeTab === "secondhand" ? "border-2 border-black" : ""
-              }`}
-              disabled={isLoading}
-            >
-              <ShoppingCart size={20} color={isLoading ? "#ccc" : "black"} />
             </TouchableOpacity>
 
             <TouchableOpacity
