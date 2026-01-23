@@ -189,3 +189,19 @@ yarn-error.*
 *.tsbuildinfo
 
 # @end expo-cli
+
+# android specific
+/android/.gradle
+/android/app/build
+/android/build
+/android/app/*.iml
+/android/.idea
+/android/captures
+/android/local.properties
+/android/app/src/debug/google-services.json
+/android/app/src/release/google-services.json
+/android/app/google-services.json
+/android/app/src/debug/res/
+/android/app/src/release/res/
+/android/app/src/debug/AndroidManifest.xml
+/android/app/src/release/AndroidManifest.xml

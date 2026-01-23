@@ -1,4 +1,6 @@
 // app/(users)/chat/[id].tsx
+import AudioMessagePlayer from "@/components/chat/AudioMessagePlayer";
+import ChatAudioRecorder from "@/components/chat/ChatAudioRecorder";
 import ChatImagePicker from "@/components/chat/ChatImagePicker";
 import { useUser } from "@/contexts/UserContext";
 import users from "@/data/UserData";
@@ -807,6 +809,31 @@ export default function ChatScreen() {
     setLocalMessages(prev => prev.filter(m => m.id !== optimisticId));
   };
 
+  // Audio recorder handlers
+  const handleOptimisticAudio = (optimisticMsg: any) => {
+    setLocalMessages(prev => [...prev, optimisticMsg]);
+  };
+
+  const handleAudioUploadSuccess = (finalMsg: any, optimisticId: string) => {
+    // Fallback: add manually if realtime doesn't pick it up
+    setTimeout(() => {
+      setMessages(prev => {
+        if (prev.some(m => m.id === finalMsg.id)) {
+          console.log('✅ Realtime already added audio message');
+          return prev;
+        }
+        console.log('⚡ Fallback: manually adding audio message');
+        return [...prev, finalMsg];
+      });
+      // Remove optimistic message
+      setLocalMessages(prev => prev.filter(m => m.id !== optimisticId));
+    }, 2000);
+  };
+
+  const handleAudioUploadError = (optimisticId: string) => {
+    setLocalMessages(prev => prev.filter(m => m.id !== optimisticId));
+  };
+
   const handleMongooseClick = () => {
     if (isAnimatingMongoose) return;
     
@@ -837,6 +864,7 @@ export default function ChatScreen() {
     const messageType = message.message_type || 'text';
     const isLocation = message.content?.includes('📍 My Location:');
     const isImage = messageType === 'image' || message.image_url;
+    const isAudio = messageType === 'audio' || message.audio_url;
 
     // Extract coordinates from location message
     let coordinates = null;
@@ -863,6 +891,41 @@ export default function ChatScreen() {
         setShowImagePreview(true);
       }
     };
+
+    // Render audio message
+    if (isAudio) {
+      return (
+        <View key={key} className={`mb-3 ${isCurrentUser ? 'items-end' : 'items-start'}`}>
+          <TouchableOpacity
+            activeOpacity={1}
+            onLongPress={() => {
+              if (isCurrentUser && !isOptimistic) {
+                setSelectedMessage(message);
+                setShowMessageActions(true);
+              }
+            }}
+            delayLongPress={500}
+            className={`${isCurrentUser ? 'mr-2' : 'ml-2'}`}
+          >
+            <AudioMessagePlayer
+              audioUrl={message.audio_url}
+              duration={message.audio_duration}
+              isCurrentUser={isCurrentUser}
+              isOptimistic={isOptimistic}
+            />
+          </TouchableOpacity>
+          <Text className="text-xs text-gray-500 mt-1 mx-2">
+            {message.created_at ? new Date(message.created_at).toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit'
+            }) : new Date().toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit'
+            })}
+          </Text>
+        </View>
+      );
+    }
 
     // Render image message
     if (isImage) {
@@ -1130,6 +1193,13 @@ export default function ChatScreen() {
             onUploadSuccess={handleImageUploadSuccess}
             onUploadError={handleImageUploadError}
           />
+          <ChatAudioRecorder
+            currentUserUUID={currentUserUUID || ''}
+            chatPartnerId={chatPartnerId as string}
+            onOptimisticAudio={handleOptimisticAudio}
+            onUploadSuccess={handleAudioUploadSuccess}
+            onUploadError={handleAudioUploadError}
+          />
           <TouchableOpacity
             onPress={handleShareLocation}
             disabled={isSharingLocation}
@@ -1244,7 +1314,7 @@ export default function ChatScreen() {
           className="flex-1 bg-black/50 justify-center items-center"
         >
           <View className="bg-white rounded-2xl w-64 overflow-hidden" style={{ elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4 }}>
-            {selectedMessage?.message_type !== 'image' && (
+            {selectedMessage?.message_type !== 'image' && selectedMessage?.message_type !== 'audio' && (
               <TouchableOpacity
                 onPress={handleEditMessage}
                 className="flex-row items-center px-6 py-4 border-b border-gray-200 active:bg-gray-50"
