@@ -140,6 +140,12 @@ export default function CreatePost({ onClose }: CreatePostProps) {
     try {
       console.log('Available ImagePicker object:', Object.keys(ImagePicker));
 
+      const cameraPermission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!cameraPermission.granted) {
+        showErrorPopup('Camera access is needed to take photos.');
+        return;
+      }
+
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ['images'],
         allowsEditing: true,
@@ -184,6 +190,12 @@ export default function CreatePost({ onClose }: CreatePostProps) {
 
 
     try {
+      const libraryPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!libraryPermission.granted) {
+        showErrorPopup('Photo library access is needed to select images.');
+        return;
+      }
+
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsEditing: true,
@@ -227,6 +239,12 @@ export default function CreatePost({ onClose }: CreatePostProps) {
     console.log('Starting camera video picker, isForSell:', isForSell);
 
     try {
+      const cameraPermission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!cameraPermission.granted) {
+        showErrorPopup('Camera access is needed to record videos.');
+        return;
+      }
+
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ['videos'],
         allowsEditing: true,
@@ -270,6 +288,12 @@ export default function CreatePost({ onClose }: CreatePostProps) {
     console.log('Starting gallery video picker, isForSell:', isForSell);
 
     try {
+      const libraryPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!libraryPermission.granted) {
+        showErrorPopup('Photo library access is needed to select videos.');
+        return;
+      }
+
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['videos'],
         allowsEditing: true,

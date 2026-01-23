@@ -130,36 +130,56 @@ export default function CreateProductModal({
   }, [selectedCategory]);
 
   const openCamera = async () => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert(
-        "Permission Required",
-        "Camera access is needed to take photos.",
-      );
-      return;
-    }
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(
+          "Permission Required",
+          "Camera access is needed to take photos.",
+        );
+        return;
+      }
 
-    const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: false,
-      quality: 1.0,
-    });
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: false,
+        quality: 1.0,
+      });
 
-    if (!result.canceled && result.assets[0]) {
-      setPendingImageUri(result.assets[0].uri);
-      setShowCropper(true);
+      if (!result.canceled && result.assets?.[0]) {
+        setPendingImageUri(result.assets[0].uri);
+        setShowCropper(true);
+      }
+    } catch (error) {
+      console.error("Failed to open camera:", error);
+      showErrorPopup("Failed to open camera.");
     }
   };
 
   const openGallery = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsEditing: false,
-      quality: 1.0,
-    });
+    try {
+      const permission =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert(
+          "Permission Required",
+          "Gallery access is needed to select photos.",
+        );
+        return;
+      }
 
-    if (!result.canceled && result.assets[0]) {
-      setPendingImageUri(result.assets[0].uri);
-      setShowCropper(true);
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsEditing: false,
+        quality: 1.0,
+      });
+
+      if (!result.canceled && result.assets?.[0]) {
+        setPendingImageUri(result.assets[0].uri);
+        setShowCropper(true);
+      }
+    } catch (error) {
+      console.error("Failed to open gallery:", error);
+      showErrorPopup("Failed to open gallery.");
     }
   };
 

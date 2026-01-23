@@ -163,40 +163,50 @@ export default function MarketplacePostOverlay({
   };
 
   const openCamera = async () => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== "granted") {
-      showErrorPopup("Camera access is needed to take photos.");
-      return;
-    }
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== "granted") {
+        showErrorPopup("Camera access is needed to take photos.");
+        return;
+      }
 
-    const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: false,
-      quality: 1.0,
-    });
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: false,
+        quality: 1.0,
+      });
 
-    if (!result.canceled && result.assets[0]) {
-      setPendingImageUri(result.assets[0].uri);
-      setShowCropper(true);
+      if (!result.canceled && result.assets?.[0]) {
+        setPendingImageUri(result.assets[0].uri);
+        setShowCropper(true);
+      }
+    } catch (error) {
+      console.error("Failed to open camera:", error);
+      showErrorPopup("Failed to open camera.");
     }
   };
 
   const openGallery = async () => {
-    const permissionResult =
-      await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permissionResult.granted) {
-      showErrorPopup("Please allow access to your photos.");
-      return;
-    }
+    try {
+      const permissionResult =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permissionResult.granted) {
+        showErrorPopup("Please allow access to your photos.");
+        return;
+      }
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsEditing: false,
-      quality: 1.0,
-    });
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsEditing: false,
+        quality: 1.0,
+      });
 
-    if (!result.canceled && result.assets[0]) {
-      setPendingImageUri(result.assets[0].uri);
-      setShowCropper(true);
+      if (!result.canceled && result.assets?.[0]) {
+        setPendingImageUri(result.assets[0].uri);
+        setShowCropper(true);
+      }
+    } catch (error) {
+      console.error("Failed to open gallery:", error);
+      showErrorPopup("Failed to open gallery.");
     }
   };
 

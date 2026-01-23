@@ -3,8 +3,9 @@ import {
   StreamCall,
   useCall,
 } from "@stream-io/video-react-native-sdk";
+import { Camera } from "expo-camera";
 import React, { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, Text, View } from "react-native";
 
 type Props = {
   callId: string;
@@ -24,6 +25,18 @@ function HostLivestreamUI({ callId }: { callId: string }) {
   const [live, setLive] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  const ensureCameraPermission = useCallback(async () => {
+    const { status } = await Camera.requestCameraPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert(
+        "Camera Permission Needed",
+        "Please enable camera access to start a live stream."
+      );
+      return false;
+    }
+    return true;
+  }, []);
+
   useEffect(() => {
     if (!call) return;
     call.join(); // host must join before going live
@@ -34,6 +47,8 @@ function HostLivestreamUI({ callId }: { callId: string }) {
     setBusy(true);
 
     try {
+      const cameraGranted = await ensureCameraPermission();
+      if (!cameraGranted) return;
       await call.camera.enable();
       await call.microphone.enable();
       await call.goLive();
@@ -41,7 +56,7 @@ function HostLivestreamUI({ callId }: { callId: string }) {
     } finally {
       setBusy(false);
     }
-  }, [call, live, busy]);
+  }, [call, live, busy, ensureCameraPermission]);
 
   const endLive = useCallback(async () => {
     if (!call || busy) return;

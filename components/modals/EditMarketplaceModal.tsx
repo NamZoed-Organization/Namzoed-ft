@@ -14,7 +14,6 @@ import { Upload, X } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Image,
   KeyboardAvoidingView,
   Modal,
@@ -132,36 +131,50 @@ export default function EditMarketplaceModal({
   }));
 
   const openCamera = async () => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert(
-        "Permission Required",
-        "Camera access is needed to take photos.",
-      );
-      return;
-    }
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== "granted") {
+        showErrorPopup("Camera access is needed to take photos.");
+        return;
+      }
 
-    const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: false,
-      quality: 1.0,
-    });
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: false,
+        quality: 1.0,
+      });
 
-    if (!result.canceled && result.assets[0]) {
-      setPendingImageUri(result.assets[0].uri);
-      setShowCropOverlay(true);
+      if (!result.canceled && result.assets?.[0]) {
+        setPendingImageUri(result.assets[0].uri);
+        setShowCropOverlay(true);
+      }
+    } catch (error) {
+      console.error("Failed to open camera:", error);
+      showErrorPopup("Failed to open camera.");
     }
   };
 
   const openGallery = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsEditing: false,
-      quality: 1.0,
-    });
+    try {
+      const permission =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        showErrorPopup("Gallery access is needed to select photos.");
+        return;
+      }
 
-    if (!result.canceled && result.assets[0]) {
-      setPendingImageUri(result.assets[0].uri);
-      setShowCropOverlay(true);
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsEditing: false,
+        quality: 1.0,
+      });
+
+      if (!result.canceled && result.assets?.[0]) {
+        setPendingImageUri(result.assets[0].uri);
+        setShowCropOverlay(true);
+      }
+    } catch (error) {
+      console.error("Failed to open gallery:", error);
+      showErrorPopup("Failed to open gallery.");
     }
   };
 

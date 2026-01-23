@@ -8,6 +8,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { Platform } from "react-native";
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
 
 interface TrackMongooseModalProps {
@@ -241,7 +242,7 @@ export default function TrackMongooseModal({
               </View>
             ) : (
               <MapView
-                provider={PROVIDER_GOOGLE}
+                provider={Platform.OS === "android" ? PROVIDER_GOOGLE : undefined}
                 mapType={mapType}
                 style={{ flex: 1 }}
                 region={getMapRegion()}

@@ -8,6 +8,7 @@ import {
     Text,
     View,
 } from "react-native";
+import { Platform } from "react-native";
 import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
 
 interface Location {
@@ -258,7 +259,7 @@ export default function LocationMapPicker({
           {/* Map */}
           <View className="flex-1 relative">
             <MapView
-              provider={PROVIDER_GOOGLE}
+              provider={Platform.OS === "android" ? PROVIDER_GOOGLE : undefined}
               mapType={mapType}
               style={{ flex: 1 }}
               region={mapRegion}
