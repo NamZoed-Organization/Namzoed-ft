@@ -38,32 +38,23 @@ DROP POLICY IF EXISTS "Users can upload audio messages" ON storage.objects;
 DROP POLICY IF EXISTS "Users can read audio messages" ON storage.objects;
 DROP POLICY IF EXISTS "Users can delete their own audio" ON storage.objects;
 
--- Allow authenticated users to upload audio (check if user ID is in the path)
+-- Allow all authenticated users to upload audio
 CREATE POLICY "Users can upload audio messages"
 ON storage.objects FOR INSERT
 TO authenticated
-WITH CHECK (
-  bucket_id = 'chat-audio' 
-  AND (name LIKE '%' || auth.uid()::text || '%')
-);
+WITH CHECK (bucket_id = 'chat-audio');
 
--- Allow authenticated users to read audio (check if user ID is in the path)
+-- Allow all authenticated users to read audio
 CREATE POLICY "Users can read audio messages"
 ON storage.objects FOR SELECT
 TO authenticated
-USING (
-  bucket_id = 'chat-audio' 
-  AND (name LIKE '%' || auth.uid()::text || '%')
-);
+USING (bucket_id = 'chat-audio');
 
--- Allow users to delete their own audio (check if user ID is in the path)
+-- Allow all authenticated users to delete audio
 CREATE POLICY "Users can delete their own audio"
 ON storage.objects FOR DELETE
 TO authenticated
-USING (
-  bucket_id = 'chat-audio' 
-  AND (name LIKE '%' || auth.uid()::text || '%')
-);
+USING (bucket_id = 'chat-audio');
 
 -- Optional: Allow public access to audio (if you want unauthenticated users to listen)
 -- Uncomment the following if needed:
