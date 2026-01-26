@@ -54,10 +54,14 @@ export default function HomeCard({
 
           {/* Discount Badge on Image */}
           {discountPercent && (
-            <View style={[
-              styles.discountBadge,
-              isClosingSale ? styles.closingSaleBadge : styles.regularDiscountBadge
-            ]}>
+            <View
+              style={[
+                styles.discountBadge,
+                isClosingSale
+                  ? styles.closingSaleBadge
+                  : styles.regularDiscountBadge,
+              ]}
+            >
               {isClosingSale && <Text style={styles.discountEmoji}>🌙</Text>}
               <Text style={styles.discountText}>-{discountPercent}%</Text>
             </View>
@@ -99,7 +103,9 @@ export default function HomeCard({
             )}
           </View>
           {subtitle && (
-            <Text style={styles.subtitle} numberOfLines={1}>{subtitle.toUpperCase()}</Text>
+            <Text style={styles.subtitle} numberOfLines={1}>
+              {subtitle.toUpperCase()}
+            </Text>
           )}
         </View>
       </View>

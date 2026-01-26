@@ -1,30 +1,31 @@
-import React, { useEffect, useState } from "react";
+import { Product } from "@/lib/productsService";
 import {
-  View,
-  Text,
-  StyleSheet,
-} from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
-import {
-  getCountdownSeconds,
   formatCompactCountdown,
   getCountdownDisplayText,
+  getCountdownSeconds,
+  isClosingSaleActive,
 } from "@/utils/timeHelpers";
-import { Product } from "@/lib/productsService";
+import { LinearGradient } from "expo-linear-gradient";
+import React, { useEffect, useState } from "react";
+import { StyleSheet, Text, View } from "react-native";
 
 interface ClosingSaleBannerProps {
   foodItems: Product[]; // Food items with closing sale enabled
 }
 
-export default function ClosingSaleBanner({ foodItems }: ClosingSaleBannerProps) {
+export default function ClosingSaleBanner({
+  foodItems,
+}: ClosingSaleBannerProps) {
   const [countdown, setCountdown] = useState(getCountdownSeconds());
   const [displayText, setDisplayText] = useState(getCountdownDisplayText());
+  const [isActive, setIsActive] = useState(isClosingSaleActive());
 
   // Update countdown every second
   useEffect(() => {
     const interval = setInterval(() => {
       setCountdown(getCountdownSeconds());
       setDisplayText(getCountdownDisplayText());
+      setIsActive(isClosingSaleActive());
     }, 1000);
 
     return () => clearInterval(interval);
@@ -33,7 +34,11 @@ export default function ClosingSaleBanner({ foodItems }: ClosingSaleBannerProps)
   return (
     <View style={styles.bannerContainer}>
       <LinearGradient
-        colors={["#F59E0B", "#D97706"]}
+        colors={
+          isActive
+            ? ["#F59E0B", "#D97706"] // Yellow gradient when active (8-10pm)
+            : ["#094569", "#0A5276"] // Blue gradient when dormant
+        }
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
         style={styles.gradientBanner}
@@ -53,7 +58,9 @@ export default function ClosingSaleBanner({ foodItems }: ClosingSaleBannerProps)
             {/* Part 3: Countdown label and timer */}
             <View style={styles.rightSection}>
               <Text style={styles.countdownLabel}>{displayText.subtitle}</Text>
-              <Text style={styles.countdownTimer}>{formatCompactCountdown(countdown)}</Text>
+              <Text style={styles.countdownTimer}>
+                {formatCompactCountdown(countdown)}
+              </Text>
             </View>
           </View>
         </View>
@@ -95,10 +102,10 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
   },
   bannerTitle: {
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: "800",
     color: "white",
-    letterSpacing: 0.3,
+    letterSpacing: 0,
     marginBottom: 2,
   },
   timeRange: {
@@ -113,7 +120,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   countdownTimer: {
-    fontSize: 17,
+    fontSize: 14,
     fontWeight: "900",
     color: "white",
     letterSpacing: 0.5,

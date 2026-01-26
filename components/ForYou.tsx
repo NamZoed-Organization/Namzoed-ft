@@ -236,119 +236,99 @@ export default function ForYou() {
   return (
     <View className="flex-1 bg-background pt-4">
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Closing Sale Banner - Always shown at top */}
-        <ClosingSaleBanner foodItems={closingSaleFoodItems} />
+        {/* Closing Sale Banner with integrated cards */}
+        <View className="mb-4">
+          {/* Banner with gradient background */}
 
-        {/* Sort Button - Above preview cards */}
-        <View className="px-4 mb-3">
-          <TouchableOpacity
-            onPress={toggleSortMenu}
-            className="bg-white px-3 py-2 rounded-xl shadow-sm border border-gray-200 flex-row items-center self-start"
-          >
-            <ArrowUpDown size={16} color="#1F2937" />
-            <Text className="ml-1.5 text-xs font-semibold text-gray-700">
-              {getSortLabel(sortOrder)}
-            </Text>
-          </TouchableOpacity>
+          <ClosingSaleBanner foodItems={closingSaleFoodItems} />
 
-          {/* Sort Menu Dropdown */}
-          {showSortMenu && (
-            <View className="mt-2 bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-              {(
-                [
-                  "latest",
-                  "oldest",
-                  "high_discount",
-                  "low_discount",
-                  "high_price",
-                  "low_price",
-                ] as SortOrder[]
-              ).map((sort) => (
+          {/* Sort Button and Cards - Only shown during active time */}
+          {isClosingSaleTime && (
+            <View className="pb-4">
+              {/* Sort Button */}
+              <View className="px-4 mb-3">
                 <TouchableOpacity
-                  key={sort}
-                  onPress={() => {
-                    setSortOrder(sort);
-                    setShowSortMenu(false);
-                  }}
-                  className={`p-3 border-b border-gray-100 ${sortOrder === sort ? "bg-primary/10" : ""}`}
+                  onPress={toggleSortMenu}
+                  className="bg-white/90 backdrop-blur-sm px-3 py-2 rounded-xl shadow-sm border border-white/50 flex-row items-center self-start"
+                  style={{ backgroundColor: "rgba(255, 255, 255, 0.9)" }}
                 >
-                  <Text
-                    className={`text-sm font-medium ${sortOrder === sort ? "text-primary" : "text-gray-700"}`}
-                  >
-                    {getSortLabel(sort)}
+                  <ArrowUpDown size={16} color="#1F2937" />
+                  <Text className="ml-1.5 text-xs font-semibold text-gray-700">
+                    {getSortLabel(sortOrder)}
                   </Text>
                 </TouchableOpacity>
-              ))}
+
+                {/* Sort Menu Dropdown */}
+                {showSortMenu && (
+                  <View className="mt-2 bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+                    {(
+                      [
+                        "latest",
+                        "oldest",
+                        "high_discount",
+                        "low_discount",
+                        "high_price",
+                        "low_price",
+                      ] as SortOrder[]
+                    ).map((sort) => (
+                      <TouchableOpacity
+                        key={sort}
+                        onPress={() => {
+                          setSortOrder(sort);
+                          setShowSortMenu(false);
+                        }}
+                        className={`p-3 border-b border-gray-100 ${sortOrder === sort ? "bg-primary/10" : ""}`}
+                      >
+                        <Text
+                          className={`text-sm font-medium ${sortOrder === sort ? "text-primary" : "text-gray-700"}`}
+                        >
+                          {getSortLabel(sort)}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+
+              {/* Closing Sale Preview Cards */}
+              {closingSaleFoodItems.length > 0 && (
+                <View>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={{ paddingLeft: 16 }}
+                  >
+                    {closingSaleFoodItems.map((item) => {
+                      const discountedPrice = item.discount_percent
+                        ? item.price -
+                          (item.price * item.discount_percent) / 100
+                        : item.price;
+
+                      return (
+                        <HomeCard
+                          key={item.id}
+                          imageUrl={
+                            item.images[0] || "https://via.placeholder.com/140"
+                          }
+                          title={item.name}
+                          subtitle="FOOD"
+                          price={`Nu. ${discountedPrice.toLocaleString()}`}
+                          discountPercent={item.discount_percent}
+                          isClosingSale={true}
+                          profileImage={(item as any).profiles?.avatar_url}
+                          profileName={(item as any).profiles?.name}
+                          onPress={() =>
+                            router.push(`/(users)/product/${item.id}` as any)
+                          }
+                        />
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              )}
             </View>
           )}
         </View>
-
-        {/* Closing Sale Preview Cards - Below sort button */}
-        {closingSaleFoodItems.length > 0 && (
-          <View className="mb-4">
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ paddingLeft: 16 }}
-            >
-              {closingSaleFoodItems.map((item) => {
-                const discountedPrice = item.discount_percent
-                  ? item.price - (item.price * item.discount_percent) / 100
-                  : item.price;
-
-                return (
-                  <HomeCard
-                    key={item.id}
-                    imageUrl={
-                      item.images[0] || "https://via.placeholder.com/140"
-                    }
-                    title={item.name}
-                    subtitle="FOOD"
-                    price={`Nu. ${discountedPrice.toLocaleString()}`}
-                    discountPercent={item.discount_percent}
-                    isClosingSale={true}
-                    profileImage={(item as any).profiles?.avatar_url}
-                    profileName={(item as any).profiles?.name}
-                    onPress={() =>
-                      router.push(`/(users)/product/${item.id}` as any)
-                    }
-                  />
-                );
-              })}
-            </ScrollView>
-          </View>
-        )}
-
-        {/* 1. Closing Sale Section - Only shown during 8pm-10pm */}
-        {isClosingSaleTime &&
-          renderSection(
-            "🌙 Closing Sale",
-            activeClosingSaleProducts,
-            (product: Product) => (
-              <HomeCard
-                key={product.id}
-                imageUrl={
-                  product.images[0] || "https://via.placeholder.com/200"
-                }
-                title={product.name}
-                subtitle={product.category?.toUpperCase() || "FOOD"}
-                price={
-                  product.current_price && product.current_price > 0
-                    ? `Nu. ${product.current_price}`
-                    : undefined
-                }
-                discountPercent={product.discount_percent}
-                isClosingSale={true}
-                profileImage={(product as any).profiles?.avatar_url}
-                profileName={(product as any).profiles?.name}
-                onPress={() => handleProductPress(product)}
-              />
-            ),
-            "/(users)/categories",
-            false,
-            undefined,
-            false,
-          )}
 
         {/* 2. Flash Deals - only shown if items exist */}
         {renderSection(

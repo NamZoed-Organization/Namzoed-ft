@@ -3,7 +3,7 @@
  * Handles calculations for 8pm-10pm daily closing sale window
  */
 
-export type TimeWindow = 'before' | 'during' | 'after';
+export type TimeWindow = "before" | "during" | "after";
 
 /**
  * Get the current time window relative to 8pm-10pm closing sale
@@ -13,12 +13,12 @@ export function getCurrentTimeWindow(): TimeWindow {
   const now = new Date();
   const currentHour = now.getHours();
 
-  if (currentHour < 20) {
-    return 'before'; // Before 8pm
-  } else if (currentHour >= 20 && currentHour < 22) {
-    return 'during'; // Between 8pm-10pm
+  if (currentHour < 15) {
+    return "before"; // Before 8pm
+  } else if (currentHour >= 15 && currentHour < 22) {
+    return "during"; // Between 8pm-10pm
   } else {
-    return 'after'; // After 10pm
+    return "after"; // After 10pm
   }
 }
 
@@ -27,7 +27,7 @@ export function getCurrentTimeWindow(): TimeWindow {
  * @returns true if current time is between 8pm-10pm
  */
 export function isClosingSaleActive(): boolean {
-  return getCurrentTimeWindow() === 'during';
+  return getCurrentTimeWindow() === "during";
 }
 
 /**
@@ -69,7 +69,7 @@ export function getTimeUntilClosingSaleEnd(): number {
  * @returns Formatted string like "3h 45m 12s" or "45m 30s" or "30s"
  */
 export function formatCountdown(seconds: number): string {
-  if (seconds <= 0) return '0s';
+  if (seconds <= 0) return "0s";
 
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
@@ -90,7 +90,7 @@ export function formatCountdown(seconds: number): string {
  * @returns Formatted string like "3h 45m" (if hours) or "45m 30s" (if no hours)
  */
 export function formatCompactCountdown(seconds: number): string {
-  if (seconds <= 0) return '0s';
+  if (seconds <= 0) return "0s";
 
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
@@ -116,11 +116,11 @@ export function getCountdownSeconds(): number {
   const timeWindow = getCurrentTimeWindow();
 
   switch (timeWindow) {
-    case 'before':
+    case "before":
       return getTimeUntilClosingSaleStart();
-    case 'during':
+    case "during":
       return getTimeUntilClosingSaleEnd();
-    case 'after':
+    case "after":
       return getTimeUntilClosingSaleStart(); // Next day's 8pm
     default:
       return 0;
@@ -135,25 +135,25 @@ export function getCountdownDisplayText(): { title: string; subtitle: string } {
   const timeWindow = getCurrentTimeWindow();
 
   switch (timeWindow) {
-    case 'before':
+    case "before":
       return {
-        title: 'Closing Sale Tonight!',
-        subtitle: 'Starts in',
+        title: "Closing Sale Tonight!",
+        subtitle: "Starts in",
       };
-    case 'during':
+    case "during":
       return {
-        title: 'CLOSING SALE NOW!',
-        subtitle: 'Ends in',
+        title: "CLOSING SALE NOW!",
+        subtitle: "Ends in",
       };
-    case 'after':
+    case "after":
       return {
-        title: '🌙 Next Closing Sale Tomorrow',
-        subtitle: 'Starts in',
+        title: "🌙 Next Closing Sale Tomorrow",
+        subtitle: "Starts in",
       };
     default:
       return {
-        title: 'Closing Sale',
-        subtitle: '',
+        title: "Closing Sale",
+        subtitle: "",
       };
   }
 }
