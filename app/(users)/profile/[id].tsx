@@ -10,6 +10,7 @@ import {
   fetchUserProviderServices,
   ProviderServiceWithDetails,
 } from "@/lib/servicesService";
+import * as Haptics from "expo-haptics";
 import { Redirect, Stack, useLocalSearchParams, useRouter } from "expo-router";
 import {
   AlertCircle,
@@ -58,12 +59,7 @@ export default function PublicProfileScreen() {
   const { currentUser } = useUser();
   const router = useRouter();
 
-  // Guard: If viewing own profile, redirect to the main profile tab
-  if (currentUser?.id === id) {
-    return <Redirect href="/(users)/profile" />;
-  }
-
-  // State
+  // State - ALL hooks must be called before any conditional returns
   const [mainTab, setMainTab] = useState<"main" | "work">(
     tab === "work" ? "work" : "main",
   );
@@ -95,6 +91,12 @@ export default function PublicProfileScreen() {
 
   // Horizontal scroll ref
   const horizontalScrollRef = React.useRef<ScrollView>(null);
+
+  // Guard: If viewing own profile, redirect to the main profile tab
+  // MOVED AFTER all hooks to avoid hook order violations
+  if (currentUser?.id === id) {
+    return <Redirect href="/(users)/profile" />;
+  }
 
   // Fetch Data on Mount
   useEffect(() => {

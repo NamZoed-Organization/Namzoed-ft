@@ -73,6 +73,25 @@ export default function MessageScreen() {
   const [selectedBookingForTracking, setSelectedBookingForTracking] =
     useState<any>(null);
 
+  // Get userData - will be null if currentUser is null
+  const userData = currentUser ? getUserData(currentUser.phone_number || "") : null;
+
+  // Get follow requests (followers who user hasn't followed back)
+  // Make conditional to avoid accessing userData when it's null
+  const followRequests = useMemo(() => {
+    if (!userData) return [];
+    return userData.followers.filter(
+      (follower) => !userData.following.includes(follower),
+    );
+  }, [userData]);
+
+  // Get all conversations (only show users who have messages)
+  // Make conditional to avoid accessing userData when it's null
+  const conversationPartners = useMemo(() => {
+    if (!userData) return [];
+    return Object.keys(userData.messages as Record<string, IMessage[]>);
+  }, [userData]);
+
   // Handle tab navigation from URL parameters
   useEffect(() => {
     if (tab) {
@@ -84,50 +103,6 @@ export default function MessageScreen() {
       }
     }
   }, [tab]);
-
-  if (!currentUser) {
-    return (
-      <View className="flex-1 bg-background">
-        {/* Status Bar Space */}
-        <View className="h-12 bg-white" />
-
-        <View className="flex-1 items-center justify-center px-4">
-          <Text className="text-base font-regular text-gray-500 text-center">
-            Please login to view messages
-          </Text>
-        </View>
-      </View>
-    );
-  }
-
-  const userData = getUserData(currentUser.phone_number || "");
-
-  if (!userData) {
-    return (
-      <View className="flex-1 bg-background">
-        {/* Status Bar Space */}
-        <View className="h-12 bg-white" />
-
-        <View className="flex-1 items-center justify-center px-4">
-          <Text className="text-base font-regular text-gray-500 text-center">
-            No user data found
-          </Text>
-        </View>
-      </View>
-    );
-  }
-
-  // Get follow requests (followers who user hasn't followed back)
-  const followRequests = useMemo(() => {
-    return userData.followers.filter(
-      (follower) => !userData.following.includes(follower),
-    );
-  }, [userData]);
-
-  // Get all conversations (only show users who have messages)
-  const conversationPartners = useMemo(() => {
-    return Object.keys(userData.messages as Record<string, IMessage[]>);
-  }, [userData.messages]);
 
   // Search users from Supabase profiles table
   useEffect(() => {
@@ -869,6 +844,39 @@ export default function MessageScreen() {
       </View>
     );
   };
+
+  // Early returns AFTER all hooks are defined to avoid hook order violations
+  // Check if user is logged in
+  if (!currentUser) {
+    return (
+      <View className="flex-1 bg-background">
+        {/* Status Bar Space */}
+        <View className="h-12 bg-white" />
+
+        <View className="flex-1 items-center justify-center px-4">
+          <Text className="text-base font-regular text-gray-500 text-center">
+            Please login to view messages
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  // Check if userData is available
+  if (!userData) {
+    return (
+      <View className="flex-1 bg-background">
+        {/* Status Bar Space */}
+        <View className="h-12 bg-white" />
+
+        <View className="flex-1 items-center justify-center px-4">
+          <Text className="text-base font-regular text-gray-500 text-center">
+            No user data found
+          </Text>
+        </View>
+      </View>
+    );
+  }
 
   // If showing follow requests, render the FollowRequests component
   if (showFollowRequests) {
