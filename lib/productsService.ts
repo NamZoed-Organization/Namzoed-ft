@@ -28,6 +28,7 @@ export interface ProductWithUser extends Product {
     name?: string;
     email?: string;
     phone?: string;
+    avatar_url?: string;
   };
 }
 
@@ -44,7 +45,8 @@ export const fetchProducts = async (page: number = 0, pageSize: number = 10) => 
       profiles:user_id (
         name,
         email,
-        phone
+        phone,
+        avatar_url
       )
     `, { count: 'exact' })
     .order('created_at', { ascending: false })
@@ -68,7 +70,8 @@ export const fetchProductById = async (productId: string): Promise<ProductWithUs
       profiles:user_id (
         name,
         email,
-        phone
+        phone,
+        avatar_url
       )
     `)
     .eq('id', productId)
@@ -118,7 +121,8 @@ export const fetchProductsByCategory = async (
       profiles:user_id (
         name,
         email,
-        phone
+        phone,
+        avatar_url
       )
     `, { count: 'exact' })
     .eq('category', category)

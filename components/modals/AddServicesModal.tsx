@@ -483,7 +483,6 @@ export default function AddServicesModal({
             imageUri={pendingImageUri}
             onSave={handleCropSave}
             onCancel={handleCropCancel}
-            initialAspectRatio="1:1"
           />
         </Modal>
       )}

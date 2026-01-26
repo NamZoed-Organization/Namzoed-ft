@@ -7,7 +7,6 @@ import {
   updateProduct,
   uploadProductImages,
 } from "@/lib/productsService";
-import DateTimePicker from "@react-native-community/datetimepicker";
 import { Picker } from "@react-native-picker/picker";
 import { BlurView } from "expo-blur";
 import * as ImagePicker from "expo-image-picker";
@@ -93,18 +92,9 @@ export default function EditProductModal({
   const [discountPercent, setDiscountPercent] = useState<number>(
     product.discount_percent || 0,
   );
-  const [discountStartedAt, setDiscountStartedAt] = useState<Date | undefined>(
-    product.discount_started_at
-      ? new Date(product.discount_started_at)
-      : undefined,
-  );
   const [discountDurationHrs, setDiscountDurationHrs] = useState<string>(
     product.discount_duration_hrs?.toString() || "24",
   );
-
-  // Date picker state
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [datePickerMode, setDatePickerMode] = useState<"date" | "time">("date");
 
   // Image picker and crop states
   const [showPickerSheet, setShowPickerSheet] = useState(false);
@@ -273,17 +263,6 @@ export default function EditProductModal({
       return;
     }
 
-    // Discount validation - start time is required when discount is active (except for food - auto-starts)
-    if (isDiscountActive && !discountStartedAt && !isFood) {
-      showErrorPopup("Please select when the discount should start.");
-      return;
-    }
-
-    // For food Closing Sale, ensure start time is set to now if not already
-    if (isFood && isDiscountActive && !discountStartedAt) {
-      setDiscountStartedAt(new Date());
-    }
-
     setLoading(true);
 
     try {
@@ -296,17 +275,8 @@ export default function EditProductModal({
       // Combine existing + newly uploaded images
       const finalImages = [...existingImages, ...uploadedUrls];
 
-      // Debug discount fields before saving
-      if (isDiscountActive) {
-        console.log("Saving discount with:", {
-          is_discount_active: isDiscountActive,
-          discount_percent: discountPercent,
-          discount_started_at_raw: discountStartedAt,
-          discount_started_at_iso: discountStartedAt?.toISOString(),
-          discount_duration_hrs: parseFloat(discountDurationHrs),
-          current_time: new Date().toISOString(),
-        });
-      }
+      // Prepare discount fields - start time is NOW if discount is active, null if not
+      const discountStartTime = isDiscountActive ? new Date().toISOString() : null;
 
       // Update product
       await updateProduct(product.id, {
@@ -319,7 +289,7 @@ export default function EditProductModal({
         // Discount fields (optional)
         is_discount_active: isDiscountActive,
         discount_percent: discountPercent,
-        discount_started_at: discountStartedAt?.toISOString(),
+        discount_started_at: discountStartTime,
         discount_duration_hrs: parseFloat(discountDurationHrs),
       });
 
@@ -492,13 +462,7 @@ export default function EditProductModal({
                           </Text>
                           <Switch
                             value={isDiscountActive}
-                            onValueChange={(newValue) => {
-                              setIsDiscountActive(newValue);
-                              // Auto-set start time to NOW when toggled on
-                              if (newValue) {
-                                setDiscountStartedAt(new Date());
-                              }
-                            }}
+                            onValueChange={setIsDiscountActive}
                             trackColor={{ false: "#D1D5DB", true: "#F59E0B" }}
                             thumbColor={
                               isDiscountActive ? "#D97706" : "#F3F4F6"
@@ -508,8 +472,7 @@ export default function EditProductModal({
                       </View>
 
                       <Text className="text-xs text-amber-600 mb-4">
-                        Clear your leftover food quickly with a time-limited
-                        offer
+                        Starts immediately when activated. Clear your leftover food with a time-limited offer!
                       </Text>
 
                       {/* Closing Sale Percent Dropdown - Higher discounts */}
@@ -576,9 +539,6 @@ export default function EditProductModal({
                             <Picker.Item label="6 hours" value="6" />
                           </Picker>
                         </View>
-                        <Text className="text-xs text-amber-600 mt-1">
-                          Starts immediately when activated
-                        </Text>
                       </View>
                     </View>
                   ) : (
@@ -654,131 +614,6 @@ export default function EditProductModal({
                         </View>
                       )}
 
-                      {/* Discount Start Time - Two Options */}
-                      <View className="mb-4">
-                        <Text className="text-sm font-medium text-gray-700 mb-2">
-                          Start Time{" "}
-                          {isDiscountActive && (
-                            <Text className="text-red-500">*</Text>
-                          )}
-                        </Text>
-
-                        <View className="flex-row gap-2">
-                          {/* Start Now Button */}
-                          <TouchableOpacity
-                            onPress={() => {
-                              if (isDiscountActive) {
-                                const now = new Date();
-                                console.log("Start Now clicked:", {
-                                  localTime: now.toString(),
-                                  isoTime: now.toISOString(),
-                                  timestamp: now.getTime(),
-                                });
-                                setDiscountStartedAt(now);
-                              }
-                            }}
-                            disabled={!isDiscountActive}
-                            className={`flex-1 py-3 rounded-xl border ${
-                              !isDiscountActive
-                                ? "bg-gray-100 border-gray-200 opacity-50"
-                                : discountStartedAt &&
-                                    Math.abs(
-                                      discountStartedAt.getTime() -
-                                        new Date().getTime(),
-                                    ) < 60000
-                                  ? "border-primary border-2"
-                                  : "bg-white border-gray-300"
-                            }`}
-                          >
-                            <Text
-                              className={`text-center font-medium ${
-                                !isDiscountActive
-                                  ? "text-gray-400"
-                                  : discountStartedAt &&
-                                      Math.abs(
-                                        discountStartedAt.getTime() -
-                                          new Date().getTime(),
-                                      ) < 60000
-                                    ? "text-primary"
-                                    : "text-gray-700"
-                              }`}
-                            >
-                              Start Now
-                            </Text>
-                          </TouchableOpacity>
-
-                          {/* Choose Date Button */}
-                          <TouchableOpacity
-                            onPress={() => {
-                              if (isDiscountActive) {
-                                setDatePickerMode("date");
-                                setShowDatePicker(true);
-                              }
-                            }}
-                            disabled={!isDiscountActive}
-                            className={`flex-1 py-3 rounded-xl border ${
-                              !isDiscountActive
-                                ? "bg-gray-100 border-gray-200 opacity-50"
-                                : discountStartedAt &&
-                                    Math.abs(
-                                      discountStartedAt.getTime() -
-                                        new Date().getTime(),
-                                    ) >= 60000
-                                  ? "border-primary border-2"
-                                  : "bg-white border-gray-300"
-                            }`}
-                          >
-                            <Text
-                              className={`text-center font-medium ${
-                                !isDiscountActive
-                                  ? "text-gray-400"
-                                  : discountStartedAt &&
-                                      Math.abs(
-                                        discountStartedAt.getTime() -
-                                          new Date().getTime(),
-                                      ) >= 60000
-                                    ? "text-primary"
-                                    : "text-gray-700"
-                              }`}
-                            >
-                              Choose Date
-                            </Text>
-                          </TouchableOpacity>
-                        </View>
-
-                        {/* Selected Date Display */}
-                        {discountStartedAt && (
-                          <View className="mt-2 bg-gray-50 border border-gray-200 rounded-lg p-2.5 flex-row items-center justify-between">
-                            <View className="flex-1">
-                              <Text className="text-xs text-gray-500 mb-0.5">
-                                Selected:
-                              </Text>
-                              <Text className="text-sm font-medium text-gray-900">
-                                {discountStartedAt.toLocaleString("en-US", {
-                                  month: "short",
-                                  day: "numeric",
-                                  year: "numeric",
-                                  hour: "numeric",
-                                  minute: "2-digit",
-                                  hour12: true,
-                                })}
-                              </Text>
-                            </View>
-                            <TouchableOpacity
-                              onPress={() => {
-                                if (isDiscountActive) {
-                                  setDiscountStartedAt(undefined);
-                                }
-                              }}
-                              disabled={!isDiscountActive}
-                              className="p-1"
-                            >
-                              <X size={18} color="#6B7280" />
-                            </TouchableOpacity>
-                          </View>
-                        )}
-                      </View>
-
                       {/* Discount Duration - Dropdown */}
                       <View>
                         <Text className="text-sm font-medium text-gray-700 mb-2">
@@ -803,7 +638,7 @@ export default function EditProductModal({
                           </Picker>
                         </View>
                         <Text className="text-xs text-gray-500 mt-1">
-                          How long the discount will last after it starts
+                          Starts immediately when activated. You can turn it off anytime.
                         </Text>
                       </View>
                     </View>
@@ -953,99 +788,6 @@ export default function EditProductModal({
           </View>
         </KeyboardAvoidingView>
       </Animated.View>
-
-      {/* Date/Time Picker Modal for iOS */}
-      {showDatePicker && Platform.OS === "ios" && (
-        <Modal
-          transparent={true}
-          animationType="slide"
-          visible={showDatePicker}
-          onRequestClose={() => setShowDatePicker(false)}
-        >
-          <View className="flex-1 justify-end bg-black/50">
-            <BlurView
-              intensity={80}
-              tint="light"
-              className="bg-white rounded-t-3xl"
-            >
-              <View className="flex-row justify-between items-center px-5 py-4 border-b border-gray-100">
-                <TouchableOpacity onPress={() => setShowDatePicker(false)}>
-                  <Text className="text-gray-500 font-medium">Cancel</Text>
-                </TouchableOpacity>
-                <Text className="font-semibold text-gray-900">
-                  Select {datePickerMode === "date" ? "Date" : "Time"}
-                </Text>
-                <TouchableOpacity
-                  onPress={() => {
-                    if (datePickerMode === "date") {
-                      setDatePickerMode("time");
-                    } else {
-                      setShowDatePicker(false);
-                    }
-                  }}
-                >
-                  <Text className="text-primary font-semibold">
-                    {datePickerMode === "date" ? "Next" : "Done"}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-              <DateTimePicker
-                value={discountStartedAt || new Date()}
-                mode={datePickerMode}
-                display="spinner"
-                minimumDate={new Date()}
-                onChange={(event, selectedDate) => {
-                  if (selectedDate) {
-                    console.log("iOS DatePicker selected:", {
-                      mode: datePickerMode,
-                      localTime: selectedDate.toString(),
-                      isoTime: selectedDate.toISOString(),
-                      timestamp: selectedDate.getTime(),
-                    });
-                    setDiscountStartedAt(selectedDate);
-                  }
-                }}
-                textColor="#000"
-                style={{ height: 200 }}
-              />
-            </BlurView>
-          </View>
-        </Modal>
-      )}
-
-      {/* Android DateTimePicker */}
-      {showDatePicker && Platform.OS === "android" && (
-        <DateTimePicker
-          value={discountStartedAt || new Date()}
-          mode={datePickerMode}
-          display="spinner"
-          minimumDate={new Date()}
-          onChange={(event, selectedDate) => {
-            setShowDatePicker(false);
-            if (event.type === "set" && selectedDate) {
-              console.log("Android DatePicker selected:", {
-                mode: datePickerMode,
-                localTime: selectedDate.toString(),
-                isoTime: selectedDate.toISOString(),
-                timestamp: selectedDate.getTime(),
-              });
-              if (datePickerMode === "date") {
-                setDiscountStartedAt(selectedDate);
-                // Immediately show time picker
-                setTimeout(() => {
-                  setDatePickerMode("time");
-                  setShowDatePicker(true);
-                }, 100);
-              } else {
-                setDiscountStartedAt(selectedDate);
-                setDatePickerMode("date"); // Reset for next time
-              }
-            } else {
-              setDatePickerMode("date"); // Reset on cancel
-            }
-          }}
-        />
-      )}
 
       {/* Success/Error Popups */}
       <PopupMessage

@@ -5,12 +5,7 @@ import { categories } from "@/data/categories";
 import { createProduct, uploadProductImages } from "@/lib/productsService";
 import { BlurView } from "expo-blur";
 import * as ImagePicker from "expo-image-picker";
-import {
-  Check,
-  ChevronDown,
-  Upload,
-  X
-} from "lucide-react-native";
+import { Check, ChevronDown, Upload, X } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -140,11 +135,11 @@ export default function CreateProductModal({
         return;
       }
 
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ['images'],
-      allowsEditing: false,
-      quality: 1.0,
-    });
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ["images"],
+        allowsEditing: false,
+        quality: 1.0,
+      });
 
       if (!result.canceled && result.assets?.[0]) {
         setPendingImageUri(result.assets[0].uri);
@@ -157,11 +152,12 @@ export default function CreateProductModal({
   };
 
   const openGallery = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: false,
-      quality: 1.0,
-    });
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsEditing: false,
+        quality: 1.0,
+      });
 
       if (!result.canceled && result.assets?.[0]) {
         setPendingImageUri(result.assets[0].uri);
@@ -645,7 +641,6 @@ export default function CreateProductModal({
             imageUri={pendingImageUri}
             onSave={handleCropSave}
             onCancel={handleCropCancel}
-            initialAspectRatio="1:1"
           />
         </Modal>
       )}

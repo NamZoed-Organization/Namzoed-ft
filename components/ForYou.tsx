@@ -1,9 +1,10 @@
 import HomeCard from "@/components/HomeCard";
+import CountdownTimer from "@/components/CountdownTimer";
 import { fetchProducts, Product } from "@/lib/productsService";
 import { fetchMarketplaceItems, MarketplaceItem } from "@/lib/postMarketPlace";
 import { fetchAllProviderServices, ProviderServiceWithDetails } from "@/lib/servicesService";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   ScrollView,
@@ -34,6 +35,16 @@ export default function ForYou() {
     loadAllData();
   }, []);
 
+  // Filter products with active discounts (excluding food items)
+  const discountedProducts = useMemo(() => {
+    return products.filter(p => p.is_currently_active && p.category !== "food");
+  }, [products]);
+
+  // Filter food products with active discounts
+  const closingSaleProducts = useMemo(() => {
+    return products.filter(p => p.is_currently_active && p.category === "food");
+  }, [products]);
+
   const loadAllData = async () => {
     try {
       setLoading(true);
@@ -43,7 +54,7 @@ export default function ForYou() {
         fetchAllProviderServices(0, 20),
       ]);
 
-      // Shuffle and take first 10 items
+      // Shuffle items within each category and take first 10 items
       setProducts(shuffleArray(productsData.products || []).slice(0, 10));
       setMarketplaceItems(shuffleArray(marketplaceData.items || []).slice(0, 10));
       setServices(shuffleArray(servicesData || []).slice(0, 10));
@@ -70,26 +81,41 @@ export default function ForYou() {
     title: string,
     items: any[],
     renderCard: (item: any) => JSX.Element,
-    viewAllRoute: string
+    viewAllRoute: string,
+    showTimer?: boolean,
+    timerEndTime?: string,
+    showEmptyState?: boolean
   ) => {
-    if (items.length === 0) return null;
+    // For discount categories, don't render if empty
+    if (items.length === 0 && !showEmptyState) return null;
 
     return (
       <View className="mb-8">
-        <Text className="text-lg font-mbold text-gray-800 mb-4 px-4">
-          {title}
-        </Text>
+        <View className="flex-row items-center justify-between mb-4 px-4">
+          <Text className="text-lg font-mbold text-gray-800">
+            {title}
+          </Text>
+          {showTimer && timerEndTime && (
+            <CountdownTimer endsAt={timerEndTime} compact={false} />
+          )}
+        </View>
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{
-            paddingLeft: 16,
-          }}
-        >
-          {items.map((item) => renderCard(item))}
-          <HomeCard isSeeMore onPress={() => router.push(viewAllRoute as any)} />
-        </ScrollView>
+        {items.length === 0 ? (
+          <View className="px-4 py-8 items-center">
+            <Text className="text-gray-500 text-sm">No products available at the moment</Text>
+          </View>
+        ) : (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{
+              paddingLeft: 16,
+            }}
+          >
+            {items.map((item) => renderCard(item))}
+            <HomeCard isSeeMore onPress={() => router.push(viewAllRoute as any)} />
+          </ScrollView>
+        )}
       </View>
     );
   };
@@ -105,23 +131,106 @@ export default function ForYou() {
 
   return (
     <View className="flex-1 bg-background pt-4">
-      {/* Products Section */}
+      {/* 1. Closing Sale - shown whenever there are food items with active discounts */}
       {renderSection(
-        "Products",
-        products,
+        "🌙 Closing Sale",
+        closingSaleProducts,
         (product: Product) => (
           <HomeCard
             key={product.id}
             imageUrl={product.images[0] || 'https://via.placeholder.com/200'}
             title={product.name}
-            subtitle={`Nu. ${product.current_price || product.price}`}
+            subtitle={product.category?.toUpperCase() || 'FOOD'}
+            price={product.current_price && product.current_price > 0 ? `Nu. ${product.current_price}` : undefined}
+            discountPercent={product.discount_percent}
+            isClosingSale={true}
+            profileImage={(product as any).profiles?.avatar_url}
+            profileName={(product as any).profiles?.name}
             onPress={() => handleProductPress(product)}
           />
         ),
-        "/(users)/categories"
+        "/(users)/categories",
+        false,
+        undefined,
+        false
       )}
 
-      {/* Marketplace Section */}
+      {/* 2. Flash Deals - only shown if items exist */}
+      {renderSection(
+        "🔥 Flash Deals",
+        discountedProducts,
+        (product: Product) => (
+          <HomeCard
+            key={product.id}
+            imageUrl={product.images[0] || 'https://via.placeholder.com/200'}
+            title={product.name}
+            subtitle={product.category?.toUpperCase() || 'PRODUCT'}
+            price={product.current_price && product.current_price > 0 ? `Nu. ${product.current_price}` : undefined}
+            discountPercent={product.discount_percent}
+            isClosingSale={false}
+            profileImage={(product as any).profiles?.avatar_url}
+            profileName={(product as any).profiles?.name}
+            onPress={() => handleProductPress(product)}
+          />
+        ),
+        "/(users)/categories",
+        false,
+        undefined,
+        false
+      )}
+
+      {/* 3. Products - always shown, with empty state */}
+      {renderSection(
+        "Products",
+        products,
+        (product: Product) => {
+          const price = product.current_price || product.price;
+          const hasDiscount = product.is_currently_active && product.discount_percent;
+          const isFood = product.category === "food";
+
+          return (
+            <HomeCard
+              key={product.id}
+              imageUrl={product.images[0] || 'https://via.placeholder.com/200'}
+              title={product.name}
+              subtitle={product.category?.toUpperCase() || 'PRODUCT'}
+              price={price && price > 0 ? `Nu. ${price}` : undefined}
+              discountPercent={hasDiscount ? product.discount_percent : undefined}
+              isClosingSale={hasDiscount && isFood}
+              profileImage={(product as any).profiles?.avatar_url}
+              profileName={(product as any).profiles?.name}
+              onPress={() => handleProductPress(product)}
+            />
+          );
+        },
+        "/(users)/categories",
+        false,
+        undefined,
+        true
+      )}
+
+      {/* 4. Services - always shown, with empty state */}
+      {renderSection(
+        "Services",
+        services,
+        (service: ProviderServiceWithDetails) => (
+          <HomeCard
+            key={service.id}
+            imageUrl={service.images[0] || 'https://via.placeholder.com/200'}
+            title={service.name}
+            subtitle={service.service_categories?.name || 'Service'}
+            profileImage={service.service_providers?.profile_url || service.service_providers?.profiles?.avatar_url}
+            profileName={service.service_providers?.profiles?.name || service.service_providers?.name}
+            onPress={() => handleServicePress(service)}
+          />
+        ),
+        "/(users)/services/index",
+        false,
+        undefined,
+        true
+      )}
+
+      {/* 5. Marketplace - always shown, with empty state */}
       {renderSection(
         "Marketplace",
         marketplaceItems,
@@ -131,26 +240,16 @@ export default function ForYou() {
             imageUrl={item.images[0] || 'https://via.placeholder.com/200'}
             title={item.title}
             subtitle={item.type.replace('_', ' ')}
+            price={item.price && item.price > 0 ? `Nu. ${item.price}` : undefined}
+            profileImage={(item as any).profiles?.avatar_url}
+            profileName={(item as any).profiles?.name}
             onPress={() => handleMarketplacePress(item)}
           />
         ),
-        "/(users)/marketplace"
-      )}
-
-      {/* Services Section */}
-      {renderSection(
-        "Services",
-        services,
-        (service: ProviderServiceWithDetails) => (
-          <HomeCard
-            key={service.id}
-            imageUrl={service.images[0] || 'https://via.placeholder.com/200'}
-            title={service.name}
-            subtitle={service.service_providers?.profiles?.name || service.service_categories?.name || 'Service'}
-            onPress={() => handleServicePress(service)}
-          />
-        ),
-        "/(users)/services/index"
+        "/(users)/marketplace",
+        false,
+        undefined,
+        true
       )}
     </View>
   );

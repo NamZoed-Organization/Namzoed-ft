@@ -19,6 +19,7 @@ export interface MarketplaceItemWithUser extends MarketplaceItem {
     name?: string;
     email?: string;
     phone?: string;
+    avatar_url?: string;
   };
 }
 
@@ -34,7 +35,8 @@ export const fetchMarketplaceItems = async (page: number = 0, pageSize: number =
       profiles:user_id (
         name,
         email,
-        phone
+        phone,
+        avatar_url
       )
     `, { count: 'exact' })
     .order('created_at', { ascending: false })
@@ -60,7 +62,8 @@ export const fetchMarketplaceByType = async (type: 'rent' | 'swap' | 'second_han
       profiles:user_id (
         name,
         email,
-        phone
+        phone,
+        avatar_url
       )
     `, { count: 'exact' })
     .eq('type', type)
@@ -100,7 +103,8 @@ export const fetchMarketplaceItemById = async (itemId: string) => {
       profiles:user_id (
         name,
         email,
-        phone
+        phone,
+        avatar_url
       )
     `)
     .eq('id', itemId)

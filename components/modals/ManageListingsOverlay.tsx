@@ -24,22 +24,21 @@ import {
   Trash2,
   X,
 } from "lucide-react-native";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState
+} from "react";
 import {
   ActivityIndicator,
   Alert,
   RefreshControl,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
-import Animated, {
-  FadeInDown,
-  FadeInRight,
-  FadeOutDown,
-  FadeOutLeft,
-  Layout,
-} from "react-native-reanimated";
+import Animated, { FadeInDown, FadeOutDown } from "react-native-reanimated";
 
 interface BookmarkedItem {
   id: string;
@@ -159,17 +158,6 @@ export default function ManageListingsOverlay({
             .order("created_at", { ascending: false }),
         ]);
 
-      // Debug: Log products with discount info
-      console.log(
-        "ManageListingsOverlay loaded products:",
-        productsData?.map((p) => ({
-          name: p.name,
-          is_currently_active: p.is_currently_active,
-          discount_percent: p.discount_percent,
-          current_price: p.current_price,
-        })),
-      );
-
       setProducts(productsData || []);
       setMarketplaceItems(marketplaceData || []);
 
@@ -279,36 +267,49 @@ export default function ManageListingsOverlay({
 
   // --- RENDER ITEM ---
 
-  const renderItem = ({ item }: { item: any }) => {
-    const isSelected = selectedIds.includes(item.id);
+  // Memoized ListItem component to prevent unnecessary re-renders
+  const ListItem = React.memo(({
+    item,
+    isSelected,
+    onLongPress,
+    onPress
+  }: {
+    item: any;
+    isSelected: boolean;
+    onLongPress: () => void;
+    onPress: () => void;
+  }) => {
+    // Handle category headers
+    if (item.type === "category_header") {
+      return (
+        <View className="px-4 py-3 mt-2">
+          <Text className="text-sm font-mbold text-gray-700 uppercase tracking-wider">
+            {item.category.replace("-", " & ")}
+          </Text>
+        </View>
+      );
+    }
 
-    // Normalize data based on tab type
-    const title =
-      item.name || item.title || item.products?.name || item.marketplace?.title;
+    // Normalize data
+    const title = item.name || item.title || item.products?.name || item.marketplace?.title;
     const price = item.price || item.products?.price || item.marketplace?.price;
-    const image =
-      item.images?.[0] ||
-      item.products?.images?.[0] ||
-      item.marketplace?.images?.[0];
-    const typeLabel = item.type || item.marketplace?.type; // For marketplace (rent/secondhand)
+    const image = item.images?.[0] || item.products?.images?.[0] || item.marketplace?.images?.[0];
+    const typeLabel = item.type || item.marketplace?.type;
+    const hasActiveDiscount = activeTab === "products" && item.is_currently_active;
+    const isFood = item.category === "food";
 
     return (
-      <Animated.View
-        entering={FadeInRight}
-        exiting={FadeOutLeft}
-        layout={Layout.springify()}
-        className="px-4 mb-3"
-      >
+      <View className="px-4 mb-3">
         <TouchableOpacity
-          activeOpacity={0.8}
-          onLongPress={() => handleLongPress(item.id)}
-          onPress={() => (isSelectionMode ? toggleSelection(item.id) : null)}
-          className={`flex-row items-center bg-white rounded-[24px] p-3 shadow-sm border-2 ${
-            isSelected ? "border-primary bg-blue-50/50" : "border-transparent"
+          activeOpacity={0.7}
+          onLongPress={onLongPress}
+          onPress={onPress}
+          className={`flex-row items-center bg-white rounded-xl p-3 border ${
+            isSelected ? "border-primary bg-blue-50" : "border-gray-200"
           }`}
         >
           {/* Image */}
-          <View className="w-20 h-20 rounded-2xl overflow-hidden bg-gray-100">
+          <View className="w-20 h-20 rounded-xl overflow-hidden bg-gray-100">
             <ImageWithFallback
               source={{ uri: image || "" }}
               className="w-full h-full"
@@ -323,50 +324,38 @@ export default function ManageListingsOverlay({
 
           {/* Details */}
           <View className="flex-1 ml-4">
-            {typeLabel && (
+            {/* Type label for marketplace */}
+            {typeLabel && (activeTab === "marketplace" || (activeTab === "bookmarks" && item.marketplace)) && (
               <Text className="text-[10px] font-mbold text-primary uppercase tracking-tighter mb-0.5">
                 {typeLabel}
               </Text>
             )}
-            <Text
-              className="text-gray-900 font-msemibold text-base"
-              numberOfLines={1}
-            >
+            <Text className="text-gray-900 font-msemibold text-lg" numberOfLines={1}>
               {title}
             </Text>
 
-            {/* Price with Discount Info - only for products tab */}
-            {activeTab === "products" && item.is_currently_active ? (
+            {/* Price with Discount Info */}
+            {hasActiveDiscount ? (
               <View className="gap-1">
-                {/* Conditional Badge: Closing Sale (Food) vs Discount (Non-Food) */}
-                {item.category === "food" ? (
-                  <View className="bg-amber-500 px-1.5 py-0.5 rounded self-start flex-row items-center gap-1">
-                    <Text className="text-white text-[10px]">🌙</Text>
-                    <Text className="text-white text-[10px] font-bold">
-                      CLOSING SALE -{item.discount_percent}%
-                    </Text>
-                  </View>
-                ) : (
-                  <View className="bg-green-500 px-1.5 py-0.5 rounded self-start">
-                    <Text className="text-white text-[10px] font-bold">
-                      -{item.discount_percent}% OFF
-                    </Text>
-                  </View>
-                )}
+                {/* Badge */}
+                <View className={`${isFood ? "bg-amber-500" : "bg-green-500"} px-1.5 py-0.5 rounded self-start ${isFood ? "flex-row items-center gap-1" : ""}`}>
+                  {isFood && <Text className="text-white text-[10px]">🌙</Text>}
+                  <Text className="text-white text-[10px] font-bold">
+                    {isFood ? `CLOSING SALE -${item.discount_percent}%` : `-${item.discount_percent}% OFF`}
+                  </Text>
+                </View>
 
-                {/* Prices in one row */}
-                <View className="flex-row items-center gap-2 flex-wrap">
+                {/* Prices */}
+                <View className="flex-row items-center gap-2">
                   <Text className="text-xs text-gray-400 line-through">
                     Nu. {item.price?.toLocaleString()}
                   </Text>
-                  <Text
-                    className={`text-base font-mbold ${item.category === "food" ? "text-amber-600" : "text-primary"}`}
-                  >
+                  <Text className={`text-base font-mbold ${isFood ? "text-amber-600" : "text-primary"}`}>
                     Nu. {item.current_price?.toLocaleString()}
                   </Text>
                 </View>
 
-                {/* Countdown Timer */}
+                {/* Countdown - Isolated to prevent re-render cascade */}
                 <CountdownTimer endsAt={item.discount_ends_at} compact={true} />
               </View>
             ) : (
@@ -376,7 +365,7 @@ export default function ManageListingsOverlay({
             )}
           </View>
 
-          {/* Regular Action Buttons */}
+          {/* Action Buttons */}
           {!isSelectionMode && (
             <View className="flex-row items-center gap-x-2">
               <TouchableOpacity
@@ -386,7 +375,6 @@ export default function ManageListingsOverlay({
                   if (activeTab === "marketplace") {
                     path = `/(users)/marketplace/${item.id}`;
                   } else if (activeTab === "bookmarks") {
-                    // For bookmarks, check if it's a product or marketplace item
                     if (item.product_id) {
                       path = `/(users)/product/${item.product_id}`;
                     } else if (item.marketplace_id) {
@@ -420,18 +408,81 @@ export default function ManageListingsOverlay({
             </View>
           )}
         </TouchableOpacity>
-      </Animated.View>
+      </View>
     );
-  };
+  });
 
-  // Memoize data for the FlashList with sorting
+  const renderItem = useCallback(
+    ({ item }: { item: any }) => {
+      const isSelected = selectedIds.includes(item.id);
+      return (
+        <ListItem
+          item={item}
+          isSelected={isSelected}
+          onLongPress={() => handleLongPress(item.id)}
+          onPress={() => (isSelectionMode ? toggleSelection(item.id) : null)}
+        />
+      );
+    },
+    [
+      selectedIds,
+      isSelectionMode,
+      handleLongPress,
+      toggleSelection,
+    ],
+  );
+
+  // Memoize data for the FlashList with sorting and grouping
   const currentListData = useMemo(() => {
     let data: any[] = [];
-    if (activeTab === "products") data = [...products];
-    else if (activeTab === "marketplace") data = [...marketplaceItems];
-    else data = [...bookmarks];
+    if (activeTab === "products") {
+      // Group products by category
+      const grouped: { [key: string]: any[] } = {};
+      products.forEach((product) => {
+        const category = product.category || "uncategorized";
+        if (!grouped[category]) {
+          grouped[category] = [];
+        }
+        grouped[category].push(product);
+      });
 
-    // Sort by created_at
+      // Sort products within each category
+      Object.keys(grouped).forEach((category) => {
+        grouped[category].sort((a, b) => {
+          const dateA = new Date(a.created_at).getTime();
+          const dateB = new Date(b.created_at).getTime();
+          return sortOrder === "latest" ? dateB - dateA : dateA - dateB;
+        });
+      });
+
+      // Convert to flat array with category headers
+      // Sort categories: food first, then alphabetically
+      const flatData: any[] = [];
+      Object.keys(grouped)
+        .sort((a, b) => {
+          if (a === "food") return -1;
+          if (b === "food") return 1;
+          return a.localeCompare(b);
+        })
+        .forEach((category) => {
+          // Add category header
+          flatData.push({
+            type: "category_header",
+            category: category,
+            id: `header-${category}`,
+          });
+          // Add products in this category
+          flatData.push(...grouped[category]);
+        });
+
+      return flatData;
+    } else if (activeTab === "marketplace") {
+      data = [...marketplaceItems];
+    } else {
+      data = [...bookmarks];
+    }
+
+    // Sort by created_at for non-product tabs
     return data.sort((a, b) => {
       const dateA = new Date(a.created_at).getTime();
       const dateB = new Date(b.created_at).getTime();
@@ -565,12 +616,19 @@ export default function ManageListingsOverlay({
               data={currentListData}
               renderItem={renderItem}
               keyExtractor={(item) => item.id}
+              getItemType={(item) => {
+                if (item.type === "category_header") return "header";
+                if (item.is_currently_active) return "discount_item";
+                return "regular_item";
+              }}
               contentContainerStyle={{ paddingTop: 20, paddingBottom: 150 }}
+              showsVerticalScrollIndicator={false}
               refreshControl={
                 <RefreshControl
                   refreshing={refreshing}
                   onRefresh={onRefresh}
                   tintColor="#094569"
+                  progressViewOffset={20}
                 />
               }
               ListEmptyComponent={
