@@ -8,7 +8,6 @@ import {
 } from "@/lib/postMarketPlace";
 import { fetchUserProducts, Product } from "@/lib/productsService";
 import { supabase } from "@/lib/supabase";
-import { FlashList } from "@shopify/flash-list";
 import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
@@ -34,6 +33,7 @@ import {
   ActivityIndicator,
   Alert,
   RefreshControl,
+  ScrollView,
   Text,
   TouchableOpacity,
   View
@@ -612,17 +612,9 @@ export default function ManageListingsOverlay({
               <ActivityIndicator size="large" color="#094569" />
             </View>
           ) : (
-            <FlashList
-              data={currentListData}
-              renderItem={renderItem}
-              keyExtractor={(item) => item.id}
-              getItemType={(item) => {
-                if (item.type === "category_header") return "header";
-                if (item.is_currently_active) return "discount_item";
-                return "regular_item";
-              }}
-              contentContainerStyle={{ paddingTop: 20, paddingBottom: 150 }}
+            <ScrollView
               showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingTop: 20, paddingBottom: 150 }}
               refreshControl={
                 <RefreshControl
                   refreshing={refreshing}
@@ -631,7 +623,8 @@ export default function ManageListingsOverlay({
                   progressViewOffset={20}
                 />
               }
-              ListEmptyComponent={
+            >
+              {currentListData.length === 0 ? (
                 <View className="flex-1 items-center justify-center pt-32 px-10">
                   <View className="w-16 h-16 bg-gray-100 rounded-full items-center justify-center mb-4">
                     <Package size={28} color="#94A3B8" />
@@ -643,8 +636,14 @@ export default function ManageListingsOverlay({
                     Items in this category will appear here.
                   </Text>
                 </View>
-              }
-            />
+              ) : (
+                currentListData.map((item) => (
+                  <View key={item.id}>
+                    {renderItem({ item })}
+                  </View>
+                ))
+              )}
+            </ScrollView>
           )}
         </View>
       )}

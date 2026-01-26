@@ -10,7 +10,7 @@ import {
 import { Picker } from "@react-native-picker/picker";
 import { BlurView } from "expo-blur";
 import * as ImagePicker from "expo-image-picker";
-import { Check, DollarSign, Moon, Upload, X } from "lucide-react-native";
+import { Check, DollarSign, Upload, X } from "lucide-react-native";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -95,6 +95,16 @@ export default function EditProductModal({
   const [discountDurationHrs, setDiscountDurationHrs] = useState<string>(
     product.discount_duration_hrs?.toString() || "24",
   );
+
+  // Calculate 8pm-10pm time window for food items
+  const getFoodDiscountTimes = () => {
+    const today = new Date();
+    const startTime = new Date(today);
+    startTime.setHours(20, 0, 0, 0); // 8pm today
+    const endTime = new Date(today);
+    endTime.setHours(22, 0, 0, 0); // 10pm today
+    return { startTime, endTime };
+  };
 
   // Image picker and crop states
   const [showPickerSheet, setShowPickerSheet] = useState(false);
@@ -275,8 +285,21 @@ export default function EditProductModal({
       // Combine existing + newly uploaded images
       const finalImages = [...existingImages, ...uploadedUrls];
 
-      // Prepare discount fields - start time is NOW if discount is active, null if not
-      const discountStartTime = isDiscountActive ? new Date().toISOString() : null;
+      // Prepare discount fields
+      let discountStartTime = null;
+      let discountDuration = parseFloat(discountDurationHrs);
+
+      if (isDiscountActive) {
+        if (isFood) {
+          // Food items: Always 8pm-10pm today
+          const { startTime } = getFoodDiscountTimes();
+          discountStartTime = startTime.toISOString();
+          discountDuration = 2; // Always 2 hours (8pm-10pm)
+        } else {
+          // Non-food: Start immediately
+          discountStartTime = new Date().toISOString();
+        }
+      }
 
       // Update product
       await updateProduct(product.id, {
@@ -290,7 +313,7 @@ export default function EditProductModal({
         is_discount_active: isDiscountActive,
         discount_percent: discountPercent,
         discount_started_at: discountStartTime,
-        discount_duration_hrs: parseFloat(discountDurationHrs),
+        discount_duration_hrs: discountDuration,
       });
 
       showSuccessPopup("Product updated successfully!", () => {
@@ -448,10 +471,12 @@ export default function EditProductModal({
                     /* ========== CLOSING SALE UI (Food Only) ========== */
                     <View className="bg-amber-50 border border-amber-200 rounded-[24px] p-5 shadow-sm">
                       <View className="flex-row items-center justify-between mb-4">
-                        <View className="flex-row items-center gap-2">
-                          <Moon size={18} color="#D97706" />
+                        <View>
                           <Text className="text-sm font-semibold text-amber-800">
                             Closing Sale
+                          </Text>
+                          <Text className="text-xs text-amber-600 mt-0.5">
+                            8:00 PM - 10:00 PM Today
                           </Text>
                         </View>
 
@@ -471,9 +496,11 @@ export default function EditProductModal({
                         </View>
                       </View>
 
-                      <Text className="text-xs text-amber-600 mb-4">
-                        Starts immediately when activated. Clear your leftover food with a time-limited offer!
-                      </Text>
+                      <View className="bg-amber-100/50 border border-amber-300 rounded-xl p-3 mb-4">
+                        <Text className="text-xs text-amber-700 leading-5">
+                          💡 Your discount will automatically activate from <Text className="font-semibold">8:00 PM to 10:00 PM today</Text>, regardless of when you turn it on. Perfect for clearing leftover food!
+                        </Text>
+                      </View>
 
                       {/* Closing Sale Percent Dropdown - Higher discounts */}
                       <View className="mb-4">
@@ -500,7 +527,7 @@ export default function EditProductModal({
 
                       {/* Closing Sale Price Display */}
                       {isDiscountActive && discountedPrice !== null && (
-                        <View className="mb-4 bg-amber-100 border border-amber-300 rounded-xl p-3">
+                        <View className="bg-amber-100 border border-amber-300 rounded-xl p-3">
                           <Text className="text-xs text-amber-700 mb-1">
                             Closing Sale Price:
                           </Text>
@@ -517,29 +544,6 @@ export default function EditProductModal({
                           </View>
                         </View>
                       )}
-
-                      {/* Duration - Shorter options for food */}
-                      <View>
-                        <Text className="text-sm font-medium text-amber-800 mb-2">
-                          Duration
-                        </Text>
-                        <View className="bg-white border border-amber-200 rounded-xl overflow-hidden">
-                          <Picker
-                            selectedValue={discountDurationHrs}
-                            onValueChange={(value) =>
-                              setDiscountDurationHrs(value)
-                            }
-                            enabled={isDiscountActive}
-                            style={{ opacity: isDiscountActive ? 1 : 0.5 }}
-                          >
-                            <Picker.Item label="1 hour" value="1" />
-                            <Picker.Item label="2 hours" value="2" />
-                            <Picker.Item label="3 hours" value="3" />
-                            <Picker.Item label="4 hours" value="4" />
-                            <Picker.Item label="6 hours" value="6" />
-                          </Picker>
-                        </View>
-                      </View>
                     </View>
                   ) : (
                     /* ========== REGULAR DISCOUNT UI (Non-Food) ========== */
