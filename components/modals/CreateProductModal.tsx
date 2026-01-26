@@ -130,14 +130,15 @@ export default function CreateProductModal({
   }, [selectedCategory]);
 
   const openCamera = async () => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert(
-        "Permission Required",
-        "Camera access is needed to take photos.",
-      );
-      return;
-    }
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(
+          "Permission Required",
+          "Camera access is needed to take photos.",
+        );
+        return;
+      }
 
     const result = await ImagePicker.launchCameraAsync({
       mediaTypes: ['images'],
@@ -145,9 +146,13 @@ export default function CreateProductModal({
       quality: 1.0,
     });
 
-    if (!result.canceled && result.assets[0]) {
-      setPendingImageUri(result.assets[0].uri);
-      setShowCropper(true);
+      if (!result.canceled && result.assets?.[0]) {
+        setPendingImageUri(result.assets[0].uri);
+        setShowCropper(true);
+      }
+    } catch (error) {
+      console.error("Failed to open camera:", error);
+      showErrorPopup("Failed to open camera.");
     }
   };
 
@@ -158,9 +163,13 @@ export default function CreateProductModal({
       quality: 1.0,
     });
 
-    if (!result.canceled && result.assets[0]) {
-      setPendingImageUri(result.assets[0].uri);
-      setShowCropper(true);
+      if (!result.canceled && result.assets?.[0]) {
+        setPendingImageUri(result.assets[0].uri);
+        setShowCropper(true);
+      }
+    } catch (error) {
+      console.error("Failed to open gallery:", error);
+      showErrorPopup("Failed to open gallery.");
     }
   };
 

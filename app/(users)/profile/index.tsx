@@ -423,6 +423,15 @@ export default function ProfileScreen() {
     setShowImageViewer(true);
   };
 
+  const ensureCameraPermission = async (message = "Camera access is needed.") => {
+    const cameraPermission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!cameraPermission.granted) {
+      showErrorPopup(message);
+      return false;
+    }
+    return true;
+  };
+
   const handleImageOption = async (option: "camera" | "gallery") => {
     pickerTranslateY.value = withTiming(1000, {}, () =>
       runOnJS(setShowImagePicker)(false),
@@ -431,12 +440,10 @@ export default function ProfileScreen() {
     try {
       let result;
       if (option === "camera") {
-        const cameraPermission =
-          await ImagePicker.requestCameraPermissionsAsync();
-        if (!cameraPermission.granted) {
-          showErrorPopup("Camera access is needed.");
-          return;
-        }
+        const cameraGranted = await ensureCameraPermission(
+          "Camera access is needed."
+        );
+        if (!cameraGranted) return;
         result = await ImagePicker.launchCameraAsync({
           mediaTypes: ["images"],
           allowsEditing: false, // We use our own cropper
@@ -474,12 +481,10 @@ export default function ProfileScreen() {
     try {
       let result;
       if (option === "camera") {
-        const cameraPermission =
-          await ImagePicker.requestCameraPermissionsAsync();
-        if (!cameraPermission.granted) {
-          showErrorPopup("Camera access is needed.");
-          return;
-        }
+        const cameraGranted = await ensureCameraPermission(
+          "Camera access is needed."
+        );
+        if (!cameraGranted) return;
         result = await ImagePicker.launchCameraAsync({
           mediaTypes: ["images"],
           allowsEditing: false,

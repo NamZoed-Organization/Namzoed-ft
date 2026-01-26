@@ -1,10 +1,12 @@
 import Constants from 'expo-constants';
 
 // Get BT SMS API URL from environment
-const BT_SMS_API = Constants.expoConfig?.extra?.BT_SMS_API || process.env.BT_SMS_API || 'http://52.66.255.185/api/send-sms/bt';
+// Note: process.env doesn't work in bundled React Native apps - use Constants.expoConfig.extra instead
+const BT_SMS_API = Constants.expoConfig?.extra?.BT_SMS_API || 'http://52.66.255.185/api/send-sms/bt';
 
 // Get Tashicell SMS API URL from environment
-const TASHI_SMS_API = Constants.expoConfig?.extra?.TASHI_SMS_API || process.env.TASHI_SMS_API || 'http://52.66.255.185/api/send-sms/tashicell';
+// Note: process.env doesn't work in bundled React Native apps - use Constants.expoConfig.extra instead
+const TASHI_SMS_API = Constants.expoConfig?.extra?.TASHI_SMS_API || 'http://52.66.255.185/api/send-sms/tashicell';
 
 interface SMSPayload {
   phone: string;
