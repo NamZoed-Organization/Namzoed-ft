@@ -1,8 +1,11 @@
-import FullscreenVideoPlayer from "@/components/FullscreenVideoPlayer";
+import DeleteConfirmationModal from "@/components/modals/DeleteConfirmationModal";
 import ImageViewer from "@/components/modals/ImageViewer";
+import PostActionSheet from "@/components/modals/PostActionSheet";
 import ReportPostModal from "@/components/modals/ReportPostModal";
 import { useUser } from "@/contexts/UserContext";
+import { deletePost } from "@/lib/postsService";
 import { PostData } from "@/types/post";
+import { feedEvents } from "@/utils/feedEvents";
 import {
   Bookmark,
   Heart,
@@ -25,6 +28,7 @@ export { default as PostSkeleton } from "@/components/ui/PostSkeleton";
 interface FeedPostProps {
   post: PostData;
   isVisible?: boolean;
+  onVideoTap?: (videoUri: string) => void;
 }
 
 const formatDate = (date: Date): string => {
@@ -121,58 +125,41 @@ const PostImage = ({ imageUri, onPress, className, style }: any) => {
   );
 };
 
-const PostVideo = ({
-  videoUri,
-  className,
-  style,
-  videoId,
-  postContent,
-  username,
-  likes,
-  comments,
-}: any) => {
-  const [showFullscreen, setShowFullscreen] = useState(false);
+interface PostVideoProps {
+  videoUri: string;
+  className?: string;
+  style?: any;
+  onVideoTap: (videoUri: string) => void;
+}
 
+const PostVideo = ({ videoUri, className, style, onVideoTap }: PostVideoProps) => {
   return (
-    <>
-      <TouchableOpacity
-        onPress={() => setShowFullscreen(true)}
-        activeOpacity={0.85}
-        className={className}
-        style={[videoPreviewStyles.container, style]}
-      >
-        <View style={videoPreviewStyles.videoWrapper}>
-          {/* Static video thumbnail placeholder */}
-          <Image
-            source={{ uri: videoUri }}
-            style={videoPreviewStyles.videoPlayer}
-            resizeMode="cover"
-          />
+    <TouchableOpacity
+      onPress={() => onVideoTap(videoUri)}
+      activeOpacity={0.85}
+      className={className}
+      style={[videoPreviewStyles.container, style]}
+    >
+      <View style={videoPreviewStyles.videoWrapper}>
+        {/* Static video thumbnail placeholder */}
+        <Image
+          source={{ uri: videoUri }}
+          style={videoPreviewStyles.videoPlayer}
+          resizeMode="cover"
+        />
 
-          <View style={videoPreviewStyles.overlay}>
-            <View style={videoPreviewStyles.playButton}>
-              <Play size={52} color="#000" fill="#000" strokeWidth={0} />
-            </View>
-          </View>
-
-          {/* Video badge indicator */}
-          <View style={videoPreviewStyles.videoBadge}>
-            <Text style={videoPreviewStyles.videoBadgeText}>VIDEO</Text>
+        <View style={videoPreviewStyles.overlay}>
+          <View style={videoPreviewStyles.playButton}>
+            <Play size={52} color="#000" fill="#000" strokeWidth={0} />
           </View>
         </View>
-      </TouchableOpacity>
 
-      <FullscreenVideoPlayer
-        visible={showFullscreen}
-        videoUri={videoUri}
-        videoId={videoId}
-        onClose={() => setShowFullscreen(false)}
-        postContent={postContent}
-        username={username}
-        likes={likes}
-        comments={comments}
-      />
-    </>
+        {/* Video badge indicator */}
+        <View style={videoPreviewStyles.videoBadge}>
+          <Text style={videoPreviewStyles.videoBadgeText}>VIDEO</Text>
+        </View>
+      </View>
+    </TouchableOpacity>
   );
 };
 
@@ -181,6 +168,7 @@ const renderImages = (
   images: string[],
   onImagePress: (index: number) => void,
   postId: string,
+  onVideoTap?: (videoUri: string) => void,
   postContent?: string,
   username?: string,
   likes?: number,
@@ -202,15 +190,9 @@ const renderImages = (
         <PostVideo
           key={index}
           videoUri={mediaUri}
-          onPress={() => onImagePress(index)}
           className={className}
           style={style}
-          videoId={`${postId}-video-${index}`}
-          postContent={postContent}
-          username={username}
-          likes={likes}
-          comments={comments}
-          isVisible={isVisible}
+          onVideoTap={onVideoTap || (() => {})}
         />
       );
     }
@@ -263,14 +245,18 @@ const renderImages = (
   );
 };
 
-export default function FeedPost({ post, isVisible }: FeedPostProps) {
+export default function FeedPost({ post, isVisible = true, onVideoTap }: FeedPostProps) {
   const [isLiked, setIsLiked] = useState(false);
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [likesCount, setLikesCount] = useState(post.likes);
   const [showImageViewer, setShowImageViewer] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [showReportModal, setShowReportModal] = useState(false);
+  const [showActionSheet, setShowActionSheet] = useState(false);
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const { currentUser } = useUser();
+
+  const isOwnPost = currentUser?.id === post.userId;
 
   const handleLike = () => {
     setIsLiked(!isLiked);
@@ -280,6 +266,27 @@ export default function FeedPost({ post, isVisible }: FeedPostProps) {
   const handleImagePress = (index: number) => {
     setSelectedImageIndex(index);
     setShowImageViewer(true);
+  };
+
+  const handleDeletePress = () => {
+    setShowActionSheet(false);
+    setShowDeleteConfirmation(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    try {
+      await deletePost(post.id);
+      setShowDeleteConfirmation(false);
+      feedEvents.emit('postDeleted', post.id);
+    } catch (error) {
+      console.error('Error deleting post:', error);
+      setShowDeleteConfirmation(false);
+    }
+  };
+
+  const handleReportPress = () => {
+    setShowActionSheet(false);
+    setShowReportModal(true);
   };
 
   return (
@@ -307,7 +314,7 @@ export default function FeedPost({ post, isVisible }: FeedPostProps) {
             </Text>
           </View>
         </View>
-        <TouchableOpacity onPress={() => setShowReportModal(true)}>
+        <TouchableOpacity onPress={() => setShowActionSheet(true)}>
           <MoreHorizontal size={20} color="#666" />
         </TouchableOpacity>
       </View>
@@ -323,6 +330,7 @@ export default function FeedPost({ post, isVisible }: FeedPostProps) {
           post.images,
           handleImagePress,
           post.id,
+          onVideoTap,
           post.content,
           post.username,
           likesCount,
@@ -374,6 +382,23 @@ export default function FeedPost({ post, isVisible }: FeedPostProps) {
         username={post.username}
         likes={likesCount}
         comments={post.comments}
+      />
+
+      {/* Post Action Sheet */}
+      <PostActionSheet
+        visible={showActionSheet}
+        onClose={() => setShowActionSheet(false)}
+        isOwnPost={isOwnPost}
+        onDelete={handleDeletePress}
+        onReport={handleReportPress}
+      />
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmationModal
+        visible={showDeleteConfirmation}
+        onClose={() => setShowDeleteConfirmation(false)}
+        onConfirm={handleConfirmDelete}
+        postContent={post.content}
       />
 
       {/* Report Modal */}

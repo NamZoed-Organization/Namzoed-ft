@@ -1,330 +1,157 @@
-import LazyProductCard from "@/components/ui/LazyProductCard";
-import { products } from "@/data/products";
+import HomeCard from "@/components/HomeCard";
+import { fetchProducts, Product } from "@/lib/productsService";
+import { fetchMarketplaceItems, MarketplaceItem } from "@/lib/postMarketPlace";
+import { fetchAllProviderServices, ProviderServiceWithDetails } from "@/lib/servicesService";
 import { useRouter } from "expo-router";
-import { ArrowRight } from "lucide-react-native";
-import React, { useCallback, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
-  Animated,
-  Dimensions,
-  Image,
-  NativeScrollEvent,
-  NativeSyntheticEvent,
+  ActivityIndicator,
   ScrollView,
   Text,
-  TouchableOpacity,
   View,
 } from "react-native";
 
-const filters = ["all", "beauty", "fashion", "kids", "mens", "womens", "toys"];
-const CARD_WIDTH = 170;
 const CARD_SPACING = 16;
-const BUFFER_SIZE = 5; // Number of items to buffer outside viewport
+
+// Shuffle array helper function
+const shuffleArray = <T,>(array: T[]): T[] => {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+};
 
 export default function ForYou() {
   const router = useRouter();
-  const screenWidth = Dimensions.get("window").width;
-  const [activeFilter, setActiveFilter] = useState<string>("all");
-  const [visibleIndices, setVisibleIndices] = useState<{
-    [key: string]: { start: number; end: number };
-  }>({});
+  const [products, setProducts] = useState<Product[]>([]);
+  const [marketplaceItems, setMarketplaceItems] = useState<MarketplaceItem[]>([]);
+  const [services, setServices] = useState<ProviderServiceWithDetails[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const getFilteredProducts = useCallback(
-    (sectionKey: string) => {
-      if (sectionKey === "clothes" && activeFilter !== "all") {
-        return products.filter(
-          (product) =>
-            product.category?.toLowerCase() === activeFilter ||
-            product.tags?.some((tag) => tag.toLowerCase() === activeFilter),
-        );
-      }
-      return products;
-    },
-    [activeFilter],
-  );
+  useEffect(() => {
+    loadAllData();
+  }, []);
 
-  const getScrollLimits = useCallback(
-    (filteredProducts: typeof products) => {
-      const totalCards = filteredProducts.length + 1;
-      const totalContentWidth =
-        totalCards * (CARD_WIDTH + CARD_SPACING) - CARD_SPACING + 20;
-      const visibleWidth = screenWidth - 32;
-      const maxScrollX = Math.max(0, totalContentWidth - visibleWidth);
-      return { totalContentWidth, maxScrollX };
-    },
-    [screenWidth],
-  );
+  const loadAllData = async () => {
+    try {
+      setLoading(true);
+      const [productsData, marketplaceData, servicesData] = await Promise.all([
+        fetchProducts(0, 20),
+        fetchMarketplaceItems(0, 20),
+        fetchAllProviderServices(0, 20),
+      ]);
 
-  const handleGoToPage = (sectionKey: string) => {
-    switch (sectionKey) {
-      case "clothes":
-        if (activeFilter === "all") {
-          // Navigate to fashion category page
-          router.push({
-            pathname: "/(users)/categories/[slug]",
-            params: { slug: "fashion" },
-          });
-        } else {
-          // Navigate to specific category with filter
-          const categorySlug =
-            activeFilter === "kids"
-              ? "kids-toys"
-              : activeFilter === "mens" || activeFilter === "womens"
-                ? "fashion"
-                : activeFilter;
-          const slug = categorySlug
-            .toLowerCase()
-            .replace(/ & /g, "-")
-            .replace(/ /g, "-");
-
-          router.push({
-            pathname: "/categories/[slug]",
-            params: {
-              slug,
-              filter:
-                activeFilter === "mens" || activeFilter === "womens"
-                  ? activeFilter
-                  : undefined,
-            },
-          });
-        }
-        break;
-      case "live":
-        // Navigate to live products or featured products page
-        router.push("/live"); // or whatever your live page route is
-        break;
-      case "toys":
-        // Navigate to toys category
-        router.push({
-          pathname: "/(users)/categories/[slug]",
-          params: { slug: "kids-toys" },
-        });
-        break;
-      default:
-        router.push("/(users)/categories");
+      // Shuffle and take first 10 items
+      setProducts(shuffleArray(productsData.products || []).slice(0, 10));
+      setMarketplaceItems(shuffleArray(marketplaceData.items || []).slice(0, 10));
+      setServices(shuffleArray(servicesData || []).slice(0, 10));
+    } catch (error) {
+      console.error("Error loading data:", error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const getSectionTitle = (sectionKey: string) => {
-    switch (sectionKey) {
-      case "clothes":
-        return activeFilter !== "all"
-          ? `${activeFilter.charAt(0).toUpperCase() + activeFilter.slice(1)} Clothes`
-          : "Clothes";
-      case "live":
-        return "Live Products";
-      case "toys":
-        return "Toys & Games";
-      default:
-        return sectionKey.charAt(0).toUpperCase() + sectionKey.slice(1);
-    }
+  const handleProductPress = (product: Product) => {
+    router.push(`/(users)/product/${product.id}` as any);
   };
 
-  const getGoToPageText = (sectionKey: string) => {
-    switch (sectionKey) {
-      case "clothes":
-        return activeFilter !== "all"
-          ? `View All ${activeFilter.charAt(0).toUpperCase() + activeFilter.slice(1)}`
-          : "View All Clothes";
-      case "live":
-        return "View Live";
-      case "toys":
-        return "View All Toys";
-      default:
-        return "View All";
-    }
+  const handleMarketplacePress = (item: MarketplaceItem) => {
+    router.push(`/(users)/marketplace/${item.id}` as any);
   };
 
-  return (
-    <View className="flex-1 bg-background pt-4 px-4">
-      <View className="bg-white rounded-lg px-4 py-3 mb-4">
+  const handleServicePress = (service: ProviderServiceWithDetails) => {
+    router.push(`/(users)/servicedetail/${service.id}` as any);
+  };
+
+  const renderSection = (
+    title: string,
+    items: any[],
+    renderCard: (item: any) => JSX.Element,
+    viewAllRoute: string
+  ) => {
+    if (items.length === 0) return null;
+
+    return (
+      <View className="mb-8">
+        <Text className="text-lg font-mbold text-gray-800 mb-4 px-4">
+          {title}
+        </Text>
+
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 8, gap: 16 }}
+          contentContainerStyle={{
+            paddingLeft: 16,
+          }}
         >
-          {filters.map((filter) => (
-            <TouchableOpacity
-              key={filter}
-              className="items-center"
-              onPress={() => setActiveFilter(filter)}
-            >
-              <View
-                className={`w-14 h-14 rounded-full mb-1 border-2 ${
-                  activeFilter === filter
-                    ? "border-primary"
-                    : "border-transparent"
-                }`}
-              >
-                <Image
-                  source={require("@/assets/images/all.png")}
-                  className="w-full h-full rounded-full"
-                />
-              </View>
-              <Text
-                className={`text-xs font-medium ${
-                  activeFilter === filter ? "text-primary" : "text-gray-500"
-                }`}
-              >
-                {filter.charAt(0).toUpperCase() + filter.slice(1)}
-              </Text>
-            </TouchableOpacity>
-          ))}
+          {items.map((item) => renderCard(item))}
+          <HomeCard isSeeMore onPress={() => router.push(viewAllRoute as any)} />
         </ScrollView>
       </View>
+    );
+  };
 
-      {[
-        { title: "Clothes", key: "clothes" },
-        { title: "Live", key: "live" },
-        { title: "Toys", key: "toys" },
-      ].map((section) => {
-        const scrollX = useRef(new Animated.Value(0)).current;
-        const scrollRef = useRef<ScrollView>(null);
+  if (loading) {
+    return (
+      <View className="flex-1 bg-background justify-center items-center">
+        <ActivityIndicator size="large" color="#094569" />
+        <Text className="text-gray-500 mt-2">Loading...</Text>
+      </View>
+    );
+  }
 
-        const filteredProducts = getFilteredProducts(section.key);
-        const displayProducts = filteredProducts.slice(0, 10);
-        const { maxScrollX } = getScrollLimits(displayProducts);
+  return (
+    <View className="flex-1 bg-background pt-4">
+      {/* Products Section */}
+      {renderSection(
+        "Products",
+        products,
+        (product: Product) => (
+          <HomeCard
+            key={product.id}
+            imageUrl={product.images[0] || 'https://via.placeholder.com/200'}
+            title={product.name}
+            subtitle={`Nu. ${product.current_price || product.price}`}
+            onPress={() => handleProductPress(product)}
+          />
+        ),
+        "/(users)/categories"
+      )}
 
-        React.useEffect(() => {
-          if (section.key === "clothes" && scrollRef.current) {
-            scrollRef.current.scrollTo({ x: 0, animated: true });
-            scrollX.setValue(0);
-          }
-        }, [activeFilter, section.key]);
+      {/* Marketplace Section */}
+      {renderSection(
+        "Marketplace",
+        marketplaceItems,
+        (item: MarketplaceItem) => (
+          <HomeCard
+            key={item.id}
+            imageUrl={item.images[0] || 'https://via.placeholder.com/200'}
+            title={item.title}
+            subtitle={item.type.replace('_', ' ')}
+            onPress={() => handleMarketplacePress(item)}
+          />
+        ),
+        "/(users)/marketplace"
+      )}
 
-        const progress =
-          maxScrollX > 0
-            ? Animated.divide(scrollX, maxScrollX)
-            : new Animated.Value(0);
-
-        // Calculate visible items based on scroll position
-        const updateVisibleItems = (offsetX: number) => {
-          const cardsPerScreen = Math.ceil(
-            screenWidth / (CARD_WIDTH + CARD_SPACING),
-          );
-          const firstVisibleIndex = Math.floor(
-            offsetX / (CARD_WIDTH + CARD_SPACING),
-          );
-          const start = Math.max(0, firstVisibleIndex - BUFFER_SIZE);
-          const end = Math.min(
-            displayProducts.length - 1,
-            firstVisibleIndex + cardsPerScreen + BUFFER_SIZE,
-          );
-
-          setVisibleIndices((prev) => ({
-            ...prev,
-            [section.key]: { start, end },
-          }));
-        };
-
-        const handleScroll = Animated.event(
-          [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-          {
-            useNativeDriver: false,
-            listener: (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-              const offsetX = event.nativeEvent.contentOffset.x;
-              updateVisibleItems(offsetX);
-
-              if (offsetX > maxScrollX && scrollRef.current) {
-                scrollRef.current.scrollTo({ x: maxScrollX, animated: false });
-              }
-            },
-          },
-        );
-
-        // Initialize visible range
-        React.useEffect(() => {
-          if (!visibleIndices[section.key]) {
-            updateVisibleItems(0);
-          }
-        }, [section.key]);
-
-        return (
-          <View key={section.key} className="mb-10">
-            <Text className="text-lg font-mbold text-gray-800 mb-2">
-              {getSectionTitle(section.key)}
-              {section.key === "clothes" && activeFilter !== "all" && (
-                <Text className="text-sm font-normal text-gray-500">
-                  {` (${displayProducts.length} items)`}
-                </Text>
-              )}
-            </Text>
-
-            <Animated.ScrollView
-              ref={scrollRef}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              onScroll={handleScroll}
-              scrollEventThrottle={16}
-              bounces={false}
-              overScrollMode="never"
-              snapToInterval={CARD_WIDTH + CARD_SPACING}
-              decelerationRate="fast"
-              contentContainerStyle={{
-                paddingLeft: 4,
-                paddingRight: 16,
-                gap: CARD_SPACING,
-              }}
-            >
-              {displayProducts.map((product, index) => {
-                const isVisible = visibleIndices[section.key]
-                  ? index >= visibleIndices[section.key].start &&
-                    index <= visibleIndices[section.key].end
-                  : index < 5; // Default to first 5 items visible
-
-                return (
-                  <LazyProductCard
-                    key={`${product.id}-${section.key}-${index}`}
-                    product={product}
-                    index={index}
-                    isVisible={isVisible}
-                    estimatedHeight={280}
-                  />
-                );
-              })}
-
-              {displayProducts.length > 0 && (
-                <TouchableOpacity
-                  className="w-40 h-52 rounded-2xl bg-white justify-center items-center shadow shadow-black/10"
-                  activeOpacity={0.7}
-                  onPress={() => handleGoToPage(section.key)}
-                >
-                  <Text className="text-primary font-medium mb-1 text-center px-2">
-                    {getGoToPageText(section.key)}
-                  </Text>
-                  <ArrowRight color="#094569" size={24} />
-                </TouchableOpacity>
-              )}
-            </Animated.ScrollView>
-
-            {maxScrollX > 0 && (
-              <View className="h-1 w-full bg-gray-200 mt-2 rounded-full overflow-hidden">
-                <Animated.View
-                  style={{
-                    width: progress.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: ["0%", "100%"],
-                      extrapolate: "clamp",
-                    }),
-                    height: 4,
-                    backgroundColor: "#094569",
-                    borderRadius: 4,
-                  }}
-                />
-              </View>
-            )}
-
-            {section.key === "clothes" &&
-              displayProducts.length === 0 &&
-              activeFilter !== "all" && (
-                <View className="h-52 justify-center items-center bg-gray-50 rounded-2xl">
-                  <Text className="text-gray-500 font-medium">
-                    No products found for "{activeFilter}"
-                  </Text>
-                </View>
-              )}
-          </View>
-        );
-      })}
+      {/* Services Section */}
+      {renderSection(
+        "Services",
+        services,
+        (service: ProviderServiceWithDetails) => (
+          <HomeCard
+            key={service.id}
+            imageUrl={service.images[0] || 'https://via.placeholder.com/200'}
+            title={service.name}
+            subtitle={service.service_providers?.profiles?.name || service.service_categories?.name || 'Service'}
+            onPress={() => handleServicePress(service)}
+          />
+        ),
+        "/(users)/services/index"
+      )}
     </View>
   );
 }

@@ -140,6 +140,7 @@ export default function CreateProductModal({
     }
 
     const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
       allowsEditing: false,
       quality: 1.0,
     });
@@ -152,7 +153,7 @@ export default function CreateProductModal({
 
   const openGallery = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
+      mediaTypes: ['images'],
       allowsEditing: false,
       quality: 1.0,
     });

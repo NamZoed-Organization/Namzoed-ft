@@ -7,14 +7,22 @@ import ManageListingsOverlay from "@/components/modals/ManageListingsOverlay";
 import ProfileImageViewer from "@/components/modals/ProfileImageViewer";
 import ProfileSettings from "@/components/modals/ProfileSettings";
 import { useUser } from "@/contexts/UserContext";
-import { fetchUserPosts, Post } from "@/lib/postsService";
-import { fetchUserProducts, Product } from "@/lib/productsService";
+import { Post } from "@/lib/postsService";
 // Added import for profile services
 import EditServicesModal from "@/components/modals/EditServicesModal";
+// Custom hooks
+import { useProfileData } from "@/hooks/profile/useProfileData";
+import { useServiceProvider } from "@/hooks/profile/useServiceProvider";
+import { useUserPosts } from "@/hooks/profile/useUserPosts";
+import { useUserProducts } from "@/hooks/profile/useUserProducts";
+// Profile components
+import ProfileHeader from "@/components/profile/ProfileHeader";
+import ProfileTabContent from "@/components/profile/ProfileTabContent";
+import ProfileTabs from "@/components/profile/ProfileTabs";
+import ServiceProviderSection from "@/components/profile/ServiceProviderSection";
 import PopupMessage from "@/components/ui/PopupMessage";
 import {
   deleteAvatar,
-  fetchUserProfile,
   updateUserProfile,
   uploadAvatar,
 } from "@/lib/profileService";
@@ -22,8 +30,6 @@ import {
   deleteLicenseImage,
   deleteProviderAvatar,
   deleteProviderService,
-  fetchServiceProviderProfile,
-  fetchUserProviderServices,
   ProviderServiceWithDetails,
   toggleServiceStatus,
   updateServiceProviderLicense,
@@ -39,36 +45,23 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import {
   Bell,
   Camera,
-  CheckCircle2,
-  Edit3,
   Eye,
-  FileText,
   ImageIcon,
-  Image as ImageLucide,
-  Mail,
-  MoreVertical,
   Package,
-  Play,
   Settings,
-  ShoppingBag,
   Trash2,
   Upload,
   User,
   UserPlus,
-  Wrench,
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   Dimensions,
-  Image,
   Modal,
   RefreshControl,
   ScrollView,
-  Switch,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -80,11 +73,8 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   FadeIn,
   FadeInDown,
-  FadeInRight,
   FadeOut,
   FadeOutDown,
-  FadeOutLeft,
-  Layout,
   runOnJS,
   SlideInDown,
   SlideOutDown,
@@ -130,35 +120,9 @@ export default function ProfileScreen() {
   const [showManageListings, setShowManageListings] = useState(false);
   const [showCropOverlay, setShowCropOverlay] = useState(false);
   const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
-  const [providerImageUri, setProviderImageUri] = useState<string | null>(null);
 
-  // Data State
-  const [profileImage, setProfileImage] = useState<string | null>(null);
-  const [userPosts, setUserPosts] = useState<Post[]>([]);
-  const [loadingPosts, setLoadingPosts] = useState(true);
-  const [userImages, setUserImages] = useState<string[]>([]);
-  const [userProducts, setUserProducts] = useState<Product[]>([]);
-  const [loadingProducts, setLoadingProducts] = useState(true);
-  const [followerCount, setFollowerCount] = useState(0);
-  const [followingCount, setFollowingCount] = useState(0);
-
-  // Service provider data
-  const [serviceProvider, setServiceProvider] = useState<any>(null);
-  const [loadingServiceProvider, setLoadingServiceProvider] = useState(false);
+  // Service management state (kept here, not in provider hook)
   const [isEditingProvider, setIsEditingProvider] = useState(false);
-  const [providerFormData, setProviderFormData] = useState({
-    businessName: "",
-    email: "",
-    phone: "",
-    bio: "",
-  });
-  const [verificationStatus, setVerificationStatus] = useState<
-    "verified" | "not_verified" | "pending"
-  >("not_verified");
-  const [providerServices, setProviderServices] = useState<
-    ProviderServiceWithDetails[]
-  >([]);
-  const [loadingProviderServices, setLoadingProviderServices] = useState(false);
 
   // Service management state
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
@@ -180,9 +144,6 @@ export default function ProfileScreen() {
   const [showImageViewer, setShowImageViewer] = useState(false);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
-  const [imagePostMap, setImagePostMap] = useState<Map<string, Post>>(
-    new Map(),
-  );
 
   // Profile image viewer state
   const [showProfileImageViewer, setShowProfileImageViewer] = useState(false);
@@ -190,7 +151,6 @@ export default function ProfileScreen() {
   // License viewer state
   const [showLicenseViewer, setShowLicenseViewer] = useState(false);
   const [showLicenseMenu, setShowLicenseMenu] = useState(false);
-  const [licenseImageUrl, setLicenseImageUrl] = useState<string | null>(null);
   const [uploadingLicense, setUploadingLicense] = useState(false);
 
   // Popup states
@@ -210,6 +170,48 @@ export default function ProfileScreen() {
     setShowSuccess(true);
     setTimeout(() => setShowSuccess(false), 2000);
   };
+
+  // ------------------------------------------------------
+  // CUSTOM HOOKS
+  // ------------------------------------------------------
+
+  // Profile data hook
+  const {
+    profileImage,
+    setProfileImage,
+    followerCount,
+    setFollowerCount,
+    followingCount,
+    setFollowingCount,
+  } = useProfileData(refreshKey);
+
+  // Service provider hook
+  const {
+    serviceProvider,
+    setServiceProvider,
+    loadingServiceProvider,
+    providerFormData,
+    setProviderFormData,
+    providerImageUri,
+    setProviderImageUri,
+    licenseImageUrl,
+    setLicenseImageUrl,
+    verificationStatus,
+    setVerificationStatus,
+    providerServices,
+    setProviderServices,
+    loadingProviderServices,
+  } = useServiceProvider(refreshKey);
+
+  // User posts hook
+  const { userPosts, setUserPosts, loadingPosts, userImages, imagePostMap } =
+    useUserPosts(refreshKey, showErrorPopup);
+
+  // User products hook
+  const { userProducts, setUserProducts, loadingProducts } = useUserProducts(
+    refreshKey,
+    showErrorPopup,
+  );
 
   // ------------------------------------------------------
   // 1. SMOOTH ANIMATION LOGIC (Reanimated)
@@ -257,109 +259,6 @@ export default function ProfileScreen() {
   // END ANIMATION LOGIC
   // ------------------------------------------------------
 
-  // Initialize profile image and follower counts from DB
-  useEffect(() => {
-    const loadProfileData = async () => {
-      if (!currentUser?.id) return;
-
-      try {
-        const profile = await fetchUserProfile(currentUser.id);
-
-        // Set profile image
-        if (profile?.avatar_url) {
-          setProfileImage(profile.avatar_url);
-
-          // ALWAYS sync avatar_url from database to context/AsyncStorage
-          if (currentUser?.avatar_url !== profile.avatar_url) {
-            const updatedUser = {
-              ...currentUser,
-              avatar_url: profile.avatar_url,
-            };
-            await AsyncStorage.setItem(
-              "currentUser",
-              JSON.stringify(updatedUser),
-            );
-            setCurrentUser(updatedUser);
-          }
-        } else {
-          // Fallback to context
-          const user = currentUser as any;
-          if (user?.avatar_url) {
-            setProfileImage(user.avatar_url);
-          }
-        }
-
-        // Set follower counts from database
-        setFollowerCount(profile?.follower_count || 0);
-        setFollowingCount(profile?.following_count || 0);
-      } catch (error) {
-        console.error("Failed to fetch profile data:", error);
-      }
-    };
-
-    loadProfileData();
-  }, [currentUser, refreshKey]);
-
-  // Load service provider profile
-  useEffect(() => {
-    const loadServiceProvider = async () => {
-      if (!currentUser?.id) return;
-
-      try {
-        setLoadingServiceProvider(true);
-        const providerData = await fetchServiceProviderProfile(currentUser.id);
-        setServiceProvider(providerData);
-
-        // Populate form data and avatar
-        if (providerData) {
-          setProviderFormData({
-            businessName: "",
-            email: providerData.profiles?.email || "",
-            phone: providerData.profiles?.phone || "",
-            bio: providerData.master_bio || "",
-          });
-          // Load provider avatar
-          if (providerData.profile_url) {
-            setProviderImageUri(providerData.profile_url);
-          }
-          // Load license URL from identification jsonb
-          if (providerData.identification?.licenseUrl) {
-            setLicenseImageUrl(providerData.identification.licenseUrl);
-          }
-          // Load verification status
-          setVerificationStatus(
-            providerData.verification_status || "not_verified",
-          );
-        }
-      } catch (error) {
-        console.error("Failed to fetch service provider data:", error);
-      } finally {
-        setLoadingServiceProvider(false);
-      }
-    };
-
-    loadServiceProvider();
-  }, [currentUser?.id, refreshKey]);
-
-  // Load user's provider services
-  useEffect(() => {
-    const loadProviderServices = async () => {
-      if (!currentUser?.id) return;
-
-      try {
-        setLoadingProviderServices(true);
-        const services = await fetchUserProviderServices(currentUser.id);
-        setProviderServices(services);
-      } catch (error) {
-        console.error("Failed to fetch provider services:", error);
-      } finally {
-        setLoadingProviderServices(false);
-      }
-    };
-
-    loadProviderServices();
-  }, [currentUser?.id, refreshKey]);
-
   // Scroll to Work tab if tab parameter is "work"
   useEffect(() => {
     if (tab === "work" && horizontalScrollRef.current) {
@@ -393,62 +292,6 @@ export default function ProfileScreen() {
       };
     }, []),
   );
-
-  useEffect(() => {
-    const loadUserPosts = async () => {
-      if (!currentUser?.id) {
-        setLoadingPosts(false);
-        return;
-      }
-      try {
-        setLoadingPosts(true);
-        const posts = await fetchUserPosts(currentUser.id);
-        setUserPosts(posts);
-
-        const allImages: string[] = [];
-        const postMap = new Map<string, Post>();
-
-        posts.forEach((post) => {
-          if (post.images && post.images.length > 0) {
-            post.images.forEach((imageUrl: string) => {
-              allImages.push(imageUrl);
-              postMap.set(imageUrl, post);
-            });
-          }
-        });
-
-        setUserImages(allImages);
-        setImagePostMap(postMap);
-      } catch (error) {
-        console.error("Error loading user posts:", error);
-        showErrorPopup("Failed to load your posts");
-      } finally {
-        setLoadingPosts(false);
-      }
-    };
-    loadUserPosts();
-  }, [currentUser?.id, refreshKey]);
-
-  // Load user products
-  useEffect(() => {
-    const loadProducts = async () => {
-      if (!currentUser?.id) {
-        setLoadingProducts(false);
-        return;
-      }
-      try {
-        setLoadingProducts(true);
-        const products = await fetchUserProducts(currentUser.id);
-        setUserProducts(products);
-      } catch (error) {
-        console.error("Error loading user products:", error);
-        showErrorPopup("Failed to load your products");
-      } finally {
-        setLoadingProducts(false);
-      }
-    };
-    loadProducts();
-  }, [currentUser?.id, refreshKey]);
 
   // Refresh handler
   const onRefresh = useCallback(() => {
@@ -1160,294 +1003,41 @@ export default function ProfileScreen() {
               }
             >
               {/* Profile Header */}
-              <View className="bg-white border-b border-gray-100 px-4 py-8">
-                <View className="items-center">
-                  <View className="relative mb-4">
-                    <TouchableOpacity
-                      onPress={() =>
-                        profileImage && setShowProfileImageViewer(true)
-                      }
-                      disabled={!profileImage}
-                      className="w-24 h-24 rounded-full bg-gray-200 items-center justify-center overflow-hidden"
-                    >
-                      {profileImage ? (
-                        <Image
-                          source={{ uri: profileImage }}
-                          className="w-24 h-24 rounded-full"
-                          resizeMode="cover"
-                        />
-                      ) : (
-                        <User size={32} className="text-gray-400" />
-                      )}
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => {
-                        Haptics.impactAsync(ImpactFeedbackStyle.Light);
-                        if (profileImage) {
-                          setShowMainAvatarMenu(true);
-                        } else {
-                          handleEditProfile();
-                        }
-                      }}
-                      className="absolute -bottom-1 -right-1 w-8 h-8 bg-primary rounded-full items-center justify-center border-2 border-white"
-                    >
-                      {profileImage ? (
-                        <MoreVertical size={16} className="text-white" />
-                      ) : (
-                        <Edit3 size={16} className="text-white" />
-                      )}
-                    </TouchableOpacity>
-                  </View>
-
-                  {currentUser.name && (
-                    <Text className="text-2xl font-mbold text-gray-900 mb-1">
-                      {currentUser.name}
-                    </Text>
-                  )}
-                  {currentUser.email && (
-                    <View className="flex-row items-center mb-2">
-                      <Mail size={16} color="#6B7280" />
-                      <Text className="text-sm font-regular text-gray-500 ml-1">
-                        {currentUser.email}
-                      </Text>
-                    </View>
-                  )}
-
-                  <View className="flex-row items-center space-x-6 mt-4">
-                    <TouchableOpacity
-                      className="items-center"
-                      onPress={() => {
-                        setFollowRequestsTab("following");
-                        setShowFollowRequests(true);
-                      }}
-                    >
-                      <Text className="text-xl font-mbold text-gray-900">
-                        {followingCount > 999
-                          ? `${(followingCount / 1000).toFixed(1)}k`
-                          : followingCount}
-                      </Text>
-                      <Text className="text-sm font-regular text-gray-500">
-                        Following
-                      </Text>
-                    </TouchableOpacity>
-                    <Text className="text-gray-300 text-xl font-light">|</Text>
-                    <TouchableOpacity
-                      className="items-center"
-                      onPress={() => {
-                        setFollowRequestsTab("followers");
-                        setShowFollowRequests(true);
-                      }}
-                    >
-                      <Text className="text-xl font-mbold text-gray-900">
-                        {followerCount > 999
-                          ? `${(followerCount / 1000).toFixed(1)}k`
-                          : followerCount}
-                      </Text>
-                      <Text className="text-sm font-regular text-gray-500">
-                        Followers
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </View>
+              <ProfileHeader
+                profileImage={profileImage}
+                userName={currentUser.name}
+                userEmail={currentUser.email}
+                followerCount={followerCount}
+                followingCount={followingCount}
+                onAvatarPress={() =>
+                  profileImage && setShowProfileImageViewer(true)
+                }
+                onAvatarMenuPress={() => setShowMainAvatarMenu(true)}
+                onEditProfile={handleEditProfile}
+                onFollowingPress={() => {
+                  setFollowRequestsTab("following");
+                  setShowFollowRequests(true);
+                }}
+                onFollowersPress={() => {
+                  setFollowRequestsTab("followers");
+                  setShowFollowRequests(true);
+                }}
+              />
 
               {/* Tab Navigation */}
-              <View className="bg-white border-b border-gray-100">
-                <View className="flex-row">
-                  <TouchableOpacity
-                    className={`flex-1 py-4 items-center border-b-2 ${
-                      activeTab === "images"
-                        ? "border-primary"
-                        : "border-transparent"
-                    }`}
-                    onPress={() => setActiveTab("images")}
-                  >
-                    <ImageLucide
-                      size={24}
-                      className={`mb-1 ${
-                        activeTab === "images"
-                          ? "text-primary"
-                          : "text-gray-500"
-                      }`}
-                    />
-                    <Text
-                      className={`font-msemibold text-xs ${
-                        activeTab === "images"
-                          ? "text-primary"
-                          : "text-gray-500"
-                      }`}
-                    >
-                      Images
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    className={`flex-1 py-4 items-center border-b-2 ${
-                      activeTab === "products"
-                        ? "border-primary"
-                        : "border-transparent"
-                    }`}
-                    onPress={() => setActiveTab("products")}
-                  >
-                    <ShoppingBag
-                      size={24}
-                      className={`mb-1 ${
-                        activeTab === "products"
-                          ? "text-primary"
-                          : "text-gray-500"
-                      }`}
-                    />
-                    <Text
-                      className={`font-msemibold text-xs ${
-                        activeTab === "products"
-                          ? "text-primary"
-                          : "text-gray-500"
-                      }`}
-                    >
-                      Products
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    className={`flex-1 py-4 items-center border-b-2 ${activeTab === "services" ? "border-primary" : "border-transparent"}`}
-                    onPress={() => setActiveTab("services")}
-                  >
-                    <Wrench
-                      size={24}
-                      className={`mb-1 ${activeTab === "services" ? "text-primary" : "text-gray-500"}`}
-                    />
-                    <Text
-                      className={`font-msemibold text-xs ${activeTab === "services" ? "text-primary" : "text-gray-500"}`}
-                    >
-                      Service
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
+              <ProfileTabs activeTab={activeTab} onTabChange={setActiveTab} />
 
               {/* Tab Content */}
               <View className="px-4 py-4">
-                {activeTab === "images" && (
-                  <>
-                    {loadingPosts ? (
-                      <ActivityIndicator
-                        size="large"
-                        color="#059669"
-                        className="py-12"
-                      />
-                    ) : userImages.length > 0 ? (
-                      <View className="flex-row flex-wrap">
-                        {userImages.map((imageUrl, index) => {
-                          const isVideo = isVideoUrl(imageUrl);
-                          return (
-                            <View
-                              key={index}
-                              className="w-[33.33%] aspect-square p-1"
-                            >
-                              <TouchableOpacity
-                                className="flex-1 bg-gray-200 rounded-lg overflow-hidden relative"
-                                onPress={() => handleMediaClick(imageUrl)}
-                              >
-                                <Image
-                                  source={{ uri: imageUrl }}
-                                  className="w-full h-full"
-                                  resizeMode="cover"
-                                />
-                                {isVideo && (
-                                  <View className="absolute inset-0 items-center justify-center bg-black/30">
-                                    <View className="bg-white rounded-full p-2">
-                                      <Play
-                                        size={24}
-                                        color="#000"
-                                        fill="#000"
-                                      />
-                                    </View>
-                                  </View>
-                                )}
-                              </TouchableOpacity>
-                            </View>
-                          );
-                        })}
-                      </View>
-                    ) : (
-                      <View className="items-center justify-center py-12">
-                        <ImageLucide size={48} className="text-gray-400 mb-4" />
-                        <Text className="text-lg font-msemibold text-gray-700">
-                          No Images Yet
-                        </Text>
-                      </View>
-                    )}
-                  </>
-                )}
-                {activeTab === "products" && (
-                  <>
-                    {loadingProducts ? (
-                      <ActivityIndicator
-                        size="large"
-                        color="#059669"
-                        className="py-12"
-                      />
-                    ) : userProducts.length > 0 ? (
-                      <View className="flex-row flex-wrap">
-                        {userProducts.map((product, index) => (
-                          <View
-                            key={product.id || index}
-                            className="w-[33.33%] aspect-square p-1"
-                          >
-                            <TouchableOpacity
-                              className="flex-1 bg-gray-200 rounded-lg overflow-hidden"
-                              onPress={() =>
-                                router.push(
-                                  `/(users)/product/${product.id}` as any,
-                                )
-                              }
-                            >
-                              {product.images && product.images.length > 0 ? (
-                                <Image
-                                  source={{ uri: product.images[0] }}
-                                  className="w-full h-full"
-                                  resizeMode="cover"
-                                />
-                              ) : (
-                                <View className="w-full h-full items-center justify-center bg-gray-100">
-                                  <ShoppingBag
-                                    size={32}
-                                    className="text-gray-400"
-                                  />
-                                </View>
-                              )}
-                              {/* Price tag overlay */}
-                              <View className="absolute bottom-0 left-0 right-0 bg-black/60 px-2 py-1">
-                                <Text
-                                  className="text-white text-xs font-semibold"
-                                  numberOfLines={1}
-                                >
-                                  {product.name}
-                                </Text>
-                                <Text className="text-white text-xs font-bold">
-                                  Nu. {product.price.toLocaleString()}
-                                </Text>
-                              </View>
-                            </TouchableOpacity>
-                          </View>
-                        ))}
-                      </View>
-                    ) : (
-                      <View className="items-center justify-center py-12">
-                        <ShoppingBag size={48} className="text-gray-400 mb-4" />
-                        <Text className="text-lg font-msemibold text-gray-700">
-                          No Products Yet
-                        </Text>
-                        <Text className="text-sm text-gray-500 mt-2">
-                          Start selling to see your products here
-                        </Text>
-                      </View>
-                    )}
-                  </>
-                )}
-                {activeTab === "services" && (
-                  <Text className="text-center py-8 text-gray-500">
-                    Services coming soon
-                  </Text>
-                )}
+                <ProfileTabContent
+                  activeTab={activeTab}
+                  loadingPosts={loadingPosts}
+                  userImages={userImages}
+                  onImageClick={handleMediaClick}
+                  isVideoUrl={isVideoUrl}
+                  loadingProducts={loadingProducts}
+                  userProducts={userProducts}
+                />
               </View>
               <View className="h-8" />
             </ScrollView>
@@ -1467,476 +1057,186 @@ export default function ProfileScreen() {
                 />
               }
             >
-              {loadingServiceProvider ? (
-                <ActivityIndicator
-                  size="large"
-                  color="#094569"
-                  className="py-12"
-                />
-              ) : (
-                <View className="px-4 py-6">
-                  {/* Service Provider Header */}
-                  <View className="bg-white rounded-2xl p-6 mb-4 shadow-sm">
-                    {/* Top Bar with Title and Menu Button */}
-                    <View className="flex-row items-center justify-between mb-6">
-                      <Text className="text-xl font-mbold text-gray-900">
-                        Service Provider Profile
+              <ServiceProviderSection
+                loadingServiceProvider={loadingServiceProvider}
+                isEditingProvider={isEditingProvider}
+                providerImageUri={providerImageUri}
+                verificationStatus={verificationStatus}
+                providerFormData={providerFormData}
+                licenseImageUrl={licenseImageUrl}
+                uploadingLicense={uploadingLicense}
+                providerServices={providerServices}
+                loadingProviderServices={loadingProviderServices}
+                isServiceSelectionMode={isServiceSelectionMode}
+                selectedServiceIds={selectedServiceIds}
+                onToggleEditProvider={handleToggleEditProvider}
+                onSaveProviderProfile={handleSaveProviderProfile}
+                onShowProviderAvatarMenu={() => {
+                  Haptics.impactAsync(ImpactFeedbackStyle.Light);
+                  setShowProviderAvatarMenu(true);
+                }}
+                onEditProviderProfile={() => {
+                  Haptics.impactAsync(ImpactFeedbackStyle.Light);
+                  handleEditProviderProfile();
+                }}
+                setProviderFormData={setProviderFormData}
+                onUploadLicense={handleUploadLicense}
+                onShowLicenseMenu={() => {
+                  Haptics.impactAsync(ImpactFeedbackStyle.Light);
+                  setShowLicenseMenu(true);
+                }}
+                onServiceLongPress={handleServiceLongPress}
+                onToggleServiceSelection={toggleServiceSelection}
+                onToggleStatus={handleToggleStatus}
+                onEditService={handleEditService}
+                onNavigateToService={(serviceId) =>
+                  router.push(`/(users)/servicedetail/${serviceId}` as any)
+                }
+              />
+
+              {/* Floating Delete Bar for Service Selection */}
+              {isServiceSelectionMode && selectedServiceIds.length > 0 && (
+                <Animated.View
+                  entering={FadeInDown.duration(400)}
+                  exiting={FadeOutDown}
+                  className="absolute bottom-6 left-6 right-6 h-20 bg-gray-900 rounded-[35px] flex-row items-center justify-between px-8 shadow-2xl"
+                >
+                  <View>
+                    <Text className="text-white font-mbold text-lg">
+                      {selectedServiceIds.length}
+                    </Text>
+                    <Text className="text-gray-400 text-[10px] uppercase tracking-widest font-mbold">
+                      Selected Services
+                    </Text>
+                  </View>
+                  <View className="flex-row items-center gap-x-4">
+                    <TouchableOpacity onPress={handleCancelSelection}>
+                      <Text className="text-gray-400 font-msemibold">
+                        Cancel
                       </Text>
-
-                      {isEditingProvider ? (
-                        <View className="flex-row gap-2">
-                          <TouchableOpacity
-                            className="bg-primary rounded-full px-4 py-2 items-center"
-                            onPress={handleSaveProviderProfile}
-                          >
-                            <Text className="text-white font-msemibold text-sm">
-                              Save
-                            </Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            className="bg-gray-100 rounded-full px-4 py-2 items-center"
-                            onPress={handleToggleEditProvider}
-                          >
-                            <Text className="text-gray-700 font-msemibold text-sm">
-                              Cancel
-                            </Text>
-                          </TouchableOpacity>
-                        </View>
-                      ) : (
-                        <View className="flex-row items-center gap-2">
-                          <TouchableOpacity
-                            className="flex-row items-center gap-1 bg-primary rounded-full px-4 py-2"
-                            onPress={handleToggleEditProvider}
-                          >
-                            <Edit3 size={14} className="text-white" />
-                            <Text className="text-white font-msemibold text-sm">
-                              Edit
-                            </Text>
-                          </TouchableOpacity>
-                          {providerImageUri && (
-                            <TouchableOpacity
-                              onPress={() => {
-                                Haptics.impactAsync(ImpactFeedbackStyle.Light);
-                                setShowProviderAvatarMenu(true);
-                              }}
-                              className="w-10 h-10 bg-gray-100 rounded-full items-center justify-center"
-                            >
-                              <MoreVertical
-                                size={20}
-                                className="text-gray-700"
-                              />
-                            </TouchableOpacity>
-                          )}
-                        </View>
-                      )}
-                    </View>
-
-                    {/* Avatar Section */}
-                    <View className="items-center mb-6">
-                      <View className="relative mb-4">
-                        <View className="w-24 h-24 rounded-full bg-gray-200 items-center justify-center overflow-hidden">
-                          {providerImageUri ? (
-                            <Image
-                              source={{ uri: providerImageUri }}
-                              className="w-24 h-24 rounded-full"
-                              resizeMode="cover"
-                            />
-                          ) : (
-                            <Wrench size={40} className="text-gray-400" />
-                          )}
-                        </View>
-                        {/* Verified Badge - Made Larger and More Visible */}
-                        {verificationStatus === "verified" && (
-                          <View className="absolute top-0 right-0 w-9 h-9 bg-blue-500 rounded-full items-center justify-center border-3 border-white shadow-lg">
-                            <CheckCircle2
-                              size={20}
-                              color="white"
-                              fill="white"
-                            />
-                          </View>
-                        )}
-                        {!providerImageUri && (
-                          <TouchableOpacity
-                            onPress={() => {
-                              Haptics.impactAsync(ImpactFeedbackStyle.Light);
-                              handleEditProviderProfile();
-                            }}
-                            className="absolute -bottom-1 -right-1 w-8 h-8 bg-primary rounded-full items-center justify-center border-2 border-white"
-                          >
-                            <Camera size={16} className="text-white" />
-                          </TouchableOpacity>
-                        )}
-                      </View>
-                    </View>
-
-                    {/* Form Fields */}
-                    <View className="space-y-4">
-                      {/* Business Name - Full Width */}
-                      <View className="mb-4">
-                        <Text className="text-sm font-msemibold text-gray-700 mb-2">
-                          Business Name
-                        </Text>
-                        {isEditingProvider ? (
-                          <TextInput
-                            className="bg-gray-50 rounded-xl px-4 py-3 text-base font-regular text-gray-900 border border-gray-200"
-                            placeholder="Enter business name"
-                            placeholderTextColor="#9CA3AF"
-                            value={providerFormData.businessName}
-                            onChangeText={(text) =>
-                              setProviderFormData({
-                                ...providerFormData,
-                                businessName: text,
-                              })
-                            }
-                          />
-                        ) : (
-                          <View className="bg-gray-50 rounded-xl px-4 py-3">
-                            <Text className="text-base font-regular text-gray-400 italic">
-                              Not set
-                            </Text>
-                          </View>
-                        )}
-                      </View>
-
-                      {/* Two Column Layout - Email & Phone */}
-                      <View className="flex-row gap-3 mb-4">
-                        {/* Contact Email */}
-                        <View className="flex-1">
-                          <Text className="text-sm font-msemibold text-gray-700 mb-2">
-                            Email
-                          </Text>
-                          <View className="bg-gray-50 rounded-xl px-4 py-3 border border-gray-200">
-                            <Text
-                              className="text-base font-regular text-gray-900"
-                              numberOfLines={1}
-                            >
-                              {providerFormData.email || "Not set"}
-                            </Text>
-                          </View>
-                        </View>
-
-                        {/* Contact Phone */}
-                        <View className="flex-1">
-                          <Text className="text-sm font-msemibold text-gray-700 mb-2">
-                            Phone
-                          </Text>
-                          <View className="bg-gray-50 rounded-xl px-4 py-3 border border-gray-200">
-                            <Text
-                              className="text-base font-regular text-gray-900"
-                              numberOfLines={1}
-                            >
-                              {providerFormData.phone || "Not set"}
-                            </Text>
-                          </View>
-                        </View>
-                      </View>
-
-                      {/* Business Bio - Full Width */}
-                      <View className="mb-4">
-                        <Text className="text-sm font-msemibold text-gray-700 mb-2">
-                          Business Bio
-                        </Text>
-                        {isEditingProvider ? (
-                          <TextInput
-                            className="bg-gray-50 rounded-xl px-4 py-3 text-base font-regular text-gray-900 border border-gray-200"
-                            placeholder="Tell us about your business"
-                            placeholderTextColor="#9CA3AF"
-                            value={providerFormData.bio}
-                            onChangeText={(text) =>
-                              setProviderFormData({
-                                ...providerFormData,
-                                bio: text,
-                              })
-                            }
-                            multiline
-                            numberOfLines={4}
-                            textAlignVertical="top"
-                            style={{ minHeight: 100 }}
-                          />
-                        ) : (
-                          <View className="bg-gray-50 rounded-xl px-4 py-3">
-                            <Text className="text-base font-regular text-gray-900">
-                              {providerFormData.bio || (
-                                <Text className="italic text-gray-400">
-                                  Not set
-                                </Text>
-                              )}
-                            </Text>
-                          </View>
-                        )}
-                      </View>
-                    </View>
-                  </View>
-
-                  {/* License Verification Section */}
-                  <View className="bg-white rounded-2xl p-6 mb-4 shadow-sm">
-                    <View className="flex-row items-center justify-between mb-4">
-                      <View className="flex-row items-center">
-                        <FileText size={20} className="text-primary mr-2" />
-                        <Text className="text-lg font-mbold text-gray-900">
-                          License Verification
-                        </Text>
-                      </View>
-                      <View className="flex-row items-center gap-2">
-                        {!uploadingLicense &&
-                          verificationStatus !== "not_verified" && (
-                            <View
-                              className={`px-3 py-1 rounded-full ${
-                                verificationStatus === "verified"
-                                  ? "bg-green-100"
-                                  : "bg-yellow-100"
-                              }`}
-                            >
-                              <Text
-                                className={`text-xs font-msemibold ${
-                                  verificationStatus === "verified"
-                                    ? "text-green-700"
-                                    : "text-yellow-700"
-                                }`}
-                              >
-                                {verificationStatus === "verified"
-                                  ? "Verified"
-                                  : "Pending Verification"}
-                              </Text>
-                            </View>
-                          )}
-                        {licenseImageUrl && !uploadingLicense && (
-                          <TouchableOpacity
-                            onPress={() => {
-                              Haptics.impactAsync(ImpactFeedbackStyle.Light);
-                              setShowLicenseMenu(true);
-                            }}
-                            className="w-8 h-8 items-center justify-center"
-                          >
-                            <MoreVertical size={20} className="text-gray-700" />
-                          </TouchableOpacity>
-                        )}
-                      </View>
-                    </View>
-
-                    <Text className="text-sm text-gray-500 mb-4">
-                      {uploadingLicense
-                        ? "Uploading license document..."
-                        : verificationStatus === "verified"
-                          ? "Your license has been verified."
-                          : verificationStatus === "pending"
-                            ? "Your license is pending verification by our team."
-                            : "Upload your business license or identification document for verification."}
-                    </Text>
-
-                    {uploadingLicense ? (
-                      <View className="flex-row items-center justify-center py-3">
-                        <ActivityIndicator size="small" color="#094569" />
-                        <Text className="text-primary font-msemibold ml-3">
-                          Processing document...
-                        </Text>
-                      </View>
-                    ) : !licenseImageUrl ? (
-                      <TouchableOpacity
-                        onPress={handleUploadLicense}
-                        className="flex-row items-center justify-center bg-primary rounded-xl py-3 px-4"
-                      >
-                        <Upload size={18} className="text-white mr-2" />
-                        <Text className="text-white font-msemibold">
-                          Upload License
-                        </Text>
-                      </TouchableOpacity>
-                    ) : null}
-                  </View>
-
-                  {/* Your Services Section */}
-                  <View className="bg-white rounded-2xl p-6 shadow-sm">
-                    <Text className="text-lg font-mbold text-gray-900 mb-2">
-                      Your Services
-                    </Text>
-                    <Text className="text-sm text-gray-500 mb-4">
-                      {providerServices.length > 0
-                        ? `You have ${providerServices.length} service${providerServices.length > 1 ? "s" : ""} listed`
-                        : "Services you offer will appear here"}
-                    </Text>
-
-                    {loadingProviderServices ? (
-                      <ActivityIndicator
-                        size="large"
-                        color="#094569"
-                        className="py-8"
-                      />
-                    ) : providerServices.length > 0 ? (
-                      <View className="space-y-3">
-                        {providerServices.map((service) => (
-                          <Animated.View
-                            key={service.id}
-                            entering={FadeInRight}
-                            exiting={FadeOutLeft}
-                            layout={Layout.springify()}
-                            className="mb-3"
-                          >
-                            <TouchableOpacity
-                              activeOpacity={0.8}
-                              onLongPress={() =>
-                                handleServiceLongPress(service.id)
-                              }
-                              onPress={() =>
-                                isServiceSelectionMode
-                                  ? toggleServiceSelection(service.id)
-                                  : router.push(
-                                      `/(users)/servicedetail/${service.id}` as any,
-                                    )
-                              }
-                              className={`bg-white rounded-[24px] p-3 shadow-sm border-2 ${
-                                selectedServiceIds.includes(service.id)
-                                  ? "border-primary bg-blue-50/50"
-                                  : "border-transparent"
-                              }`}
-                            >
-                              <View className="flex-row">
-                                {/* Service Image with Selection Overlay */}
-                                <View className="w-20 h-20 rounded-2xl overflow-hidden bg-gray-100 relative">
-                                  {service.images &&
-                                  service.images.length > 0 ? (
-                                    <Image
-                                      source={{ uri: service.images[0] }}
-                                      className="w-full h-full"
-                                      resizeMode="cover"
-                                    />
-                                  ) : (
-                                    <View className="w-full h-full items-center justify-center">
-                                      <Wrench
-                                        size={32}
-                                        className="text-gray-400"
-                                      />
-                                    </View>
-                                  )}
-
-                                  {/* Selection Checkmark Overlay */}
-                                  {selectedServiceIds.includes(service.id) && (
-                                    <View className="absolute inset-0 bg-primary/30 items-center justify-center">
-                                      <CheckCircle2
-                                        color="white"
-                                        size={28}
-                                        strokeWidth={3}
-                                      />
-                                    </View>
-                                  )}
-                                </View>
-
-                                {/* Service Info */}
-                                <View className="flex-1 ml-4">
-                                  <Text
-                                    className="text-base font-mbold text-gray-900"
-                                    numberOfLines={1}
-                                  >
-                                    {service.name}
-                                  </Text>
-
-                                  {service.service_categories && (
-                                    <Text className="text-xs font-regular text-primary mb-1">
-                                      {service.service_categories.name}
-                                    </Text>
-                                  )}
-
-                                  <Text
-                                    className="text-sm font-regular text-gray-600"
-                                    numberOfLines={2}
-                                  >
-                                    {service.description}
-                                  </Text>
-                                </View>
-
-                                {/* Action Controls - Only show when NOT in selection mode */}
-                                {!isServiceSelectionMode && (
-                                  <View className="items-center justify-between ml-2">
-                                    {/* Toggle Switch */}
-                                    <View className="items-center mb-2">
-                                      <Switch
-                                        value={service.status}
-                                        onValueChange={(value) =>
-                                          handleToggleStatus(service.id, value)
-                                        }
-                                        trackColor={{
-                                          false: "#D1D5DB",
-                                          true: "#10B981",
-                                        }}
-                                        thumbColor={
-                                          service.status ? "#059669" : "#F3F4F6"
-                                        }
-                                        ios_backgroundColor="#D1D5DB"
-                                      />
-                                      <Text
-                                        className={`text-[10px] font-msemibold mt-1 ${
-                                          service.status
-                                            ? "text-green-700"
-                                            : "text-gray-500"
-                                        }`}
-                                      >
-                                        {service.status ? "Active" : "Inactive"}
-                                      </Text>
-                                    </View>
-
-                                    {/* Edit Button */}
-                                    <TouchableOpacity
-                                      onPress={() => handleEditService(service)}
-                                      className="w-9 h-9 bg-gray-50 items-center justify-center rounded-full border border-gray-100"
-                                    >
-                                      <Edit3 size={16} color="#4B5563" />
-                                    </TouchableOpacity>
-                                  </View>
-                                )}
-                              </View>
-                            </TouchableOpacity>
-                          </Animated.View>
-                        ))}
-                      </View>
-                    ) : (
-                      <View className="items-center justify-center py-8 bg-gray-50 rounded-xl">
-                        <Wrench size={48} className="text-gray-400 mb-4" />
-                        <Text className="text-base text-gray-500">
-                          No services listed yet
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-
-                  {/* Floating Delete Bar for Service Selection */}
-                  {isServiceSelectionMode && selectedServiceIds.length > 0 && (
-                    <Animated.View
-                      entering={FadeInDown.duration(400)}
-                      exiting={FadeOutDown}
-                      className="absolute bottom-6 left-6 right-6 h-20 bg-gray-900 rounded-[35px] flex-row items-center justify-between px-8 shadow-2xl"
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={handleDeleteSelectedServices}
+                      className="bg-red-500 flex-row items-center px-6 py-3 rounded-full"
                     >
-                      <View>
-                        <Text className="text-white font-mbold text-lg">
-                          {selectedServiceIds.length}
-                        </Text>
-                        <Text className="text-gray-400 text-[10px] uppercase tracking-widest font-mbold">
-                          Selected Services
-                        </Text>
-                      </View>
-                      <View className="flex-row items-center gap-x-4">
-                        <TouchableOpacity onPress={handleCancelSelection}>
-                          <Text className="text-gray-400 font-msemibold">
-                            Cancel
-                          </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          onPress={handleDeleteSelectedServices}
-                          className="bg-red-500 flex-row items-center px-6 py-3 rounded-full"
-                        >
-                          <Trash2 size={18} color="white" />
-                          <Text className="text-white font-mbold ml-2">
-                            Delete
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    </Animated.View>
-                  )}
-                </View>
+                      <Trash2 size={18} color="white" />
+                      <Text className="text-white font-mbold ml-2">Delete</Text>
+                    </TouchableOpacity>
+                  </View>
+                </Animated.View>
               )}
+
               <View className="h-8" />
             </ScrollView>
           </View>
         </ScrollView>
       </View>
+
+      {/* ------------------------------------------------------ */}
+      {/* SMOOTH IMAGE PICKER MODAL */}
+      {/* ------------------------------------------------------ */}
+      {showImagePicker && (
+        <Modal
+          transparent
+          statusBarTranslucent
+          animationType="none"
+          visible={showImagePicker}
+          onRequestClose={() => setShowImagePicker(false)}
+        >
+          <View className="flex-1 justify-end">
+            <Animated.View
+              entering={FadeIn}
+              exiting={FadeOut}
+              style={[
+                {
+                  position: "absolute",
+                  top: 0,
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  backgroundColor: "rgba(0,0,0,0.5)",
+                },
+                rPickerBackdrop,
+              ]}
+            >
+              <TouchableOpacity
+                style={{ flex: 1 }}
+                activeOpacity={1}
+                onPress={() => setShowImagePicker(false)}
+              />
+            </Animated.View>
+
+            <Animated.View
+              entering={SlideInDown.springify()}
+              exiting={SlideOutDown}
+              style={[
+                {
+                  backgroundColor: "white",
+                  borderTopLeftRadius: 24,
+                  borderTopRightRadius: 24,
+                },
+                rPickerStyle,
+              ]}
+            >
+              {/* --- DRAG HANDLE START --- */}
+              <GestureDetector gesture={pickerGesture}>
+                <View className="w-full items-center pt-5 pb-4 bg-white rounded-t-3xl">
+                  <View className="w-12 h-1.5 bg-gray-300 rounded-full" />
+                </View>
+              </GestureDetector>
+              {/* --- DRAG HANDLE END --- */}
+
+              <View className="px-6 pb-6">
+                <Text className="text-xl font-mbold text-gray-900 mb-6 text-center">
+                  Change Profile Picture
+                </Text>
+
+                <TouchableOpacity
+                  onPress={() => handleImageOption("camera")}
+                  className="flex-row items-center bg-gray-50 rounded-xl px-4 py-4 mb-3"
+                >
+                  <Camera size={24} className="text-gray-700 mr-4" />
+                  <View>
+                    <Text className="text-base font-msemibold text-gray-900">
+                      Take Photo
+                    </Text>
+                    <Text className="text-sm font-regular text-gray-500">
+                      Use camera to take a new photo
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => handleImageOption("gallery")}
+                  className="flex-row items-center bg-gray-50 rounded-xl px-4 py-4 mb-6"
+                >
+                  <ImageIcon size={24} className="text-gray-700 mr-4" />
+                  <View>
+                    <Text className="text-base font-msemibold text-gray-900">
+                      Choose from Gallery
+                    </Text>
+                    <Text className="text-sm font-regular text-gray-500">
+                      Select from your photo library
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  className="bg-gray-100 rounded-xl py-4 items-center"
+                  onPress={() => {
+                    pickerTranslateY.value = withTiming(1000, {}, () => {
+                      runOnJS(setShowImagePicker)(false);
+                      runOnJS(setRefreshKey)((prev: number) => prev + 1);
+                    });
+                  }}
+                >
+                  <Text className="text-gray-600 font-msemibold">Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            </Animated.View>
+          </View>
+        </Modal>
+      )}
 
       {/* ------------------------------------------------------ */}
       {/* SMOOTH IMAGE PICKER MODAL */}

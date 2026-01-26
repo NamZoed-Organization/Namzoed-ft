@@ -307,7 +307,8 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose }) => {
       name: displayName || supabaseUserId,
       image: profileImage,
       custom: {
-        email: (currentUser as Record<string, unknown>)?.email ?? null,
+        email:
+          (currentUser as unknown as Record<string, unknown>)?.email ?? null,
         username: displayName,
       },
     };

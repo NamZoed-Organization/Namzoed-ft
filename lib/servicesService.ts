@@ -354,6 +354,45 @@ export const toggleServiceStatus = async (
   return data as ProviderService;
 };
 
+// Fetch all provider services with pagination
+export const fetchAllProviderServices = async (page: number = 0, pageSize: number = 10): Promise<ProviderServiceWithDetails[]> => {
+  const from = page * pageSize;
+  const to = from + pageSize - 1;
+
+  const { data, error } = await supabase
+    .from('provider_services')
+    .select(`
+      *,
+      service_categories (
+        id,
+        name,
+        slug
+      ),
+      service_providers (
+        id,
+        user_id,
+        master_bio,
+        profile_url,
+        name,
+        profiles (
+          name,
+          email,
+          phone,
+          avatar_url
+        )
+      )
+    `)
+    .order('created_at', { ascending: false })
+    .range(from, to);
+
+  if (error) {
+    console.error('Error fetching all provider services:', error);
+    throw error;
+  }
+
+  return (data || []) as ProviderServiceWithDetails[];
+};
+
 // Fetch all service providers with their services (only providers who have services)
 export const fetchAllServiceProviders = async (): Promise<any[]> => {
   const { data, error } = await supabase

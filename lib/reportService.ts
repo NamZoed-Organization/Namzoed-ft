@@ -128,3 +128,25 @@ export const reportPost = async (
     return { success: false, error: error.message || 'Failed to submit report' };
   }
 };
+
+/**
+ * Get list of post IDs that the user has reported
+ * Used to filter these posts out of the user's feed
+ */
+export const getReportedPostIds = async (
+  userId: string
+): Promise<string[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('user_reports')
+      .select('item_id')
+      .eq('reporter_id', userId)
+      .not('item_id', 'is', null);
+
+    if (error) throw error;
+    return (data || []).map(row => row.item_id);
+  } catch (error) {
+    console.error('Error fetching reported post IDs:', error);
+    return [];
+  }
+};

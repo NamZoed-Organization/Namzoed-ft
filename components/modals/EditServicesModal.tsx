@@ -122,6 +122,7 @@ export default function EditServicesModal({
     }
 
     const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
       allowsEditing: false,
       quality: 1.0,
     });

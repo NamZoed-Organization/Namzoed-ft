@@ -243,20 +243,20 @@ export default function FullscreenVideoPlayer({
   }).current;
 
   useEffect(() => {
-    if (visible) {
+    if (visible && videos.length > 0) {
       setCurrentIndex(0);
       setTimeout(() => {
         flatListRef.current?.scrollToIndex({ index: 0, animated: false });
       }, 100);
     }
-  }, [visible]);
+  }, [visible, videos.length]);
 
   const handleClose = () => {
     setCurrentIndex(0);
     onClose();
   };
 
-  if (!visible) return null;
+  if (!visible || videos.length === 0) return null;
 
   return (
     <Modal

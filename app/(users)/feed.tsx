@@ -1,11 +1,13 @@
 import { PostSkeleton } from "@/components/FeedPost";
 import CreatePost from "@/components/modals/CreatePost";
+import FullscreenVideoPlayer from "@/components/FullscreenVideoPlayer";
 import { VideoErrorBoundary } from "@/components/VideoErrorBoundary";
 import { useLiveSession } from "@/contexts/LiveSessionProvider";
 import { useUser } from "@/contexts/UserContext";
 import { useFeedPagination } from "@/hooks/usePagination";
 import { useVirtualizedList } from "@/hooks/useVirtualizedList";
 import { fetchPosts, PostWithUser } from "@/lib/postsService";
+import { getReportedPostIds } from "@/lib/reportService";
 import { PostData } from "@/types/post";
 import { useRouter } from "expo-router";
 import React, {
@@ -40,6 +42,9 @@ export default function FeedScreen() {
   const [newPosts, setNewPosts] = useState<PostData[]>([]);
   const [loadingNewPosts, setLoadingNewPosts] = useState(true);
   const [visiblePostId, setVisiblePostId] = useState<string | null>(null);
+  const [reportedPostIds, setReportedPostIds] = useState<string[]>([]);
+  const [showVideoPlayer, setShowVideoPlayer] = useState(false);
+  const [shuffledVideos, setShuffledVideos] = useState<Array<{uri: string, id: string}>>([]);
 
   // Dynamic import for LiveWrapper to avoid WebRTC errors on app load
   const [LiveWrapper, setLiveWrapper] = useState<React.ComponentType<{
@@ -85,6 +90,36 @@ export default function FeedScreen() {
     };
   };
 
+  // Helper to check if URL is a video
+  const isVideoUrl = (url: string): boolean => {
+    const videoExtensions = [".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"];
+    const lowerUrl = url.toLowerCase();
+    return videoExtensions.some(ext => lowerUrl.includes(ext)) || lowerUrl.includes("post-videos");
+  };
+
+  // Extract and shuffle all videos from feed posts
+  const extractAndShuffleVideos = (posts: PostData[]) => {
+    const allVideos: Array<{uri: string, id: string}> = [];
+
+    posts.forEach(post => {
+      const videoUris = post.images.filter(uri => isVideoUrl(uri));
+      videoUris.forEach(uri => {
+        allVideos.push({
+          uri: uri,
+          id: `${post.id}_${uri}` // Unique ID combining post ID and URI
+        });
+      });
+    });
+
+    // Fisher-Yates shuffle algorithm for random order
+    for (let i = allVideos.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [allVideos[i], allVideos[j]] = [allVideos[j], allVideos[i]];
+    }
+
+    return allVideos;
+  };
+
   // Load new posts from Supabase
   const loadNewPosts = async () => {
     try {
@@ -110,6 +145,10 @@ export default function FeedScreen() {
       );
 
       setNewPosts(sortedNewPosts);
+
+      // Extract and shuffle videos for the video player
+      const videos = extractAndShuffleVideos(sortedNewPosts);
+      setShuffledVideos(videos);
     } catch (error) {
       console.error("Error loading new posts:", error);
       setNewPosts([]); // Set empty array on error to prevent crashes
@@ -118,9 +157,22 @@ export default function FeedScreen() {
     }
   };
 
+  // Load reported posts from the current user
+  const loadReportedPosts = async () => {
+    if (currentUser?.id) {
+      try {
+        const ids = await getReportedPostIds(currentUser.id);
+        setReportedPostIds(ids);
+      } catch (error) {
+        console.error('Error loading reported posts:', error);
+      }
+    }
+  };
+
   // Load posts on mount
   useEffect(() => {
     loadNewPosts();
+    loadReportedPosts();
   }, []);
 
   // Register restore handler so mini overlay can reopen the live modal (ensures navigation to feed first)
@@ -143,10 +195,10 @@ export default function FeedScreen() {
     }
   }, [pendingRestore, consumePendingRestore, router]);
 
-  // Use only Supabase posts
+  // Use only Supabase posts and filter out reported posts
   const allPosts = useMemo(() => {
-    return newPosts;
-  }, [newPosts]);
+    return newPosts.filter(post => !reportedPostIds.includes(post.id));
+  }, [newPosts, reportedPostIds]);
 
   // Use pagination for feed posts - increased to 15 items per page
   const {
@@ -191,6 +243,25 @@ export default function FeedScreen() {
     };
   }, [handleScrollToTop]);
 
+  // Listen for post deletion and report events
+  useEffect(() => {
+    const handlePostDeleted = (postId: string) => {
+      setNewPosts(prev => prev.filter(p => p.id !== postId));
+    };
+
+    const handlePostReported = (postId: string) => {
+      setReportedPostIds(prev => [...prev, postId]);
+    };
+
+    feedEvents.on('postDeleted', handlePostDeleted);
+    feedEvents.on('postReported', handlePostReported);
+
+    return () => {
+      feedEvents.off('postDeleted', handlePostDeleted);
+      feedEvents.off('postReported', handlePostReported);
+    };
+  }, []);
+
   // Handle end of list reached
   const handleEndReached = () => {
     if (hasMore && !postsLoading) {
@@ -211,6 +282,20 @@ export default function FeedScreen() {
       setVisiblePostId(null);
     }
   }, []);
+
+  // Handle video tap - open player at tapped video, reorder to start from that video
+  const handleVideoTap = useCallback((videoUri: string) => {
+    const index = shuffledVideos.findIndex(v => v.uri === videoUri);
+    if (index !== -1) {
+      // Re-order array to start at tapped video, maintaining shuffle order
+      const reordered = [
+        ...shuffledVideos.slice(index),
+        ...shuffledVideos.slice(0, index)
+      ];
+      setShuffledVideos(reordered);
+      setShowVideoPlayer(true);
+    }
+  }, [shuffledVideos]);
 
   // Viewability config - item is considered visible when 50% is on screen
   const viewabilityConfig = useRef({
@@ -234,7 +319,7 @@ export default function FeedScreen() {
 
     return (
       <VideoErrorBoundary>
-        <FeedPost post={item} isVisible={isVisible} />
+        <FeedPost post={item} isVisible={isVisible} onVideoTap={handleVideoTap} />
       </VideoErrorBoundary>
     );
   };
@@ -383,6 +468,15 @@ export default function FeedScreen() {
           </View>
         )}
       </Modal>
+
+      {/* Fullscreen Video Player */}
+      {shuffledVideos.length > 0 && (
+        <FullscreenVideoPlayer
+          visible={showVideoPlayer}
+          videos={shuffledVideos}
+          onClose={() => setShowVideoPlayer(false)}
+        />
+      )}
     </View>
   );
 }

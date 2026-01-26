@@ -172,6 +172,7 @@ export default function EditProductModal({
     }
 
     const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
       allowsEditing: false,
       quality: 1.0,
     });

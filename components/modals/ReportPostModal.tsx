@@ -1,21 +1,24 @@
-import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { AlertCircle, X } from 'lucide-react-native';
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
+  Dimensions,
   KeyboardAvoidingView,
   Modal,
+  PanResponder,
   Platform,
+  Pressable,
   ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
   View
 } from 'react-native';
-import Animated, { SlideInDown, SlideOutDown } from 'react-native-reanimated';
 import { reportPost } from '@/lib/reportService';
+import { feedEvents } from '@/utils/feedEvents';
 
 interface ReportPostModalProps {
   visible: boolean;
@@ -48,6 +51,54 @@ export default function ReportPostModal({
   const [details, setDetails] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // Vertical slide for drag-to-close
+  const panY = useRef(new Animated.Value(0)).current;
+  const screenHeight = Dimensions.get('window').height;
+
+  // Pan Responder for Drag-to-Close
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        // Activate if dragging down vertically more than horizontally
+        return (
+          Math.abs(gestureState.dy) > Math.abs(gestureState.dx) &&
+          gestureState.dy > 5
+        );
+      },
+      onPanResponderMove: (_, gestureState) => {
+        // Only allow dragging downwards
+        if (gestureState.dy > 0) {
+          panY.setValue(gestureState.dy);
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dy > 100 || gestureState.vy > 0.5) {
+          // Drag threshold: 100px or 500px/s velocity
+          Animated.timing(panY, {
+            toValue: screenHeight,
+            duration: 200,
+            useNativeDriver: false,
+          }).start(() => handleClose());
+        } else {
+          // Spring back to top
+          Animated.spring(panY, {
+            toValue: 0,
+            useNativeDriver: false,
+            bounciness: 4,
+          }).start();
+        }
+      },
+    }),
+  ).current;
+
+  // Reset panY when modal becomes visible
+  useEffect(() => {
+    if (visible) {
+      panY.setValue(0);
+    }
+  }, [visible, panY]);
+
   const handleSubmit = async () => {
     if (!selectedReason) {
       Alert.alert('Select Reason', 'Please select a reason for reporting');
@@ -75,6 +126,10 @@ export default function ReportPostModal({
     if (result.success) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
+      // Emit event immediately to hide post from feed
+      feedEvents.emit('postReported', postId);
+      onReportSuccess?.();
+
       // Reset form
       setSelectedReason('');
       setDetails('');
@@ -82,13 +137,12 @@ export default function ReportPostModal({
       // Show success message
       Alert.alert(
         'Report Submitted',
-        "Post reported successfully. We'll review it soon.",
+        "Post reported and hidden from your feed. We'll review it soon.",
         [
           {
             text: 'OK',
             onPress: () => {
               onClose();
-              onReportSuccess?.();
             }
           }
         ]
@@ -117,17 +171,31 @@ export default function ReportPostModal({
       statusBarTranslucent
       onRequestClose={handleClose}
     >
-      <View className="flex-1 bg-black/50 justify-end">
-        <Animated.View
-          entering={SlideInDown.springify()}
-          exiting={SlideOutDown}
-        >
+      <Pressable
+        className="flex-1 bg-black/50 justify-end"
+        onPress={handleClose}
+        activeOpacity={1}
+      >
+        <Pressable onPress={(e) => e.stopPropagation()}>
           <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           >
-            <BlurView intensity={90} tint="light" className="rounded-t-3xl overflow-hidden">
+            <Animated.View
+              className="bg-white rounded-t-3xl overflow-hidden shadow-xl w-full"
+              style={{
+                transform: [{ translateY: panY }],
+              }}
+            >
+              {/* Drag Bar */}
+              <View
+                {...panResponder.panHandlers}
+                className="w-full items-center justify-center py-3 bg-white"
+              >
+                <View className="w-16 h-1.5 bg-gray-300 rounded-full" />
+              </View>
+
               {/* Header */}
-              <View className="px-6 pt-6 pb-4 border-b border-gray-200">
+              <View className="px-6 pt-2 pb-4 border-b border-gray-200">
                 <View className="flex-row items-center justify-between mb-2">
                   <View className="flex-row items-center">
                     <AlertCircle size={24} color="#EF4444" />
@@ -215,10 +283,10 @@ export default function ReportPostModal({
                   )}
                 </TouchableOpacity>
               </ScrollView>
-            </BlurView>
+            </Animated.View>
           </KeyboardAvoidingView>
-        </Animated.View>
-      </View>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 }
