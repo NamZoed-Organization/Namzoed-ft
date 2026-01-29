@@ -205,3 +205,14 @@ yarn-error.*
 /android/app/src/release/res/
 /android/app/src/debug/AndroidManifest.xml
 /android/app/src/release/AndroidManifest.xml
+
+# Release keystore (sensitive)
+/android/keystore.properties
+/android/app/release.keystore
+
+.expo/types/router.d.ts
+.expo/types/router.d.ts
+.claude/settings.local.json
+.expo/types/router.d.ts
+.claude/settings.local.json
+.expo/types/router.d.ts
