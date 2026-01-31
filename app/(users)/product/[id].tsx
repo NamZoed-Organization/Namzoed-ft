@@ -589,7 +589,7 @@ export default function ProductDetail() {
                   onPress={() =>
                     router.push(`/(users)/profile/${product.user_id}`)
                   }
-                  className="flex-row items-center"
+                  className="flex-row items-center mb-4"
                 >
                   {/* Avatar */}
                   <View className="relative">
@@ -635,6 +635,16 @@ export default function ProductDetail() {
                       style={{ transform: [{ rotate: "180deg" }] }}
                     />
                   </View>
+                </TouchableOpacity>
+
+                {/* Message Button */}
+                <TouchableOpacity
+                  onPress={handleMessageSeller}
+                  activeOpacity={0.8}
+                  className="bg-primary flex-row items-center justify-center py-3 rounded-2xl"
+                >
+                  <MessageCircle size={18} color="white" />
+                  <Text className="text-white font-semibold ml-2">Message Seller</Text>
                 </TouchableOpacity>
               </Animated.View>
             )}

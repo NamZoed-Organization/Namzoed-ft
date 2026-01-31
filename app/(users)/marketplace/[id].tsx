@@ -437,7 +437,11 @@ export default function MarketplaceDetailScreen() {
               <Text className="text-lg font-semibold text-gray-900 mb-3">
                 Seller Information
               </Text>
-              <View className="flex-row items-center mb-3">
+              <TouchableOpacity
+                onPress={() => router.push(`/(users)/profile/${item.user_id}`)}
+                activeOpacity={0.7}
+                className="flex-row items-center mb-3"
+              >
                 <View className="w-12 h-12 bg-gray-300 rounded-full items-center justify-center mr-3">
                   <User size={24} color="#666" />
                 </View>
@@ -451,7 +455,15 @@ export default function MarketplaceDetailScreen() {
                     </Text>
                   )}
                 </View>
-              </View>
+                {/* Profile Arrow Indicator */}
+                <View className="w-8 h-8 bg-white rounded-full items-center justify-center">
+                  <ArrowLeft
+                    size={16}
+                    color="#094569"
+                    style={{ transform: [{ rotate: "180deg" }] }}
+                  />
+                </View>
+              </TouchableOpacity>
 
               {/* Contact Button */}
               <TouchableOpacity
