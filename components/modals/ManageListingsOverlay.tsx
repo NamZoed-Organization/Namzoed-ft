@@ -1,6 +1,7 @@
 import CountdownTimer from "@/components/CountdownTimer";
 import EditMarketplaceModal from "@/components/modals/EditMarketplaceModal";
 import EditProductModal from "@/components/modals/EditProductModal";
+import ImageViewer from "@/components/modals/ImageViewer";
 import ImageWithFallback from "@/components/ui/ImageWithFallback";
 import {
   fetchUserMarketplaceItems,
@@ -44,6 +45,7 @@ interface BookmarkedItem {
   id: string;
   product_id?: string;
   marketplace_id?: string;
+  post_id?: string;
   created_at: string;
   products?: {
     id: string;
@@ -57,6 +59,17 @@ interface BookmarkedItem {
     price: number;
     images: string[];
     type: string;
+  };
+  posts?: {
+    id: string;
+    content: string;
+    images: string[];
+    likes: number;
+    comments: number;
+    user_id: string;
+    profiles?: {
+      full_name: string;
+    };
   };
 }
 
@@ -94,6 +107,10 @@ export default function ManageListingsOverlay({
   const [marketplaceItemToEdit, setMarketplaceItemToEdit] =
     useState<MarketplaceItem | null>(null);
   const [previousTab, setPreviousTab] = useState<TabType>("products");
+
+  // Image Viewer States
+  const [showImageViewer, setShowImageViewer] = useState(false);
+  const [selectedPost, setSelectedPost] = useState<any | null>(null);
 
   useEffect(() => {
     loadData();
@@ -138,7 +155,7 @@ export default function ManageListingsOverlay({
   const loadData = async () => {
     try {
       if (!refreshing) setLoading(true);
-      const [productsData, marketplaceData, { data: bookmarksData }] =
+      const [productsData, marketplaceData, { data: bookmarksData, error: bookmarksError }] =
         await Promise.all([
           fetchUserProducts(userId),
           fetchUserMarketplaceItems(userId),
@@ -149,20 +166,27 @@ export default function ManageListingsOverlay({
             id,
             product_id,
             marketplace_id,
+            post_id,
             created_at,
-            products (id, name, price, images),
-            marketplace (id, title, price, images, type)
+            products (id, name, price, images, category),
+            marketplace (id, title, price, images, type),
+            posts (id, content, images, likes, comments, user_id, profiles:user_id (name))
           `,
             )
             .eq("user_id", userId)
             .order("created_at", { ascending: false }),
         ]);
 
+      // Debug logging
+      console.log("📚 Raw bookmarks data:", bookmarksData);
+      console.log("❌ Bookmarks error:", bookmarksError);
+      console.log("👤 User ID:", userId);
+
       setProducts(productsData || []);
       setMarketplaceItems(marketplaceData || []);
 
-      const formattedBookmarks = (bookmarksData as any[])
-        ?.map((item) => ({
+      const formattedBookmarks = ((bookmarksData as any[]) || [])
+        .map((item) => ({
           ...item,
           products: item.products
             ? Array.isArray(item.products)
@@ -174,12 +198,20 @@ export default function ManageListingsOverlay({
               ? item.marketplace[0]
               : item.marketplace
             : null,
+          posts: item.posts
+            ? Array.isArray(item.posts)
+              ? item.posts[0]
+              : item.posts
+            : null,
         }))
         .filter(
-          (item) => item.products || item.marketplace,
+          (item) => item.products || item.marketplace || item.posts,
         ) as BookmarkedItem[];
 
-      setBookmarks(formattedBookmarks);
+      console.log("✅ Formatted bookmarks:", formattedBookmarks);
+      console.log("📊 Bookmark count:", formattedBookmarks.length);
+
+      setBookmarks(formattedBookmarks || []);
     } catch (error) {
       console.error("Error loading listings:", error);
     } finally {
@@ -291,12 +323,15 @@ export default function ManageListingsOverlay({
     }
 
     // Normalize data
-    const title = item.name || item.title || item.products?.name || item.marketplace?.title;
+    const isPost = !!item.posts || !!item.post_id;
+    const title = item.name || item.title || item.products?.name || item.marketplace?.title ||
+                  (item.posts?.content ? item.posts.content.substring(0, 50) + (item.posts.content.length > 50 ? "..." : "") : "Post");
     const price = item.price || item.products?.price || item.marketplace?.price;
-    const image = item.images?.[0] || item.products?.images?.[0] || item.marketplace?.images?.[0];
+    const image = item.images?.[0] || item.products?.images?.[0] || item.marketplace?.images?.[0] || item.posts?.images?.[0];
     const typeLabel = item.type || item.marketplace?.type;
     const hasActiveDiscount = activeTab === "products" && item.is_currently_active;
     const isFood = item.category === "food";
+    const postUsername = item.posts?.profiles?.name || "Unknown User";
 
     return (
       <View className="px-4 mb-3">
@@ -324,18 +359,26 @@ export default function ManageListingsOverlay({
 
           {/* Details */}
           <View className="flex-1 ml-4">
-            {/* Type label for marketplace */}
-            {typeLabel && (activeTab === "marketplace" || (activeTab === "bookmarks" && item.marketplace)) && (
+            {/* Type label for marketplace or post */}
+            {isPost ? (
+              <Text className="text-[10px] font-mbold text-pink-600 uppercase tracking-tighter mb-0.5">
+                POST
+              </Text>
+            ) : typeLabel && (activeTab === "marketplace" || (activeTab === "bookmarks" && item.marketplace)) ? (
               <Text className="text-[10px] font-mbold text-primary uppercase tracking-tighter mb-0.5">
                 {typeLabel}
               </Text>
-            )}
+            ) : null}
             <Text className="text-gray-900 font-msemibold text-lg" numberOfLines={1}>
               {title}
             </Text>
 
-            {/* Price with Discount Info */}
-            {hasActiveDiscount ? (
+            {/* Price with Discount Info or Post Info */}
+            {isPost ? (
+              <Text className="text-gray-500 text-sm mt-0.5">
+                by {postUsername}
+              </Text>
+            ) : hasActiveDiscount ? (
               <View className="gap-1">
                 {/* Badge */}
                 <View className={`${isFood ? "bg-amber-500" : "bg-green-500"} px-1.5 py-0.5 rounded self-start ${isFood ? "flex-row items-center gap-1" : ""}`}>
@@ -370,6 +413,22 @@ export default function ManageListingsOverlay({
             <View className="flex-row items-center gap-x-2">
               <TouchableOpacity
                 onPress={() => {
+                  // Handle posts differently - open ImageViewer
+                  if (isPost && item.posts) {
+                    setSelectedPost({
+                      id: item.posts.id,
+                      user_id: item.posts.user_id,
+                      content: item.posts.content,
+                      images: item.posts.images || [],
+                      likes: item.posts.likes || 0,
+                      comments: item.posts.comments || 0,
+                      userName: postUsername,
+                    });
+                    setShowImageViewer(true);
+                    return;
+                  }
+
+                  // Handle products and marketplace items
                   onClose();
                   let path;
                   if (activeTab === "marketplace") {
@@ -477,7 +536,108 @@ export default function ManageListingsOverlay({
 
       return flatData;
     } else if (activeTab === "marketplace") {
-      data = [...marketplaceItems];
+      // Group marketplace items by type
+      const grouped: { [key: string]: any[] } = {};
+      marketplaceItems.forEach((item) => {
+        const category = item.type || "uncategorized";
+        if (!grouped[category]) {
+          grouped[category] = [];
+        }
+        grouped[category].push(item);
+      });
+
+      // Sort items within each category
+      Object.keys(grouped).forEach((category) => {
+        grouped[category].sort((a, b) => {
+          const dateA = new Date(a.created_at).getTime();
+          const dateB = new Date(b.created_at).getTime();
+          return sortOrder === "latest" ? dateB - dateA : dateA - dateB;
+        });
+      });
+
+      // Convert to flat array with category headers
+      // Sort categories alphabetically
+      const flatData: any[] = [];
+      Object.keys(grouped)
+        .sort((a, b) => a.localeCompare(b))
+        .forEach((category) => {
+          // Add category header
+          flatData.push({
+            type: "category_header",
+            category: category,
+            id: `header-${category}`,
+          });
+          // Add items in this category
+          flatData.push(...grouped[category]);
+        });
+
+      return flatData;
+    } else if (activeTab === "bookmarks") {
+      // Group bookmarks by category/type
+      const grouped: { [key: string]: any[] } = {};
+      bookmarks.forEach((bookmark) => {
+        let category = "uncategorized";
+
+        // Determine category based on bookmark type
+        if (bookmark.products) {
+          category = bookmark.products.category || "products";
+        } else if (bookmark.marketplace) {
+          category = bookmark.marketplace.type || "marketplace";
+        } else if (bookmark.posts) {
+          category = "posts";
+        }
+
+        if (!grouped[category]) {
+          grouped[category] = [];
+        }
+        grouped[category].push(bookmark);
+      });
+
+      // Sort bookmarks within each category
+      Object.keys(grouped).forEach((category) => {
+        grouped[category].sort((a, b) => {
+          const dateA = new Date(a.created_at).getTime();
+          const dateB = new Date(b.created_at).getTime();
+          return sortOrder === "latest" ? dateB - dateA : dateA - dateB;
+        });
+      });
+
+      // Convert to flat array with category headers
+      // Sort categories: food, fashion, rent, posts, then others alphabetically
+      const flatData: any[] = [];
+      Object.keys(grouped)
+        .sort((a, b) => {
+          // Priority order: food -> fashion -> rent -> posts -> others
+          const getPriority = (cat: string): number => {
+            if (cat === "food") return 1;
+            if (cat === "fashion") return 2;
+            if (cat === "rent") return 3;
+            if (cat === "posts") return 4;
+            return 5; // Others
+          };
+
+          const priorityA = getPriority(a);
+          const priorityB = getPriority(b);
+
+          if (priorityA !== priorityB) {
+            return priorityA - priorityB;
+          }
+
+          // If both are "others" (priority 5), sort alphabetically
+          return a.localeCompare(b);
+        })
+        .forEach((category) => {
+          // Add category header
+          flatData.push({
+            type: "category_header",
+            category: category,
+            id: `header-${category}`,
+          });
+          // Add bookmarks in this category
+          flatData.push(...grouped[category]);
+        });
+
+      return flatData;
     } else {
       data = [...bookmarks];
     }
@@ -702,6 +862,23 @@ export default function ManageListingsOverlay({
           item={marketplaceItemToEdit}
           userId={userId}
           onSuccess={handleExitEdit}
+        />
+      )}
+
+      {/* Image Viewer for Posts */}
+      {showImageViewer && selectedPost && (
+        <ImageViewer
+          visible={showImageViewer}
+          images={selectedPost.images}
+          initialIndex={0}
+          onClose={() => {
+            setShowImageViewer(false);
+            setSelectedPost(null);
+          }}
+          postContent={selectedPost.content}
+          username={selectedPost.userName}
+          likes={selectedPost.likes}
+          comments={selectedPost.comments}
         />
       )}
     </View>

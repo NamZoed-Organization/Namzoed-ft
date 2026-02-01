@@ -1,12 +1,12 @@
 /**
  * Time Helper Utilities for Closing Sale Banner
- * Handles calculations for 8pm-10pm daily closing sale window
+ * Handles calculations for 3pm-10pm daily closing sale window
  */
 
 export type TimeWindow = "before" | "during" | "after";
 
 /**
- * Get the current time window relative to 8pm-10pm closing sale
+ * Get the current time window relative to 3pm-10pm closing sale
  * @returns 'before' | 'during' | 'after'
  */
 export function getCurrentTimeWindow(): TimeWindow {
@@ -14,39 +14,39 @@ export function getCurrentTimeWindow(): TimeWindow {
   const currentHour = now.getHours();
 
   if (currentHour < 15) {
-    return "before"; // Before 8pm
+    return "before"; // Before 3pm
   } else if (currentHour >= 15 && currentHour < 22) {
-    return "during"; // Between 8pm-10pm
+    return "during"; // Between 3pm-10pm
   } else {
     return "after"; // After 10pm
   }
 }
 
 /**
- * Check if closing sale is currently active (8pm-10pm)
- * @returns true if current time is between 8pm-10pm
+ * Check if closing sale is currently active (3pm-10pm)
+ * @returns true if current time is between 3pm-10pm
  */
 export function isClosingSaleActive(): boolean {
   return getCurrentTimeWindow() === "during";
 }
 
 /**
- * Get seconds until next closing sale start (8pm today or tomorrow)
- * @returns Number of seconds until 8pm
+ * Get seconds until next closing sale start (3pm today or tomorrow)
+ * @returns Number of seconds until 3pm
  */
 export function getTimeUntilClosingSaleStart(): number {
   const now = new Date();
-  const today8pm = new Date(now);
-  today8pm.setHours(20, 0, 0, 0);
+  const today3pm = new Date(now);
+  today3pm.setHours(15, 0, 0, 0);
 
-  if (now < today8pm) {
-    // 8pm is today
-    return Math.floor((today8pm.getTime() - now.getTime()) / 1000);
+  if (now < today3pm) {
+    // 3pm is today
+    return Math.floor((today3pm.getTime() - now.getTime()) / 1000);
   } else {
-    // 8pm is tomorrow
-    const tomorrow8pm = new Date(today8pm);
-    tomorrow8pm.setDate(tomorrow8pm.getDate() + 1);
-    return Math.floor((tomorrow8pm.getTime() - now.getTime()) / 1000);
+    // 3pm is tomorrow
+    const tomorrow3pm = new Date(today3pm);
+    tomorrow3pm.setDate(tomorrow3pm.getDate() + 1);
+    return Math.floor((tomorrow3pm.getTime() - now.getTime()) / 1000);
   }
 }
 
@@ -121,7 +121,7 @@ export function getCountdownSeconds(): number {
     case "during":
       return getTimeUntilClosingSaleEnd();
     case "after":
-      return getTimeUntilClosingSaleStart(); // Next day's 8pm
+      return getTimeUntilClosingSaleStart(); // Next day's 3pm
     default:
       return 0;
   }

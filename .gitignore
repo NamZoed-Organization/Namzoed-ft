@@ -210,9 +210,5 @@ yarn-error.*
 /android/keystore.properties
 /android/app/release.keystore
 
-.expo/types/router.d.ts
-.expo/types/router.d.ts
+# Claude Code local settings
 .claude/settings.local.json
-.expo/types/router.d.ts
-.claude/settings.local.json
-.expo/types/router.d.ts

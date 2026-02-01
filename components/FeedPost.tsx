@@ -2,10 +2,14 @@ import DeleteConfirmationModal from "@/components/modals/DeleteConfirmationModal
 import ImageViewer from "@/components/modals/ImageViewer";
 import PostActionSheet from "@/components/modals/PostActionSheet";
 import ReportPostModal from "@/components/modals/ReportPostModal";
+import PopupMessage from "@/components/ui/PopupMessage";
 import { useUser } from "@/contexts/UserContext";
 import { deletePost } from "@/lib/postsService";
+import { hasUserLikedPost, togglePostLike, getPostLikeCount } from "@/lib/likesService";
+import { hasUserBookmarkedPost, togglePostBookmark } from "@/lib/bookmarkService";
 import { PostData } from "@/types/post";
 import { feedEvents } from "@/utils/feedEvents";
+import { useRouter } from "expo-router";
 import {
   Bookmark,
   Heart,
@@ -13,13 +17,15 @@ import {
   MoreHorizontal,
   Play,
 } from "lucide-react-native";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Animated,
   Image,
+  Modal,
   StyleSheet,
   Text,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
 } from "react-native";
 
@@ -254,15 +260,114 @@ export default function FeedPost({ post, isVisible = true, onVideoTap }: FeedPos
   const [showReportModal, setShowReportModal] = useState(false);
   const [showActionSheet, setShowActionSheet] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  const [showError, setShowError] = useState(false);
+  const [popupMessage, setPopupMessage] = useState("");
   const { currentUser } = useUser();
+  const router = useRouter();
 
   const isOwnPost = currentUser?.id === post.userId;
 
-  const handleLike = () => {
+  const showErrorPopup = (message: string) => {
+    setPopupMessage(message);
+    setShowError(true);
+    setTimeout(() => setShowError(false), 2500);
+  };
+
+  // Check if post is bookmarked and liked on mount and when ImageViewer closes
+  useEffect(() => {
+    // Skip when ImageViewer is open
+    if (showImageViewer) return;
+
+    const checkBookmarkStatus = async () => {
+      if (!currentUser?.id) return;
+
+      // Check if user has bookmarked the post
+      const bookmarked = await hasUserBookmarkedPost(post.id, currentUser.id);
+      setIsBookmarked(bookmarked);
+    };
+
+    const checkLikeStatus = async () => {
+      if (!currentUser?.id) return;
+
+      // Check if user has liked the post
+      const liked = await hasUserLikedPost(post.id, currentUser.id);
+      setIsLiked(liked);
+
+      // Get actual like count from database
+      const count = await getPostLikeCount(post.id);
+      setLikesCount(count);
+    };
+
+    checkBookmarkStatus();
+    checkLikeStatus();
+  }, [showImageViewer, currentUser?.id, post.id]);
+
+  const handleLike = async () => {
+    if (!currentUser?.id) {
+      showErrorPopup("Please sign in to like posts");
+      return;
+    }
+
+    // Optimistic update
+    const previousLiked = isLiked;
+    const previousCount = likesCount;
+
     setIsLiked(!isLiked);
     setLikesCount(isLiked ? likesCount - 1 : likesCount + 1);
+
+    try {
+      // Toggle like in database
+      const result = await togglePostLike(post.id, currentUser.id, isLiked);
+
+      if (!result.success) {
+        // Rollback on failure
+        setIsLiked(previousLiked);
+        setLikesCount(previousCount);
+        showErrorPopup("Failed to update like. Please try again.");
+      } else {
+        // Update with actual values from database
+        setIsLiked(result.isLiked);
+        setLikesCount(result.likeCount);
+      }
+    } catch (error) {
+      console.error("Error toggling like:", error);
+      // Rollback on error
+      setIsLiked(previousLiked);
+      setLikesCount(previousCount);
+      showErrorPopup("Failed to update like. Please try again.");
+    }
   };
-  const handleBookmark = () => setIsBookmarked(!isBookmarked);
+
+  const handleBookmark = async () => {
+    if (!currentUser?.id) {
+      showErrorPopup("Please sign in to bookmark posts");
+      return;
+    }
+
+    // Optimistic update
+    const previousBookmarked = isBookmarked;
+    setIsBookmarked(!isBookmarked);
+
+    try {
+      // Toggle bookmark in database
+      const result = await togglePostBookmark(post.id, currentUser.id, isBookmarked);
+
+      if (!result.success) {
+        // Rollback on failure
+        setIsBookmarked(previousBookmarked);
+        showErrorPopup("Failed to update bookmark. Please try again.");
+      } else {
+        // Update with actual value from database
+        setIsBookmarked(result.isBookmarked);
+      }
+    } catch (error) {
+      console.error("Error toggling bookmark:", error);
+      // Rollback on error
+      setIsBookmarked(previousBookmarked);
+      showErrorPopup("Failed to update bookmark. Please try again.");
+    }
+  };
+
   const handleImagePress = (index: number) => {
     setSelectedImageIndex(index);
     setShowImageViewer(true);
@@ -287,6 +392,21 @@ export default function FeedPost({ post, isVisible = true, onVideoTap }: FeedPos
   const handleReportPress = () => {
     setShowActionSheet(false);
     setShowReportModal(true);
+  };
+
+  const handleMessage = () => {
+    if (!currentUser?.id) {
+      showErrorPopup("Please sign in to send messages");
+      return;
+    }
+
+    if (isOwnPost) {
+      showErrorPopup("You cannot send a message to your own post");
+      return;
+    }
+
+    // Navigate to chat with the post author
+    router.push(`/(users)/chat/${post.userId}` as any);
   };
 
   return (
@@ -366,7 +486,10 @@ export default function FeedPost({ post, isVisible = true, onVideoTap }: FeedPos
               />
             </TouchableOpacity>
           </View>
-          <TouchableOpacity className="flex-row items-center">
+          <TouchableOpacity
+            className="flex-row items-center"
+            onPress={handleMessage}
+          >
             <MessageCircle size={20} color="#666" />
             <Text className="ml-2 text-gray-600 font-medium">Message</Text>
           </TouchableOpacity>
@@ -382,6 +505,8 @@ export default function FeedPost({ post, isVisible = true, onVideoTap }: FeedPos
         username={post.username}
         likes={likesCount}
         comments={post.comments}
+        postId={post.id}
+        postUserId={post.userId}
       />
 
       {/* Post Action Sheet */}
@@ -418,6 +543,20 @@ export default function FeedPost({ post, isVisible = true, onVideoTap }: FeedPos
           }}
         />
       )}
+
+      {/* Error Popup - Rendered at screen level */}
+      <Modal
+        visible={showError}
+        transparent={true}
+        animationType="none"
+        statusBarTranslucent={true}
+      >
+        <TouchableWithoutFeedback onPress={() => setShowError(false)}>
+          <View style={{ flex: 1 }}>
+            <PopupMessage visible={showError} type="error" message={popupMessage} />
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
     </View>
   );
 }

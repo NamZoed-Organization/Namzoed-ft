@@ -8,11 +8,22 @@ import {
   ScrollView,
   Image,
   ActivityIndicator,
+  TouchableWithoutFeedback,
 } from "react-native";
-import { X, Heart, MessageCircle, Share2 } from "lucide-react-native";
+import { X, Heart, MessageCircle, Bookmark, MoreHorizontal } from "lucide-react-native";
 import { VideoView, useVideoPlayer } from "expo-video";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
 import Animated, { useSharedValue, useAnimatedStyle, withSpring } from "react-native-reanimated";
+import { useRouter } from "expo-router";
+import { useUser } from "@/contexts/UserContext";
+import { hasUserLikedPost, togglePostLike, getPostLikeCount } from "@/lib/likesService";
+import { hasUserBookmarkedPost, togglePostBookmark } from "@/lib/bookmarkService";
+import { deletePost } from "@/lib/postsService";
+import { feedEvents } from "@/utils/feedEvents";
+import PopupMessage from "@/components/ui/PopupMessage";
+import PostActionSheet from "@/components/modals/PostActionSheet";
+import DeleteConfirmationModal from "@/components/modals/DeleteConfirmationModal";
+import ReportPostModal from "@/components/modals/ReportPostModal";
 
 interface ImageViewerProps {
   visible: boolean;
@@ -23,6 +34,8 @@ interface ImageViewerProps {
   username?: string;
   likes?: number;
   comments?: number;
+  postId: string;
+  postUserId: string;
 }
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
@@ -166,19 +179,140 @@ export default function ImageViewer({
   username,
   likes = 0,
   comments = 0,
+  postId,
+  postUserId,
 }: ImageViewerProps) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [isLiked, setIsLiked] = useState(false);
+  const [isBookmarked, setIsBookmarked] = useState(false);
   const [likesCount, setLikesCount] = useState(likes);
+  const [showError, setShowError] = useState(false);
+  const [popupMessage, setPopupMessage] = useState("");
+  const [showActionSheet, setShowActionSheet] = useState(false);
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const { currentUser } = useUser();
+  const router = useRouter();
 
-  const handleLike = () => {
-    if (isLiked) {
-      setIsLiked(false);
-      setLikesCount(likesCount - 1);
-    } else {
-      setIsLiked(true);
-      setLikesCount(likesCount + 1);
+  const isOwnPost = currentUser?.id === postUserId;
+
+  const showErrorPopup = (message: string) => {
+    setPopupMessage(message);
+    setShowError(true);
+    setTimeout(() => setShowError(false), 2500);
+  };
+
+  // Check if post is liked and bookmarked when modal becomes visible
+  useEffect(() => {
+    if (!visible) return;
+
+    const checkLikeStatus = async () => {
+      if (!currentUser?.id) return;
+      const liked = await hasUserLikedPost(postId, currentUser.id);
+      setIsLiked(liked);
+      const count = await getPostLikeCount(postId);
+      setLikesCount(count);
+    };
+
+    const checkBookmarkStatus = async () => {
+      if (!currentUser?.id) return;
+      const bookmarked = await hasUserBookmarkedPost(postId, currentUser.id);
+      setIsBookmarked(bookmarked);
+    };
+
+    checkLikeStatus();
+    checkBookmarkStatus();
+  }, [visible, currentUser?.id, postId]);
+
+  const handleLike = async () => {
+    if (!currentUser?.id) return;
+
+    // Optimistic update
+    const previousLiked = isLiked;
+    const previousCount = likesCount;
+
+    setIsLiked(!isLiked);
+    setLikesCount(isLiked ? likesCount - 1 : likesCount + 1);
+
+    try {
+      const result = await togglePostLike(postId, currentUser.id, isLiked);
+
+      if (!result.success) {
+        // Rollback on failure
+        setIsLiked(previousLiked);
+        setLikesCount(previousCount);
+      } else {
+        // Update with actual values from database
+        setIsLiked(result.isLiked);
+        setLikesCount(result.likeCount);
+      }
+    } catch (error) {
+      console.error("Error toggling like:", error);
+      // Rollback on error
+      setIsLiked(previousLiked);
+      setLikesCount(previousCount);
     }
+  };
+
+  const handleBookmark = async () => {
+    if (!currentUser?.id) return;
+
+    // Optimistic update
+    const previousBookmarked = isBookmarked;
+    setIsBookmarked(!isBookmarked);
+
+    try {
+      const result = await togglePostBookmark(postId, currentUser.id, isBookmarked);
+
+      if (!result.success) {
+        // Rollback on failure
+        setIsBookmarked(previousBookmarked);
+      } else {
+        // Update with actual value from database
+        setIsBookmarked(result.isBookmarked);
+      }
+    } catch (error) {
+      console.error("Error toggling bookmark:", error);
+      // Rollback on error
+      setIsBookmarked(previousBookmarked);
+    }
+  };
+
+  const handleMessage = () => {
+    if (!currentUser?.id) {
+      showErrorPopup("Please sign in to send messages");
+      return;
+    }
+
+    if (isOwnPost) {
+      showErrorPopup("You cannot send a message to your own post");
+      return;
+    }
+
+    onClose();
+    router.push(`/(users)/chat/${postUserId}` as any);
+  };
+
+  const handleDeletePress = () => {
+    setShowActionSheet(false);
+    setShowDeleteConfirmation(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    try {
+      await deletePost(postId);
+      setShowDeleteConfirmation(false);
+      onClose();
+      feedEvents.emit('postDeleted', postId);
+    } catch (error) {
+      console.error('Error deleting post:', error);
+      setShowDeleteConfirmation(false);
+    }
+  };
+
+  const handleReportPress = () => {
+    setShowActionSheet(false);
+    setShowReportModal(true);
   };
 
   const handleScroll = (event: any) => {
@@ -206,13 +340,22 @@ export default function ImageViewer({
               <X size={24} color="white" />
             </TouchableOpacity>
 
-            {images.length > 1 && (
-              <View className="bg-black/50 rounded-full px-3 py-1">
-                <Text className="text-white font-medium">
-                  {currentIndex + 1} / {images.length}
-                </Text>
-              </View>
-            )}
+            <View className="flex-row items-center gap-3">
+              {images.length > 1 && (
+                <View className="bg-black/50 rounded-full px-3 py-1">
+                  <Text className="text-white font-medium">
+                    {currentIndex + 1} / {images.length}
+                  </Text>
+                </View>
+              )}
+
+              <TouchableOpacity
+                onPress={() => setShowActionSheet(true)}
+                className="bg-black/50 rounded-full p-2"
+              >
+                <MoreHorizontal size={24} color="white" />
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Media Carousel */}
@@ -262,9 +405,13 @@ export default function ImageViewer({
             </View>
           )}
 
-          {/* Action Strip - Likes, Comments, Share */}
+          {/* Action Strip - Like, Bookmark, Message */}
           <View className="mx-4 px-4 py-3 border border-gray-400 rounded-lg flex-row items-center justify-around" style={{ backgroundColor: 'transparent' }}>
-            <TouchableOpacity className="flex-row items-center" onPress={handleLike}>
+            <TouchableOpacity
+              className="flex-row items-center"
+              onPress={handleLike}
+              disabled={!currentUser?.id}
+            >
               <Heart
                 size={20}
                 color={isLiked ? "#e91e63" : "white"}
@@ -276,21 +423,84 @@ export default function ImageViewer({
               </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity className="flex-row items-center">
-              <MessageCircle size={20} color="white" strokeWidth={1.5} />
-              <Text className="text-white ml-2 font-medium">
-                {comments > 0 ? comments : 'Comment'}
+            <TouchableOpacity
+              className="flex-row items-center"
+              onPress={handleBookmark}
+              disabled={!currentUser?.id}
+            >
+              <Bookmark
+                size={20}
+                color={isBookmarked ? "#1976d2" : "white"}
+                fill={isBookmarked ? "#1976d2" : "none"}
+                strokeWidth={1.5}
+              />
+              <Text className={`ml-2 font-medium ${isBookmarked ? 'text-blue-500' : 'text-white'}`}>
+                {isBookmarked ? 'Saved' : 'Save'}
               </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity className="flex-row items-center">
-              <Share2 size={20} color="white" strokeWidth={1.5} />
-              <Text className="text-white ml-2 font-medium">Share</Text>
+            <TouchableOpacity
+              className="flex-row items-center"
+              onPress={handleMessage}
+            >
+              <MessageCircle size={20} color="white" strokeWidth={1.5} />
+              <Text className="text-white ml-2 font-medium">Message</Text>
             </TouchableOpacity>
           </View>
         </View>
       </View>
       </GestureHandlerRootView>
+
+      {/* Error Popup */}
+      <Modal
+        visible={showError}
+        transparent={true}
+        animationType="none"
+        statusBarTranslucent={true}
+      >
+        <TouchableWithoutFeedback onPress={() => setShowError(false)}>
+          <View style={{ flex: 1 }}>
+            <PopupMessage visible={showError} type="error" message={popupMessage} />
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+
+      {/* Post Action Sheet */}
+      <PostActionSheet
+        visible={showActionSheet}
+        onClose={() => setShowActionSheet(false)}
+        isOwnPost={isOwnPost}
+        onDelete={handleDeletePress}
+        onReport={handleReportPress}
+      />
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmationModal
+        visible={showDeleteConfirmation}
+        onClose={() => setShowDeleteConfirmation(false)}
+        onConfirm={handleConfirmDelete}
+        postContent={postContent || ""}
+      />
+
+      {/* Report Modal */}
+      {currentUser?.id && postUserId && (
+        <ReportPostModal
+          visible={showReportModal}
+          onClose={() => setShowReportModal(false)}
+          postId={postId}
+          postContent={
+            postContent
+              ? postContent.substring(0, 50) + (postContent.length > 50 ? "..." : "")
+              : ""
+          }
+          postOwnerId={postUserId}
+          currentUserId={currentUser.id}
+          onReportSuccess={() => {
+            setShowReportModal(false);
+            onClose();
+          }}
+        />
+      )}
     </Modal>
   );
 }

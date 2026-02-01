@@ -8,12 +8,18 @@ import { supabase } from "@/lib/supabase";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ActivityIndicator,
   Animated,
   Image,
-  KeyboardAvoidingView,
+  Keyboard,
   Linking,
   Modal,
   Platform,
@@ -99,7 +105,7 @@ const getUserData = async (identifier: string) => {
       u.phone_number === identifier ||
       u.phone_number === cleanIdentifier ||
       u.username === identifier ||
-      u.username === cleanIdentifier
+      u.username === cleanIdentifier,
   );
 
   if (user) {
@@ -137,7 +143,7 @@ const TypingIndicator = () => {
             duration: 300,
             useNativeDriver: true,
           }),
-        ])
+        ]),
       );
     };
 
@@ -242,6 +248,8 @@ export default function ChatScreen() {
   );
   const isLocalTypingRef = useRef(false);
   const bikeAnimationX = useRef(new Animated.Value(0)).current;
+  const keyboardOffset = useRef(new Animated.Value(0)).current;
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
 
   const isMongooseChat = typeof id === "string" && id.startsWith("mongoose-");
   const mongooseName = isMongooseChat ? id.replace("mongoose-", "") : null;
@@ -375,7 +383,7 @@ export default function ChatScreen() {
           .from("messages")
           .select("*")
           .or(
-            `and(sender_id.eq.${userUUID},receiver_id.eq.${chatPartnerId}),and(sender_id.eq.${chatPartnerId},receiver_id.eq.${userUUID})`
+            `and(sender_id.eq.${userUUID},receiver_id.eq.${chatPartnerId}),and(sender_id.eq.${chatPartnerId},receiver_id.eq.${userUUID})`,
           )
           .order("created_at", { ascending: true })
           .limit(200);
@@ -442,7 +450,7 @@ export default function ChatScreen() {
               if (payload.eventType === "INSERT") {
                 console.log(
                   "⚡ New message:",
-                  message.content?.substring(0, 30)
+                  message.content?.substring(0, 30),
                 );
 
                 // Add to messages if not duplicate
@@ -461,7 +469,7 @@ export default function ChatScreen() {
                     const isSameContent = m.content === message.content;
                     const timeDiff = Math.abs(
                       new Date(m.created_at).getTime() -
-                        new Date(message.created_at).getTime()
+                        new Date(message.created_at).getTime(),
                     );
                     if (isSameContent && timeDiff < 5000) {
                       console.log("✅ Removed optimistic message");
@@ -476,13 +484,13 @@ export default function ChatScreen() {
 
                 setMessages((prev) =>
                   prev.map((m) =>
-                    m.id === message.id ? { ...m, ...message } : m
-                  )
+                    m.id === message.id ? { ...m, ...message } : m,
+                  ),
                 );
                 setLocalMessages((prev) =>
                   prev.map((m) =>
-                    m.id === message.id ? { ...m, ...message } : m
-                  )
+                    m.id === message.id ? { ...m, ...message } : m,
+                  ),
                 );
               } else if (payload.eventType === "DELETE") {
                 const deleteId = oldMessage?.id;
@@ -491,11 +499,11 @@ export default function ChatScreen() {
 
                   setMessages((prev) => prev.filter((m) => m.id !== deleteId));
                   setLocalMessages((prev) =>
-                    prev.filter((m) => m.id !== deleteId)
+                    prev.filter((m) => m.id !== deleteId),
                   );
                 }
               }
-            }
+            },
           )
           .subscribe((status) => {
             console.log("📡 Chat subscription status:", status);
@@ -587,6 +595,38 @@ export default function ChatScreen() {
     markAsRead();
   }, [messages, currentUserUUID, chatPartnerId]);
 
+  // Handle keyboard show/hide to move input up and down
+  useEffect(() => {
+    const keyboardWillShow = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      (e) => {
+        setIsKeyboardVisible(true);
+        Animated.timing(keyboardOffset, {
+          toValue: -e.endCoordinates.height,
+          duration: Platform.OS === "ios" ? e.duration : 250,
+          useNativeDriver: false,
+        }).start();
+      },
+    );
+
+    const keyboardWillHide = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+      (e) => {
+        setIsKeyboardVisible(false);
+        Animated.timing(keyboardOffset, {
+          toValue: 0,
+          duration: Platform.OS === "ios" ? e.duration : 250,
+          useNativeDriver: false,
+        }).start();
+      },
+    );
+
+    return () => {
+      keyboardWillShow.remove();
+      keyboardWillHide.remove();
+    };
+  }, [keyboardOffset]);
+
   const sendTypingEvent = useCallback(
     (typing: boolean) => {
       if (!channelRef.current || !currentUserUUID || !chatPartnerId) return;
@@ -607,9 +647,11 @@ export default function ChatScreen() {
     return (
       <View className="flex-1 items-center justify-center bg-background">
         <Ionicons name="person-circle-outline" size={80} color="#9ca3af" />
-        <Text className="text-gray-500 text-lg mt-4">Please login to view messages</Text>
+        <Text className="text-gray-500 text-lg mt-4">
+          Please login to view messages
+        </Text>
         <TouchableOpacity
-          onPress={() => router.push('/login')}
+          onPress={() => router.push("/login")}
           className="mt-6 bg-primary px-6 py-3 rounded-full"
         >
           <Text className="text-white font-semibold">Go to Login</Text>
@@ -787,7 +829,7 @@ export default function ChatScreen() {
       console.log(
         "📍 Sharing location:",
         latitude.toFixed(4),
-        longitude.toFixed(4)
+        longitude.toFixed(4),
       );
 
       // Optimistic message
@@ -859,7 +901,7 @@ export default function ChatScreen() {
         // Remove from local state
         setMessages((prev) => prev.filter((m) => m.id !== selectedMessage.id));
         setLocalMessages((prev) =>
-          prev.filter((m) => m.id !== selectedMessage.id)
+          prev.filter((m) => m.id !== selectedMessage.id),
         );
         console.log("Message deleted successfully");
       }
@@ -909,8 +951,8 @@ export default function ChatScreen() {
                   content: updatedContent,
                   updated_at: new Date().toISOString(),
                 }
-              : m
-          )
+              : m,
+          ),
         );
         setLocalMessages((prev) =>
           prev.map((m) =>
@@ -920,8 +962,8 @@ export default function ChatScreen() {
                   content: updatedContent,
                   updated_at: new Date().toISOString(),
                 }
-              : m
-          )
+              : m,
+          ),
         );
         console.log("Message updated successfully");
       }
@@ -962,27 +1004,27 @@ export default function ChatScreen() {
 
   // Audio recorder handlers
   const handleOptimisticAudio = (optimisticMsg: any) => {
-    setLocalMessages(prev => [...prev, optimisticMsg]);
+    setLocalMessages((prev) => [...prev, optimisticMsg]);
   };
 
   const handleAudioUploadSuccess = (finalMsg: any, optimisticId: string) => {
     // Fallback: add manually if realtime doesn't pick it up
     setTimeout(() => {
-      setMessages(prev => {
-        if (prev.some(m => m.id === finalMsg.id)) {
-          console.log('✅ Realtime already added audio message');
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === finalMsg.id)) {
+          console.log("✅ Realtime already added audio message");
           return prev;
         }
-        console.log('⚡ Fallback: manually adding audio message');
+        console.log("⚡ Fallback: manually adding audio message");
         return [...prev, finalMsg];
       });
       // Remove optimistic message
-      setLocalMessages(prev => prev.filter(m => m.id !== optimisticId));
+      setLocalMessages((prev) => prev.filter((m) => m.id !== optimisticId));
     }, 2000);
   };
 
   const handleAudioUploadError = (optimisticId: string) => {
-    setLocalMessages(prev => prev.filter(m => m.id !== optimisticId));
+    setLocalMessages((prev) => prev.filter((m) => m.id !== optimisticId));
   };
 
   const handleMongooseClick = () => {
@@ -1009,8 +1051,9 @@ export default function ChatScreen() {
     });
   };
   const renderMessage = (message: any, index: number) => {
-    const isCurrentUser =
-      !!(currentUserUUID && message.sender_id === currentUserUUID);
+    const isCurrentUser = !!(
+      currentUserUUID && message.sender_id === currentUserUUID
+    );
     const isOptimistic = message.isOptimistic;
     const key = message.id != null ? String(message.id) : `idx-${index}`;
     const messageType = message.message_type || "text";
@@ -1022,7 +1065,7 @@ export default function ChatScreen() {
     let coordinates = null;
     if (isLocation) {
       const urlMatch = message.content.match(
-        /https:\/\/maps\.google\.com\/\?q=([0-9.-]+),([0-9.-]+)/
+        /https:\/\/maps\.google\.com\/\?q=([0-9.-]+),([0-9.-]+)/,
       );
       if (urlMatch) {
         coordinates = {
@@ -1049,7 +1092,10 @@ export default function ChatScreen() {
     // Render audio message
     if (isAudio) {
       return (
-        <View key={key} className={`mb-3 ${isCurrentUser ? 'items-end' : 'items-start'}`}>
+        <View
+          key={key}
+          className={`mb-3 ${isCurrentUser ? "items-end" : "items-start"}`}
+        >
           <TouchableOpacity
             activeOpacity={1}
             onLongPress={() => {
@@ -1059,7 +1105,7 @@ export default function ChatScreen() {
               }
             }}
             delayLongPress={500}
-            className={`${isCurrentUser ? 'mr-2' : 'ml-2'}`}
+            className={`${isCurrentUser ? "mr-2" : "ml-2"}`}
           >
             <AudioMessagePlayer
               audioUrl={message.audio_url}
@@ -1069,13 +1115,15 @@ export default function ChatScreen() {
             />
           </TouchableOpacity>
           <Text className="text-xs text-gray-500 mt-1 mx-2">
-            {message.created_at ? new Date(message.created_at).toLocaleTimeString([], {
-              hour: '2-digit',
-              minute: '2-digit'
-            }) : new Date().toLocaleTimeString([], {
-              hour: '2-digit',
-              minute: '2-digit'
-            })}
+            {message.created_at
+              ? new Date(message.created_at).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })
+              : new Date().toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
           </Text>
         </View>
       );
@@ -1365,10 +1413,19 @@ export default function ChatScreen() {
       </ScrollView>
 
       {/* Fixed Input Bar - Above Bottom Navigation */}
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      <Animated.View
+        className={isKeyboardVisible ? "mb-3" : "mb-20"}
+        style={{
+          transform: [
+            {
+              translateY: isKeyboardVisible
+                ? keyboardOffset
+                : Animated.add(keyboardOffset, -20),
+            },
+          ],
+        }}
       >
-        <View className="flex-row items-center p-4 border-t border-gray-200 bg-white mb-20">
+        <View className="flex-row items-center px-4 py-6 border-t border-gray-200 bg-white">
           <ChatImagePicker
             currentUserUUID={currentUserUUID || ""}
             chatPartnerId={chatPartnerId as string}
@@ -1377,7 +1434,7 @@ export default function ChatScreen() {
             onUploadError={handleImageUploadError}
           />
           <ChatAudioRecorder
-            currentUserUUID={currentUserUUID || ''}
+            currentUserUUID={currentUserUUID || ""}
             chatPartnerId={chatPartnerId as string}
             onOptimisticAudio={handleOptimisticAudio}
             onUploadSuccess={handleAudioUploadSuccess}
@@ -1440,7 +1497,7 @@ export default function ChatScreen() {
             />
           </TouchableOpacity>
         </View>
-      </KeyboardAvoidingView>
+      </Animated.View>
 
       {/* Full-Screen Map Modal */}
       <Modal
@@ -1512,8 +1569,17 @@ export default function ChatScreen() {
           onPress={() => setShowMessageActions(false)}
           className="flex-1 bg-black/50 justify-center items-center"
         >
-          <View className="bg-white rounded-2xl w-64 overflow-hidden" style={{ elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4 }}>
-            {selectedMessage?.message_type !== 'image' && (
+          <View
+            className="bg-white rounded-2xl w-64 overflow-hidden"
+            style={{
+              elevation: 5,
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.25,
+              shadowRadius: 4,
+            }}
+          >
+            {selectedMessage?.message_type !== "image" && (
               <TouchableOpacity
                 onPress={handleEditMessage}
                 className="flex-row items-center px-6 py-4 border-b border-gray-200 active:bg-gray-50"

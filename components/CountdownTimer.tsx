@@ -1,34 +1,46 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import { Clock } from 'lucide-react-native';
+import { getCurrentTimeWindow, getCountdownSeconds, formatCompactCountdown } from '@/utils/timeHelpers';
 
 interface CountdownTimerProps {
-  endsAt?: string;  // ISO timestamp
+  endsAt?: string;  // ISO timestamp (deprecated - now uses daily 3pm-10pm window)
   compact?: boolean;  // Compact mode for cards
 }
 
 export default function CountdownTimer({ endsAt, compact = false }: CountdownTimerProps) {
-  const timeLeft = useMemo(() => {
-    if (!endsAt) return '';
+  const [timeLeft, setTimeLeft] = useState(() => {
+    const timeWindow = getCurrentTimeWindow();
+    const seconds = getCountdownSeconds();
 
-    const now = new Date().getTime();
-    const end = new Date(endsAt).getTime();
-    const diff = end - now;
-
-    if (diff <= 0) return 'Expired';
-
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-
-    if (days > 0) {
-      return `${days}d ${hours}h left`;
-    } else if (hours > 0) {
-      return `${hours}h ${minutes}m left`;
+    if (timeWindow === 'before') {
+      return 'Opens at 3pm';
+    } else if (timeWindow === 'after') {
+      return 'Closed';
     } else {
-      return `${minutes}m left`;
+      // During sale (3pm-10pm)
+      return formatCompactCountdown(seconds) + ' left';
     }
-  }, [endsAt]);
+  });
+
+  // Update countdown every second
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const timeWindow = getCurrentTimeWindow();
+      const seconds = getCountdownSeconds();
+
+      if (timeWindow === 'before') {
+        setTimeLeft('Opens at 3pm');
+      } else if (timeWindow === 'after') {
+        setTimeLeft('Closed');
+      } else {
+        // During sale (3pm-10pm)
+        setTimeLeft(formatCompactCountdown(seconds) + ' left');
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   if (!endsAt || !timeLeft) return null;
 

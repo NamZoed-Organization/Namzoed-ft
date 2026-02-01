@@ -33,6 +33,9 @@ export const fetchPosts = async (page: number = 0, pageSize: number = 10) => {
         name,
         email,
         phone
+      ),
+      post_likes (
+        id
       )
     `, { count: 'exact' })
     .order('created_at', { ascending: false })
@@ -43,14 +46,25 @@ export const fetchPosts = async (page: number = 0, pageSize: number = 10) => {
     throw error;
   }
 
-  return { posts: (data || []) as PostWithUser[], totalCount: count || 0 };
+  // Map posts to include actual like count from post_likes
+  const postsWithLikeCounts = (data || []).map((post: any) => ({
+    ...post,
+    likes: post.post_likes?.length || 0,
+  })) as PostWithUser[];
+
+  return { posts: postsWithLikeCounts, totalCount: count || 0 };
 };
 
 // Fetch posts by user ID
 export const fetchUserPosts = async (userId: string) => {
   const { data, error } = await supabase
     .from('posts')
-    .select('*')
+    .select(`
+      *,
+      post_likes (
+        id
+      )
+    `)
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
 
@@ -59,7 +73,13 @@ export const fetchUserPosts = async (userId: string) => {
     throw error;
   }
 
-  return data || [];
+  // Map posts to include actual like count from post_likes
+  const postsWithLikeCounts = (data || []).map((post: any) => ({
+    ...post,
+    likes: post.post_likes?.length || 0,
+  }));
+
+  return postsWithLikeCounts;
 };
 
 // Create a new post

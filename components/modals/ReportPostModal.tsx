@@ -6,7 +6,7 @@ import {
   Alert,
   Animated,
   Dimensions,
-  KeyboardAvoidingView,
+  Keyboard,
   Modal,
   PanResponder,
   Platform,
@@ -19,6 +19,8 @@ import {
 } from 'react-native';
 import { reportPost } from '@/lib/reportService';
 import { feedEvents } from '@/utils/feedEvents';
+import PopupMessage from '@/components/ui/PopupMessage';
+import { unbookmarkPost } from '@/lib/bookmarkService';
 
 interface ReportPostModalProps {
   visible: boolean;
@@ -50,9 +52,11 @@ export default function ReportPostModal({
   const [selectedReason, setSelectedReason] = useState<string>('');
   const [details, setDetails] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
 
   // Vertical slide for drag-to-close
   const panY = useRef(new Animated.Value(0)).current;
+  const keyboardOffset = useRef(new Animated.Value(0)).current;
   const screenHeight = Dimensions.get('window').height;
 
   // Pan Responder for Drag-to-Close
@@ -96,8 +100,41 @@ export default function ReportPostModal({
   useEffect(() => {
     if (visible) {
       panY.setValue(0);
+      keyboardOffset.setValue(0);
     }
-  }, [visible, panY]);
+  }, [visible, panY, keyboardOffset]);
+
+  // Handle keyboard show/hide to move modal up and down
+  useEffect(() => {
+    if (!visible) return;
+
+    const keyboardWillShow = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => {
+        Animated.timing(keyboardOffset, {
+          toValue: -e.endCoordinates.height,
+          duration: Platform.OS === 'ios' ? e.duration : 250,
+          useNativeDriver: false,
+        }).start();
+      }
+    );
+
+    const keyboardWillHide = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      (e) => {
+        Animated.timing(keyboardOffset, {
+          toValue: 0,
+          duration: Platform.OS === 'ios' ? e.duration : 250,
+          useNativeDriver: false,
+        }).start();
+      }
+    );
+
+    return () => {
+      keyboardWillShow.remove();
+      keyboardWillHide.remove();
+    };
+  }, [visible, keyboardOffset]);
 
   const handleSubmit = async () => {
     if (!selectedReason) {
@@ -126,27 +163,25 @@ export default function ReportPostModal({
     if (result.success) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-      // Emit event immediately to hide post from feed
-      feedEvents.emit('postReported', postId);
-      onReportSuccess?.();
+      // Remove bookmark if post was bookmarked
+      await unbookmarkPost(postId, currentUserId);
 
       // Reset form
       setSelectedReason('');
       setDetails('');
 
-      // Show success message
-      Alert.alert(
-        'Report Submitted',
-        "Post reported and hidden from your feed. We'll review it soon.",
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              onClose();
-            }
-          }
-        ]
-      );
+      // Close the report modal first
+      onClose();
+
+      // Show success popup
+      setShowSuccess(true);
+
+      // After popup duration, hide post from feed
+      setTimeout(() => {
+        setShowSuccess(false);
+        feedEvents.emit('postReported', postId);
+        onReportSuccess?.();
+      }, 2000);
     } else {
       Alert.alert('Error', result.error || 'Failed to submit report');
     }
@@ -164,26 +199,26 @@ export default function ReportPostModal({
   };
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="none"
-      statusBarTranslucent
-      onRequestClose={handleClose}
-    >
-      <Pressable
-        className="flex-1 bg-black/50 justify-end"
-        onPress={handleClose}
-        activeOpacity={1}
+    <>
+      <Modal
+        visible={visible}
+        transparent
+        animationType="none"
+        statusBarTranslucent
+        onRequestClose={handleClose}
       >
-        <Pressable onPress={(e) => e.stopPropagation()}>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          >
+        <Pressable
+          className="flex-1 bg-black/50 justify-end"
+          onPress={handleClose}
+          activeOpacity={1}
+        >
+          <Pressable onPress={(e) => e.stopPropagation()}>
             <Animated.View
               className="bg-white rounded-t-3xl overflow-hidden shadow-xl w-full"
               style={{
-                transform: [{ translateY: panY }],
+                transform: [{
+                  translateY: Animated.add(panY, keyboardOffset)
+                }],
               }}
             >
               {/* Drag Bar */}
@@ -268,7 +303,7 @@ export default function ReportPostModal({
                 <TouchableOpacity
                   onPress={handleSubmit}
                   disabled={submitting || !selectedReason || !details.trim()}
-                  className={`mt-6 py-4 rounded-2xl ${
+                  className={`mt-6 mb-8 py-4 rounded-2xl ${
                     submitting || !selectedReason || !details.trim()
                       ? 'bg-gray-300'
                       : 'bg-red-500'
@@ -284,9 +319,24 @@ export default function ReportPostModal({
                 </TouchableOpacity>
               </ScrollView>
             </Animated.View>
-          </KeyboardAvoidingView>
+          </Pressable>
         </Pressable>
-      </Pressable>
     </Modal>
+
+    {/* Success Popup */}
+    <Modal
+      visible={showSuccess}
+      transparent={true}
+      animationType="none"
+      statusBarTranslucent={true}
+    >
+      <PopupMessage
+        visible={showSuccess}
+        type="white"
+        title="We're on it!"
+        message="Post reported and hidden from your feed. We'll review it soon."
+      />
+    </Modal>
+  </>
   );
 }

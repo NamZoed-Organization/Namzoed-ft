@@ -52,7 +52,7 @@ export default function ClosingSaleBanner({
             {/* Part 2: Title and time range */}
             <View style={styles.middleSection}>
               <Text style={styles.bannerTitle}>{displayText.title}</Text>
-              <Text style={styles.timeRange}>8:00 PM - 10:00 PM</Text>
+              <Text style={styles.timeRange}>3:00 PM - 10:00 PM</Text>
             </View>
 
             {/* Part 3: Countdown label and timer */}

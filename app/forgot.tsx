@@ -3,7 +3,6 @@ import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Image,
   Keyboard,
   Text,
@@ -14,12 +13,19 @@ import {
 } from "react-native";
 import { supabase } from '../lib/supabase';
 import { sendOTPSMS } from '../services/smsService';
+import PopupMessage from '../components/ui/PopupMessage';
 
 export default function Forgot() {
   const [identifier, setIdentifier] = useState(""); // Can be email or phone
   const [loading, setLoading] = useState(false);
   const [inputType, setInputType] = useState<"email" | "phone" | null>(null);
+  const [popup, setPopup] = useState({ visible: false, type: 'error' as 'success' | 'error' | 'warning', title: '', message: '' });
   const router = useRouter();
+
+  const showPopup = (type: 'success' | 'error' | 'warning', title: string, message: string) => {
+    setPopup({ visible: true, type, title, message });
+    setTimeout(() => setPopup({ visible: false, type: 'error', title: '', message: '' }), 3000);
+  };
   
   const isValidBhutanesePhone = (input: string) => {
     return (
@@ -53,22 +59,27 @@ export default function Forgot() {
     const isEmail = isValidEmail(identifier);
 
     if (!isPhone && !isEmail) {
-      Alert.alert("Invalid Input", "Please enter a valid email or phone number");
+      showPopup('error', 'Invalid Input', 'Please enter a valid email or phone number');
       return;
     }
 
     setLoading(true);
 
     try {
-      // Check if user exists
-      const { data: profiles, error: profileError } = await supabase
-        .from('profiles')
-        .select('id, email, phone')
-        .or(isEmail ? `email.eq.${identifier}` : `phone.eq.${identifier}`)
-        .single();
+      // Check if user exists - Fixed query using .eq() instead of .or()
+      const query = isEmail
+        ? supabase.from('profiles').select('id, email, phone').eq('email', identifier)
+        : supabase.from('profiles').select('id, email, phone').eq('phone', identifier);
+
+      const { data: profiles, error: profileError } = await query.single();
 
       if (profileError || !profiles) {
-        Alert.alert("Not Found", "No account found with this " + (isEmail ? "email" : "phone number"));
+        console.error('Profile lookup error:', profileError);
+        showPopup(
+          'error',
+          'Not Found',
+          `No account found with this ${isEmail ? 'email' : 'phone number'}.\n\nError: ${profileError?.message || 'Unknown error'}`
+        );
         setLoading(false);
         return;
       }
@@ -81,48 +92,66 @@ export default function Forgot() {
       // For now, we'll pass it via route params
       
       if (isPhone) {
-        // Send OTP via SMS
-        const smsSent = await sendOTPSMS(identifier, otp);
-        
-        if (smsSent) {
-          router.push({
-            pathname: "/verify-otp",
-            params: { 
-              identifier: identifier,
-              type: "phone",
-              otp: otp, // In production, don't pass OTP in params, use a secure backend
-              expiresAt: expiresAt.toISOString()
-            }
-          });
-        } else {
-          Alert.alert("Error", "Failed to send OTP. Please try again.");
+        // Send OTP via SMS - wrapped in try-catch for detailed error logging
+        try {
+          console.log('Attempting to send SMS to:', identifier, 'with OTP:', otp);
+          const smsSent = await sendOTPSMS(identifier, otp);
+          console.log('SMS result:', smsSent);
+
+          if (smsSent) {
+            router.push({
+              pathname: "/verify-otp",
+              params: {
+                identifier: identifier,
+                type: "phone",
+                otp: otp, // In production, don't pass OTP in params, use a secure backend
+                expiresAt: expiresAt.toISOString()
+              }
+            });
+          } else {
+            showPopup(
+              'error',
+              'SMS Failed',
+              'Failed to send OTP via SMS. The SMS service returned false. Please check your internet connection and try again.'
+            );
+          }
+        } catch (smsError: any) {
+          console.error('SMS Error:', smsError);
+          console.error('SMS Error details:', JSON.stringify(smsError, null, 2));
+          showPopup(
+            'error',
+            'SMS Error',
+            `Failed to send OTP.\n\nError: ${smsError?.message || 'Unknown error'}\n\nDetails: ${JSON.stringify(smsError, null, 2)}`
+          );
         }
       } else {
         // Send OTP via email using Supabase
-        Alert.alert(
-          "Email OTP",
-          `OTP sent to your email. Use this OTP: ${otp}`, // In production, send via email service
-          [
-            {
-              text: "OK",
-              onPress: () => {
-                router.push({
-                  pathname: "/verify-otp",
-                  params: { 
-                    identifier: identifier,
-                    type: "email",
-                    otp: otp,
-                    expiresAt: expiresAt.toISOString()
-                  }
-                });
-              }
-            }
-          ]
+        showPopup(
+          'success',
+          'Email OTP',
+          `OTP sent to your email. Use this OTP: ${otp}`
         );
+
+        setTimeout(() => {
+          router.push({
+            pathname: "/verify-otp",
+            params: {
+              identifier: identifier,
+              type: "email",
+              otp: otp,
+              expiresAt: expiresAt.toISOString()
+            }
+          });
+        }, 3000);
       }
     } catch (error: any) {
       console.error("Error:", error);
-      Alert.alert("Error", error.message || "Something went wrong");
+      console.error("Error details:", JSON.stringify(error, null, 2));
+      showPopup(
+        'error',
+        'Error',
+        `Something went wrong.\n\nError: ${error?.message || 'Unknown error'}\n\nDetails: ${JSON.stringify(error, null, 2)}`
+      );
     } finally {
       setLoading(false);
     }
@@ -131,6 +160,14 @@ export default function Forgot() {
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
       <View className="flex-1 justify-center items-center bg-white px-[10%]">
+        {/* Popup Message */}
+        <PopupMessage
+          visible={popup.visible}
+          type={popup.type}
+          title={popup.title}
+          message={popup.message}
+        />
+
         {/* Back Button */}
         <TouchableOpacity
           onPress={() => router.back()}
