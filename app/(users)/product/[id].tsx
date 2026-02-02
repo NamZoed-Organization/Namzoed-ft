@@ -242,12 +242,11 @@ export default function ProductDetail() {
 
   const handleMessageSeller = () => {
     if (!product) return;
-    if (currentUser?.id === product.user_id) {
-      showSuccessPopup("This is your own product");
-      return;
-    }
     router.push(`/(users)/chat/${product.user_id}`);
   };
+
+  // Check if viewing own product
+  const isOwnProduct = currentUser?.id === product?.user_id;
 
   const handleShare = async () => {
     if (!product) return;
@@ -637,15 +636,17 @@ export default function ProductDetail() {
                   </View>
                 </TouchableOpacity>
 
-                {/* Message Button */}
-                <TouchableOpacity
-                  onPress={handleMessageSeller}
-                  activeOpacity={0.8}
-                  className="bg-primary flex-row items-center justify-center py-3 rounded-2xl"
-                >
-                  <MessageCircle size={18} color="white" />
-                  <Text className="text-white font-semibold ml-2">Message Seller</Text>
-                </TouchableOpacity>
+                {/* Message Button - Only show for other users' products */}
+                {!isOwnProduct && (
+                  <TouchableOpacity
+                    onPress={handleMessageSeller}
+                    activeOpacity={0.8}
+                    className="bg-primary flex-row items-center justify-center py-3 rounded-2xl"
+                  >
+                    <MessageCircle size={18} color="white" />
+                    <Text className="text-white font-semibold ml-2">Message Seller</Text>
+                  </TouchableOpacity>
+                )}
               </Animated.View>
             )}
 
@@ -698,55 +699,57 @@ export default function ProductDetail() {
         </Animated.View>
       </ScrollView>
 
-      {/* Floating Bottom Action Bar */}
-      <Animated.View
-        entering={FadeInUp.duration(400).delay(300)}
-        className="absolute bottom-0 left-0 right-0"
-      >
-        <BlurView
-          intensity={80}
-          tint="light"
-          className="border-t border-gray-100"
+      {/* Floating Bottom Action Bar - Only show for other users' products */}
+      {!isOwnProduct && (
+        <Animated.View
+          entering={FadeInUp.duration(400).delay(300)}
+          className="absolute bottom-0 left-0 right-0"
         >
-          <View className="px-6 py-4 pb-8 flex-row gap-4">
-            {/* Message Seller Button */}
-            <TouchableOpacity
-              onPress={handleMessageSeller}
-              activeOpacity={0.8}
-              className="flex-1 bg-primary py-4 rounded-2xl flex-row items-center justify-center gap-2 shadow-lg"
-              style={{
-                shadowColor: "#094569",
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.3,
-                shadowRadius: 12,
-                elevation: 8,
-              }}
-            >
-              <MessageCircle size={20} color="white" />
-              <Text className="text-white font-bold text-base">
-                Message Seller
-              </Text>
-            </TouchableOpacity>
+          <BlurView
+            intensity={80}
+            tint="light"
+            className="border-t border-gray-100"
+          >
+            <View className="px-6 py-4 pb-8 flex-row gap-4">
+              {/* Message Seller Button */}
+              <TouchableOpacity
+                onPress={handleMessageSeller}
+                activeOpacity={0.8}
+                className="flex-1 bg-primary py-4 rounded-2xl flex-row items-center justify-center gap-2 shadow-lg"
+                style={{
+                  shadowColor: "#094569",
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.3,
+                  shadowRadius: 12,
+                  elevation: 8,
+                }}
+              >
+                <MessageCircle size={20} color="white" />
+                <Text className="text-white font-bold text-base">
+                  Message Seller
+                </Text>
+              </TouchableOpacity>
 
-            {/* Quick Actions */}
-            <TouchableOpacity
-              onPress={toggleBookmark}
-              activeOpacity={0.8}
-              className={`w-14 h-14 rounded-2xl items-center justify-center border-2 ${
-                isBookmarked
-                  ? "bg-primary/10 border-primary"
-                  : "bg-white border-gray-200"
-              }`}
-            >
-              <Bookmark
-                size={22}
-                color={isBookmarked ? "#094569" : "#6B7280"}
-                fill={isBookmarked ? "#094569" : "transparent"}
-              />
-            </TouchableOpacity>
-          </View>
-        </BlurView>
-      </Animated.View>
+              {/* Quick Actions */}
+              <TouchableOpacity
+                onPress={toggleBookmark}
+                activeOpacity={0.8}
+                className={`w-14 h-14 rounded-2xl items-center justify-center border-2 ${
+                  isBookmarked
+                    ? "bg-primary/10 border-primary"
+                    : "bg-white border-gray-200"
+                }`}
+              >
+                <Bookmark
+                  size={22}
+                  color={isBookmarked ? "#094569" : "#6B7280"}
+                  fill={isBookmarked ? "#094569" : "transparent"}
+                />
+              </TouchableOpacity>
+            </View>
+          </BlurView>
+        </Animated.View>
+      )}
 
       {/* Report Modal */}
       {currentUser && product && product.user_id && (
