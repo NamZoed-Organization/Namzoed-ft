@@ -1,16 +1,21 @@
-import Constants from 'expo-constants';
+// Get BT SMS API URL from environment variables
+const BT_SMS_API = process.env.EXPO_PUBLIC_BT_SMS_API;
 
-// Get BT SMS API URL from environment
-// Note: process.env doesn't work in bundled React Native apps - use Constants.expoConfig.extra instead
-const BT_SMS_API = Constants.expoConfig?.extra?.BT_SMS_API || 'http://52.66.255.185/api/send-sms/bt';
-
-// Get Tashicell SMS API URL from environment
-// Note: process.env doesn't work in bundled React Native apps - use Constants.expoConfig.extra instead
-const TASHI_SMS_API = Constants.expoConfig?.extra?.TASHI_SMS_API || 'http://52.66.255.185/api/send-sms/tashicell';
+// Get Tashicell SMS API URL from environment variables
+const TASHI_SMS_API = process.env.EXPO_PUBLIC_TASHI_SMS_API;
 
 interface SMSPayload {
   phone: string;
   message: string;
+}
+
+/**
+ * Validates that required environment variables are set
+ */
+function validateEnvironment(): void {
+  if (!BT_SMS_API || !TASHI_SMS_API) {
+    console.error('SMS API URLs are not configured in environment variables');
+  }
 }
 
 /**
@@ -23,6 +28,14 @@ interface SMSPayload {
  */
 export async function sendSMS({ phone, message }: SMSPayload): Promise<boolean> {
   try {
+    // Validate environment variables are set
+    validateEnvironment();
+
+    if (!BT_SMS_API || !TASHI_SMS_API) {
+      console.error('SMS API configuration is missing');
+      return false;
+    }
+
     // Format phone number - ensure it has Bhutan country code 975
     let formattedPhone = phone;
     if (!phone.startsWith('975')) {
@@ -30,7 +43,8 @@ export async function sendSMS({ phone, message }: SMSPayload): Promise<boolean> 
     }
 
     // Determine which API to use based on phone prefix
-    let apiUrl = BT_SMS_API;
+    // TypeScript assertion: we've validated these are strings above
+    let apiUrl: string = BT_SMS_API;
     if (formattedPhone.startsWith('97577')) {
       apiUrl = TASHI_SMS_API;
       console.log('Using Tashicell SMS API');
