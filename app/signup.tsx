@@ -3,6 +3,7 @@ import {
   Ionicons,
   MaterialIcons
 } from "@expo/vector-icons";
+import FormInput from "@/components/ui/FormInput";
 import { Link, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -15,7 +16,6 @@ import {
   Pressable,
   ScrollView,
   Text,
-  TextInput,
   TouchableOpacity,
   TouchableWithoutFeedback,
   View,
@@ -301,67 +301,34 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
           </View>
 
           {/* Name */}
-          <View className="flex-row items-center border border-gray-300 rounded-lg px-4 py-3">
-            <MaterialIcons name="person" size={20} color="#999" />
-            <TextInput
-              placeholder="Full Name"
-              style={{
-                flex: 1,
-                fontSize: 16,
-                fontWeight: '400',
-                color: '#000000',
-                marginLeft: 8,
-                paddingVertical: 12,
-              }}
-              placeholderTextColor="#999999"
-              value={name}
-              onChangeText={setName}
-              onFocus={closeDropdown}
-            />
-          </View>
+          <FormInput
+            placeholder="Full Name"
+            value={name}
+            onChangeText={setName}
+            onFocus={closeDropdown}
+            leftIcon={<MaterialIcons name="person" size={20} color="#6B7280" />}
+          />
 
           {/* Email */}
-          <View className="flex-row items-center border border-gray-300 rounded-lg px-4 py-3">
-            <MaterialIcons name="email" size={20} color="#999" />
-            <TextInput
-              placeholder="E-mail"
-              style={{
-                flex: 1,
-                fontSize: 16,
-                fontWeight: '400',
-                color: '#000000',
-                marginLeft: 8,
-                paddingVertical: 12,
-              }}
-              placeholderTextColor="#999999"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              onFocus={closeDropdown}
-            />
-          </View>
+          <FormInput
+            placeholder="E-mail"
+            value={email}
+            onChangeText={setEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            onFocus={closeDropdown}
+            leftIcon={<MaterialIcons name="email" size={20} color="#6B7280" />}
+          />
 
           {/* Phone */}
-          <View className="flex-row items-center border border-gray-300 rounded-lg px-4 py-3">
-            <MaterialIcons name="phone" size={20} color="#999" />
-            <TextInput
-              placeholder="Phone Number"
-              style={{
-                flex: 1,
-                fontSize: 16,
-                fontWeight: '400',
-                color: '#000000',
-                marginLeft: 8,
-                paddingVertical: 12,
-              }}
-              placeholderTextColor="#999999"
-              keyboardType="phone-pad"
-              value={phone}
-              onChangeText={setPhone}
-              onFocus={closeDropdown}
-            />
-          </View>
+          <FormInput
+            placeholder="Phone Number"
+            keyboardType="phone-pad"
+            value={phone}
+            onChangeText={setPhone}
+            onFocus={closeDropdown}
+            leftIcon={<MaterialIcons name="phone" size={20} color="#6B7280" />}
+          />
 
           {/* Dzongkhag Dropdown */}
           <View className="relative">
@@ -380,12 +347,12 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
                   alignItems: "center",
                   justifyContent: "space-between",
                   borderWidth: 1,
-                  borderColor: showDropdown ? "#6B7280" : "#D1D5DB",
-                  borderRadius: 8,
-                  paddingVertical: 18,
+                  borderColor: showDropdown ? "#9CA3AF" : "#E5E7EB",
+                  borderRadius: 12,
+                  paddingVertical: 14,
                   paddingHorizontal: 16,
                   paddingLeft: 46,
-                  backgroundColor: "#fff",
+                  backgroundColor: "#F9FAFB",
                 }}
               >
                 <Text
@@ -484,62 +451,46 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
           </View>
 
           {/* Password */}
-          <View className="flex-row items-center border border-gray-300 rounded-lg px-4 py-3">
-            <MaterialIcons name="lock" size={20} color="#999" />
-            <TextInput
-              placeholder="Password"
-              style={{
-                flex: 1,
-                fontSize: 16,
-                fontWeight: '400',
-                color: '#000000',
-                marginLeft: 8,
-                paddingVertical: 12,
-              }}
-              placeholderTextColor="#999999"
-              secureTextEntry={!showPassword}
-              value={password}
-              onChangeText={setPassword}
-              onFocus={closeDropdown}
-            />
-            <Pressable onPress={() => setShowPassword(!showPassword)}>
-              <Ionicons
-                name={showPassword ? "eye" : "eye-off"}
-                size={20}
-                color="#999"
-              />
-            </Pressable>
-          </View>
+          <FormInput
+            placeholder="Password"
+            secureTextEntry={!showPassword}
+            value={password}
+            onChangeText={setPassword}
+            onFocus={closeDropdown}
+            leftIcon={<MaterialIcons name="lock" size={20} color="#6B7280" />}
+            rightAccessory={
+              <Pressable onPress={() => setShowPassword(!showPassword)}>
+                <Ionicons
+                  name={showPassword ? "eye" : "eye-off"}
+                  size={20}
+                  color="#6B7280"
+                />
+              </Pressable>
+            }
+          />
 
           {/* Confirm Password */}
-          <View className="flex-row items-center border border-gray-300 rounded-lg px-4 py-3">
-            <MaterialIcons name="lock-outline" size={20} color="#999" />
-            <TextInput
-              placeholder="Confirm Password"
-              style={{
-                flex: 1,
-                fontSize: 16,
-                fontWeight: '400',
-                color: '#000000',
-                marginLeft: 8,
-                paddingVertical: 12,
-              }}
-              placeholderTextColor="#999999"
-              secureTextEntry={!showConfirmPassword}
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              onFocus={closeDropdown}
-            />
-            <Pressable
-              onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-            >
-              <Ionicons
-                name={showConfirmPassword ? "eye" : "eye-off"}
-                size={20}
-                color="#999"
-              />
-            </Pressable>
-          </View>
+          <FormInput
+            placeholder="Confirm Password"
+            secureTextEntry={!showConfirmPassword}
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            onFocus={closeDropdown}
+            leftIcon={
+              <MaterialIcons name="lock-outline" size={20} color="#6B7280" />
+            }
+            rightAccessory={
+              <Pressable
+                onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+              >
+                <Ionicons
+                  name={showConfirmPassword ? "eye" : "eye-off"}
+                  size={20}
+                  color="#6B7280"
+                />
+              </Pressable>
+            }
+          />
 
           {/* Terms */}
           <Text className="text-sm font-mlight text-center text-gray-500">

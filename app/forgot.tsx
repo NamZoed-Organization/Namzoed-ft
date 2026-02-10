@@ -1,4 +1,5 @@
 import { Entypo, MaterialIcons } from "@expo/vector-icons";
+import FormInput from "@/components/ui/FormInput";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
@@ -6,7 +7,6 @@ import {
   Image,
   Keyboard,
   Text,
-  TextInput,
   TouchableOpacity,
   TouchableWithoutFeedback,
   View,
@@ -195,14 +195,8 @@ export default function Forgot() {
           </View>
 
           {/* Email/Phone Input */}
-          <View className="border border-gray-300 rounded-lg px-4 py-2 mb-4 flex-row items-center">
-            <MaterialIcons
-              name={inputType === "email" ? "email" : "phone"}
-              size={20}
-              color="#999"
-              className="mr-2"
-            />
-            <TextInput
+          <View className="mb-4">
+            <FormInput
               value={identifier}
               onChangeText={(text) => {
                 setIdentifier(text);
@@ -210,8 +204,14 @@ export default function Forgot() {
               }}
               placeholder="Enter your email or phone number"
               keyboardType={inputType === "email" ? "email-address" : "phone-pad"}
-              className="flex-1 font-regular text-base"
               autoCapitalize="none"
+              leftIcon={
+                <MaterialIcons
+                  name={inputType === "email" ? "email" : "phone"}
+                  size={20}
+                  color="#6B7280"
+                />
+              }
             />
           </View>
 

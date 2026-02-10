@@ -1,8 +1,18 @@
-import React from "react";
-import { View, TouchableOpacity, Modal, Image, Dimensions } from "react-native";
+import { BlurView } from "expo-blur";
+import { LinearGradient } from "expo-linear-gradient";
 import { X } from "lucide-react-native";
-import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
-import Animated, { useSharedValue, useAnimatedStyle, withSpring } from "react-native-reanimated";
+import React from "react";
+import { Dimensions, Image, Modal, TouchableOpacity, View } from "react-native";
+import {
+  Gesture,
+  GestureDetector,
+  GestureHandlerRootView,
+} from "react-native-gesture-handler";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from "react-native-reanimated";
 
 interface ProfileImageViewerProps {
   visible: boolean;
@@ -11,6 +21,14 @@ interface ProfileImageViewerProps {
 }
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
+const AVATAR_SIZE = Math.min(screenWidth * 0.78, 360);
+const GRAIN_DOTS = Array.from({ length: 140 }, (_, i) => ({
+  key: i,
+  left: (i * 73) % 100,
+  top: (i * 41) % 100,
+  size: i % 3 === 0 ? 2 : 1,
+  opacity: i % 4 === 0 ? 0.12 : 0.06,
+}));
 
 // ZoomableImage Component (simplified version from ImageViewer)
 const ZoomableImage = ({ uri }: { uri: string }) => {
@@ -42,18 +60,32 @@ const ZoomableImage = ({ uri }: { uri: string }) => {
 
   return (
     <GestureDetector gesture={pinchGesture}>
-      <Animated.View style={[{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }, animatedStyle]}>
+      <Animated.View
+        style={[
+          {
+            width: AVATAR_SIZE,
+            height: AVATAR_SIZE,
+            justifyContent: "center",
+            alignItems: "center",
+          },
+          animatedStyle,
+        ]}
+      >
         <Image
           source={{ uri }}
-          style={{ width: '100%', height: '100%' }}
-          resizeMode="contain"
+          style={{ width: AVATAR_SIZE, height: AVATAR_SIZE }}
+          resizeMode="cover"
         />
       </Animated.View>
     </GestureDetector>
   );
 };
 
-export default function ProfileImageViewer({ visible, imageUri, onClose }: ProfileImageViewerProps) {
+export default function ProfileImageViewer({
+  visible,
+  imageUri,
+  onClose,
+}: ProfileImageViewerProps) {
   if (!imageUri) return null;
 
   return (
@@ -65,27 +97,103 @@ export default function ProfileImageViewer({ visible, imageUri, onClose }: Profi
       onRequestClose={onClose}
     >
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <View className="flex-1 bg-black" style={{ backgroundColor: '#000000' }}>
+        <View
+          className="flex-1"
+          style={{ backgroundColor: "rgba(232, 232, 232, 0.9)" }}
+        >
+          <BlurView
+            intensity={35}
+            tint="dark"
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+            }}
+          />
+          <LinearGradient
+            colors={[
+              "rgba(255, 132, 86, 0.14)",
+              "rgba(112, 86, 255, 0.12)",
+              "rgba(28, 28, 38, 0.18)",
+            ]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+            }}
+          />
+          <View
+            pointerEvents="none"
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+            }}
+          >
+            {GRAIN_DOTS.map((dot) => (
+              <View
+                key={dot.key}
+                style={{
+                  position: "absolute",
+                  left: `${dot.left}%`,
+                  top: `${dot.top}%`,
+                  width: dot.size,
+                  height: dot.size,
+                  borderRadius: dot.size,
+                  backgroundColor: `rgba(255,255,255,${dot.opacity})`,
+                }}
+              />
+            ))}
+          </View>
+
           {/* Close Button - Top Left */}
           <View className="absolute top-0 left-0 right-0 z-10 flex-row items-center justify-between p-4 pt-16">
             <TouchableOpacity
               onPress={onClose}
-              className="bg-black/50 rounded-full p-2"
+              className="rounded-full p-2"
+              style={{ backgroundColor: "rgba(9, 16, 29, 0.45)" }}
             >
               <X size={24} color="white" />
             </TouchableOpacity>
           </View>
 
-          {/* Zoomable Image - Center */}
+          {/* Rounded profile image viewer */}
           <View
-            className="items-center justify-center bg-black"
+            className="items-center justify-center"
             style={{
               width: screenWidth,
               height: screenHeight,
-              backgroundColor: '#000000'
             }}
           >
-            <ZoomableImage uri={imageUri} />
+            <View
+              style={{
+                width: AVATAR_SIZE + 14,
+                height: AVATAR_SIZE + 14,
+                borderRadius: (AVATAR_SIZE + 14) / 2,
+                padding: 7,
+                backgroundColor: "rgba(255,255,255,0.18)",
+              }}
+            >
+              <View
+                style={{
+                  width: AVATAR_SIZE,
+                  height: AVATAR_SIZE,
+                  borderRadius: AVATAR_SIZE / 2,
+                  overflow: "hidden",
+                  backgroundColor: "rgba(255,255,255,0.12)",
+                }}
+              >
+                <ZoomableImage uri={imageUri} />
+              </View>
+            </View>
           </View>
         </View>
       </GestureHandlerRootView>

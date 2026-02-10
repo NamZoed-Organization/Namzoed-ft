@@ -1,4 +1,5 @@
 import { Entypo, Ionicons } from "@expo/vector-icons";
+import FormInput from "@/components/ui/FormInput";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
@@ -7,7 +8,6 @@ import {
     Image,
     Keyboard,
     Text,
-    TextInput,
     TouchableOpacity,
     TouchableWithoutFeedback,
     View,
@@ -151,59 +151,51 @@ export default function ResetPassword() {
           </Text>
 
           {/* New Password Input */}
-          <View className="border border-gray-300 rounded-lg px-4 py-2 mb-4 flex-row items-center">
-            <Ionicons
-              name="lock-closed"
-              size={20}
-              color="#999"
-              className="mr-2"
-            />
-            <TextInput
+          <View className="mb-4">
+            <FormInput
               value={newPassword}
               onChangeText={setNewPassword}
               placeholder="New Password"
               secureTextEntry={!showNewPassword}
-              className="flex-1 font-regular text-base"
               autoCapitalize="none"
+              leftIcon={<Ionicons name="lock-closed" size={20} color="#6B7280" />}
+              rightAccessory={
+                <TouchableOpacity
+                  onPress={() => setShowNewPassword(!showNewPassword)}
+                  className="ml-2"
+                >
+                  <Ionicons
+                    name={showNewPassword ? "eye" : "eye-off"}
+                    size={20}
+                    color="#6B7280"
+                  />
+                </TouchableOpacity>
+              }
             />
-            <TouchableOpacity
-              onPress={() => setShowNewPassword(!showNewPassword)}
-              className="ml-2"
-            >
-              <Ionicons
-                name={showNewPassword ? "eye" : "eye-off"}
-                size={20}
-                color="#999"
-              />
-            </TouchableOpacity>
           </View>
 
           {/* Confirm Password Input */}
-          <View className="border border-gray-300 rounded-lg px-4 py-2 mb-4 flex-row items-center">
-            <Ionicons
-              name="lock-closed"
-              size={20}
-              color="#999"
-              className="mr-2"
-            />
-            <TextInput
+          <View className="mb-4">
+            <FormInput
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               placeholder="Confirm Password"
               secureTextEntry={!showConfirmPassword}
-              className="flex-1 font-regular text-base"
               autoCapitalize="none"
+              leftIcon={<Ionicons name="lock-closed" size={20} color="#6B7280" />}
+              rightAccessory={
+                <TouchableOpacity
+                  onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="ml-2"
+                >
+                  <Ionicons
+                    name={showConfirmPassword ? "eye" : "eye-off"}
+                    size={20}
+                    color="#6B7280"
+                  />
+                </TouchableOpacity>
+              }
             />
-            <TouchableOpacity
-              onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-              className="ml-2"
-            >
-              <Ionicons
-                name={showConfirmPassword ? "eye" : "eye-off"}
-                size={20}
-                color="#999"
-              />
-            </TouchableOpacity>
           </View>
 
           {/* Password Requirements */}

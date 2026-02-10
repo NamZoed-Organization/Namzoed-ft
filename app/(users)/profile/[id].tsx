@@ -1,4 +1,5 @@
 import ReportUserModal from "@/components/modals/ReportUserModal";
+import ProfileImageViewer from "@/components/modals/ProfileImageViewer";
 import { useUser } from "@/contexts/UserContext";
 import { blockUser, isUserBlocked, unblockUser } from "@/lib/blockService";
 import { followUser, isFollowing, unfollowUser } from "@/lib/followService";
@@ -88,6 +89,8 @@ export default function PublicProfileScreen() {
   const [showReportModal, setShowReportModal] = useState(false);
   const [showBlockMenu, setShowBlockMenu] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [showProfileImageViewer, setShowProfileImageViewer] = useState(false);
+  const [viewerImageUri, setViewerImageUri] = useState<string | null>(null);
 
   // Horizontal scroll ref
   const horizontalScrollRef = React.useRef<ScrollView>(null);
@@ -372,6 +375,12 @@ export default function PublicProfileScreen() {
     handleBlockToggle();
   };
 
+  const handleOpenProfileImage = (imageUri?: string | null) => {
+    if (!imageUri) return;
+    setViewerImageUri(imageUri);
+    setShowProfileImageViewer(true);
+  };
+
   if (loading) {
     return (
       <View className="flex-1 bg-white items-center justify-center">
@@ -479,7 +488,12 @@ export default function PublicProfileScreen() {
               {/* Profile Info Section */}
               <View className="px-4 py-6 items-center">
                 {/* Avatar */}
-                <View className="w-24 h-24 rounded-full bg-gray-200 overflow-hidden mb-4 border border-gray-100">
+                <TouchableOpacity
+                  onPress={() => handleOpenProfileImage(userProfile.avatar_url)}
+                  disabled={!userProfile.avatar_url}
+                  activeOpacity={0.85}
+                  className="w-24 h-24 rounded-full bg-gray-200 overflow-hidden mb-4 border border-gray-100"
+                >
                   {userProfile.avatar_url ? (
                     <Image
                       source={{ uri: userProfile.avatar_url }}
@@ -491,7 +505,7 @@ export default function PublicProfileScreen() {
                       <User size={32} className="text-gray-400" />
                     </View>
                   )}
-                </View>
+                </TouchableOpacity>
 
                 {/* Name & Bio */}
                 <Text className="text-2xl font-mbold text-gray-900 text-center mb-1">
@@ -805,7 +819,14 @@ export default function PublicProfileScreen() {
                     {/* Avatar Section */}
                     <View className="items-center mb-6">
                       <View className="relative">
-                        <View className="w-24 h-24 rounded-full bg-gray-200 items-center justify-center overflow-hidden">
+                        <TouchableOpacity
+                          onPress={() =>
+                            handleOpenProfileImage(serviceProvider.profile_url)
+                          }
+                          disabled={!serviceProvider.profile_url}
+                          activeOpacity={0.85}
+                          className="w-24 h-24 rounded-full bg-gray-200 items-center justify-center overflow-hidden"
+                        >
                           {serviceProvider.profile_url ? (
                             <Image
                               source={{ uri: serviceProvider.profile_url }}
@@ -815,7 +836,7 @@ export default function PublicProfileScreen() {
                           ) : (
                             <Wrench size={40} className="text-gray-400" />
                           )}
-                        </View>
+                        </TouchableOpacity>
                         {/* Verified Badge */}
                         {serviceProvider.status === "verified" && (
                           <View className="absolute top-0 right-0 w-7 h-7 bg-blue-500 rounded-full items-center justify-center border-2 border-white">
@@ -1063,6 +1084,15 @@ export default function PublicProfileScreen() {
           onReportSuccess={handleReportSuccess}
         />
       )}
+
+      <ProfileImageViewer
+        visible={showProfileImageViewer}
+        imageUri={viewerImageUri}
+        onClose={() => {
+          setShowProfileImageViewer(false);
+          setViewerImageUri(null);
+        }}
+      />
     </View>
   );
 }

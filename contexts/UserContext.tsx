@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '@/lib/supabase';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
 interface User {
@@ -52,6 +53,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = async () => {
     try {
+      // Clear Supabase auth session so next login doesn't reuse stale account.
+      await supabase.auth.signOut({ scope: 'local' });
       await AsyncStorage.removeItem('currentUser');
       setCurrentUser(null);
     } catch (error) {

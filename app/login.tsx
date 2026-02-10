@@ -1,9 +1,12 @@
+import FormInput from "@/components/ui/FormInput";
 import { useUser } from "@/contexts/UserContext";
 import { supabase } from "@/lib/supabase";
 import { isMongooseUser } from "@/utils/roleCheck";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Linking from "expo-linking";
 import { Link, useRouter } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -11,187 +14,297 @@ import {
   Image,
   Keyboard,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   Text,
-  TextInput,
   TouchableOpacity,
   TouchableWithoutFeedback,
-  View
+  View,
 } from "react-native";
+import Svg, { Path } from "react-native-svg";
+
+WebBrowser.maybeCompleteAuthSession();
+const NATIVE_OAUTH_REDIRECT = "namzoed://login";
+
+function GoogleIcon({ size = 18 }: { size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 48 48" fill="none">
+      <Path
+        fill="#FFC107"
+        d="M43.611 20.083H42V20H24v8h11.303C33.654 32.657 29.216 36 24 36c-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.153 7.958 3.042l5.657-5.657C34.057 6.053 29.265 4 24 4 12.954 4 4 12.954 4 24s8.954 20 20 20 20-8.954 20-20c0-1.341-.138-2.651-.389-3.917z"
+      />
+      <Path
+        fill="#FF3D00"
+        d="M6.306 14.691l6.571 4.819C14.654 15.108 18.961 12 24 12c3.059 0 5.842 1.153 7.958 3.042l5.657-5.657C34.057 6.053 29.265 4 24 4c-7.682 0-14.36 4.337-17.694 10.691z"
+      />
+      <Path
+        fill="#4CAF50"
+        d="M24 44c5.163 0 9.879-1.977 13.438-5.189l-6.19-5.238C29.176 35.181 26.701 36 24 36c-5.195 0-9.625-3.317-11.287-7.943l-6.522 5.025C9.485 39.556 16.18 44 24 44z"
+      />
+      <Path
+        fill="#1976D2"
+        d="M43.611 20.083H42V20H24v8h11.303a12.04 12.04 0 0 1-4.055 5.573l.003-.002 6.19 5.238C37 39.167 44 34 44 24c0-1.341-.138-2.651-.389-3.917z"
+      />
+    </Svg>
+  );
+}
 
 export default function Login() {
-  const [email, setEmail] = useState("");
-  const [phoneNumber, setPhoneNumber] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [oauthLoading, setOauthLoading] = useState<"google" | "apple" | null>(
+    null,
+  );
+  const [showPhonePrompt, setShowPhonePrompt] = useState(false);
+  const [phonePromptValue, setPhonePromptValue] = useState("");
+  const [phonePromptLoading, setPhonePromptLoading] = useState(false);
+  const [pendingUserData, setPendingUserData] = useState<any | null>(null);
+  const [pendingResolvedEmail, setPendingResolvedEmail] = useState("");
   const { setCurrentUser } = useUser();
 
   const isValidEmail = (input: string) => {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input);
   };
 
+  const normalizeBhutanPhone = (input: string) => {
+    const compact = input.trim().replace(/\s+/g, "");
+    return compact.startsWith("+975") ? compact.slice(4) : compact;
+  };
+
   const isValidBhutanesePhone = (input: string) => {
-    return (input.startsWith("17") || input.startsWith("77")) && input.length === 8;
+    const normalized = normalizeBhutanPhone(input);
+    return (
+      /^[0-9]{8}$/.test(normalized) &&
+      (normalized.startsWith("17") || normalized.startsWith("77"))
+    );
   };
 
-  // Field disable logic
-  const isEmailDisabled = phoneNumber.length > 0;
-  const isPhoneDisabled = email.length > 0;
+  const isIdentifierEmail = identifier.includes("@");
+  const isIdentifierValid = isIdentifierEmail
+    ? isValidEmail(identifier)
+    : isValidBhutanesePhone(identifier);
 
-  // Clear handlers
-  const handleClearEmail = () => {
-    setEmail("");
+  const handleClearIdentifier = () => {
+    setIdentifier("");
   };
 
-  const handleClearPhone = () => {
-    setPhoneNumber("");
+  const completeLogin = async (userData: any, resolvedEmail: string) => {
+    await AsyncStorage.setItem("currentUser", JSON.stringify(userData));
+    setCurrentUser(userData);
+    setIdentifier("");
+    setPassword("");
+
+    if (resolvedEmail && isMongooseUser(resolvedEmail)) {
+      router.replace("/mongoose-dashboard");
+    } else {
+      router.replace("/(users)");
+    }
   };
 
+  const ensureProfileFromAuthUser = async (authUser: any) => {
+    const providerMeta = authUser?.user_metadata || {};
+    const providerName =
+      providerMeta.full_name || providerMeta.name || providerMeta.user_name || null;
+    const providerAvatar =
+      providerMeta.avatar_url || providerMeta.picture || providerMeta.photo_url || null;
+
+    const { data: existingProfile, error: fetchError } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", authUser.id)
+      .maybeSingle();
+
+    if (fetchError) {
+      console.error("Profile fetch error:", fetchError);
+    }
+
+    const profilePayload: any = {
+      id: authUser.id,
+      email: authUser.email ?? existingProfile?.email ?? null,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (!existingProfile?.name && providerName) profilePayload.name = providerName;
+    if (!existingProfile?.avatar_url && providerAvatar) profilePayload.avatar_url = providerAvatar;
+
+    if (!existingProfile) {
+      profilePayload.created_at = new Date().toISOString();
+      if (!profilePayload.name && authUser.email) {
+        profilePayload.name = authUser.email.split("@")[0];
+      }
+    }
+
+    const hasUsefulUpdates =
+      !existingProfile ||
+      (!!profilePayload.name && profilePayload.name !== existingProfile?.name) ||
+      (!!profilePayload.avatar_url &&
+        profilePayload.avatar_url !== existingProfile?.avatar_url);
+
+    if (hasUsefulUpdates) {
+      const { error: upsertError } = await supabase.from("profiles").upsert(profilePayload);
+      if (upsertError) {
+        console.error("Profile upsert error:", upsertError);
+      }
+    }
+
+    const { data: finalProfile } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", authUser.id)
+      .maybeSingle();
+
+    return finalProfile || existingProfile || null;
+  };
+
+  const finalizeLogin = async (authUser: any, isOAuth = false) => {
+    try {
+      const profileData = await ensureProfileFromAuthUser(authUser);
+
+      const userData = {
+        id: authUser.id,
+        email: authUser.email ?? profileData?.email ?? null,
+        ...(profileData || {}),
+      };
+
+      const resolvedEmail = userData?.email || "";
+
+      if (isOAuth && !profileData?.phone) {
+        const promptDoneKey = `oauth_phone_prompt_done_${authUser.id}`;
+        const alreadyHandled = await AsyncStorage.getItem(promptDoneKey);
+        if (!alreadyHandled) {
+          setPendingUserData(userData);
+          setPendingResolvedEmail(resolvedEmail);
+          setPhonePromptValue("");
+          setShowPhonePrompt(true);
+          return;
+        }
+      }
+
+      await completeLogin(userData, resolvedEmail);
+    } catch (error: any) {
+      console.error("Finalize login error:", error);
+      Alert.alert("Error", "Failed to complete login");
+    }
+  };
+
+  const handleOAuthLogin = async (provider: "google" | "apple") => {
+    try {
+      setOauthLoading(provider);
+      // Force fresh account selection flow and prevent stale user session reuse.
+      await supabase.auth.signOut({ scope: "local" });
+      const redirectTo =
+        Platform.OS === "web" ? Linking.createURL("/login") : NATIVE_OAUTH_REDIRECT;
+
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo,
+          skipBrowserRedirect: true,
+          queryParams:
+            provider === "google"
+              ? { prompt: "select_account", access_type: "offline" }
+              : undefined,
+        },
+      });
+
+      if (error || !data?.url) {
+        Alert.alert("Login Failed", error?.message || "Unable to start OAuth");
+        return;
+      }
+
+      const result = await WebBrowser.openAuthSessionAsync(
+        data.url,
+        redirectTo,
+      );
+      if (result.type !== "success" || !result.url) return;
+
+      const callbackUrl = result.url;
+      const code = callbackUrl.match(/[?&]code=([^&]+)/)?.[1];
+      if (code) {
+        const { data: sessionData, error: exchangeError } =
+          await supabase.auth.exchangeCodeForSession(decodeURIComponent(code));
+        if (exchangeError) {
+          Alert.alert("Login Failed", exchangeError.message);
+          return;
+        }
+        if (sessionData?.user?.id) {
+          await finalizeLogin(sessionData.user, true);
+        }
+        return;
+      }
+
+      const { data: sessionResult } = await supabase.auth.getSession();
+      if (sessionResult.session?.user?.id) {
+        await finalizeLogin(sessionResult.session.user, true);
+      }
+    } catch (error: any) {
+      console.error("OAuth error:", error);
+      Alert.alert("Login Failed", error?.message || "OAuth sign-in failed");
+    } finally {
+      setOauthLoading(null);
+    }
+  };
 
   const handleLogin = async () => {
-    const loginIdentifier = email || phoneNumber;
-
-    // Validation
-    if (!loginIdentifier || !password) {
+    if (!identifier.trim() || !password) {
       Alert.alert("Error", "Please fill in all fields");
       return;
     }
 
-    // Validate email format if email is being used
-    if (email && !isValidEmail(email)) {
-      console.error("Invalid email:", email);
-      Alert.alert("Error", "Please enter a valid email address");
-      return;
-    }
-
-    // Validate phone format if phone is being used
-    if (phoneNumber && !isValidBhutanesePhone(phoneNumber)) {
-      console.error("Invalid phone:", phoneNumber);
-      Alert.alert("Error", "Please enter a valid Bhutanese phone number (starts with 17 or 77, 8 digits)");
+    if (!isIdentifierValid) {
+      Alert.alert(
+        "Error",
+        isIdentifierEmail
+          ? "Please enter a valid email address"
+          : "Please enter a valid Bhutanese phone number (17/77 + 8 digits), with or without +975",
+      );
       return;
     }
 
     try {
       setLoading(true);
 
-      let authEmail = email;
+      let authEmail = identifier.trim();
 
-      // If using phone number, lookup email from profiles
-      if (phoneNumber && !email) {
-        console.log("Looking up user by phone:", phoneNumber);
+      if (!isIdentifierEmail) {
+        const normalizedPhone = normalizeBhutanPhone(identifier);
 
         const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('email')
-          .eq('phone', phoneNumber)
+          .from("profiles")
+          .select("email")
+          .eq("phone", normalizedPhone)
           .single();
 
         if (profileError || !profile) {
-          console.error("Phone lookup error:", profileError);
-          Alert.alert("Error", "Phone number not found. Please check your number or sign up.");
-          setLoading(false);
+          Alert.alert(
+            "Error",
+            "Bhutan phone number not found. Please check your number or sign up.",
+          );
           return;
         }
 
         authEmail = profile.email;
-        console.log("Found email for phone:", authEmail);
       }
 
-      console.log("Attempting login with:", {
-        email: authEmail,
-        passwordLength: password.length
-      });
-
-      // Attempt to sign in
       const { data, error } = await supabase.auth.signInWithPassword({
         email: authEmail,
-        password
+        password,
       });
 
-      if (error) {
-        console.error("Login Error:", {
-          message: error.message,
-          status: error.status,
-          name: error.name
-        });
-        Alert.alert("Login Failed", error.message);
+      if (error || !data?.user?.id) {
+        Alert.alert("Login Failed", error?.message || "Unable to sign in");
         return;
       }
 
-      console.log("Auth successful:", data.user?.id);
-
-      if (data?.user) {
-        try {
-          // Get user profile from profiles table
-          const { data: profileData, error: profileError } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', data.user.id)
-            .single();
-
-          if (profileError) {
-            console.error("Profile fetch error:", {
-              message: profileError.message,
-              code: profileError.code,
-              details: profileError.details
-            });
-            Alert.alert("Error", "Failed to fetch user profile");
-            return;
-          }
-
-          console.log("Profile data fetched:", profileData);
-
-          // Combine auth and profile data
-          const userData = {
-            ...data.user,
-            ...profileData
-          };
-          console.log("Combined user data:", userData);
-
-          try {
-            // Store user data in AsyncStorage
-            await AsyncStorage.setItem('currentUser', JSON.stringify(userData));
-            console.log("User data stored in AsyncStorage");
-            
-            // Update context
-            setCurrentUser(userData);
-            console.log("Context updated with user data");
-            
-            // Clear form
-            setEmail("");
-            setPassword("");
-            
-            // Check if user is mongoose@gmail.com and redirect accordingly
-            if (isMongooseUser(authEmail)) {
-              console.log("Redirecting to Mongoose Dashboard");
-              router.replace("/mongoose-dashboard");
-            } else {
-              console.log("Redirecting to user area");
-              router.replace("/(users)");
-            }
-          } catch (storageError: any) {
-            console.error("Storage/Context Error:", {
-              message: storageError.message,
-              stack: storageError.stack
-            });
-            Alert.alert("Error", "Failed to save login state");
-          }
-          
-        } catch (error: any) {
-          console.error("Profile processing error:", {
-            message: error.message,
-            stack: error.stack
-          });
-          Alert.alert("Error", "Failed to complete login");
-        }
-      }
+      await finalizeLogin(data.user, false);
     } catch (error: any) {
       console.error("Main login error:", {
         message: error.message,
-        stack: error.stack
+        stack: error.stack,
       });
       Alert.alert("Error", error.message);
     } finally {
@@ -204,15 +317,13 @@ export default function Login() {
     <TouchableWithoutFeedback
       onPress={() => {
         Keyboard.dismiss();
-        
       }}
     >
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
-        className="flex-1 bg-background"
+        className="flex-1 bg-white"
       >
         <View className="flex-1 px-[10%] justify-center">
-          {/* Header */}
           <View className="flex-row justify-between items-center mb-8">
             <View>
               <Text className="text-4xl text-primary/90 font-mbold">
@@ -229,133 +340,71 @@ export default function Login() {
             />
           </View>
 
-          {/* Fields */}
           <View className="gap-3 flex-2">
-       
-
-            {/* Email Input */}
-            <View className={`border rounded-lg px-4 py-2 mb-4 flex-row items-center ${
-              isEmailDisabled ? 'border-gray-200 bg-gray-50' : 'border-gray-300'
-            }`}>
-              <MaterialIcons
-                name="email"
-                size={20}
-                color={isEmailDisabled ? "#ccc" : "#999"}
-                className="mr-2"
-              />
-              <TextInput
-                value={email}
-                onChangeText={setEmail}
-                placeholder="Email Address"
-                keyboardType="email-address"
+            <View className="mb-4">
+              <FormInput
+                value={identifier}
+                onChangeText={setIdentifier}
+                placeholder="Email or Bhutan phone (+975XXXXXXXX / XXXXXXXX)"
+                keyboardType={isIdentifierEmail ? "email-address" : "default"}
                 autoCapitalize="none"
-                editable={!isEmailDisabled}
-                style={{
-                  flex: 1,
-                  fontSize: 16,
-                  fontWeight: '400',
-                  color: isEmailDisabled ? '#999' : '#000000',
-                  marginLeft: 8,
-                  paddingVertical: 12,
-                }}
-                placeholderTextColor="#999999"
+                leftIcon={
+                  isIdentifierEmail ? (
+                    <MaterialIcons name="email" size={20} color="#6B7280" />
+                  ) : (
+                    <Ionicons name="call" size={20} color="#6B7280" />
+                  )
+                }
+                rightAccessory={
+                  identifier.length > 0 ? (
+                    <Pressable onPress={handleClearIdentifier}>
+                      <Ionicons name="close-circle" size={20} color="#9CA3AF" />
+                    </Pressable>
+                  ) : undefined
+                }
               />
-              {email.length > 0 && (
-                <Pressable onPress={handleClearEmail}>
-                  <Ionicons name="close-circle" size={20} color="#999" />
-                </Pressable>
-              )}
             </View>
 
-            {/* Phone Number Input */}
-            <View className={`border rounded-lg px-4 py-2 mb-4 flex-row items-center ${
-              isPhoneDisabled ? 'border-gray-200 bg-gray-50' : 'border-gray-300'
-            }`}>
-              <Ionicons
-                name="call"
-                size={20}
-                color={isPhoneDisabled ? "#ccc" : "#999"}
-                className="mr-2"
-              />
-              <TextInput
-                value={phoneNumber}
-                onChangeText={setPhoneNumber}
-                placeholder="Phone Number"
-                keyboardType="phone-pad"
-                editable={!isPhoneDisabled}
-                maxLength={8}
-                style={{
-                  flex: 1,
-                  fontSize: 16,
-                  fontWeight: '400',
-                  color: isPhoneDisabled ? '#999' : '#000000',
-                  marginLeft: 8,
-                  paddingVertical: 12,
-                }}
-                placeholderTextColor="#999999"
-              />
-              {phoneNumber.length > 0 && (
-                <Pressable onPress={handleClearPhone}>
-                  <Ionicons name="close-circle" size={20} color="#999" />
-                </Pressable>
-              )}
-            </View>
-
-            {/* Password Input */}
-            <View className="border border-gray-300 rounded-lg px-4 py-2 mb-2 flex-row items-center">
-              <Ionicons
-                name="lock-closed"
-                size={20}
-                color="#999"
-                className="mr-2"
-              />
-              <TextInput
+            <View className="mb-2">
+              <FormInput
                 value={password}
                 onChangeText={setPassword}
                 placeholder="Password"
                 secureTextEntry={!showPassword}
-                style={{
-                  flex: 1,
-                  fontSize: 16,
-                  fontWeight: '400',
-                  color: '#000000',
-                  marginLeft: 8,
-                  paddingVertical: 12,
-                }}
-                placeholderTextColor="#999999"
+                leftIcon={
+                  <Ionicons name="lock-closed" size={20} color="#6B7280" />
+                }
+                rightAccessory={
+                  <Pressable onPress={() => setShowPassword(!showPassword)}>
+                    <Ionicons
+                      name={showPassword ? "eye" : "eye-off"}
+                      size={20}
+                      color="#6B7280"
+                    />
+                  </Pressable>
+                }
               />
-              <Pressable onPress={() => setShowPassword(!showPassword)}>
-                <Ionicons
-                  name={showPassword ? "eye" : "eye-off"}
-                  size={20}
-                  color="#999"
-                />
-              </Pressable>
             </View>
           </View>
 
-          {/* Forgot Password */}
           <Text className="text-right text-sm mb-6 font-regular">
-            <Link href="/forgot" className="text-red-400 font-regular">
+            <Link href="/forgot" className="text-black font-regular">
               Forgot Password?
             </Link>
           </Text>
 
-          {/* Login Button */}
           <TouchableOpacity
             disabled={
-              !(email || phoneNumber) ||
+              !identifier.trim() ||
               password.length === 0 ||
-              (email && !isValidEmail(email)) ||
-              (phoneNumber && !isValidBhutanesePhone(phoneNumber)) ||
+              !isIdentifierValid ||
               loading
             }
             onPress={handleLogin}
             className={`py-5 rounded-md items-center my-10 ${
-              (email || phoneNumber) &&
+              identifier.trim() &&
               password.length > 0 &&
-              (!email || isValidEmail(email)) &&
-              (!phoneNumber || isValidBhutanesePhone(phoneNumber)) &&
+              isIdentifierValid &&
               !loading
                 ? "bg-primary"
                 : "bg-primary/50"
@@ -370,13 +419,14 @@ export default function Login() {
             )}
           </TouchableOpacity>
 
-          {/* Guest Option */}
           <Text className="text-center font-regular text-gray-500 text-sm mb-2">
-            - or continue as -
+            - or continue with -
           </Text>
 
           <TouchableOpacity
-            className="bg-white border border-gray-300 py-5 rounded-md mb-4"
+            disabled={!!oauthLoading}
+            onPress={() => handleOAuthLogin("google")}
+            className="bg-white border border-gray-200 py-4 rounded-xl mb-3 flex-row items-center justify-center"
             style={{
               shadowColor: "#000",
               shadowOffset: { width: 1, height: 1 },
@@ -385,20 +435,160 @@ export default function Login() {
               elevation: 1,
             }}
           >
-            <Text className="text-black text-center font-semibold text-base">
-              Guest
-            </Text>
+            {oauthLoading === "google" ? (
+              <ActivityIndicator color="#094569" />
+            ) : (
+              <>
+                <GoogleIcon size={18} />
+                <Text className="text-gray-900 text-center font-msemibold text-base ml-2">
+                  Continue with Google
+                </Text>
+              </>
+            )}
           </TouchableOpacity>
 
-          {/* Signup Link */}
+          {Platform.OS === "ios" && (
+            <TouchableOpacity
+              disabled={!!oauthLoading}
+              onPress={() => handleOAuthLogin("apple")}
+              className="bg-black py-4 rounded-xl mb-4 flex-row items-center justify-center"
+            >
+              {oauthLoading === "apple" ? (
+                <ActivityIndicator color="white" />
+              ) : (
+                <>
+                  <Ionicons name="logo-apple" size={18} color="white" />
+                  <Text className="text-white text-center font-msemibold text-base ml-2">
+                    Continue with Apple
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+
           <Text className="text-center text-gray-500 font-regular text-sm">
             Create an account{" "}
-            <Link href="/signup" className="text-red-400 font-medium underline">
+            <Link href="/signup" className="text-black font-medium underline">
               Sign up
             </Link>
           </Text>
         </View>
       </KeyboardAvoidingView>
+
+      <Modal
+        visible={showPhonePrompt}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {}}
+      >
+        <View className="flex-1 bg-black/45 justify-center px-6">
+          <View className="bg-white rounded-2xl p-5">
+            <Text className="text-xl font-mbold text-gray-900 mb-2">
+              Add Phone Number
+            </Text>
+            <Text className="text-sm text-gray-600 mb-4">
+              First-time sign-in: add your Bhutan number (+975XXXXXXXX or XXXXXXXX).
+            </Text>
+
+            <FormInput
+              value={phonePromptValue}
+              onChangeText={setPhonePromptValue}
+              placeholder="Bhutan phone"
+              keyboardType="phone-pad"
+              leftIcon={<Ionicons name="call" size={20} color="#6B7280" />}
+            />
+
+            <TouchableOpacity
+              disabled={phonePromptLoading}
+              onPress={async () => {
+                const normalizedPhone = normalizeBhutanPhone(phonePromptValue);
+                if (!isValidBhutanesePhone(phonePromptValue)) {
+                  Alert.alert(
+                    "Invalid Phone",
+                    "Please enter a valid Bhutan phone (17/77 + 8 digits), with or without +975.",
+                  );
+                  return;
+                }
+
+                if (!pendingUserData?.id) return;
+
+                try {
+                  setPhonePromptLoading(true);
+                  const { error } = await supabase
+                    .from("profiles")
+                    .update({ phone: normalizedPhone, updated_at: new Date().toISOString() })
+                    .eq("id", pendingUserData.id);
+
+                  if (error) {
+                    Alert.alert("Error", error.message || "Failed to save phone number");
+                    return;
+                  }
+
+                  const updatedUser = { ...pendingUserData, phone: normalizedPhone };
+                  await AsyncStorage.setItem(
+                    `oauth_phone_prompt_done_${pendingUserData.id}`,
+                    "true",
+                  );
+                  setShowPhonePrompt(false);
+                  setPendingUserData(null);
+                  await completeLogin(updatedUser, pendingResolvedEmail);
+                } finally {
+                  setPhonePromptLoading(false);
+                }
+              }}
+              className={`mt-4 py-3 rounded-xl items-center ${
+                phonePromptLoading ? "bg-gray-300" : "bg-primary"
+              }`}
+            >
+              {phonePromptLoading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text className="text-white font-msemibold">Save Number</Text>
+              )}
+            </TouchableOpacity>
+
+            <View className="flex-row mt-3 gap-2">
+              <TouchableOpacity
+                className="flex-1 py-3 rounded-xl bg-gray-100 items-center"
+                onPress={async () => {
+                  if (pendingUserData?.id) {
+                    await AsyncStorage.setItem(
+                      `oauth_phone_prompt_done_${pendingUserData.id}`,
+                      "true",
+                    );
+                  }
+                  setShowPhonePrompt(false);
+                  if (pendingUserData) {
+                    await completeLogin(pendingUserData, pendingResolvedEmail);
+                    setPendingUserData(null);
+                  }
+                }}
+              >
+                <Text className="text-gray-700 font-msemibold">Decline</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                className="flex-1 py-3 rounded-xl bg-gray-100 items-center"
+                onPress={async () => {
+                  if (pendingUserData?.id) {
+                    await AsyncStorage.setItem(
+                      `oauth_phone_prompt_done_${pendingUserData.id}`,
+                      "true",
+                    );
+                  }
+                  setShowPhonePrompt(false);
+                  if (pendingUserData) {
+                    await completeLogin(pendingUserData, pendingResolvedEmail);
+                    setPendingUserData(null);
+                  }
+                }}
+              >
+                <Text className="text-gray-700 font-msemibold">No Bhutan Number</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </TouchableWithoutFeedback>
   );
 }

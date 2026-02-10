@@ -212,3 +212,8 @@ yarn-error.*
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# iOS build artifacts
+/ios/build/
+
+/ios/*

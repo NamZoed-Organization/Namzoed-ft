@@ -58,7 +58,9 @@ import React, { useCallback, useEffect, useState } from "react";
 import {
   Alert,
   Dimensions,
+  InteractionManager,
   Modal,
+  Platform,
   RefreshControl,
   ScrollView,
   Text,
@@ -107,8 +109,14 @@ export default function ProfileScreen() {
 
   // UI State
   const [showImagePicker, setShowImagePicker] = useState(false);
+  const [pendingImageOption, setPendingImageOption] = useState<
+    "camera" | "gallery" | null
+  >(null);
   const [showMainAvatarMenu, setShowMainAvatarMenu] = useState(false);
   const [showProviderImagePicker, setShowProviderImagePicker] = useState(false);
+  const [pendingProviderImageOption, setPendingProviderImageOption] = useState<
+    "camera" | "gallery" | null
+  >(null);
   const [showProviderAvatarMenu, setShowProviderAvatarMenu] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -280,8 +288,10 @@ export default function ProfileScreen() {
         setShowPendingRequests(false);
         setShowSettings(false);
         setShowImagePicker(false);
+        setPendingImageOption(null);
         setShowMainAvatarMenu(false);
         setShowProviderImagePicker(false);
+        setPendingProviderImageOption(null);
         setShowProviderAvatarMenu(false);
         setShowManageListings(false);
         setShowCropOverlay(false);
@@ -300,7 +310,26 @@ export default function ProfileScreen() {
     setTimeout(() => setRefreshing(false), 1000);
   }, []);
 
-  const handleEditProfile = () => setShowImagePicker(true);
+  const handleEditProfile = () => {
+    if (Platform.OS === "ios") {
+      Alert.alert("Change Profile Picture", undefined, [
+        {
+          text: "Take Photo",
+          onPress: () => handleImageOption("camera"),
+        },
+        {
+          text: "Choose from Gallery",
+          onPress: () => handleImageOption("gallery"),
+        },
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+      ]);
+      return;
+    }
+    setShowImagePicker(true);
+  };
   const handleEditProviderProfile = () => setShowProviderImagePicker(true);
   const handleSettings = () => setShowSettings(true);
   const handleFollowRequests = () => setShowPendingRequests(true);
@@ -432,12 +461,22 @@ export default function ProfileScreen() {
     return true;
   };
 
-  const handleImageOption = async (option: "camera" | "gallery") => {
-    pickerTranslateY.value = withTiming(1000, {}, () =>
-      runOnJS(setShowImagePicker)(false),
-    );
+  const waitForIosModalDismiss = async () => {
+    if (Platform.OS !== "ios") return;
+    await new Promise<void>((resolve) => {
+      InteractionManager.runAfterInteractions(() => resolve());
+    });
+    await new Promise<void>((resolve) => setTimeout(resolve, 120));
+  };
 
+  const openImageOption = async (option: "camera" | "gallery") => {
     try {
+      const useNativeEditor = Platform.OS === "ios";
+      // Defensive cleanup to avoid any stale overlays intercepting touches.
+      setShowMainAvatarMenu(false);
+      setShowImagePicker(false);
+      setShowError(false);
+      setShowSuccess(false);
       let result;
       if (option === "camera") {
         const cameraGranted = await ensureCameraPermission(
@@ -446,7 +485,8 @@ export default function ProfileScreen() {
         if (!cameraGranted) return;
         result = await ImagePicker.launchCameraAsync({
           mediaTypes: ["images"],
-          allowsEditing: false, // We use our own cropper
+          allowsEditing: useNativeEditor,
+          aspect: [1, 1],
           quality: 1.0,
         });
       } else {
@@ -458,14 +498,22 @@ export default function ProfileScreen() {
         }
         result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ["images"],
-          allowsEditing: false, // We use our own cropper
+          allowsEditing: useNativeEditor,
+          aspect: [1, 1],
           quality: 1.0,
         });
       }
 
       if (!result.canceled && result.assets[0]) {
-        setSelectedImageUri(result.assets[0].uri);
-        setShowCropOverlay(true);
+        const pickedUri = result.assets[0].uri;
+        if (useNativeEditor) {
+          // iOS: use native editor result directly to avoid custom crop overlay
+          // modal interactions that can leave touches blocked after camera return.
+          await handleCropSave(pickedUri);
+        } else {
+          setSelectedImageUri(pickedUri);
+          setShowCropOverlay(true);
+        }
       }
     } catch (error) {
       console.error("Error picking image:", error);
@@ -473,9 +521,7 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleProviderImageOption = async (option: "camera" | "gallery") => {
-    setShowProviderImagePicker(false);
-
+  const openProviderImageOption = async (option: "camera" | "gallery") => {
     if (!currentUser?.id) return;
 
     try {
@@ -539,6 +585,51 @@ export default function ProfileScreen() {
       showErrorPopup("Failed to select image.");
     }
   };
+
+  const handleImageOption = (option: "camera" | "gallery") => {
+    setPendingImageOption(option);
+    setShowImagePicker(false);
+    pickerTranslateY.value = 0;
+  };
+
+  const handleProviderImageOption = (option: "camera" | "gallery") => {
+    setPendingProviderImageOption(option);
+    setShowProviderImagePicker(false);
+  };
+
+  useEffect(() => {
+    if (showImagePicker || !pendingImageOption) return;
+
+    let cancelled = false;
+    (async () => {
+      await waitForIosModalDismiss();
+      if (cancelled) return;
+      const option = pendingImageOption;
+      setPendingImageOption(null);
+      await openImageOption(option);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [showImagePicker, pendingImageOption]);
+
+  useEffect(() => {
+    if (showProviderImagePicker || !pendingProviderImageOption) return;
+
+    let cancelled = false;
+    (async () => {
+      await waitForIosModalDismiss();
+      if (cancelled) return;
+      const option = pendingProviderImageOption;
+      setPendingProviderImageOption(null);
+      await openProviderImageOption(option);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [showProviderImagePicker, pendingProviderImageOption, currentUser?.id]);
 
   // Service management handlers
   const handleToggleStatus = (serviceId: string, newStatus: boolean) => {
@@ -1136,112 +1227,6 @@ export default function ProfileScreen() {
           </View>
         </ScrollView>
       </View>
-
-      {/* ------------------------------------------------------ */}
-      {/* SMOOTH IMAGE PICKER MODAL */}
-      {/* ------------------------------------------------------ */}
-      {showImagePicker && (
-        <Modal
-          transparent
-          statusBarTranslucent
-          animationType="none"
-          visible={showImagePicker}
-          onRequestClose={() => setShowImagePicker(false)}
-        >
-          <View className="flex-1 justify-end">
-            <Animated.View
-              entering={FadeIn}
-              exiting={FadeOut}
-              style={[
-                {
-                  position: "absolute",
-                  top: 0,
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  backgroundColor: "rgba(0,0,0,0.5)",
-                },
-                rPickerBackdrop,
-              ]}
-            >
-              <TouchableOpacity
-                style={{ flex: 1 }}
-                activeOpacity={1}
-                onPress={() => setShowImagePicker(false)}
-              />
-            </Animated.View>
-
-            <Animated.View
-              entering={SlideInDown.springify()}
-              exiting={SlideOutDown}
-              style={[
-                {
-                  backgroundColor: "white",
-                  borderTopLeftRadius: 24,
-                  borderTopRightRadius: 24,
-                },
-                rPickerStyle,
-              ]}
-            >
-              {/* --- DRAG HANDLE START --- */}
-              <GestureDetector gesture={pickerGesture}>
-                <View className="w-full items-center pt-5 pb-4 bg-white rounded-t-3xl">
-                  <View className="w-12 h-1.5 bg-gray-300 rounded-full" />
-                </View>
-              </GestureDetector>
-              {/* --- DRAG HANDLE END --- */}
-
-              <View className="px-6 pb-6">
-                <Text className="text-xl font-mbold text-gray-900 mb-6 text-center">
-                  Change Profile Picture
-                </Text>
-
-                <TouchableOpacity
-                  onPress={() => handleImageOption("camera")}
-                  className="flex-row items-center bg-gray-50 rounded-xl px-4 py-4 mb-3"
-                >
-                  <Camera size={24} className="text-gray-700 mr-4" />
-                  <View>
-                    <Text className="text-base font-msemibold text-gray-900">
-                      Take Photo
-                    </Text>
-                    <Text className="text-sm font-regular text-gray-500">
-                      Use camera to take a new photo
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={() => handleImageOption("gallery")}
-                  className="flex-row items-center bg-gray-50 rounded-xl px-4 py-4 mb-6"
-                >
-                  <ImageIcon size={24} className="text-gray-700 mr-4" />
-                  <View>
-                    <Text className="text-base font-msemibold text-gray-900">
-                      Choose from Gallery
-                    </Text>
-                    <Text className="text-sm font-regular text-gray-500">
-                      Select from your photo library
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  className="bg-gray-100 rounded-xl py-4 items-center"
-                  onPress={() => {
-                    pickerTranslateY.value = withTiming(1000, {}, () => {
-                      runOnJS(setShowImagePicker)(false);
-                      runOnJS(setRefreshKey)((prev: number) => prev + 1);
-                    });
-                  }}
-                >
-                  <Text className="text-gray-600 font-msemibold">Cancel</Text>
-                </TouchableOpacity>
-              </View>
-            </Animated.View>
-          </View>
-        </Modal>
-      )}
 
       {/* ------------------------------------------------------ */}
       {/* SMOOTH IMAGE PICKER MODAL */}

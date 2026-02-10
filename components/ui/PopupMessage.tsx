@@ -55,6 +55,7 @@ export default function PopupMessage({ visible, type, title, message }: PopupMes
     <Animated.View
       entering={FadeIn.duration(300)}
       exiting={FadeOut.duration(200)}
+      pointerEvents="none"
       className="absolute inset-0 items-center justify-center z-50"
       style={{ backgroundColor: 'rgba(0,0,0,0.4)' }}
     >
