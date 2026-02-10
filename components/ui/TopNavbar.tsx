@@ -1,6 +1,7 @@
 // components/ui/TopNavbar.tsx
 import DetectDzongkhag from "@/components/DetectDzongkhag";
 import { ChatIcon } from "@/components/icons/index";
+import { useUnreadMessages } from "@/contexts/UnreadMessagesContext";
 import TabBarButton from "@/components/ui/TabBarButton";
 import { useUser } from "@/contexts/UserContext";
 import { useRouter } from "expo-router";
@@ -12,6 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 export default function TopNavbar() {
   const router = useRouter();
   const { currentUser } = useUser();
+  const { unreadCount } = useUnreadMessages();
   const insets = useSafeAreaInsets();
   const [imageLoadError, setImageLoadError] = useState(false);
 
@@ -43,7 +45,16 @@ export default function TopNavbar() {
           onPress={() => router.push("/messages")}
           android_ripple={null}
         >
-          <ChatIcon />
+          <View>
+            <ChatIcon />
+            {unreadCount > 0 && (
+              <View className="absolute -top-1 -right-2 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 items-center justify-center">
+                <Text className="text-white text-[10px] font-bold">
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </Text>
+              </View>
+            )}
+          </View>
         </TabBarButton>
 
         <TabBarButton

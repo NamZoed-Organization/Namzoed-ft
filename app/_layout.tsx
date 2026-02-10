@@ -3,6 +3,8 @@
 import CustomFlashMessage from "@/components/CustomFlashMessage";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { NavigationLogger } from "@/components/NavigationLogger";
+import InAppChatBanner from "@/components/chat/InAppChatBanner";
+import { UnreadMessagesProvider } from "@/contexts/UnreadMessagesContext";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import {
   DarkTheme,
@@ -59,35 +61,38 @@ export default function RootLayout() {
         >
           {/* 2. wrap your entire app in the provider */}
           <UserProvider>
-            <DzongkhagProvider>
-              <VideoPlaybackProvider>
-                <VideoCacheProvider>
-                  <LiveSessionProvider>
-                    {/* Global Navigation Logger */}
-                    <NavigationLogger />
-                    <View className="flex-1 bg-background">
-                      <Stack
-                        screenOptions={{
-                          headerShown: false,
-                          // Enable iOS-style swipe back for all stack screens
-                          gestureEnabled: true,
-                          fullScreenGestureEnabled: true,
-                          gestureDirection: "horizontal",
-                          animation: "default",
-                        }}
-                      />
-                      <StatusBar style="dark" />
-                      <FlashMessage
-                        position="top"
-                        renderCustomContent={(msg) => (
-                          <CustomFlashMessage message={msg} />
-                        )}
-                      />
-                    </View>
-                  </LiveSessionProvider>
-                </VideoCacheProvider>
-              </VideoPlaybackProvider>
-            </DzongkhagProvider>
+            <UnreadMessagesProvider>
+              <DzongkhagProvider>
+                <VideoPlaybackProvider>
+                  <VideoCacheProvider>
+                    <LiveSessionProvider>
+                      {/* Global Navigation Logger */}
+                      <NavigationLogger />
+                      <View className="flex-1 bg-background">
+                        <Stack
+                          screenOptions={{
+                            headerShown: false,
+                            // Enable iOS-style swipe back for all stack screens
+                            gestureEnabled: true,
+                            fullScreenGestureEnabled: true,
+                            gestureDirection: "horizontal",
+                            animation: "default",
+                          }}
+                        />
+                        <InAppChatBanner />
+                        <StatusBar style="dark" />
+                        <FlashMessage
+                          position="top"
+                          renderCustomContent={(msg) => (
+                            <CustomFlashMessage message={msg} />
+                          )}
+                        />
+                      </View>
+                    </LiveSessionProvider>
+                  </VideoCacheProvider>
+                </VideoPlaybackProvider>
+              </DzongkhagProvider>
+            </UnreadMessagesProvider>
           </UserProvider>
         </ThemeProvider>
       </GestureHandlerRootView>

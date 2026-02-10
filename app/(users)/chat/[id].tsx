@@ -2,12 +2,13 @@
 import AudioMessagePlayer from "@/components/chat/AudioMessagePlayer";
 import ChatAudioRecorder from "@/components/chat/ChatAudioRecorder";
 import ChatImagePicker from "@/components/chat/ChatImagePicker";
+import { useUnreadMessages } from "@/contexts/UnreadMessagesContext";
 import { useUser } from "@/contexts/UserContext";
 import users from "@/data/UserData";
 import { supabase } from "@/lib/supabase";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import React, {
   useCallback,
   useEffect,
@@ -218,6 +219,11 @@ const TypingIndicator = () => {
 
 export default function ChatScreen() {
   const { currentUser } = useUser();
+  const {
+    setActiveChatPartnerId,
+    markConversationAsRead,
+    currentUserUUID: contextUserUUID,
+  } = useUnreadMessages();
   const router = useRouter();
   const { id } = useLocalSearchParams();
   const [messageText, setMessageText] = useState("");
@@ -247,6 +253,7 @@ export default function ChatScreen() {
     null,
   );
   const isLocalTypingRef = useRef(false);
+  const messagesPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const bikeAnimationX = useRef(new Animated.Value(0)).current;
   const keyboardOffset = useRef(new Animated.Value(0)).current;
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
@@ -254,6 +261,25 @@ export default function ChatScreen() {
   const isMongooseChat = typeof id === "string" && id.startsWith("mongoose-");
   const mongooseName = isMongooseChat ? id.replace("mongoose-", "") : null;
   const chatPartnerId = Array.isArray(id) ? id[0] : id;
+  const effectiveCurrentUserUUID = currentUserUUID || contextUserUUID;
+
+  useEffect(() => {
+    if (contextUserUUID) {
+      setCurrentUserUUID(contextUserUUID);
+    }
+  }, [contextUserUUID]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!chatPartnerId || isMongooseChat) {
+        setActiveChatPartnerId(null);
+        return () => setActiveChatPartnerId(null);
+      }
+
+      setActiveChatPartnerId(String(chatPartnerId));
+      return () => setActiveChatPartnerId(null);
+    }, [chatPartnerId, isMongooseChat, setActiveChatPartnerId]),
+  );
 
   // Combine original messages with local messages
   const allMessages = useMemo(() => {
@@ -338,38 +364,52 @@ export default function ChatScreen() {
 
   // Fetch initial messages and subscribe to real-time updates
   useEffect(() => {
-    const userPhone =
-      currentUser?.phone_number ||
-      (currentUser as any)?.phone ||
-      (currentUser as any)?.phoneNumber ||
-      (currentUser as any)?.mobile;
-
-    if (!userPhone || !chatPartnerId) {
-      console.log("⚠️ Missing user phone or chat partner ID");
+    if (!chatPartnerId) {
+      console.log("⚠️ Missing chat partner ID");
       return;
     }
 
     let isSubscribed = true;
-    const channelName = `chat_${[currentUserUUID, chatPartnerId]
+    const channelName = `chat_${[effectiveCurrentUserUUID, chatPartnerId]
       .map(String)
       .sort()
       .join("_")}`;
 
     const setupChatRealtime = async () => {
       try {
-        // Get user UUID from profiles
-        const { data: profileData, error: profileError } = await supabase
-          .from("profiles")
-          .select("id")
-          .eq("phone", userPhone)
-          .maybeSingle();
-
-        if (profileError) {
-          console.error("❌ Error fetching user profile:", profileError);
-          return;
+        let userUUID = contextUserUUID;
+        if (!userUUID && currentUser?.id) {
+          const { data: profileById } = await supabase
+            .from("profiles")
+            .select("id")
+            .eq("id", currentUser.id)
+            .maybeSingle();
+          userUUID = profileById?.id || null;
         }
 
-        const userUUID = profileData?.id;
+        if (!userUUID) {
+          const userPhone =
+            currentUser?.phone_number ||
+            (currentUser as any)?.phone ||
+            (currentUser as any)?.phoneNumber ||
+            (currentUser as any)?.mobile;
+          const cleanPhone = String(userPhone || "").replace("+975", "");
+
+          if (userPhone || cleanPhone) {
+            const { data: profileByPhone } = await supabase
+              .from("profiles")
+              .select("id")
+              .or(`phone.eq.${userPhone},phone.eq.${cleanPhone}`)
+              .maybeSingle();
+            userUUID = profileByPhone?.id || null;
+          }
+        }
+
+        if (!userUUID) {
+          const { data: authData } = await supabase.auth.getUser();
+          userUUID = authData.user?.id || null;
+        }
+
         if (!userUUID) {
           console.error("❌ No UUID found for user");
           return;
@@ -378,22 +418,26 @@ export default function ChatScreen() {
         console.log("✅ User UUID:", userUUID.substring(0, 8));
         if (isSubscribed) setCurrentUserUUID(userUUID);
 
-        // Fetch initial messages
-        const { data: messagesData, error: messagesError } = await supabase
-          .from("messages")
-          .select("*")
-          .or(
-            `and(sender_id.eq.${userUUID},receiver_id.eq.${chatPartnerId}),and(sender_id.eq.${chatPartnerId},receiver_id.eq.${userUUID})`,
-          )
-          .order("created_at", { ascending: true })
-          .limit(200);
+        const fetchLatestMessages = async () => {
+          const { data: messagesData, error: messagesError } = await supabase
+            .from("messages")
+            .select("*")
+            .or(
+              `and(sender_id.eq.${userUUID},receiver_id.eq.${chatPartnerId}),and(sender_id.eq.${chatPartnerId},receiver_id.eq.${userUUID})`,
+            )
+            .order("created_at", { ascending: true })
+            .limit(200);
 
-        if (messagesError) {
-          console.error("❌ Error fetching messages:", messagesError);
-        } else if (isSubscribed) {
-          console.log("✅ Fetched", messagesData?.length || 0, "messages");
+          if (messagesError) {
+            console.error("❌ Error fetching messages:", messagesError);
+            return;
+          }
+          if (!isSubscribed) return;
           setMessages(messagesData || []);
-        }
+        };
+
+        // Fetch initial messages
+        await fetchLatestMessages();
 
         // Clean up previous channel
         if (channelRef.current) {
@@ -510,8 +554,24 @@ export default function ChatScreen() {
 
             if (status === "SUBSCRIBED") {
               console.log("✅ Real-time chat ACTIVE");
+              if (messagesPollRef.current) {
+                clearInterval(messagesPollRef.current);
+                messagesPollRef.current = null;
+              }
             } else if (status === "CHANNEL_ERROR") {
               console.error("❌ Chat subscription ERROR");
+              if (!messagesPollRef.current) {
+                messagesPollRef.current = setInterval(() => {
+                  fetchLatestMessages();
+                }, 3000);
+              }
+            } else if (status === "TIMED_OUT") {
+              console.error("⏱️ Chat subscription TIMED OUT");
+              if (!messagesPollRef.current) {
+                messagesPollRef.current = setInterval(() => {
+                  fetchLatestMessages();
+                }, 3000);
+              }
             }
           });
       } catch (error) {
@@ -526,12 +586,16 @@ export default function ChatScreen() {
       isSubscribed = false;
 
       if (channelRef.current) {
-        if (isLocalTypingRef.current && currentUserUUID && chatPartnerId) {
+        if (
+          isLocalTypingRef.current &&
+          effectiveCurrentUserUUID &&
+          chatPartnerId
+        ) {
           channelRef.current.send({
             type: "broadcast",
             event: "typing",
             payload: {
-              senderId: currentUserUUID,
+              senderId: effectiveCurrentUserUUID,
               receiverId: chatPartnerId,
               isTyping: false,
             },
@@ -550,8 +614,12 @@ export default function ChatScreen() {
         clearTimeout(typingSendTimeoutRef.current);
         typingSendTimeoutRef.current = null;
       }
+      if (messagesPollRef.current) {
+        clearInterval(messagesPollRef.current);
+        messagesPollRef.current = null;
+      }
     };
-  }, [currentUser?.phone_number, chatPartnerId, currentUserUUID]);
+  }, [chatPartnerId, currentUser?.id, currentUser?.phone_number, contextUserUUID]);
 
   // Auto-scroll to bottom when new messages are added
   useEffect(() => {
@@ -576,24 +644,12 @@ export default function ChatScreen() {
   // Mark messages as read when new messages arrive
   useEffect(() => {
     const markAsRead = async () => {
-      if (!currentUserUUID || !chatPartnerId) return;
-
-      try {
-        const { data, error } = await supabase.rpc("mark_messages_as_read", {
-          sender_user_id: chatPartnerId,
-          receiver_user_id: currentUserUUID,
-        });
-
-        if (error) {
-          console.error("Error marking messages as read:", error);
-        }
-      } catch (e) {
-        console.error("An exception occurred:", e);
-      }
+      if (!effectiveCurrentUserUUID || !chatPartnerId) return;
+      await markConversationAsRead(String(chatPartnerId));
     };
 
     markAsRead();
-  }, [messages, currentUserUUID, chatPartnerId]);
+  }, [messages, effectiveCurrentUserUUID, chatPartnerId, markConversationAsRead]);
 
   // Handle keyboard show/hide to move input up and down
   useEffect(() => {
@@ -629,18 +685,18 @@ export default function ChatScreen() {
 
   const sendTypingEvent = useCallback(
     (typing: boolean) => {
-      if (!channelRef.current || !currentUserUUID || !chatPartnerId) return;
+      if (!channelRef.current || !effectiveCurrentUserUUID || !chatPartnerId) return;
       channelRef.current.send({
         type: "broadcast",
         event: "typing",
         payload: {
-          senderId: currentUserUUID,
+          senderId: effectiveCurrentUserUUID,
           receiverId: chatPartnerId,
           isTyping: typing,
         },
       });
     },
-    [currentUserUUID, chatPartnerId],
+    [effectiveCurrentUserUUID, chatPartnerId],
   );
 
   if (!currentUser) {
@@ -697,25 +753,23 @@ export default function ChatScreen() {
 
   const handleSendMessage = async () => {
     const messageContent = messageText.trim();
-
-    if (!messageContent || !currentUserUUID || !chatPartnerId) {
+    if (!messageContent || !effectiveCurrentUserUUID || !chatPartnerId) {
       console.log("⚠️ Cannot send: missing content, userUUID, or partnerId");
       return;
     }
 
-    // Create optimistic message for instant UI feedback
     const optimisticId = `temp-${Date.now()}-${Math.random()}`;
     const optimisticMessage = {
       id: optimisticId,
-      sender_id: currentUserUUID,
+      sender_id: effectiveCurrentUserUUID,
       receiver_id: chatPartnerId,
       content: messageContent,
       created_at: new Date().toISOString(),
       is_read: false,
       isOptimistic: true,
+      localStatus: "sending",
     };
 
-    // Add to local messages immediately
     setLocalMessages((prev) => [...prev, optimisticMessage]);
     setMessageText("");
     if (isLocalTypingRef.current) {
@@ -724,19 +778,27 @@ export default function ChatScreen() {
         type: "broadcast",
         event: "typing",
         payload: {
-          senderId: currentUserUUID,
+          senderId: effectiveCurrentUserUUID,
           receiverId: chatPartnerId,
           isTyping: false,
         },
       });
     }
+    await sendMessageToServer(messageContent, optimisticId);
+  };
+
+  const sendMessageToServer = async (
+    messageContent: string,
+    optimisticId: string,
+  ) => {
+    if (!effectiveCurrentUserUUID || !chatPartnerId) return;
 
     try {
       const { data, error } = await supabase
         .from("messages")
         .insert([
           {
-            sender_id: currentUserUUID,
+            sender_id: effectiveCurrentUserUUID,
             receiver_id: chatPartnerId,
             content: messageContent,
             is_read: false,
@@ -747,32 +809,31 @@ export default function ChatScreen() {
 
       if (error) {
         console.error("❌ Send error:", error.message);
-        // Remove optimistic message on error
-        setLocalMessages((prev) => prev.filter((m) => m.id !== optimisticId));
-        alert("Failed to send message. Please try again.");
-      } else {
-        console.log("✅ Message sent to DB:", data.id.substring(0, 8));
-
-        // Fallback: If realtime doesn't pick it up within 2 seconds, add it manually
-        setTimeout(() => {
-          setMessages((prev) => {
-            // Only add if not already present (realtime didn't pick it up)
-            if (prev.some((m) => m.id === data.id)) {
-              console.log("✅ Realtime already added message");
-              return prev;
-            }
-            console.log("⚡ Fallback: manually adding sent message");
-            return [...prev, data];
-          });
-
-          // Remove optimistic message
-          setLocalMessages((prev) => prev.filter((m) => m.id !== optimisticId));
-        }, 2000);
+        setLocalMessages((prev) =>
+          prev.map((m) =>
+            m.id === optimisticId ? { ...m, localStatus: "failed" } : m,
+          ),
+        );
+        return;
       }
+
+      // Fallback: If realtime doesn't pick it up within 2 seconds, add it manually
+      setTimeout(() => {
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === data.id)) {
+            return prev;
+          }
+          return [...prev, data];
+        });
+        setLocalMessages((prev) => prev.filter((m) => m.id !== optimisticId));
+      }, 2000);
     } catch (error) {
       console.error("❌ Exception:", error);
-      setLocalMessages((prev) => prev.filter((m) => m.id !== optimisticId));
-      alert("Failed to send message. Please try again.");
+      setLocalMessages((prev) =>
+        prev.map((m) =>
+          m.id === optimisticId ? { ...m, localStatus: "failed" } : m,
+        ),
+      );
     }
   };
 
@@ -806,7 +867,7 @@ export default function ChatScreen() {
     }
   };
   const handleShareLocation = async () => {
-    if (isSharingLocation || !currentUserUUID || !chatPartnerId) return;
+    if (isSharingLocation || !effectiveCurrentUserUUID || !chatPartnerId) return;
 
     setIsSharingLocation(true);
 
@@ -836,7 +897,7 @@ export default function ChatScreen() {
       const optimisticId = `temp-${Date.now()}-${Math.random()}`;
       const optimisticMessage = {
         id: optimisticId,
-        sender_id: currentUserUUID,
+        sender_id: effectiveCurrentUserUUID,
         receiver_id: chatPartnerId,
         content: locationMessage,
         created_at: new Date().toISOString(),
@@ -851,7 +912,7 @@ export default function ChatScreen() {
         .from("messages")
         .insert([
           {
-            sender_id: currentUserUUID,
+            sender_id: effectiveCurrentUserUUID,
             receiver_id: chatPartnerId,
             content: locationMessage,
             is_read: false,
@@ -1052,9 +1113,11 @@ export default function ChatScreen() {
   };
   const renderMessage = (message: any, index: number) => {
     const isCurrentUser = !!(
-      currentUserUUID && message.sender_id === currentUserUUID
+      effectiveCurrentUserUUID &&
+      message.sender_id === effectiveCurrentUserUUID
     );
     const isOptimistic = message.isOptimistic;
+    const localStatus = message.localStatus;
     const key = message.id != null ? String(message.id) : `idx-${index}`;
     const messageType = message.message_type || "text";
     const isLocation = message.content?.includes("📍 My Location:");
@@ -1258,7 +1321,17 @@ export default function ChatScreen() {
         className={`mb-3 ${isCurrentUser ? "items-end" : "items-start"}`}
       >
         <TouchableOpacity
-          activeOpacity={1}
+          activeOpacity={localStatus === "failed" ? 0.7 : 1}
+          onPress={() => {
+            if (localStatus === "failed") {
+              setLocalMessages((prev) =>
+                prev.map((m) =>
+                  m.id === message.id ? { ...m, localStatus: "sending" } : m,
+                ),
+              );
+              sendMessageToServer(message.content, String(message.id));
+            }
+          }}
           onLongPress={() => {
             if (isCurrentUser && !isOptimistic) {
               setSelectedMessage(message);
@@ -1273,7 +1346,7 @@ export default function ChatScreen() {
           <Text className={isCurrentUser ? "text-white" : "text-gray-800"}>
             {message.content}
           </Text>
-          {isOptimistic && (
+          {isOptimistic && localStatus !== "failed" && (
             <Text
               className={`text-xs mt-1 ${
                 isCurrentUser ? "text-blue-200" : "text-gray-500"
@@ -1281,6 +1354,9 @@ export default function ChatScreen() {
             >
               Sending...
             </Text>
+          )}
+          {localStatus === "failed" && (
+            <Text className="text-xs mt-1 text-red-200">Failed. Tap to retry.</Text>
           )}
         </TouchableOpacity>
         <Text className="text-xs text-gray-500 mt-1 mx-2">
@@ -1427,14 +1503,14 @@ export default function ChatScreen() {
       >
         <View className="flex-row items-center px-4 py-6 border-t border-gray-200 bg-white">
           <ChatImagePicker
-            currentUserUUID={currentUserUUID || ""}
+            currentUserUUID={effectiveCurrentUserUUID || ""}
             chatPartnerId={chatPartnerId as string}
             onOptimisticImage={handleOptimisticImage}
             onUploadSuccess={handleImageUploadSuccess}
             onUploadError={handleImageUploadError}
           />
           <ChatAudioRecorder
-            currentUserUUID={currentUserUUID || ""}
+            currentUserUUID={effectiveCurrentUserUUID || ""}
             chatPartnerId={chatPartnerId as string}
             onOptimisticAudio={handleOptimisticAudio}
             onUploadSuccess={handleAudioUploadSuccess}

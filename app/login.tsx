@@ -108,9 +108,15 @@ export default function Login() {
   const ensureProfileFromAuthUser = async (authUser: any) => {
     const providerMeta = authUser?.user_metadata || {};
     const providerName =
-      providerMeta.full_name || providerMeta.name || providerMeta.user_name || null;
+      providerMeta.full_name ||
+      providerMeta.name ||
+      providerMeta.user_name ||
+      null;
     const providerAvatar =
-      providerMeta.avatar_url || providerMeta.picture || providerMeta.photo_url || null;
+      providerMeta.avatar_url ||
+      providerMeta.picture ||
+      providerMeta.photo_url ||
+      null;
 
     const { data: existingProfile, error: fetchError } = await supabase
       .from("profiles")
@@ -128,8 +134,10 @@ export default function Login() {
       updated_at: new Date().toISOString(),
     };
 
-    if (!existingProfile?.name && providerName) profilePayload.name = providerName;
-    if (!existingProfile?.avatar_url && providerAvatar) profilePayload.avatar_url = providerAvatar;
+    if (!existingProfile?.name && providerName)
+      profilePayload.name = providerName;
+    if (!existingProfile?.avatar_url && providerAvatar)
+      profilePayload.avatar_url = providerAvatar;
 
     if (!existingProfile) {
       profilePayload.created_at = new Date().toISOString();
@@ -140,12 +148,15 @@ export default function Login() {
 
     const hasUsefulUpdates =
       !existingProfile ||
-      (!!profilePayload.name && profilePayload.name !== existingProfile?.name) ||
+      (!!profilePayload.name &&
+        profilePayload.name !== existingProfile?.name) ||
       (!!profilePayload.avatar_url &&
         profilePayload.avatar_url !== existingProfile?.avatar_url);
 
     if (hasUsefulUpdates) {
-      const { error: upsertError } = await supabase.from("profiles").upsert(profilePayload);
+      const { error: upsertError } = await supabase
+        .from("profiles")
+        .upsert(profilePayload);
       if (upsertError) {
         console.error("Profile upsert error:", upsertError);
       }
@@ -197,7 +208,9 @@ export default function Login() {
       // Force fresh account selection flow and prevent stale user session reuse.
       await supabase.auth.signOut({ scope: "local" });
       const redirectTo =
-        Platform.OS === "web" ? Linking.createURL("/login") : NATIVE_OAUTH_REDIRECT;
+        Platform.OS === "web"
+          ? Linking.createURL("/login")
+          : NATIVE_OAUTH_REDIRECT;
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider,
@@ -223,7 +236,7 @@ export default function Login() {
       if (result.type !== "success" || !result.url) return;
 
       const callbackUrl = result.url;
-      const code = callbackUrl.match(/[?&]code=([^&]+)/)?.[1];
+      const code = callbackUrl.match(/[?&]code=([^&#]+)/)?.[1];
       if (code) {
         const { data: sessionData, error: exchangeError } =
           await supabase.auth.exchangeCodeForSession(decodeURIComponent(code));
@@ -237,10 +250,35 @@ export default function Login() {
         return;
       }
 
+      // Some providers/native flows return tokens in URL fragment.
+      const accessToken = callbackUrl.match(/[#&]access_token=([^&]+)/)?.[1];
+      const refreshToken = callbackUrl.match(/[#&]refresh_token=([^&]+)/)?.[1];
+      if (accessToken && refreshToken) {
+        const { data: setSessionData, error: setSessionError } =
+          await supabase.auth.setSession({
+            access_token: decodeURIComponent(accessToken),
+            refresh_token: decodeURIComponent(refreshToken),
+          });
+        if (setSessionError) {
+          Alert.alert("Login Failed", setSessionError.message);
+          return;
+        }
+        if (setSessionData?.user?.id) {
+          await finalizeLogin(setSessionData.user, true);
+          return;
+        }
+      }
+
       const { data: sessionResult } = await supabase.auth.getSession();
       if (sessionResult.session?.user?.id) {
         await finalizeLogin(sessionResult.session.user, true);
+        return;
       }
+
+      Alert.alert(
+        "Login Failed",
+        "OAuth completed but no app session was created. Please try again.",
+      );
     } catch (error: any) {
       console.error("OAuth error:", error);
       Alert.alert("Login Failed", error?.message || "OAuth sign-in failed");
@@ -319,276 +357,302 @@ export default function Login() {
         Keyboard.dismiss();
       }}
     >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        className="flex-1 bg-white"
-      >
-        <View className="flex-1 px-[10%] justify-center">
-          <View className="flex-row justify-between items-center mb-8">
-            <View>
-              <Text className="text-4xl text-primary/90 font-mbold">
-                Welcome
-              </Text>
-              <Text className="text-4xl text-secondary/90 font-mbold">
-                Back!
-              </Text>
-            </View>
-            <Image
-              source={require("../assets/images/logo.png")}
-              className="w-28 h-28"
-              resizeMode="contain"
-            />
-          </View>
-
-          <View className="gap-3 flex-2">
-            <View className="mb-4">
-              <FormInput
-                value={identifier}
-                onChangeText={setIdentifier}
-                placeholder="Email or Bhutan phone (+975XXXXXXXX / XXXXXXXX)"
-                keyboardType={isIdentifierEmail ? "email-address" : "default"}
-                autoCapitalize="none"
-                leftIcon={
-                  isIdentifierEmail ? (
-                    <MaterialIcons name="email" size={20} color="#6B7280" />
-                  ) : (
-                    <Ionicons name="call" size={20} color="#6B7280" />
-                  )
-                }
-                rightAccessory={
-                  identifier.length > 0 ? (
-                    <Pressable onPress={handleClearIdentifier}>
-                      <Ionicons name="close-circle" size={20} color="#9CA3AF" />
-                    </Pressable>
-                  ) : undefined
-                }
-              />
-            </View>
-
-            <View className="mb-2">
-              <FormInput
-                value={password}
-                onChangeText={setPassword}
-                placeholder="Password"
-                secureTextEntry={!showPassword}
-                leftIcon={
-                  <Ionicons name="lock-closed" size={20} color="#6B7280" />
-                }
-                rightAccessory={
-                  <Pressable onPress={() => setShowPassword(!showPassword)}>
-                    <Ionicons
-                      name={showPassword ? "eye" : "eye-off"}
-                      size={20}
-                      color="#6B7280"
-                    />
-                  </Pressable>
-                }
-              />
-            </View>
-          </View>
-
-          <Text className="text-right text-sm mb-6 font-regular">
-            <Link href="/forgot" className="text-black font-regular">
-              Forgot Password?
-            </Link>
-          </Text>
-
-          <TouchableOpacity
-            disabled={
-              !identifier.trim() ||
-              password.length === 0 ||
-              !isIdentifierValid ||
-              loading
-            }
-            onPress={handleLogin}
-            className={`py-5 rounded-md items-center my-10 ${
-              identifier.trim() &&
-              password.length > 0 &&
-              isIdentifierValid &&
-              !loading
-                ? "bg-primary"
-                : "bg-primary/50"
-            }`}
-          >
-            {loading ? (
-              <ActivityIndicator color="#EDC06D" />
-            ) : (
-              <Text className="text-secondary text-center font-semibold text-lg">
-                Login
-              </Text>
-            )}
-          </TouchableOpacity>
-
-          <Text className="text-center font-regular text-gray-500 text-sm mb-2">
-            - or continue with -
-          </Text>
-
-          <TouchableOpacity
-            disabled={!!oauthLoading}
-            onPress={() => handleOAuthLogin("google")}
-            className="bg-white border border-gray-200 py-4 rounded-xl mb-3 flex-row items-center justify-center"
-            style={{
-              shadowColor: "#000",
-              shadowOffset: { width: 1, height: 1 },
-              shadowOpacity: 0.1,
-              shadowRadius: 1,
-              elevation: 1,
-            }}
-          >
-            {oauthLoading === "google" ? (
-              <ActivityIndicator color="#094569" />
-            ) : (
-              <>
-                <GoogleIcon size={18} />
-                <Text className="text-gray-900 text-center font-msemibold text-base ml-2">
-                  Continue with Google
+      <View className="flex-1">
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          className="flex-1 bg-white"
+        >
+          <View className="flex-1 px-[10%] justify-center">
+            <View className="flex-row justify-between items-center mb-8">
+              <View>
+                <Text className="text-4xl text-primary/90 font-mbold">
+                  Welcome
                 </Text>
-              </>
-            )}
-          </TouchableOpacity>
+                <Text className="text-4xl text-secondary/90 font-mbold">
+                  Back!
+                </Text>
+              </View>
+              <Image
+                source={require("../assets/images/logo.png")}
+                className="w-28 h-28"
+                resizeMode="contain"
+              />
+            </View>
 
-          {Platform.OS === "ios" && (
+            <View className="gap-3 flex-2">
+              <View className="mb-4">
+                <FormInput
+                  value={identifier}
+                  onChangeText={setIdentifier}
+                  placeholder="Email or phone"
+                  keyboardType={isIdentifierEmail ? "email-address" : "default"}
+                  autoCapitalize="none"
+                  leftIcon={
+                    isIdentifierEmail ? (
+                      <MaterialIcons name="email" size={20} color="#6B7280" />
+                    ) : (
+                      <Ionicons name="call" size={20} color="#6B7280" />
+                    )
+                  }
+                  rightAccessory={
+                    identifier.length > 0 ? (
+                      <Pressable onPress={handleClearIdentifier}>
+                        <Ionicons
+                          name="close-circle"
+                          size={20}
+                          color="#9CA3AF"
+                        />
+                      </Pressable>
+                    ) : undefined
+                  }
+                />
+              </View>
+
+              <View className="mb-2">
+                <FormInput
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder="Password"
+                  secureTextEntry={!showPassword}
+                  leftIcon={
+                    <Ionicons name="lock-closed" size={20} color="#6B7280" />
+                  }
+                  rightAccessory={
+                    <Pressable onPress={() => setShowPassword(!showPassword)}>
+                      <Ionicons
+                        name={showPassword ? "eye" : "eye-off"}
+                        size={20}
+                        color="#6B7280"
+                      />
+                    </Pressable>
+                  }
+                />
+              </View>
+            </View>
+
+            <Text className="text-right text-sm mb-6 font-regular">
+              <Link href="/forgot" className="text-black font-regular">
+                Forgot Password?
+              </Link>
+            </Text>
+
+            <TouchableOpacity
+              disabled={
+                !identifier.trim() ||
+                password.length === 0 ||
+                !isIdentifierValid ||
+                loading
+              }
+              onPress={handleLogin}
+              className={`py-5 rounded-md items-center my-10 ${
+                identifier.trim() &&
+                password.length > 0 &&
+                isIdentifierValid &&
+                !loading
+                  ? "bg-primary"
+                  : "bg-primary/50"
+              }`}
+            >
+              {loading ? (
+                <ActivityIndicator color="#EDC06D" />
+              ) : (
+                <Text className="text-secondary text-center font-semibold text-lg">
+                  Login
+                </Text>
+              )}
+            </TouchableOpacity>
+
+            <Text className="text-center font-regular text-gray-500 text-sm mb-2">
+              - or continue with -
+            </Text>
+
             <TouchableOpacity
               disabled={!!oauthLoading}
-              onPress={() => handleOAuthLogin("apple")}
-              className="bg-black py-4 rounded-xl mb-4 flex-row items-center justify-center"
+              onPress={() => handleOAuthLogin("google")}
+              className="bg-white border border-gray-200 py-4 rounded-xl mb-3 flex-row items-center justify-center"
+              style={{
+                shadowColor: "#000",
+                shadowOffset: { width: 1, height: 1 },
+                shadowOpacity: 0.1,
+                shadowRadius: 1,
+                elevation: 1,
+              }}
             >
-              {oauthLoading === "apple" ? (
-                <ActivityIndicator color="white" />
+              {oauthLoading === "google" ? (
+                <ActivityIndicator color="#094569" />
               ) : (
                 <>
-                  <Ionicons name="logo-apple" size={18} color="white" />
-                  <Text className="text-white text-center font-msemibold text-base ml-2">
-                    Continue with Apple
+                  <GoogleIcon size={18} />
+                  <Text className="text-gray-900 text-center font-msemibold text-base ml-2">
+                    Continue with Google
                   </Text>
                 </>
               )}
             </TouchableOpacity>
-          )}
 
-          <Text className="text-center text-gray-500 font-regular text-sm">
-            Create an account{" "}
-            <Link href="/signup" className="text-black font-medium underline">
-              Sign up
-            </Link>
-          </Text>
-        </View>
-      </KeyboardAvoidingView>
+            {Platform.OS === "ios" && (
+              <TouchableOpacity
+                disabled={!!oauthLoading}
+                onPress={() => handleOAuthLogin("apple")}
+                className="bg-black py-4 rounded-xl mb-4 flex-row items-center justify-center"
+              >
+                {oauthLoading === "apple" ? (
+                  <ActivityIndicator color="white" />
+                ) : (
+                  <>
+                    <Ionicons name="logo-apple" size={18} color="white" />
+                    <Text className="text-white text-center font-msemibold text-base ml-2">
+                      Continue with Apple
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
 
-      <Modal
-        visible={showPhonePrompt}
-        transparent
-        animationType="fade"
-        onRequestClose={() => {}}
-      >
-        <View className="flex-1 bg-black/45 justify-center px-6">
-          <View className="bg-white rounded-2xl p-5">
-            <Text className="text-xl font-mbold text-gray-900 mb-2">
-              Add Phone Number
+            <Text className="text-center text-gray-500 font-regular text-sm">
+              Create an account{" "}
+              <Link href="/signup" className="text-black font-medium underline">
+                Sign up
+              </Link>
             </Text>
-            <Text className="text-sm text-gray-600 mb-4">
-              First-time sign-in: add your Bhutan number (+975XXXXXXXX or XXXXXXXX).
-            </Text>
+          </View>
+        </KeyboardAvoidingView>
 
-            <FormInput
-              value={phonePromptValue}
-              onChangeText={setPhonePromptValue}
-              placeholder="Bhutan phone"
-              keyboardType="phone-pad"
-              leftIcon={<Ionicons name="call" size={20} color="#6B7280" />}
-            />
+        <Modal
+          visible={showPhonePrompt}
+          transparent
+          animationType="fade"
+          onRequestClose={() => {}}
+        >
+          <View className="flex-1 bg-black/45 justify-center px-6">
+            <View className="bg-white rounded-2xl p-5">
+              <Text className="text-xl font-mbold text-gray-900 mb-2">
+                Add Phone Number
+              </Text>
+              <Text className="text-sm text-gray-600 mb-4">
+                First-time sign-in: add your Bhutan number for a better
+                experience. You can skip if you don't have one or prefer not to
+                share.
+              </Text>
 
-            <TouchableOpacity
-              disabled={phonePromptLoading}
-              onPress={async () => {
-                const normalizedPhone = normalizeBhutanPhone(phonePromptValue);
-                if (!isValidBhutanesePhone(phonePromptValue)) {
-                  Alert.alert(
-                    "Invalid Phone",
-                    "Please enter a valid Bhutan phone (17/77 + 8 digits), with or without +975.",
-                  );
-                  return;
-                }
+              <FormInput
+                value={phonePromptValue}
+                onChangeText={setPhonePromptValue}
+                placeholder="Bhutan phone"
+                keyboardType="phone-pad"
+                leftIcon={<Ionicons name="call" size={20} color="#6B7280" />}
+              />
 
-                if (!pendingUserData?.id) return;
-
-                try {
-                  setPhonePromptLoading(true);
-                  const { error } = await supabase
-                    .from("profiles")
-                    .update({ phone: normalizedPhone, updated_at: new Date().toISOString() })
-                    .eq("id", pendingUserData.id);
-
-                  if (error) {
-                    Alert.alert("Error", error.message || "Failed to save phone number");
+              <TouchableOpacity
+                disabled={phonePromptLoading}
+                onPress={async () => {
+                  const normalizedPhone =
+                    normalizeBhutanPhone(phonePromptValue);
+                  if (!isValidBhutanesePhone(phonePromptValue)) {
+                    Alert.alert(
+                      "Invalid Phone",
+                      "Please enter a valid Bhutan phone (17/77 + 8 digits), with or without +975.",
+                    );
                     return;
                   }
 
-                  const updatedUser = { ...pendingUserData, phone: normalizedPhone };
-                  await AsyncStorage.setItem(
-                    `oauth_phone_prompt_done_${pendingUserData.id}`,
-                    "true",
-                  );
-                  setShowPhonePrompt(false);
-                  setPendingUserData(null);
-                  await completeLogin(updatedUser, pendingResolvedEmail);
-                } finally {
-                  setPhonePromptLoading(false);
-                }
-              }}
-              className={`mt-4 py-3 rounded-xl items-center ${
-                phonePromptLoading ? "bg-gray-300" : "bg-primary"
-              }`}
-            >
-              {phonePromptLoading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text className="text-white font-msemibold">Save Number</Text>
-              )}
-            </TouchableOpacity>
+                  if (!pendingUserData?.id) return;
 
-            <View className="flex-row mt-3 gap-2">
-              <TouchableOpacity
-                className="flex-1 py-3 rounded-xl bg-gray-100 items-center"
-                onPress={async () => {
-                  if (pendingUserData?.id) {
+                  try {
+                    setPhonePromptLoading(true);
+                    const { error } = await supabase
+                      .from("profiles")
+                      .update({
+                        phone: normalizedPhone,
+                        updated_at: new Date().toISOString(),
+                      })
+                      .eq("id", pendingUserData.id);
+
+                    if (error) {
+                      Alert.alert(
+                        "Error",
+                        error.message || "Failed to save phone number",
+                      );
+                      return;
+                    }
+
+                    const updatedUser = {
+                      ...pendingUserData,
+                      phone: normalizedPhone,
+                    };
                     await AsyncStorage.setItem(
                       `oauth_phone_prompt_done_${pendingUserData.id}`,
                       "true",
                     );
-                  }
-                  setShowPhonePrompt(false);
-                  if (pendingUserData) {
-                    await completeLogin(pendingUserData, pendingResolvedEmail);
+                    setShowPhonePrompt(false);
                     setPendingUserData(null);
+                    await completeLogin(updatedUser, pendingResolvedEmail);
+                  } finally {
+                    setPhonePromptLoading(false);
                   }
                 }}
+                className={`mt-4 py-3 rounded-xl items-center ${
+                  phonePromptLoading ? "bg-gray-300" : "bg-primary"
+                }`}
               >
-                <Text className="text-gray-700 font-msemibold">Decline</Text>
+                {phonePromptLoading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text className="text-white font-msemibold">Save Number</Text>
+                )}
               </TouchableOpacity>
 
-              <TouchableOpacity
-                className="flex-1 py-3 rounded-xl bg-gray-100 items-center"
-                onPress={async () => {
-                  if (pendingUserData?.id) {
-                    await AsyncStorage.setItem(
-                      `oauth_phone_prompt_done_${pendingUserData.id}`,
-                      "true",
-                    );
-                  }
-                  setShowPhonePrompt(false);
-                  if (pendingUserData) {
-                    await completeLogin(pendingUserData, pendingResolvedEmail);
-                    setPendingUserData(null);
-                  }
-                }}
-              >
-                <Text className="text-gray-700 font-msemibold">No Bhutan Number</Text>
-              </TouchableOpacity>
+              <View className="flex-row mt-3 gap-2">
+                <TouchableOpacity
+                  className="flex-1 py-3 rounded-xl bg-gray-100 items-center"
+                  onPress={async () => {
+                    if (pendingUserData?.id) {
+                      await AsyncStorage.setItem(
+                        `oauth_phone_prompt_done_${pendingUserData.id}`,
+                        "true",
+                      );
+                    }
+                    setShowPhonePrompt(false);
+                    if (pendingUserData) {
+                      await completeLogin(
+                        pendingUserData,
+                        pendingResolvedEmail,
+                      );
+                      setPendingUserData(null);
+                    }
+                  }}
+                >
+                  <Text className="text-gray-700 font-msemibold">Decline</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  className="flex-1 py-3 rounded-xl bg-gray-100 items-center"
+                  onPress={async () => {
+                    if (pendingUserData?.id) {
+                      await AsyncStorage.setItem(
+                        `oauth_phone_prompt_done_${pendingUserData.id}`,
+                        "true",
+                      );
+                    }
+                    setShowPhonePrompt(false);
+                    if (pendingUserData) {
+                      await completeLogin(
+                        pendingUserData,
+                        pendingResolvedEmail,
+                      );
+                      setPendingUserData(null);
+                    }
+                  }}
+                >
+                  <Text className="text-gray-700 font-msemibold">
+                    No Bhutan Number
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
+      </View>
     </TouchableWithoutFeedback>
   );
 }

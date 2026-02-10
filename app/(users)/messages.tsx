@@ -2,13 +2,14 @@
 import BookMongooseModal from "@/components/BookMongooseModal";
 import FollowRequests from "@/components/modals/FollowRequests";
 import TrackMongooseModal from "@/components/modals/TrackMongooseModal";
+import { useUnreadMessages } from "@/contexts/UnreadMessagesContext";
 import { useUser } from "@/contexts/UserContext";
 import userData17123456 from "@/data/17123456";
 import users from "@/data/UserData";
 import { supabase } from "@/lib/supabase";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -55,6 +56,7 @@ const getUserData = (phoneNumber: string): IUserData | null => {
 
 export default function MessageScreen() {
   const { currentUser } = useUser();
+  const { refreshUnreadCount, currentUserUUID } = useUnreadMessages();
   const router = useRouter();
   const { tab } = useLocalSearchParams();
   const [activeTab, setActiveTab] = useState(0);
@@ -72,6 +74,31 @@ export default function MessageScreen() {
   const [showTrackingModal, setShowTrackingModal] = useState(false);
   const [selectedBookingForTracking, setSelectedBookingForTracking] =
     useState<any>(null);
+  const conversationsPollRef = useRef<ReturnType<typeof setInterval> | null>(
+    null,
+  );
+  const bookingsPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const formatConversationPreview = (message: any) => {
+    if (!message) return "No messages yet";
+    if (message.message_type === "image" || message.image_url) return "Photo";
+    if (message.message_type === "audio" || message.audio_url) return "Voice message";
+    if (typeof message.content === "string" && message.content.includes("📍 My Location:")) {
+      return "Location";
+    }
+    return message.content || "No messages yet";
+  };
+
+  const formatConversationTime = (iso?: string) => {
+    if (!iso) return "";
+    const date = new Date(iso);
+    const now = new Date();
+    const isToday = date.toDateString() === now.toDateString();
+    if (isToday) {
+      return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    }
+    return date.toLocaleDateString();
+  };
 
   // Get userData - will be null if currentUser is null
   const userData = currentUser ? getUserData(currentUser.phone_number || "") : null;
@@ -156,9 +183,47 @@ export default function MessageScreen() {
     return () => clearTimeout(debounceTimer);
   }, [searchQuery, currentUser?.phone_number]);
 
+  const resolveCurrentUserUUID = useCallback(async () => {
+    if (currentUserUUID) return currentUserUUID;
+    if (!currentUser) {
+      const { data: authData } = await supabase.auth.getUser();
+      return authData.user?.id ?? null;
+    }
+
+    if (currentUser.id) {
+      const { data: byId } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("id", currentUser.id)
+        .maybeSingle();
+      if (byId?.id) return byId.id;
+    }
+
+    const userPhone =
+      currentUser.phone_number ||
+      (currentUser as any)?.phone ||
+      (currentUser as any)?.phoneNumber ||
+      (currentUser as any)?.mobile;
+    const cleanPhone = String(userPhone || "").replace("+975", "");
+
+    if (userPhone || cleanPhone) {
+      const { data: byPhone } = await supabase
+        .from("profiles")
+        .select("id")
+        .or(`phone.eq.${userPhone},phone.eq.${cleanPhone}`)
+        .maybeSingle();
+      if (byPhone?.id) return byPhone.id;
+    }
+
+    const { data: authData } = await supabase.auth.getUser();
+    return authData.user?.id ?? null;
+  }, [currentUserUUID, currentUser]);
+
   // Fetch conversations from Supabase
-  const fetchConversations = async () => {
-    setIsLoadingConversations(true);
+  const fetchConversations = useCallback(async (showLoader = true) => {
+    if (showLoader) {
+      setIsLoadingConversations(true);
+    }
     try {
       console.log("=== FETCHING CONVERSATIONS ===");
       console.log("Current user object:", JSON.stringify(currentUser));
@@ -167,45 +232,12 @@ export default function MessageScreen() {
         currentUser ? Object.keys(currentUser) : "null",
       );
 
-      // Try multiple possible phone number properties
-      const userPhone =
-        currentUser?.phone_number ||
-        (currentUser as any)?.phone ||
-        (currentUser as any)?.phoneNumber ||
-        (currentUser as any)?.mobile;
-
-      console.log("Detected user phone:", userPhone);
-
-      if (!userPhone) {
-        console.log("❌ No phone number found for current user");
+      const resolvedUUID = await resolveCurrentUserUUID();
+      if (!resolvedUUID) {
+        console.log("❌ Current user UUID not found");
         setConversations([]);
-        setDebugInfo("Please login with a valid phone number");
-        setIsLoadingConversations(false);
-        return;
-      }
-
-      // Get current user's profile to get their UUID
-      console.log("🔍 Searching for profile with phone:", userPhone);
-      const { data: currentUserProfile, error: profileError } = await supabase
-        .from("profiles")
-        .select("id, name, phone")
-        .eq("phone", userPhone)
-        .maybeSingle();
-
-      if (profileError) {
-        console.log("❌ Error finding profile:", profileError);
-      }
-
-      console.log("✅ Current user profile found:", currentUserProfile);
-
-      if (!currentUserProfile) {
-        console.log("❌ Current user not found in profiles table");
-        console.log(
-          "💡 Make sure your phone number matches a profile in the database",
-        );
-        setConversations([]);
-        setDebugInfo(`User with phone ${userPhone} not found in database`);
-        setIsLoadingConversations(false);
+        setDebugInfo("Current user not found in profiles table");
+        if (showLoader) setIsLoadingConversations(false);
         return;
       }
 
@@ -213,9 +245,7 @@ export default function MessageScreen() {
       const { data: messages, error } = await supabase
         .from("messages")
         .select("*")
-        .or(
-          `sender_id.eq.${currentUserProfile.id},receiver_id.eq.${currentUserProfile.id}`,
-        )
+        .or(`sender_id.eq.${resolvedUUID},receiver_id.eq.${resolvedUUID}`)
         .order("created_at", { ascending: false });
 
       console.log(
@@ -236,9 +266,10 @@ export default function MessageScreen() {
       // Extract unique partner UUIDs
       console.log("Processing messages to extract partners...");
       const partnerMap = new Map();
+      const unreadMap = new Map<string, number>();
       for (const message of messages) {
         const partnerId =
-          message.sender_id === currentUserProfile.id
+          message.sender_id === resolvedUUID
             ? message.receiver_id
             : message.sender_id;
 
@@ -252,6 +283,14 @@ export default function MessageScreen() {
             new Date(partnerMap.get(partnerId).created_at)
         ) {
           partnerMap.set(partnerId, message);
+        }
+
+        if (
+          message.receiver_id === resolvedUUID &&
+          message.sender_id === partnerId &&
+          !message.is_read
+        ) {
+          unreadMap.set(partnerId, (unreadMap.get(partnerId) || 0) + 1);
         }
       }
 
@@ -297,6 +336,7 @@ export default function MessageScreen() {
             partnerId: pid,
             partnerProfile,
             lastMessage,
+            unreadCount: unreadMap.get(pid) || 0,
             created_at: lastMessage.created_at,
           };
         })
@@ -314,6 +354,7 @@ export default function MessageScreen() {
       );
 
       setConversations(supabaseConversations);
+      await refreshUnreadCount();
       setDebugInfo(`${supabaseConversations.length} chat partners`);
       console.log("State updated with conversations");
     } catch (e) {
@@ -321,15 +362,17 @@ export default function MessageScreen() {
       setDebugInfo(`Error: ${(e as any).message}`);
       setConversations([]);
     } finally {
-      setIsLoadingConversations(false);
+      if (showLoader) {
+        setIsLoadingConversations(false);
+      }
     }
-  };
+  }, [currentUser, refreshUnreadCount, resolveCurrentUserUUID]);
 
   useEffect(() => {
     // Fetch conversations from Supabase (prioritize database over local data)
     console.log("useEffect triggered, fetching conversations...");
-    fetchConversations();
-  }, [currentUser?.phone_number]);
+    fetchConversations(true);
+  }, [fetchConversations]);
 
   // Fetch mongoose users (users with email starting with mongoose@gmail.com)
   const fetchMongooseUsers = async () => {
@@ -464,10 +507,24 @@ export default function MessageScreen() {
 
         if (status === "SUBSCRIBED") {
           console.log("✅ Real-time subscription ACTIVE");
+          if (bookingsPollRef.current) {
+            clearInterval(bookingsPollRef.current);
+            bookingsPollRef.current = null;
+          }
         } else if (status === "CHANNEL_ERROR") {
           console.error("❌ Real-time subscription ERROR");
+          if (!bookingsPollRef.current) {
+            bookingsPollRef.current = setInterval(() => {
+              fetchMongooseBookings();
+            }, 8000);
+          }
         } else if (status === "TIMED_OUT") {
           console.error("⏱️ Real-time subscription TIMED OUT");
+          if (!bookingsPollRef.current) {
+            bookingsPollRef.current = setInterval(() => {
+              fetchMongooseBookings();
+            }, 8000);
+          }
         } else if (status === "CLOSED") {
           console.log("🔒 Real-time subscription CLOSED");
         }
@@ -477,31 +534,17 @@ export default function MessageScreen() {
       console.log("🔌 Cleaning up booking subscription:", channelName);
       isSubscribed = false;
       supabase.removeChannel(bookingsChannel);
+      if (bookingsPollRef.current) {
+        clearInterval(bookingsPollRef.current);
+        bookingsPollRef.current = null;
+      }
     };
   }, [currentUser?.id]);
 
   // Subscribe to real-time updates for new messages
   useEffect(() => {
-    const userPhone =
-      currentUser?.phone_number ||
-      (currentUser as any)?.phone ||
-      (currentUser as any)?.phoneNumber ||
-      (currentUser as any)?.mobile;
-
-    if (!userPhone) {
-      console.log("⚠️ Cannot setup real-time: no phone number");
-      return;
-    }
-
     const setupRealtimeSubscription = async () => {
-      // Get user's UUID for real-time filtering
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("phone", userPhone)
-        .maybeSingle();
-
-      const userUUID = profile?.id;
+      const userUUID = await resolveCurrentUserUUID();
 
       if (!userUUID) {
         console.log("⚠️ Cannot setup real-time: user UUID not found");
@@ -514,29 +557,72 @@ export default function MessageScreen() {
       );
 
       const channel = supabase
-        .channel("conversations")
+        .channel(`conversations_${userUUID}`)
         .on(
           "postgres_changes",
           {
             event: "*",
             schema: "public",
             table: "messages",
-            filter: `or(sender_id.eq.${userUUID},receiver_id.eq.${userUUID})`,
+            filter: `receiver_id.eq.${userUUID}`,
           },
-          (payload) => {
-            console.log("📨 New message received, refreshing conversations");
-            fetchConversations();
+          () => {
+            console.log("📨 Incoming message detected, refreshing conversations");
+            fetchConversations(false);
           },
         )
-        .subscribe();
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "messages",
+            filter: `sender_id.eq.${userUUID}`,
+          },
+          () => {
+            console.log("📨 Outgoing message detected, refreshing conversations");
+            fetchConversations(false);
+          },
+        )
+        .subscribe((status) => {
+          console.log("📡 Conversations subscription status:", status);
+
+          if (status === "SUBSCRIBED") {
+            if (conversationsPollRef.current) {
+              clearInterval(conversationsPollRef.current);
+              conversationsPollRef.current = null;
+            }
+          } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+            if (!conversationsPollRef.current) {
+              conversationsPollRef.current = setInterval(() => {
+                fetchConversations(false);
+              }, 5000);
+            }
+          }
+        });
 
       return () => {
         supabase.removeChannel(channel);
+        if (conversationsPollRef.current) {
+          clearInterval(conversationsPollRef.current);
+          conversationsPollRef.current = null;
+        }
       };
     };
 
-    setupRealtimeSubscription();
-  }, [currentUser]);
+    let cleanup: (() => void) | undefined;
+    setupRealtimeSubscription().then((fn) => {
+      cleanup = fn;
+    });
+
+    return () => {
+      cleanup?.();
+      if (conversationsPollRef.current) {
+        clearInterval(conversationsPollRef.current);
+        conversationsPollRef.current = null;
+      }
+    };
+  }, [currentUserUUID, fetchConversations, resolveCurrentUserUUID]);
 
   const getUserByPhone = (phoneNumber: string) => {
     const cleanPhone = phoneNumber.replace("+975", "");
@@ -606,24 +692,8 @@ export default function MessageScreen() {
           onPress: async () => {
             try {
               // Get current user's UUID
-              const userPhone =
-                currentUser?.phone_number ||
-                (currentUser as any)?.phone ||
-                (currentUser as any)?.phoneNumber ||
-                (currentUser as any)?.mobile;
-
-              if (!userPhone) {
-                console.log("❌ No phone number found for deletion");
-                return;
-              }
-
-              const { data: currentUserProfile } = await supabase
-                .from("profiles")
-                .select("id")
-                .eq("phone", userPhone)
-                .maybeSingle();
-
-              if (!currentUserProfile) {
+              const resolvedUUID = await resolveCurrentUserUUID();
+              if (!resolvedUUID) {
                 console.log("❌ User profile not found");
                 return;
               }
@@ -633,7 +703,7 @@ export default function MessageScreen() {
                 .from("messages")
                 .delete()
                 .or(
-                  `and(sender_id.eq.${currentUserProfile.id},receiver_id.eq.${partnerId}),and(sender_id.eq.${partnerId},receiver_id.eq.${currentUserProfile.id})`,
+                  `and(sender_id.eq.${resolvedUUID},receiver_id.eq.${partnerId}),and(sender_id.eq.${partnerId},receiver_id.eq.${resolvedUUID})`,
                 );
 
               if (error) {
@@ -685,16 +755,19 @@ export default function MessageScreen() {
           <View className="flex-1">
             <Text className="font-semibold text-gray-800">{userName}</Text>
             <Text className="text-sm text-gray-500 mt-1" numberOfLines={1}>
-              {conversation.lastMessage?.content || "No messages yet"}
+              {formatConversationPreview(conversation.lastMessage)}
             </Text>
           </View>
           <Text className="text-xs text-gray-400 mr-2">
-            {conversation.lastMessage?.created_at
-              ? new Date(
-                  conversation.lastMessage.created_at,
-                ).toLocaleDateString()
-              : ""}
+            {formatConversationTime(conversation.lastMessage?.created_at)}
           </Text>
+          {conversation.unreadCount > 0 && (
+            <View className="mr-2 min-w-[22px] h-[22px] px-1 rounded-full bg-red-500 items-center justify-center">
+              <Text className="text-white text-[11px] font-bold">
+                {conversation.unreadCount > 99 ? "99+" : conversation.unreadCount}
+              </Text>
+            </View>
+          )}
         </TouchableOpacity>
 
         {/* Delete Button */}
