@@ -3,11 +3,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { X } from "lucide-react-native";
 import React from "react";
 import { Dimensions, Image, Modal, TouchableOpacity, View } from "react-native";
-import {
-  Gesture,
-  GestureDetector,
-  GestureHandlerRootView,
-} from "react-native-gesture-handler";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -96,12 +92,8 @@ export default function ProfileImageViewer({
       statusBarTranslucent={true}
       onRequestClose={onClose}
     >
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <View
-          className="flex-1"
-          style={{ backgroundColor: "rgba(232, 232, 232, 0.9)" }}
-        >
-          <BlurView
+      <View style={{ flex: 1, backgroundColor: "rgba(232, 232, 232, 0.9)" }}>
+        <BlurView
             intensity={35}
             tint="dark"
             style={{
@@ -195,8 +187,7 @@ export default function ProfileImageViewer({
               </View>
             </View>
           </View>
-        </View>
-      </GestureHandlerRootView>
+      </View>
     </Modal>
   );
 }

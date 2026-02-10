@@ -8,7 +8,6 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
-  FlatList,
   Image,
   Text,
   TextInput,
@@ -136,6 +135,7 @@ const FeaturedSellers = () => {
 
     try {
       setLoading(true);
+      if (!isLoadMore) setUsers([]);
       const currentPage = isLoadMore ? page + 1 : 0;
       const offset = currentPage * PAGE_SIZE;
 
@@ -158,14 +158,12 @@ const FeaturedSellers = () => {
         excludeIds.push(currentUser.id);
       }
 
-      // Never filter by location - let fetchFeaturedSellers natural sorting handle it
-      // This shows same location users first, then others (for all filters)
       let fetchedUsers = await fetchFeaturedSellers(
         PAGE_SIZE,
         offset,
         searchQuery,
-        excludeIds.filter(id => id !== ''), // Remove empty strings
-        undefined  // Always undefined - no location filtering, only sorting
+        excludeIds.filter(id => id !== ''),
+        activeSort === 'most_products' ? undefined : (currentUser?.dzongkhag || undefined)
       );
 
       // Apply filter-specific logic
@@ -276,20 +274,6 @@ const FeaturedSellers = () => {
     }
   };
 
-  const renderUser = ({ item }: { item: FeaturedSellerProfile }) => {
-    const isFollowed = (followingIds.includes(item.id) || newlyFollowedIds.includes(item.id)) && !unfollowedIds.includes(item.id);
-
-    return (
-      <UserCard
-        user={item}
-        onPress={() => handleUserPress(item)}
-        onFollow={() => handleFollow(item)}
-        onUnfollow={() => handleUnfollow(item)}
-        isFollowed={isFollowed}
-      />
-    );
-  };
-
   const [showFilterMenu, setShowFilterMenu] = useState(false);
 
   const getFilterIcon = () => {
@@ -302,7 +286,7 @@ const FeaturedSellers = () => {
   };
 
   return (
-    <View className="flex-1 bg-background px-4">
+    <View className="bg-background px-4">
       {/* Header */}
       <View className="mb-4 pt-4">
         <Text className="text-sm font-regular text-gray-500">
@@ -410,14 +394,14 @@ const FeaturedSellers = () => {
       )}
 
       {/* Content */}
-      <View className="flex-1">
+      <View>
         {loading && users.length === 0 ? (
-          <View className="flex-1 items-center justify-center py-12">
+          <View className="items-center justify-center py-12">
             <ActivityIndicator size="large" color="#094569" />
             <Text className="text-sm text-gray-500 mt-2">Loading sellers...</Text>
           </View>
         ) : users.length === 0 ? (
-          <View className="flex-1 items-center justify-center py-12">
+          <View className="items-center justify-center py-12">
             <Search size={48} className="text-gray-300 mb-4" />
             <Text className="text-lg font-msemibold text-gray-700 mb-2">
               No sellers found
@@ -427,32 +411,42 @@ const FeaturedSellers = () => {
             </Text>
           </View>
         ) : (
-          <FlatList
-            data={users}
-            renderItem={renderUser}
-            keyExtractor={(item) => item.id}
-            numColumns={2}
-            columnWrapperStyle={{ justifyContent: 'space-between' }}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: 40 }}
-            ListFooterComponent={
-              <>
-                {hasMore && users.length > 0 && (
-                  <TouchableOpacity
-                    onPress={() => loadUsers(true)}
-                    disabled={loading}
-                    className={`rounded-lg py-3 px-6 items-center mx-auto mb-4 mt-2 ${loading ? 'bg-gray-300' : 'bg-primary'}`}
-                  >
-                    {loading ? (
-                      <ActivityIndicator size="small" color="#fff" />
-                    ) : (
-                      <Text className="text-white font-semibold text-base">Show More</Text>
-                    )}
-                  </TouchableOpacity>
+          <View>
+            {Array.from({ length: Math.ceil(users.length / 2) }, (_, rowIndex) => {
+              const rowUsers = users.slice(rowIndex * 2, rowIndex * 2 + 2);
+              return (
+                <View key={rowIndex} className="flex-row justify-between">
+                  {rowUsers.map((user) => {
+                    const isFollowed = (followingIds.includes(user.id) || newlyFollowedIds.includes(user.id)) && !unfollowedIds.includes(user.id);
+                    return (
+                      <UserCard
+                        key={user.id}
+                        user={user}
+                        onPress={() => handleUserPress(user)}
+                        onFollow={() => handleFollow(user)}
+                        onUnfollow={() => handleUnfollow(user)}
+                        isFollowed={isFollowed}
+                      />
+                    );
+                  })}
+                  {rowUsers.length === 1 && <View style={{ width: cardWidth }} />}
+                </View>
+              );
+            })}
+            {hasMore && (
+              <TouchableOpacity
+                onPress={() => loadUsers(true)}
+                disabled={loading}
+                className={`rounded-lg py-3 px-6 items-center mx-auto mb-4 mt-2 ${loading ? 'bg-gray-300' : 'bg-primary'}`}
+              >
+                {loading ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text className="text-white font-semibold text-base">Show More</Text>
                 )}
-              </>
-            }
-          />
+              </TouchableOpacity>
+            )}
+          </View>
         )}
       </View>
     </View>

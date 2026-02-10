@@ -1,71 +1,36 @@
 import {
-  FontAwesome5,
   Ionicons,
   MaterialIcons
 } from "@expo/vector-icons";
 import FormInput from "@/components/ui/FormInput";
 import { Link, useRouter } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   Alert,
-  Animated,
   Image,
-  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
   Text,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   View,
 } from "react-native";
 import { supabase } from '../lib/supabase';
 import { sendWelcomeSMS } from '../services/smsService';
 
-const dzongkhags = [
-  "Bumthang",
-  "Chukha",
-  "Dagana",
-  "Gasa",
-  "Haa",
-  "Lhuntse",
-  "Mongar",
-  "Paro",
-  "Pemagatshel",
-  "Punakha",
-  "Samdrup Jongkhar",
-  "Samtse",
-  "Sarpang",
-  "Thimphu",
-  "Trashigang",
-  "Trashiyangtse",
-  "Trongsa",
-  "Tsirang",
-  "Wangdue Phodrang",
-  "Zhemgang",
-];
-
-export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
+export default function SignupTab2() {
   const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [dzongkhag, setDzongkhag] = useState("");
-  const [showDropdown, setShowDropdown] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
 
-  const dropdownAnimation = useRef(new Animated.Value(0)).current;
-  const scaleAnimation = useRef(new Animated.Value(1)).current;
-
-
-  // loading states
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   // Check if phone number already exists
   const checkPhoneExists = async (phoneNumber: string): Promise<boolean> => {
@@ -77,13 +42,13 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
 
       if (error) {
         console.error("Phone lookup error:", error);
-        return false; // Allow signup to proceed if check fails
+        return false;
       }
 
       return data && data.length > 0;
     } catch (err) {
       console.error("Error checking phone:", err);
-      return false; // Allow signup to proceed if check fails
+      return false;
     }
   };
 
@@ -95,7 +60,6 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
 
     try {
       setLoading(true);
-      setError(null);
 
       // PRE-CHECK: Check if phone already exists
       const phoneExists = await checkPhoneExists(phone);
@@ -120,7 +84,6 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
           data: {
             name,
             phone,
-            dzongkhag,
             role: "user",
           },
         }
@@ -128,24 +91,19 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
 
       if (signUpError) {
         console.error("Signup error:", signUpError);
-        setError(signUpError.message);
         setLoading(false);
         return;
       }
 
       if (data?.user) {
         try {
-          // Profile will be created automatically by database trigger
-          // Store phone before clearing form
           const userPhone = phone;
 
-          // Clear form fields
           setName("");
           setEmail("");
           setPassword("");
           setPhone("");
           setConfirmPassword("");
-          setDzongkhag("");
 
           // Send welcome SMS (non-blocking, only for 97517 numbers)
           sendWelcomeSMS(userPhone).then((success) => {
@@ -158,12 +116,10 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
             console.error('SMS sending error:', err);
           });
 
-          // Show success message and navigate
           alert("Signup successful! Please check your email to verify your account.");
           router.replace("/login");
         } catch (profileErr) {
           console.error("Profile creation error:", profileErr);
-          // Still navigate to login even if profile creation fails
           alert("Account created but profile setup failed. You can still proceed to login.");
           router.replace("/login");
         }
@@ -171,82 +127,17 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
     } catch (err: any) {
       console.error("Signup error:", err);
 
-      // FALLBACK: Handle duplicate phone constraint error
       if (err.code === '23505' || err.message?.includes('profiles_phone_unique')) {
         Alert.alert(
           "Phone Already Registered",
           "This phone number is already in use. Please login or try a different number."
         );
-      } else {
-        setError(err?.message || "An error occurred during signup");
       }
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    const keyboardDidShow = Keyboard.addListener("keyboardDidShow", () => {
-      setIsKeyboardOpen(true);
-      if (showDropdown) closeDropdown();
-    });
-    const keyboardDidHide = Keyboard.addListener("keyboardDidHide", () => {
-      setIsKeyboardOpen(false);
-    });
-    return () => {
-      keyboardDidShow.remove();
-      keyboardDidHide.remove();
-    };
-  }, [showDropdown]);
-
-  const openDropdown = () => {
-    if (isKeyboardOpen) {
-      Keyboard.dismiss();
-      setTimeout(() => {
-        showDropdownAnimation();
-      }, 100);
-    } else {
-      showDropdownAnimation();
-    }
-  };
-
-  const showDropdownAnimation = () => {
-    setShowDropdown(true);
-    Animated.parallel([
-      Animated.timing(dropdownAnimation, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-      Animated.timing(scaleAnimation, {
-        toValue: 0.98,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  };
-
-  const closeDropdown = () => {
-    Animated.parallel([
-      Animated.timing(dropdownAnimation, {
-        toValue: 0,
-        duration: 150,
-        useNativeDriver: true,
-      }),
-      Animated.timing(scaleAnimation, {
-        toValue: 1,
-        duration: 150,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      setShowDropdown(false);
-    });
-  };
-
-  const handleItemSelect = (item: string) => {
-    setDzongkhag(item);
-    closeDropdown();
-  };
   const isValidBhutanesePhone = (input: string) =>
     (input.startsWith("17") || input.startsWith("77")) && input.length === 8;
 
@@ -257,25 +148,18 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
     name.trim().length > 0 &&
     isValidEmail(email) &&
     isValidBhutanesePhone(phone) &&
-    dzongkhag !== "" &&
     password.length >= 6 &&
     confirmPassword === password;
 
   return (
-    <TouchableWithoutFeedback
-      onPress={() => {
-        Keyboard.dismiss();
-        if (showDropdown) closeDropdown();
-      }}
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : "padding"}
+      style={{ flex: 1, backgroundColor: "#fff" }}
     >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        className="flex-1 bg-white"
-      >
-    
-        <ScrollView
+      <ScrollView
+          ref={scrollRef}
           className="flex-1 px-[10%]"
-          keyboardShouldPersistTaps="handled"
+          keyboardShouldPersistTaps="always"
           contentContainerStyle={{
             flexGrow: 1,
             justifyContent: "center",
@@ -305,7 +189,6 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
             placeholder="Full Name"
             value={name}
             onChangeText={setName}
-            onFocus={closeDropdown}
             leftIcon={<MaterialIcons name="person" size={20} color="#6B7280" />}
           />
 
@@ -316,7 +199,6 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
             onChangeText={setEmail}
             keyboardType="email-address"
             autoCapitalize="none"
-            onFocus={closeDropdown}
             leftIcon={<MaterialIcons name="email" size={20} color="#6B7280" />}
           />
 
@@ -326,129 +208,8 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
             keyboardType="phone-pad"
             value={phone}
             onChangeText={setPhone}
-            onFocus={closeDropdown}
             leftIcon={<MaterialIcons name="phone" size={20} color="#6B7280" />}
           />
-
-          {/* Dzongkhag Dropdown */}
-          <View className="relative">
-            <FontAwesome5
-              name="map-marker-alt"
-              size={18}
-              color="#999"
-              style={{ position: "absolute", left: 16, top: "30%", zIndex: 1000 }}
-            />
-            <Animated.View style={{ transform: [{ scale: scaleAnimation }] }}>
-              <TouchableOpacity
-                onPress={openDropdown}
-                activeOpacity={0.8}
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  borderWidth: 1,
-                  borderColor: showDropdown ? "#9CA3AF" : "#E5E7EB",
-                  borderRadius: 12,
-                  paddingVertical: 14,
-                  paddingHorizontal: 16,
-                  paddingLeft: 46,
-                  backgroundColor: "#F9FAFB",
-                }}
-              >
-                <Text
-                  className="font-regular text-base text-gray-700"
-                  selectable={false}
-                >
-                  {dzongkhag || "Select Dzongkhag"}
-                </Text>
-                <Animated.View
-                  style={{
-                    transform: [
-                      {
-                        rotate: dropdownAnimation.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: ["0deg", "180deg"],
-                        }),
-                      },
-                    ],
-                  }}
-                >
-                  <MaterialIcons
-                    name="keyboard-arrow-down"
-                    size={24}
-                    color="#999"
-                  />
-                </Animated.View>
-              </TouchableOpacity>
-            </Animated.View>
-
-            {showDropdown && (
-              <Animated.View
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 20,
-                  right: 20,
-                  maxHeight: 250,
-                  backgroundColor: "#fff",
-                  borderRadius: 8,
-                  borderColor: "#D1D5DB",
-                  borderWidth: 1,
-                  elevation: 8,
-                  shadowColor: "#000",
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.15,
-                  shadowRadius: 6,
-                  zIndex: 1000,
-                  opacity: dropdownAnimation,
-                  transform: [
-                    {
-                      translateY: dropdownAnimation.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [-10, 0],
-                      }),
-                    },
-                    {
-                      scaleY: dropdownAnimation.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [0.8, 1],
-                      }),
-                    },
-                  ],
-                }}
-              >
-                <ScrollView
-                  keyboardShouldPersistTaps="handled"
-                  showsVerticalScrollIndicator={false}
-                  style={{ maxHeight: 250 }}
-                  contentContainerStyle={{ paddingVertical: 10 }}
-                >
-                  {dzongkhags.map((item, index) => (
-                    <Pressable
-                      key={item}
-                      onPress={() => handleItemSelect(item)}
-                      style={{
-                        paddingVertical: 12,
-                        paddingHorizontal: 16,
-                        borderBottomWidth:
-                          index !== dzongkhags.length - 1 ? 0.5 : 0,
-                        borderBottomColor: "#E5E7EB",
-                        alignItems: "center",
-                      }}
-                      android_ripple={{ color: "#F3F4F6" }}
-                    >
-                      <Text
-                        className="font-regular text-base text-gray-700"
-                        selectable={false}
-                      >
-                        {item}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </ScrollView>
-              </Animated.View>
-            )}
-          </View>
 
           {/* Password */}
           <FormInput
@@ -456,7 +217,6 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
             secureTextEntry={!showPassword}
             value={password}
             onChangeText={setPassword}
-            onFocus={closeDropdown}
             leftIcon={<MaterialIcons name="lock" size={20} color="#6B7280" />}
             rightAccessory={
               <Pressable onPress={() => setShowPassword(!showPassword)}>
@@ -475,7 +235,7 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
             secureTextEntry={!showConfirmPassword}
             value={confirmPassword}
             onChangeText={setConfirmPassword}
-            onFocus={closeDropdown}
+            onFocus={() => setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 300)}
             leftIcon={
               <MaterialIcons name="lock-outline" size={20} color="#6B7280" />
             }
@@ -500,19 +260,18 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
 
           {/* Register Button */}
           <TouchableOpacity
-  onPress={handleSignup}
-  className="py-4 rounded-lg"
-  activeOpacity={0.8}
-  disabled={!isFormValid || loading}
-  style={{
-    backgroundColor: isFormValid && !loading ? "#094569" : "#09456980",
-  }}
->
-  <Text className="text-secondary text-center font-semibold text-base">
-    {loading ? "Creating Account..." : "Create Account"}
-  </Text>
-</TouchableOpacity>
-
+            onPress={handleSignup}
+            className="py-4 rounded-lg"
+            activeOpacity={0.8}
+            disabled={!isFormValid || loading}
+            style={{
+              backgroundColor: isFormValid && !loading ? "#094569" : "#09456980",
+            }}
+          >
+            <Text className="text-secondary text-center font-semibold text-base">
+              {loading ? "Creating Account..." : "Create Account"}
+            </Text>
+          </TouchableOpacity>
 
           {/* Already have account */}
           <Text className="text-center text-gray-500 font-regular">
@@ -521,8 +280,7 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
               Login
             </Link>
           </Text>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </TouchableWithoutFeedback>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }

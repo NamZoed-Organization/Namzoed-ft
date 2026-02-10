@@ -1,4 +1,5 @@
 import { Feather } from "@expo/vector-icons";
+import { MapPin } from "lucide-react-native";
 import React from "react";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -16,9 +17,10 @@ interface HomeCardProps {
   price?: string;
   profileImage?: string;
   profileName?: string;
+  location?: string;
 }
 
-export default function HomeCard({
+const HomeCard = React.memo(function HomeCard({
   imageUrl,
   title,
   subtitle,
@@ -29,6 +31,7 @@ export default function HomeCard({
   price,
   profileImage,
   profileName,
+  location,
 }: HomeCardProps) {
   if (isSeeMore) {
     return (
@@ -107,11 +110,21 @@ export default function HomeCard({
               {subtitle.toUpperCase()}
             </Text>
           )}
+          {location && (
+            <View style={styles.locationRow}>
+              <MapPin size={10} color="#9CA3AF" />
+              <Text style={styles.locationText} numberOfLines={1}>
+                {location}
+              </Text>
+            </View>
+          )}
         </View>
       </View>
     </Pressable>
   );
-}
+});
+
+export default HomeCard;
 
 const styles = StyleSheet.create({
   card: {
@@ -222,6 +235,17 @@ const styles = StyleSheet.create({
     color: "#888",
     fontWeight: "600",
     letterSpacing: 1.5,
+  },
+  locationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    marginTop: 4,
+  },
+  locationText: {
+    fontSize: 10,
+    color: "#9CA3AF",
+    flex: 1,
   },
   // SEE MORE STYLES
   seeMoreContainer: {

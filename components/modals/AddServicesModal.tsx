@@ -440,9 +440,9 @@ export default function AddServicesModal({
                 <View className="p-5">
                   <TouchableOpacity
                     onPress={handleSubmit}
-                    disabled={loading}
+                    disabled={loading || !name.trim()}
                     className={`w-full py-4 rounded-[24px] flex-row justify-center items-center shadow-lg ${
-                      loading ? "bg-gray-300" : "bg-primary"
+                      loading || !name.trim() ? "bg-gray-300" : "bg-primary"
                     }`}
                   >
                     {loading ? (

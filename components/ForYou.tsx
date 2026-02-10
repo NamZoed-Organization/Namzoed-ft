@@ -8,18 +8,19 @@ import {
   ProviderServiceWithDetails,
 } from "@/lib/servicesService";
 import { isClosingSaleActive } from "@/utils/timeHelpers";
+import { FlashList } from "@shopify/flash-list";
 import { useRouter } from "expo-router";
 import { ArrowUpDown } from "lucide-react-native";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  ScrollView,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
 
-const CARD_SPACING = 16;
+const CARD_ESTIMATED_SIZE = 196; // CARD_WIDTH (180) + marginRight (16)
+const CARD_LIST_HEIGHT = 255; // imageFrame (140) + text area (~105) + marginBottom (10)
 
 type SortOrder =
   | "latest"
@@ -56,20 +57,18 @@ export default function ForYou() {
   useEffect(() => {
     loadAllData();
 
-    // Check closing sale time every second
+    // Check closing sale time every 60 seconds — it only changes at 8pm/10pm
     const interval = setInterval(() => {
       setIsClosingSaleTime(isClosingSaleActive());
-    }, 1000);
+    }, 60000);
 
     return () => clearInterval(interval);
   }, []);
 
-  // Toggle sort menu
   const toggleSortMenu = () => {
     setShowSortMenu(!showSortMenu);
   };
 
-  // Get sort label
   const getSortLabel = (sort: SortOrder) => {
     switch (sort) {
       case "latest":
@@ -89,59 +88,54 @@ export default function ForYou() {
     }
   };
 
-  // Sort ONLY closing sale products based on sortOrder
   const sortedClosingSaleProducts = useMemo(() => {
     const closingSaleItems = products.filter(
       (p) => p.category === "food" && p.is_discount_active,
     );
 
+    const sorted = [...closingSaleItems];
     switch (sortOrder) {
       case "latest":
-        return closingSaleItems.sort(
+        return sorted.sort(
           (a, b) =>
             new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
         );
       case "oldest":
-        return closingSaleItems.sort(
+        return sorted.sort(
           (a, b) =>
             new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
         );
       case "high_discount":
-        return closingSaleItems.sort(
+        return sorted.sort(
           (a, b) => (b.discount_percent || 0) - (a.discount_percent || 0),
         );
       case "low_discount":
-        return closingSaleItems.sort(
+        return sorted.sort(
           (a, b) => (a.discount_percent || 0) - (b.discount_percent || 0),
         );
       case "high_price":
-        return closingSaleItems.sort(
-          (a, b) => (b.current_price || b.price) - (a.current_price || a.price),
+        return sorted.sort(
+          (a, b) =>
+            (b.current_price || b.price) - (a.current_price || a.price),
         );
       case "low_price":
-        return closingSaleItems.sort(
-          (a, b) => (a.current_price || a.price) - (b.current_price || b.price),
+        return sorted.sort(
+          (a, b) =>
+            (a.current_price || a.price) - (b.current_price || b.price),
         );
       default:
-        return closingSaleItems;
+        return sorted;
     }
   }, [products, sortOrder]);
 
-  // Filter products with active discounts (excluding food items) - NO SORTING
   const discountedProducts = useMemo(() => {
     return products.filter(
       (p) => p.is_currently_active && p.category !== "food",
     );
   }, [products]);
 
-  // Shuffled closing sale food items for banner
   const closingSaleFoodItems = useMemo(() => {
     return shuffleArray(sortedClosingSaleProducts);
-  }, [sortedClosingSaleProducts]);
-
-  // Active closing sale products (for section - shows only during 8-10pm)
-  const activeClosingSaleProducts = useMemo(() => {
-    return sortedClosingSaleProducts.filter((p) => p.is_currently_active);
   }, [sortedClosingSaleProducts]);
 
   const loadAllData = async () => {
@@ -153,7 +147,6 @@ export default function ForYou() {
         fetchAllProviderServices(0, 20),
       ]);
 
-      // Shuffle items within each category and take first 10 items
       setProducts(shuffleArray(productsData.products || []).slice(0, 10));
       setMarketplaceItems(
         shuffleArray(marketplaceData.items || []).slice(0, 10),
@@ -187,7 +180,6 @@ export default function ForYou() {
     timerEndTime?: string,
     showEmptyState?: boolean,
   ) => {
-    // For discount categories, don't render if empty
     if (items.length === 0 && !showEmptyState) return null;
 
     return (
@@ -206,19 +198,22 @@ export default function ForYou() {
             </Text>
           </View>
         ) : (
-          <ScrollView
+          <FlashList
             horizontal
+            data={items}
+            renderItem={({ item }) => renderCard(item)}
+            keyExtractor={(item) => item.id}
+            estimatedItemSize={CARD_ESTIMATED_SIZE}
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{
-              paddingLeft: 16,
-            }}
-          >
-            {items.map((item) => renderCard(item))}
-            <HomeCard
-              isSeeMore
-              onPress={() => router.push(viewAllRoute as any)}
-            />
-          </ScrollView>
+            contentContainerStyle={{ paddingLeft: 16 }}
+            style={{ height: CARD_LIST_HEIGHT }}
+            ListFooterComponent={
+              <HomeCard
+                isSeeMore
+                onPress={() => router.push(viewAllRoute as any)}
+              />
+            }
+          />
         )}
       </View>
     );
@@ -234,229 +229,211 @@ export default function ForYou() {
   }
 
   return (
-    <View className="flex-1 bg-background pt-4">
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Closing Sale Banner with integrated cards */}
-        <View className="mb-4">
-          {/* Banner with gradient background */}
+    <View className="bg-background pt-4">
+      {/* Closing Sale Banner */}
+      <View className="mb-4">
+        <ClosingSaleBanner foodItems={closingSaleFoodItems} />
 
-          <ClosingSaleBanner foodItems={closingSaleFoodItems} />
+        {isClosingSaleTime && (
+          <View className="pb-4">
+            {/* Sort Button */}
+            <View className="px-4 mb-3">
+              <TouchableOpacity
+                onPress={toggleSortMenu}
+                className="bg-white/90 backdrop-blur-sm px-3 py-2 rounded-xl shadow-sm border border-white/50 flex-row items-center self-start"
+                style={{ backgroundColor: "rgba(255, 255, 255, 0.9)" }}
+              >
+                <ArrowUpDown size={16} color="#1F2937" />
+                <Text className="ml-1.5 text-xs font-semibold text-gray-700">
+                  {getSortLabel(sortOrder)}
+                </Text>
+              </TouchableOpacity>
 
-          {/* Sort Button and Cards - Only shown during active time */}
-          {isClosingSaleTime && (
-            <View className="pb-4">
-              {/* Sort Button */}
-              <View className="px-4 mb-3">
-                <TouchableOpacity
-                  onPress={toggleSortMenu}
-                  className="bg-white/90 backdrop-blur-sm px-3 py-2 rounded-xl shadow-sm border border-white/50 flex-row items-center self-start"
-                  style={{ backgroundColor: "rgba(255, 255, 255, 0.9)" }}
-                >
-                  <ArrowUpDown size={16} color="#1F2937" />
-                  <Text className="ml-1.5 text-xs font-semibold text-gray-700">
-                    {getSortLabel(sortOrder)}
-                  </Text>
-                </TouchableOpacity>
-
-                {/* Sort Menu Dropdown */}
-                {showSortMenu && (
-                  <View className="mt-2 bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-                    {(
-                      [
-                        "latest",
-                        "oldest",
-                        "high_discount",
-                        "low_discount",
-                        "high_price",
-                        "low_price",
-                      ] as SortOrder[]
-                    ).map((sort) => (
-                      <TouchableOpacity
-                        key={sort}
-                        onPress={() => {
-                          setSortOrder(sort);
-                          setShowSortMenu(false);
-                        }}
-                        className={`p-3 border-b border-gray-100 ${sortOrder === sort ? "bg-primary/10" : ""}`}
+              {showSortMenu && (
+                <View className="mt-2 bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+                  {(
+                    [
+                      "latest",
+                      "oldest",
+                      "high_discount",
+                      "low_discount",
+                      "high_price",
+                      "low_price",
+                    ] as SortOrder[]
+                  ).map((sort) => (
+                    <TouchableOpacity
+                      key={sort}
+                      onPress={() => {
+                        setSortOrder(sort);
+                        setShowSortMenu(false);
+                      }}
+                      className={`p-3 border-b border-gray-100 ${sortOrder === sort ? "bg-primary/10" : ""}`}
+                    >
+                      <Text
+                        className={`text-sm font-medium ${sortOrder === sort ? "text-primary" : "text-gray-700"}`}
                       >
-                        <Text
-                          className={`text-sm font-medium ${sortOrder === sort ? "text-primary" : "text-gray-700"}`}
-                        >
-                          {getSortLabel(sort)}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
-              </View>
-
-              {/* Closing Sale Preview Cards */}
-              {closingSaleFoodItems.length > 0 && (
-                <View>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={{ paddingLeft: 16 }}
-                  >
-                    {closingSaleFoodItems.map((item) => {
-                      const discountedPrice = item.discount_percent
-                        ? item.price -
-                          (item.price * item.discount_percent) / 100
-                        : item.price;
-
-                      return (
-                        <HomeCard
-                          key={item.id}
-                          imageUrl={
-                            item.images[0] || "https://via.placeholder.com/140"
-                          }
-                          title={item.name}
-                          subtitle="FOOD"
-                          price={`Nu. ${discountedPrice.toLocaleString()}`}
-                          discountPercent={item.discount_percent}
-                          isClosingSale={true}
-                          profileImage={(item as any).profiles?.avatar_url}
-                          profileName={(item as any).profiles?.name}
-                          onPress={() =>
-                            router.push(`/(users)/product/${item.id}` as any)
-                          }
-                        />
-                      );
-                    })}
-                  </ScrollView>
+                        {getSortLabel(sort)}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
                 </View>
               )}
             </View>
-          )}
-        </View>
 
-        {/* 2. Flash Deals - only shown if items exist */}
-        {renderSection(
-          "🔥 Flash Deals",
-          discountedProducts,
-          (product: Product) => (
+            {/* Closing Sale Preview Cards */}
+            {closingSaleFoodItems.length > 0 && (
+              <FlashList
+                horizontal
+                data={closingSaleFoodItems}
+                keyExtractor={(item) => item.id}
+                estimatedItemSize={CARD_ESTIMATED_SIZE}
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingLeft: 16 }}
+                style={{ height: CARD_LIST_HEIGHT }}
+                renderItem={({ item }) => {
+                  const discountedPrice = item.discount_percent
+                    ? item.price - (item.price * item.discount_percent) / 100
+                    : item.price;
+
+                  return (
+                    <HomeCard
+                      imageUrl={
+                        item.images[0] || "https://via.placeholder.com/140"
+                      }
+                      title={item.name}
+                      subtitle="FOOD"
+                      price={`Nu. ${discountedPrice.toLocaleString()}`}
+                      discountPercent={item.discount_percent}
+                      isClosingSale={true}
+                      profileImage={(item as any).profiles?.avatar_url}
+                      profileName={(item as any).profiles?.name}
+                      onPress={() =>
+                        router.push(`/(users)/product/${item.id}` as any)
+                      }
+                    />
+                  );
+                }}
+              />
+            )}
+          </View>
+        )}
+      </View>
+
+      {/* Flash Deals */}
+      {renderSection(
+        "🔥 Flash Deals",
+        discountedProducts,
+        (product: Product) => (
+          <HomeCard
+            imageUrl={product.images[0] || "https://via.placeholder.com/200"}
+            title={product.name}
+            subtitle={product.category?.toUpperCase() || "PRODUCT"}
+            price={
+              product.current_price && product.current_price > 0
+                ? `Nu. ${product.current_price}`
+                : undefined
+            }
+            discountPercent={product.discount_percent}
+            isClosingSale={false}
+            profileImage={(product as any).profiles?.avatar_url}
+            profileName={(product as any).profiles?.name}
+            onPress={() => handleProductPress(product)}
+          />
+        ),
+        "/(users)/categories",
+        false,
+        undefined,
+        false,
+      )}
+
+      {/* Products */}
+      {renderSection(
+        "Products",
+        products,
+        (product: Product) => {
+          const isFood = product.category === "food";
+          const isFoodWithClosingSale = isFood && product.is_discount_active;
+          const displayPrice = isFoodWithClosingSale
+            ? product.price
+            : product.current_price || product.price;
+          const hasDiscount =
+            product.is_currently_active &&
+            product.discount_percent &&
+            !isFoodWithClosingSale;
+
+          return (
             <HomeCard
-              key={product.id}
-              imageUrl={product.images[0] || "https://via.placeholder.com/200"}
+                imageUrl={product.images[0] || "https://via.placeholder.com/200"}
               title={product.name}
               subtitle={product.category?.toUpperCase() || "PRODUCT"}
               price={
-                product.current_price && product.current_price > 0
-                  ? `Nu. ${product.current_price}`
+                displayPrice && displayPrice > 0
+                  ? `Nu. ${displayPrice}`
                   : undefined
               }
-              discountPercent={product.discount_percent}
+              discountPercent={hasDiscount ? product.discount_percent : undefined}
               isClosingSale={false}
               profileImage={(product as any).profiles?.avatar_url}
               profileName={(product as any).profiles?.name}
               onPress={() => handleProductPress(product)}
             />
-          ),
-          "/(users)/categories",
-          false,
-          undefined,
-          false,
-        )}
+          );
+        },
+        "/(users)/categories",
+        false,
+        undefined,
+        true,
+      )}
 
-        {/* 3. Products - always shown, with empty state */}
-        {renderSection(
-          "Products",
-          products,
-          (product: Product) => {
-            const isFood = product.category === "food";
-            const isFoodWithClosingSale = isFood && product.is_discount_active;
+      {/* Services */}
+      {renderSection(
+        "Services",
+        services,
+        (service: ProviderServiceWithDetails) => (
+          <HomeCard
+            imageUrl={service.images[0] || "https://via.placeholder.com/200"}
+            title={service.name}
+            subtitle={service.service_categories?.name || "Service"}
+            profileImage={
+              service.service_providers?.profile_url ||
+              service.service_providers?.profiles?.avatar_url
+            }
+            profileName={
+              service.service_providers?.profiles?.name ||
+              service.service_providers?.name
+            }
+            onPress={() => handleServicePress(service)}
+          />
+        ),
+        "/(users)/services/index",
+        false,
+        undefined,
+        true,
+      )}
 
-            // For food items with closing sale: show original price, no discount badge
-            // For other items: show discounted price if available
-            const displayPrice = isFoodWithClosingSale
-              ? product.price
-              : product.current_price || product.price;
-
-            const hasDiscount =
-              product.is_currently_active &&
-              product.discount_percent &&
-              !isFoodWithClosingSale;
-
-            return (
-              <HomeCard
-                key={product.id}
-                imageUrl={
-                  product.images[0] || "https://via.placeholder.com/200"
-                }
-                title={product.name}
-                subtitle={product.category?.toUpperCase() || "PRODUCT"}
-                price={
-                  displayPrice && displayPrice > 0
-                    ? `Nu. ${displayPrice}`
-                    : undefined
-                }
-                discountPercent={
-                  hasDiscount ? product.discount_percent : undefined
-                }
-                isClosingSale={false}
-                profileImage={(product as any).profiles?.avatar_url}
-                profileName={(product as any).profiles?.name}
-                onPress={() => handleProductPress(product)}
-              />
-            );
-          },
-          "/(users)/categories",
-          false,
-          undefined,
-          true,
-        )}
-
-        {/* 4. Services - always shown, with empty state */}
-        {renderSection(
-          "Services",
-          services,
-          (service: ProviderServiceWithDetails) => (
-            <HomeCard
-              key={service.id}
-              imageUrl={service.images[0] || "https://via.placeholder.com/200"}
-              title={service.name}
-              subtitle={service.service_categories?.name || "Service"}
-              profileImage={
-                service.service_providers?.profile_url ||
-                service.service_providers?.profiles?.avatar_url
-              }
-              profileName={
-                service.service_providers?.profiles?.name ||
-                service.service_providers?.name
-              }
-              onPress={() => handleServicePress(service)}
-            />
-          ),
-          "/(users)/services/index",
-          false,
-          undefined,
-          true,
-        )}
-
-        {/* 5. Marketplace - always shown, with empty state */}
-        {renderSection(
-          "Marketplace",
-          marketplaceItems,
-          (item: MarketplaceItem) => (
-            <HomeCard
-              key={item.id}
-              imageUrl={item.images[0] || "https://via.placeholder.com/200"}
-              title={item.title}
-              subtitle={item.type.replace("_", " ")}
-              price={
-                item.price && item.price > 0 ? `Nu. ${item.price}` : undefined
-              }
-              profileImage={(item as any).profiles?.avatar_url}
-              profileName={(item as any).profiles?.name}
-              onPress={() => handleMarketplacePress(item)}
-            />
-          ),
-          "/(users)/marketplace",
-          false,
-          undefined,
-          true,
-        )}
-      </ScrollView>
+      {/* Marketplace */}
+      {renderSection(
+        "Marketplace",
+        marketplaceItems,
+        (item: MarketplaceItem) => (
+          <HomeCard
+            imageUrl={item.images[0] || "https://via.placeholder.com/200"}
+            title={item.title}
+            subtitle={item.type.replace("_", " ")}
+            price={
+              item.price && item.price > 0 ? `Nu. ${item.price}` : undefined
+            }
+            location={item.dzongkhag}
+            profileImage={(item as any).profiles?.avatar_url}
+            profileName={(item as any).profiles?.name}
+            onPress={() => handleMarketplacePress(item)}
+          />
+        ),
+        "/(users)/marketplace",
+        false,
+        undefined,
+        true,
+      )}
     </View>
   );
 }
