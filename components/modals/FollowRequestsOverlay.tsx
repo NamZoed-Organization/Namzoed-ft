@@ -20,23 +20,35 @@ import Animated, {
   SlideOutLeft,
   SlideOutRight
 } from "react-native-reanimated";
+import { useUser } from "@/contexts/UserContext";
 import { fetchFollowers, fetchFollowing, followUser, FollowUser, unfollowUser } from '@/lib/followService';
 
 interface FollowRequestsOverlayProps {
   onClose: () => void;
   userId: string;
+  actorUserId?: string;
   initialTab?: TabType;
 }
 
 type TabType = 'followers' | 'following';
 type SortOrder = 'asc' | 'desc';
 
-export default function FollowRequestsOverlay({ onClose, userId, initialTab = 'following' }: FollowRequestsOverlayProps) {
+export default function FollowRequestsOverlay({
+  onClose,
+  userId,
+  actorUserId,
+  initialTab = 'following',
+}: FollowRequestsOverlayProps) {
   // States
   const router = useRouter();
+  const { currentUser } = useUser();
+  const resolvedActorUserId = actorUserId || currentUser?.id || userId;
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
   const [followers, setFollowers] = useState<FollowUser[]>([]);
   const [following, setFollowing] = useState<FollowUser[]>([]);
+  const [viewerFollowerIds, setViewerFollowerIds] = useState<Set<string>>(
+    new Set(),
+  );
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
@@ -44,7 +56,7 @@ export default function FollowRequestsOverlay({ onClose, userId, initialTab = 'f
 
   useEffect(() => {
     loadData();
-  }, [userId]);
+  }, [userId, resolvedActorUserId]);
 
   // Reset when switching tabs
   const handleTabChange = (tab: TabType) => {
@@ -58,13 +70,15 @@ export default function FollowRequestsOverlay({ onClose, userId, initialTab = 'f
       if (!refreshing) setLoading(true);
 
       // Fetch followers and following from Supabase (always desc, will sort locally)
-      const [followersData, followingData] = await Promise.all([
+      const [followersData, followingData, viewerFollowers] = await Promise.all([
         fetchFollowers(userId, 'desc'),
-        fetchFollowing(userId, 'desc')
+        fetchFollowing(userId, 'desc'),
+        fetchFollowers(resolvedActorUserId, 'desc'),
       ]);
 
       setFollowers(followersData);
       setFollowing(followingData);
+      setViewerFollowerIds(new Set(viewerFollowers.map((u) => u.id)));
 
     } catch (error) {
       console.error('Error loading follow data:', error);
@@ -76,7 +90,7 @@ export default function FollowRequestsOverlay({ onClose, userId, initialTab = 'f
 
   const handleFollow = async (user: FollowUser) => {
     try {
-      const result = await followUser(userId, user.id);
+      const result = await followUser(resolvedActorUserId, user.id);
       if (result.success) {
         // Update state based on active tab
         if (activeTab === 'following') {
@@ -102,7 +116,7 @@ export default function FollowRequestsOverlay({ onClose, userId, initialTab = 'f
 
   const handleUnfollow = async (user: FollowUser) => {
     try {
-      const result = await unfollowUser(userId, user.id);
+      const result = await unfollowUser(resolvedActorUserId, user.id);
       if (result.success) {
         // Mark as unfollowed instead of removing (soft delete)
         if (activeTab === 'following') {
@@ -137,6 +151,8 @@ export default function FollowRequestsOverlay({ onClose, userId, initialTab = 'f
   // Render user item
   const renderUserItem = useCallback(({ item }: { item: FollowUser }) => {
     const isFollowing = activeTab === 'following' ? !item.isUnfollowed : item.isFollowingBack;
+    const followsYou = viewerFollowerIds.has(item.id);
+    const canShowAction = activeTab === 'following' && item.id !== resolvedActorUserId;
 
     return (
       <View className={`mx-4 mb-3 ${item.isUnfollowed ? 'opacity-50' : ''}`}>
@@ -166,13 +182,22 @@ export default function FollowRequestsOverlay({ onClose, userId, initialTab = 'f
           {/* User Info */}
           <View className="flex-1 ml-3">
             <Text className="text-gray-900 font-msemibold text-base">{item.name}</Text>
-            {item.phone && (
-              <Text className="text-gray-500 font-regular text-sm">{item.phone}</Text>
-            )}
+            <View className="flex-row items-center mt-0.5">
+              {item.phone && (
+                <Text className="text-gray-500 font-regular text-sm">{item.phone}</Text>
+              )}
+              {followsYou && (
+                <View className="ml-2 px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20">
+                  <Text className="text-[10px] font-msemibold text-primary">
+                    Follows you
+                  </Text>
+                </View>
+              )}
+            </View>
           </View>
 
           {/* Action Button - Only show for Following tab */}
-          {activeTab === 'following' && (
+          {canShowAction && (
             <TouchableOpacity
               onPress={(e) => {
                 e.stopPropagation();
@@ -199,7 +224,7 @@ export default function FollowRequestsOverlay({ onClose, userId, initialTab = 'f
         </TouchableOpacity>
       </View>
     );
-  }, [activeTab, userId]);
+  }, [activeTab, resolvedActorUserId, viewerFollowerIds]);
 
   // Memoize and sort data for FlashList
   const currentListData = useMemo(() => {

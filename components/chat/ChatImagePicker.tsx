@@ -161,12 +161,12 @@ export default function ChatImagePicker({
     <TouchableOpacity
       onPress={handleImagePick}
       disabled={isUploading}
-      className="mr-2 w-10 h-10 rounded-full items-center justify-center bg-green-100"
+      className="mr-1 w-9 h-9 items-center justify-center"
     >
       {isUploading ? (
-        <ActivityIndicator size="small" color="#10b981" />
+        <ActivityIndicator size="small" color="#6b7280" />
       ) : (
-        <Ionicons name="image" size={22} color="#10b981" />
+        <Ionicons name="image-outline" size={21} color="#6b7280" />
       )}
     </TouchableOpacity>
   );

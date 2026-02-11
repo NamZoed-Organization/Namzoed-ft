@@ -9,10 +9,18 @@ import users from "@/data/UserData";
 import { supabase } from "@/lib/supabase";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Alert,
   FlatList,
+  Image,
+  Pressable,
   ScrollView,
   Text,
   TextInput,
@@ -78,15 +86,56 @@ export default function MessageScreen() {
     null,
   );
   const bookingsPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const conversationSwipeStartXRef = useRef<Record<string, number>>({});
+  const didConversationSwipeRef = useRef(false);
+  const [activeConversationSwipeId, setActiveConversationSwipeId] = useState<
+    string | null
+  >(null);
+  const [activeConversationSwipeX, setActiveConversationSwipeX] = useState(0);
+  const candidateUserIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (currentUserUUID) ids.add(String(currentUserUUID));
+    if (currentUser?.id) ids.add(String(currentUser.id));
+    return Array.from(ids);
+  }, [currentUserUUID, currentUser?.id]);
 
-  const formatConversationPreview = (message: any) => {
+  const formatConversationPreview = (message: any, isMine: boolean) => {
     if (!message) return "No messages yet";
+    let content =
+      typeof message.content === "string" ? message.content : message.content;
+
+    // Strip embedded metadata wrappers used by chat screen persistence.
+    if (typeof content === "string") {
+      for (let i = 0; i < 3; i++) {
+        if (content.startsWith("[product-meta]") && content.includes("[/product-meta]")) {
+          const suffixIndex = content.indexOf("[/product-meta]");
+          content = content
+            .slice(suffixIndex + "[/product-meta]".length)
+            .replace(/^\n/, "");
+          continue;
+        }
+        if (content.startsWith("[reply-meta]") && content.includes("[/reply-meta]")) {
+          const suffixIndex = content.indexOf("[/reply-meta]");
+          content = content
+            .slice(suffixIndex + "[/reply-meta]".length)
+            .replace(/^\n/, "");
+          continue;
+        }
+        break;
+      }
+    }
+
     if (message.message_type === "image" || message.image_url) return "Photo";
-    if (message.message_type === "audio" || message.audio_url) return "Voice message";
-    if (typeof message.content === "string" && message.content.includes("📍 My Location:")) {
+    if (message.message_type === "audio" || message.audio_url)
+      return "Voice message";
+    if (
+      typeof content === "string" &&
+      content.includes("📍 My Location:")
+    ) {
       return "Location";
     }
-    return message.content || "No messages yet";
+    const preview = content || "No messages yet";
+    return isMine ? `You: ${preview}` : preview;
   };
 
   const formatConversationTime = (iso?: string) => {
@@ -95,13 +144,18 @@ export default function MessageScreen() {
     const now = new Date();
     const isToday = date.toDateString() === now.toDateString();
     if (isToday) {
-      return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      return date.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
     }
     return date.toLocaleDateString();
   };
 
   // Get userData - will be null if currentUser is null
-  const userData = currentUser ? getUserData(currentUser.phone_number || "") : null;
+  const userData = currentUser
+    ? getUserData(currentUser.phone_number || "")
+    : null;
 
   // Get follow requests (followers who user hasn't followed back)
   // Make conditional to avoid accessing userData when it's null
@@ -220,153 +274,163 @@ export default function MessageScreen() {
   }, [currentUserUUID, currentUser]);
 
   // Fetch conversations from Supabase
-  const fetchConversations = useCallback(async (showLoader = true) => {
-    if (showLoader) {
-      setIsLoadingConversations(true);
-    }
-    try {
-      console.log("=== FETCHING CONVERSATIONS ===");
-      console.log("Current user object:", JSON.stringify(currentUser));
-      console.log(
-        "Current user properties:",
-        currentUser ? Object.keys(currentUser) : "null",
-      );
-
-      const resolvedUUID = await resolveCurrentUserUUID();
-      if (!resolvedUUID) {
-        console.log("❌ Current user UUID not found");
-        setConversations([]);
-        setDebugInfo("Current user not found in profiles table");
-        if (showLoader) setIsLoadingConversations(false);
-        return;
+  const fetchConversations = useCallback(
+    async (showLoader = true) => {
+      if (showLoader) {
+        setIsLoadingConversations(true);
       }
+      try {
+        console.log("=== FETCHING CONVERSATIONS ===");
+        console.log("Current user object:", JSON.stringify(currentUser));
+        console.log(
+          "Current user properties:",
+          currentUser ? Object.keys(currentUser) : "null",
+        );
 
-      // Fetch all messages where current user is sender or receiver using UUID
-      const { data: messages, error } = await supabase
-        .from("messages")
-        .select("*")
-        .or(`sender_id.eq.${resolvedUUID},receiver_id.eq.${resolvedUUID}`)
-        .order("created_at", { ascending: false });
+        const resolvedUUID = await resolveCurrentUserUUID();
+        if (!resolvedUUID) {
+          console.log("❌ Current user UUID not found");
+          setConversations([]);
+          setDebugInfo("Current user not found in profiles table");
+          if (showLoader) setIsLoadingConversations(false);
+          return;
+        }
 
-      console.log(
-        "Messages fetched:",
-        messages?.length,
-        "error:",
-        error?.message,
-      );
+        // Fetch all messages where current user is sender or receiver using UUID
+        const idsForQuery = Array.from(
+          new Set([resolvedUUID, ...candidateUserIds].filter(Boolean)),
+        );
+        const inClause = idsForQuery.join(",");
+        const { data: messages, error } = await supabase
+          .from("messages")
+          .select("*")
+          .or(`sender_id.in.(${inClause}),receiver_id.in.(${inClause})`)
+          .order("created_at", { ascending: false });
 
-      if (error || !messages || messages.length === 0) {
-        console.log("No messages found from database");
-        setConversations([]);
-        setDebugInfo("No conversations for this user");
-        setIsLoadingConversations(false);
-        return;
-      }
+        console.log(
+          "Messages fetched:",
+          messages?.length,
+          "error:",
+          error?.message,
+        );
 
-      // Extract unique partner UUIDs
-      console.log("Processing messages to extract partners...");
-      const partnerMap = new Map();
-      const unreadMap = new Map<string, number>();
-      for (const message of messages) {
-        const partnerId =
-          message.sender_id === resolvedUUID
+        if (error || !messages || messages.length === 0) {
+          console.log("No messages found from database");
+          setConversations([]);
+          setDebugInfo("No conversations for this user");
+          setIsLoadingConversations(false);
+          return;
+        }
+
+        // Extract unique partner UUIDs
+        console.log("Processing messages to extract partners...");
+        const partnerMap = new Map();
+        const unreadMap = new Map<string, number>();
+        for (const message of messages) {
+          const isCurrentUserSender = idsForQuery.includes(
+            String(message.sender_id),
+          );
+          const partnerId = isCurrentUserSender
             ? message.receiver_id
             : message.sender_id;
 
+          console.log(
+            `Message: sender=${message.sender_id?.substring(0, 8)}, receiver=${message.receiver_id?.substring(0, 8)}, partnerId=${partnerId?.substring(0, 8)}`,
+          );
+
+          if (
+            !partnerMap.has(partnerId) ||
+            new Date(message.created_at) >
+              new Date(partnerMap.get(partnerId).created_at)
+          ) {
+            partnerMap.set(partnerId, message);
+          }
+
+          if (
+            idsForQuery.includes(String(message.receiver_id)) &&
+            message.sender_id === partnerId &&
+            !message.is_read
+          ) {
+            unreadMap.set(partnerId, (unreadMap.get(partnerId) || 0) + 1);
+          }
+        }
+
+        const partnerIds = Array.from(partnerMap.keys());
+        console.log("Unique partner IDs found:", partnerIds.length);
         console.log(
-          `Message: sender=${message.sender_id?.substring(0, 8)}, receiver=${message.receiver_id?.substring(0, 8)}, partnerId=${partnerId?.substring(0, 8)}`,
+          "Partner IDs:",
+          partnerIds.map((id) => id?.substring(0, 8)),
         );
 
-        if (
-          !partnerMap.has(partnerId) ||
-          new Date(message.created_at) >
-            new Date(partnerMap.get(partnerId).created_at)
-        ) {
-          partnerMap.set(partnerId, message);
-        }
+        let profiles: any[] = [];
 
-        if (
-          message.receiver_id === resolvedUUID &&
-          message.sender_id === partnerId &&
-          !message.is_read
-        ) {
-          unreadMap.set(partnerId, (unreadMap.get(partnerId) || 0) + 1);
-        }
-      }
-
-      const partnerIds = Array.from(partnerMap.keys());
-      console.log("Unique partner IDs found:", partnerIds.length);
-      console.log(
-        "Partner IDs:",
-        partnerIds.map((id) => id?.substring(0, 8)),
-      );
-
-      let profiles: any[] = [];
-
-      if (partnerIds.length > 0) {
+        if (partnerIds.length > 0) {
         const { data: profileData, error: profileError } = await supabase
           .from("profiles")
-          .select("id, name, phone")
+          .select("id, name, phone, avatar_url")
           .in("id", partnerIds);
 
-        console.log(
-          "Profiles fetched:",
-          profileData?.length,
-          "error:",
-          profileError?.message,
-        );
-        if (profileData) {
           console.log(
-            "Profile names:",
-            profileData.map((p) => p.name),
+            "Profiles fetched:",
+            profileData?.length,
+            "error:",
+            profileError?.message,
           );
+          if (profileData) {
+            console.log(
+              "Profile names:",
+              profileData.map((p) => p.name),
+            );
+          }
+
+          profiles = profileData || [];
         }
 
-        profiles = profileData || [];
-      }
-
-      const supabaseConversations = partnerIds
-        .map((pid) => {
-          const lastMessage = partnerMap.get(pid);
-          const partnerProfile = profiles.find((p) => p.id === pid);
-          console.log(
-            `Building conversation for ${partnerProfile?.name || "Unknown"} (${pid?.substring(0, 8)})`,
+        const supabaseConversations = partnerIds
+          .map((pid) => {
+            const lastMessage = partnerMap.get(pid);
+            const partnerProfile = profiles.find((p) => p.id === pid);
+            console.log(
+              `Building conversation for ${partnerProfile?.name || "Unknown"} (${pid?.substring(0, 8)})`,
+            );
+            return {
+              partnerId: pid,
+              partnerProfile,
+              lastMessage,
+              unreadCount: unreadMap.get(pid) || 0,
+              created_at: lastMessage.created_at,
+            };
+          })
+          .sort(
+            (a, b) =>
+              new Date(b.created_at).getTime() -
+              new Date(a.created_at).getTime(),
           );
-          return {
-            partnerId: pid,
-            partnerProfile,
-            lastMessage,
-            unreadCount: unreadMap.get(pid) || 0,
-            created_at: lastMessage.created_at,
-          };
-        })
-        .sort(
-          (a, b) =>
-            new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+
+        console.log("Final conversations built:", supabaseConversations.length);
+        console.log(
+          "Conversation partners:",
+          supabaseConversations.map(
+            (c) => c.partnerProfile?.name || c.partnerId?.substring(0, 8),
+          ),
         );
 
-      console.log("Final conversations built:", supabaseConversations.length);
-      console.log(
-        "Conversation partners:",
-        supabaseConversations.map(
-          (c) => c.partnerProfile?.name || c.partnerId?.substring(0, 8),
-        ),
-      );
-
-      setConversations(supabaseConversations);
-      await refreshUnreadCount();
-      setDebugInfo(`${supabaseConversations.length} chat partners`);
-      console.log("State updated with conversations");
-    } catch (e) {
-      console.error("Error fetching conversations:", e);
-      setDebugInfo(`Error: ${(e as any).message}`);
-      setConversations([]);
-    } finally {
-      if (showLoader) {
-        setIsLoadingConversations(false);
+        setConversations(supabaseConversations);
+        await refreshUnreadCount();
+        setDebugInfo(`${supabaseConversations.length} chat partners`);
+        console.log("State updated with conversations");
+      } catch (e) {
+        console.error("Error fetching conversations:", e);
+        setDebugInfo(`Error: ${(e as any).message}`);
+        setConversations([]);
+      } finally {
+        if (showLoader) {
+          setIsLoadingConversations(false);
+        }
       }
-    }
-  }, [currentUser, refreshUnreadCount, resolveCurrentUserUUID]);
+    },
+    [candidateUserIds, currentUser, refreshUnreadCount, resolveCurrentUserUUID],
+  );
 
   useEffect(() => {
     // Fetch conversations from Supabase (prioritize database over local data)
@@ -564,23 +628,22 @@ export default function MessageScreen() {
             event: "*",
             schema: "public",
             table: "messages",
-            filter: `receiver_id.eq.${userUUID}`,
           },
-          () => {
-            console.log("📨 Incoming message detected, refreshing conversations");
-            fetchConversations(false);
-          },
-        )
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "messages",
-            filter: `sender_id.eq.${userUUID}`,
-          },
-          () => {
-            console.log("📨 Outgoing message detected, refreshing conversations");
+          (payload) => {
+            const next = payload.new as any;
+            const old = payload.old as any;
+            const senderId = String(next?.sender_id || old?.sender_id || "");
+            const receiverId = String(
+              next?.receiver_id || old?.receiver_id || "",
+            );
+            const isRelevant =
+              candidateUserIds.includes(senderId) ||
+              candidateUserIds.includes(receiverId) ||
+              senderId === String(userUUID) ||
+              receiverId === String(userUUID);
+
+            if (!isRelevant) return;
+            console.log("📨 Message event detected, refreshing conversations");
             fetchConversations(false);
           },
         )
@@ -622,7 +685,12 @@ export default function MessageScreen() {
         conversationsPollRef.current = null;
       }
     };
-  }, [currentUserUUID, fetchConversations, resolveCurrentUserUUID]);
+  }, [
+    candidateUserIds,
+    currentUserUUID,
+    fetchConversations,
+    resolveCurrentUserUUID,
+  ]);
 
   const getUserByPhone = (phoneNumber: string) => {
     const cleanPhone = phoneNumber.replace("+975", "");
@@ -641,7 +709,7 @@ export default function MessageScreen() {
 
   const renderMessageItem = ({ item: phoneNumber }: { item: string }) => {
     const user = getUserByPhone(phoneNumber);
-    const messagesObj = userData.messages as Record<string, IMessage[]>;
+    const messagesObj = userData?.messages as Record<string, IMessage[]>;
     const conversation = messagesObj[phoneNumber];
     const lastMessage = conversation?.[conversation.length - 1];
 
@@ -733,6 +801,63 @@ export default function MessageScreen() {
     );
   };
 
+  const handleConversationSwipeStart = (conversationId: string, x: number) => {
+    conversationSwipeStartXRef.current[conversationId] = x;
+    didConversationSwipeRef.current = false;
+    setActiveConversationSwipeId(conversationId);
+    setActiveConversationSwipeX(0);
+  };
+
+  const handleConversationSwipeMove = (conversationId: string, x: number) => {
+    const startX = conversationSwipeStartXRef.current[conversationId];
+    if (
+      typeof startX !== "number" ||
+      (activeConversationSwipeId !== null &&
+        activeConversationSwipeId !== conversationId)
+    ) {
+      return;
+    }
+    const deltaX = Math.min(0, Math.max(-96, x - startX));
+    if (Math.abs(deltaX) > 8) {
+      didConversationSwipeRef.current = true;
+    }
+    setActiveConversationSwipeX(deltaX);
+  };
+
+  const handleConversationSwipeEnd = (
+    conversationId: string,
+    partnerId: string,
+    partnerName: string,
+    x: number,
+  ) => {
+    const startX = conversationSwipeStartXRef.current[conversationId];
+    delete conversationSwipeStartXRef.current[conversationId];
+    if (typeof startX !== "number") return;
+
+    const deltaX = Math.min(activeConversationSwipeX, x - startX);
+    const shouldPromptDelete = deltaX <= -72;
+
+    setActiveConversationSwipeX(0);
+    setActiveConversationSwipeId((prev) =>
+      prev === conversationId ? null : prev,
+    );
+
+    if (shouldPromptDelete) {
+      Alert.alert(
+        "Delete Chat?",
+        `Do you want to delete your chat with ${partnerName}?`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Delete",
+            style: "destructive",
+            onPress: () => handleDeleteConversation(partnerId, partnerName),
+          },
+        ],
+      );
+    }
+  };
+
   const renderConversationItem = ({ item: conversation }: { item: any }) => {
     // Handle both UUID-based profiles and phone-based profiles
     const userName =
@@ -740,45 +865,91 @@ export default function MessageScreen() {
       conversation.partnerProfile?.username ||
       conversation.partnerId?.substring(0, 8) ||
       "Unknown";
+    const avatarUri =
+      conversation.partnerProfile?.avatar_url ||
+      conversation.partnerProfile?.profile_url ||
+      null;
+    const lastMessage = conversation.lastMessage;
+    const senderId = String(lastMessage?.sender_id || "");
+    const isLastMessageMine = candidateUserIds.includes(senderId);
+    const hasUnreadIncoming = !isLastMessageMine && conversation.unreadCount > 0;
+    const conversationId = String(conversation.partnerId);
 
     return (
-      <View className="flex-row items-center border-b border-gray-200">
-        <TouchableOpacity
-          className="flex-row items-center p-4 flex-1"
-          onPress={() => router.push(`/(users)/chat/${conversation.partnerId}`)}
+      <View className="border-b border-gray-200 overflow-hidden">
+        <View className="absolute right-0 top-0 bottom-0 w-24 bg-red-500 items-center justify-center">
+          <Ionicons name="trash-outline" size={20} color="white" />
+          <Text className="text-white text-xs font-semibold mt-1">Delete</Text>
+        </View>
+
+        <Pressable
+          className="flex-row items-center p-4 bg-white"
+          style={
+            activeConversationSwipeId === conversationId
+              ? { position: "relative", left: activeConversationSwipeX }
+              : undefined
+          }
+          onPress={() => {
+            if (didConversationSwipeRef.current) {
+              didConversationSwipeRef.current = false;
+              return;
+            }
+            router.push(`/(users)/chat/${conversation.partnerId}`);
+          }}
+          onPressIn={(e) =>
+            handleConversationSwipeStart(conversationId, e.nativeEvent.pageX)
+          }
+          onTouchMove={(e) =>
+            handleConversationSwipeMove(conversationId, e.nativeEvent.pageX)
+          }
+          onPressOut={(e) =>
+            handleConversationSwipeEnd(
+              conversationId,
+              conversation.partnerId,
+              userName,
+              e.nativeEvent.pageX,
+            )
+          }
         >
-          <View className="w-12 h-12 bg-primary rounded-full items-center justify-center mr-3">
-            <Text className="text-white font-bold">
-              {userName?.charAt(0).toUpperCase() || "U"}
-            </Text>
-          </View>
+          {avatarUri ? (
+            <Image
+              source={{ uri: avatarUri }}
+              className="w-12 h-12 rounded-full mr-3"
+              resizeMode="cover"
+            />
+          ) : (
+            <View className="w-12 h-12 bg-primary rounded-full items-center justify-center mr-3">
+              <Text className="text-white font-bold">
+                {userName?.charAt(0).toUpperCase() || "U"}
+              </Text>
+            </View>
+          )}
           <View className="flex-1">
-            <Text className="font-semibold text-gray-800">{userName}</Text>
-            <Text className="text-sm text-gray-500 mt-1" numberOfLines={1}>
-              {formatConversationPreview(conversation.lastMessage)}
+            <Text
+              className={`text-gray-800 ${hasUnreadIncoming ? "font-bold" : "font-semibold"}`}
+            >
+              {userName}
+            </Text>
+            <Text
+              className={`text-sm mt-1 ${hasUnreadIncoming ? "text-gray-800 font-semibold" : "text-gray-500"}`}
+              numberOfLines={1}
+            >
+              {formatConversationPreview(lastMessage, isLastMessageMine)}
             </Text>
           </View>
           <Text className="text-xs text-gray-400 mr-2">
             {formatConversationTime(conversation.lastMessage?.created_at)}
           </Text>
           {conversation.unreadCount > 0 && (
-            <View className="mr-2 min-w-[22px] h-[22px] px-1 rounded-full bg-red-500 items-center justify-center">
+            <View className="mr-2 min-w-[22px] h-[22px] px-1 rounded-full bg-primary items-center justify-center">
               <Text className="text-white text-[11px] font-bold">
-                {conversation.unreadCount > 99 ? "99+" : conversation.unreadCount}
+                {conversation.unreadCount > 99
+                  ? "99+"
+                  : conversation.unreadCount}
               </Text>
             </View>
           )}
-        </TouchableOpacity>
-
-        {/* Delete Button */}
-        <TouchableOpacity
-          className="p-4 items-center justify-center"
-          onPress={() =>
-            handleDeleteConversation(conversation.partnerId, userName)
-          }
-        >
-          <Ionicons name="trash-outline" size={22} color="#EF4444" />
-        </TouchableOpacity>
+        </Pressable>
       </View>
     );
   };
@@ -1000,14 +1171,14 @@ export default function MessageScreen() {
       <View className="h-12 bg-white" />
 
       {/* Fixed Header with spacing */}
-      <View className="bg-white px-4 py-6 border-b border-gray-200">
+      <View className="bg-white px-4 py-3 ">
         <View className="flex-row items-center justify-between">
           <View>
             <Text className="text-2xl font-mbold text-primary">
-              Welcome to Chats
+              Conversations
             </Text>
             <Text className="text-base font-medium text-gray-700">
-              {currentUser.username}
+              {currentUser.name || "User"}
             </Text>
           </View>
         </View>

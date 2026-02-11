@@ -242,7 +242,17 @@ export default function ProductDetail() {
 
   const handleMessageSeller = () => {
     if (!product) return;
-    router.push(`/(users)/chat/${product.user_id}`);
+    router.push({
+      pathname: "/(users)/chat/[id]",
+      params: {
+        id: String(product.user_id),
+        context_product_id: String(product.id),
+        context_product_title: product.name,
+        context_product_price: String(product.current_price || product.price || ""),
+        context_product_image: product.images?.[0] || "",
+        context_source: "product",
+      },
+    });
   };
 
   // Check if viewing own product

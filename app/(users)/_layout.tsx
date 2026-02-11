@@ -21,8 +21,8 @@ export default function TabLayout() {
             backgroundColor: "#fff",
             borderTopWidth: 0,
             position: "absolute",
-            paddingTop: 8,
-            paddingBottom: 12,
+            paddingTop: 4,
+            paddingBottom: 0,
           },
         }}
       >
@@ -145,9 +145,10 @@ export default function TabLayout() {
           name="chat/[id]"
           options={{
             href: null,
+            tabBarStyle: { display: "none" },
           }}
         />
-          <Tabs.Screen
+        <Tabs.Screen
           name="servicedetail/[id]"
           options={{
             href: null,
@@ -165,6 +166,7 @@ export default function TabLayout() {
           name="mongoose-chat/[name]"
           options={{
             href: null,
+            tabBarStyle: { display: "none" },
           }}
         />
         <Tabs.Screen
@@ -173,14 +175,14 @@ export default function TabLayout() {
             href: null,
           }}
         />
-     
+
         <Tabs.Screen
           name="services/[slug]"
           options={{
             href: null,
           }}
         />
-     
+
         <Tabs.Screen
           name="categories/[slug]"
           options={{

@@ -1,5 +1,6 @@
 import ReportUserModal from "@/components/modals/ReportUserModal";
 import ProfileImageViewer from "@/components/modals/ProfileImageViewer";
+import FollowRequestsOverlay from "@/components/modals/FollowRequestsOverlay";
 import { useUser } from "@/contexts/UserContext";
 import { blockUser, isUserBlocked, unblockUser } from "@/lib/blockService";
 import { followUser, isFollowing, unfollowUser } from "@/lib/followService";
@@ -91,6 +92,10 @@ export default function PublicProfileScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [showProfileImageViewer, setShowProfileImageViewer] = useState(false);
   const [viewerImageUri, setViewerImageUri] = useState<string | null>(null);
+  const [showFollowRequests, setShowFollowRequests] = useState(false);
+  const [followRequestsTab, setFollowRequestsTab] = useState<
+    "followers" | "following"
+  >("followers");
 
   // Horizontal scroll ref
   const horizontalScrollRef = React.useRef<ScrollView>(null);
@@ -528,23 +533,41 @@ export default function PublicProfileScreen() {
                     </Text>
                   </View>
                   <View className="w-[1px] h-8 bg-gray-200" />
-                  <View className="items-center">
+                  <TouchableOpacity
+                    className="items-center"
+                    onPress={() => {
+                      if (!id || typeof id !== "string") return;
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setFollowRequestsTab("followers");
+                      setShowFollowRequests(true);
+                    }}
+                    activeOpacity={0.8}
+                  >
                     <Text className="text-lg font-mbold text-gray-900">
                       {userProfile.follower_count || 0}
                     </Text>
                     <Text className="text-xs font-regular text-gray-500">
                       Followers
                     </Text>
-                  </View>
+                  </TouchableOpacity>
                   <View className="w-[1px] h-8 bg-gray-200" />
-                  <View className="items-center">
+                  <TouchableOpacity
+                    className="items-center"
+                    onPress={() => {
+                      if (!id || typeof id !== "string") return;
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setFollowRequestsTab("following");
+                      setShowFollowRequests(true);
+                    }}
+                    activeOpacity={0.8}
+                  >
                     <Text className="text-lg font-mbold text-gray-900">
                       {userProfile.following_count || 0}
                     </Text>
                     <Text className="text-xs font-regular text-gray-500">
                       Following
                     </Text>
-                  </View>
+                  </TouchableOpacity>
                 </View>
 
                 {/* Action Buttons */}
@@ -1000,6 +1023,34 @@ export default function PublicProfileScreen() {
           </View>
         </ScrollView>
       </View>
+
+      {showFollowRequests && typeof id === "string" && (
+        <Modal
+          transparent
+          statusBarTranslucent
+          animationType="none"
+          visible={showFollowRequests}
+          onRequestClose={() => setShowFollowRequests(false)}
+        >
+          <Animated.View
+            entering={SlideInDown.springify()}
+            exiting={SlideOutDown}
+            style={{
+              height: "100%",
+              borderTopLeftRadius: 24,
+              borderTopRightRadius: 24,
+              overflow: "hidden",
+            }}
+          >
+            <FollowRequestsOverlay
+              onClose={() => setShowFollowRequests(false)}
+              userId={id}
+              actorUserId={currentUser?.id}
+              initialTab={followRequestsTab}
+            />
+          </Animated.View>
+        </Modal>
+      )}
 
       {/* Block/Report Menu Modal */}
       {showBlockMenu && (

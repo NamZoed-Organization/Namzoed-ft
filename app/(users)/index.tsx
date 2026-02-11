@@ -146,8 +146,9 @@ export default function HomeScreen() {
   const renderItem: ListRenderItem<HeaderDataItem> = ({ item }) => {
     if (item.component === "header") {
       return (
-        <View className="px-4 gap-2">
+        <View>
           <TopNavbar />
+          <View className="px-4 gap-2">
           <SearchBar value={searchQuery} onChangeText={setSearchQuery} />
           <Banner />
 
@@ -214,6 +215,7 @@ export default function HomeScreen() {
               />
             </TouchableOpacity>
           </View>
+          </View>
         </View>
       );
     }
@@ -254,7 +256,7 @@ export default function HomeScreen() {
         data={headerData}
         renderItem={renderItem}
         keyExtractor={(item: HeaderDataItem) => item.key}
-        className="flex-1 bg-background mb-20"
+        className="flex-1 bg-white mb-20"
         showsVerticalScrollIndicator={false}
         scrollEventThrottle={16}
         refreshControl={

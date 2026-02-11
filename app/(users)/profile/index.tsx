@@ -1658,6 +1658,7 @@ export default function ProfileScreen() {
                 setRefreshKey((prev) => prev + 1);
               }}
               userId={currentUser.id}
+              actorUserId={currentUser.id}
               initialTab={followRequestsTab}
             />
           </Animated.View>

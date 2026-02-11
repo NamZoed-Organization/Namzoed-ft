@@ -5,6 +5,7 @@ import { BlurView } from "expo-blur";
 import { MapPin, RefreshCw, Settings, X } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
 import {
+  Animated,
   Image,
   Linking,
   Modal,
@@ -31,9 +32,14 @@ export default function DetectDzongkhag() {
   const { currentUser } = useUser();
   const [dotCount, setDotCount] = useState(0);
   const [showOverlay, setShowOverlay] = useState(false);
+  const [isLocationLabelExpanded, setIsLocationLabelExpanded] = useState(false);
   const [currentLocation, setCurrentLocation] = useState<{latitude: number, longitude: number} | null>(null);
   const mapRef = useRef<MapView>(null);
   const dzongkhagChangeTimerRef = useRef<any>(null);
+  const locationLabelAnim = useRef(new Animated.Value(0)).current;
+  const hideLocationLabelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   // Helper function to calculate distance between two coordinates
   const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
@@ -107,28 +113,79 @@ export default function DetectDzongkhag() {
       if (dzongkhagChangeTimerRef.current) {
         clearTimeout(dzongkhagChangeTimerRef.current);
       }
+      if (hideLocationLabelTimerRef.current) {
+        clearTimeout(hideLocationLabelTimerRef.current);
+      }
     };
   }, []);
+
+  const animateLocationLabel = (show: boolean) => {
+    Animated.timing(locationLabelAnim, {
+      toValue: show ? 1 : 0,
+      duration: 220,
+      useNativeDriver: false,
+    }).start();
+  };
+
+  const handleHeaderLocationPress = () => {
+    if (isLocationLabelExpanded) {
+      if (hideLocationLabelTimerRef.current) {
+        clearTimeout(hideLocationLabelTimerRef.current);
+        hideLocationLabelTimerRef.current = null;
+      }
+      animateLocationLabel(false);
+      setIsLocationLabelExpanded(false);
+      setShowOverlay(true);
+      return;
+    }
+
+    animateLocationLabel(true);
+    setIsLocationLabelExpanded(true);
+    if (hideLocationLabelTimerRef.current) {
+      clearTimeout(hideLocationLabelTimerRef.current);
+    }
+    hideLocationLabelTimerRef.current = setTimeout(() => {
+      animateLocationLabel(false);
+      setIsLocationLabelExpanded(false);
+      hideLocationLabelTimerRef.current = null;
+    }, 2200);
+  };
 
   return (
     <>
       {/* HEADER BUTTON: Shows stored name immediately, no "Auto-detect" */}
       <TouchableOpacity
-        onPress={() => setShowOverlay(true)}
+        onPress={handleHeaderLocationPress}
+        onLongPress={() => setShowOverlay(true)}
         activeOpacity={0.7}
         className="flex-row items-center justify-end py-2"
       >
         <View className="flex-row items-center">
           <MapPin size={16} color={accessDenied ? "#ef4444" : "#4b5563"} />
-          <Text
-            className={`text-sm ml-1 font-medium ${
-              accessDenied ? "text-red-500" : "text-gray-600"
-            }`}
+          <Animated.View
+            style={{
+              marginLeft: locationLabelAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, 6],
+              }),
+              maxWidth: locationLabelAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, 120],
+              }),
+              opacity: locationLabelAnim,
+            }}
           >
-            {loading
-              ? `Detecting${".".repeat(dotCount)}`
-              : dzongkhag ?? "Location off"}
-          </Text>
+            <Text
+              numberOfLines={1}
+              className={`text-sm font-medium ${
+                accessDenied ? "text-red-500" : "text-gray-600"
+              }`}
+            >
+              {loading
+                ? `Detecting${".".repeat(dotCount)}`
+                : dzongkhag ?? "Location off"}
+            </Text>
+          </Animated.View>
         </View>
       </TouchableOpacity>
 

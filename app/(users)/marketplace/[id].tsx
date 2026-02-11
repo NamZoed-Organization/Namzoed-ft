@@ -129,7 +129,17 @@ export default function MarketplaceDetailScreen() {
     }
 
     if (item?.user_id) {
-      router.push(`/(users)/chat/${item.user_id}` as any);
+      router.push({
+        pathname: "/(users)/chat/[id]",
+        params: {
+          id: String(item.user_id),
+          context_product_id: String(item.id),
+          context_product_title: item.title,
+          context_product_price: String(item.price || ""),
+          context_product_image: item.images?.[0] || "",
+          context_source: "marketplace",
+        },
+      } as any);
     }
   };
 

@@ -266,12 +266,12 @@ export default function ChatAudioRecorder({
       <TouchableOpacity
         onPress={startRecording}
         disabled={isUploading || isRecording}
-        className="mr-2 w-10 h-10 rounded-full items-center justify-center bg-red-100"
+        className="mr-1 w-9 h-9 items-center justify-center"
       >
         {isUploading ? (
-          <ActivityIndicator size="small" color="#ef4444" />
+          <ActivityIndicator size="small" color="#6b7280" />
         ) : (
-          <Ionicons name="mic" size={22} color="#ef4444" />
+          <Ionicons name="mic-outline" size={21} color="#6b7280" />
         )}
       </TouchableOpacity>
 

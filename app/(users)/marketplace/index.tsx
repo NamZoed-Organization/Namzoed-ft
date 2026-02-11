@@ -406,8 +406,9 @@ export default function MarketplaceScreen() {
         }
       >
         {/* Header */}
-        <View className="px-4 gap-2 bg-gray-50">
+        <View className="bg-gray-50">
           <TopNavbar />
+          <View className="px-4 gap-2">
 
           {/* SearchBar with Plus Button */}
           <View className="flex-row items-center gap-2">
@@ -480,6 +481,7 @@ export default function MarketplaceScreen() {
             >
               <Gift size={20} color={isLoading ? "#ccc" : "black"} />
             </TouchableOpacity>
+          </View>
           </View>
         </View>
 

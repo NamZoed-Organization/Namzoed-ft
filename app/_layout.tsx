@@ -68,17 +68,36 @@ export default function RootLayout() {
                     <LiveSessionProvider>
                       {/* Global Navigation Logger */}
                       <NavigationLogger />
-                      <View className="flex-1 bg-background">
+                    <View className="flex-1 bg-background">
                         <Stack
                           screenOptions={{
                             headerShown: false,
-                            // Enable iOS-style swipe back for all stack screens
+                            // Keep native-stack swipe navigation enabled globally.
                             gestureEnabled: true,
                             fullScreenGestureEnabled: true,
                             gestureDirection: "horizontal",
                             animation: "default",
                           }}
-                        />
+                        >
+                          <Stack.Screen
+                            name="(users)/chat/[id]"
+                            options={{
+                              gestureEnabled: true,
+                              fullScreenGestureEnabled: true,
+                              gestureDirection: "horizontal",
+                              animation: "slide_from_right",
+                            }}
+                          />
+                          <Stack.Screen
+                            name="(users)/mongoose-chat/[name]"
+                            options={{
+                              gestureEnabled: true,
+                              fullScreenGestureEnabled: true,
+                              gestureDirection: "horizontal",
+                              animation: "slide_from_right",
+                            }}
+                          />
+                        </Stack>
                         <InAppChatBanner />
                         <StatusBar style="dark" />
                         <FlashMessage

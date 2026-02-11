@@ -14,6 +14,7 @@ type IncomingBanner = {
   messageId: string;
   senderId: string;
   senderName: string;
+  senderAvatarUrl?: string | null;
   content: string;
 };
 
@@ -47,6 +48,15 @@ export const UnreadMessagesProvider: React.FC<{ children: React.ReactNode }> = (
     null,
   );
   const latestBannerMessageIdRef = useRef<string | null>(null);
+  const senderMetaCacheRef = useRef<
+    Record<string, { senderName: string; senderAvatarUrl: string | null }>
+  >({});
+  const candidateUserIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (currentUserUUID) ids.add(String(currentUserUUID));
+    if ((currentUser as any)?.id) ids.add(String((currentUser as any).id));
+    return Array.from(ids);
+  }, [currentUserUUID, currentUser]);
 
   const dismissBanner = useCallback(() => {
     setBanner(null);
@@ -57,18 +67,21 @@ export const UnreadMessagesProvider: React.FC<{ children: React.ReactNode }> = (
   }, []);
 
   const getCurrentUserUUID = useCallback(async () => {
-    if (!currentUser) {
-      const { data: authData } = await supabase.auth.getUser();
-      return authData.user?.id ?? null;
+    const { data: authData } = await supabase.auth.getUser();
+    const authUser = authData.user;
+
+    if (!currentUser && !authUser) {
+      return null;
     }
 
     const userPhone =
-      currentUser.phone_number ||
+      currentUser?.phone_number ||
       (currentUser as any)?.phone ||
       (currentUser as any)?.phoneNumber ||
       (currentUser as any)?.mobile;
+    const userEmail = currentUser?.email || authUser?.email;
 
-    if (currentUser.id) {
+    if (currentUser?.id) {
       const { data: byId } = await supabase
         .from("profiles")
         .select("id")
@@ -78,35 +91,104 @@ export const UnreadMessagesProvider: React.FC<{ children: React.ReactNode }> = (
       if (byId?.id) return byId.id;
     }
 
-    if (!userPhone) return null;
-    const cleanPhone = String(userPhone).replace("+975", "");
+    if (userPhone) {
+      const cleanPhone = String(userPhone).replace("+975", "");
+      const { data: byPhone } = await supabase
+        .from("profiles")
+        .select("id")
+        .or(`phone.eq.${userPhone},phone.eq.${cleanPhone}`)
+        .maybeSingle();
+      if (byPhone?.id) return byPhone.id;
+    }
 
-    const { data: byPhone } = await supabase
-      .from("profiles")
-      .select("id")
-      .or(`phone.eq.${userPhone},phone.eq.${cleanPhone}`)
-      .maybeSingle();
+    if (userEmail) {
+      const { data: byEmail } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("email", userEmail)
+        .maybeSingle();
+      if (byEmail?.id) return byEmail.id;
+    }
 
-    if (byPhone?.id) return byPhone.id;
-
-    const { data: authData } = await supabase.auth.getUser();
-    return authData.user?.id ?? null;
+    return authUser?.id ?? null;
   }, [currentUser]);
 
+  const resolveSenderMeta = useCallback(async (message: any) => {
+    const senderId = String(message?.sender_id || "");
+    if (!senderId) {
+      return { senderName: "User", senderAvatarUrl: null as string | null };
+    }
+
+    const cached = senderMetaCacheRef.current[senderId];
+    if (cached) return cached;
+
+    let profile: any = null;
+
+    const { data: profileById } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", senderId)
+      .maybeSingle();
+    profile = profileById || null;
+
+    if (!profile) {
+      const cleanSender = senderId.replace("+975", "").replace(/\D/g, "");
+      if (cleanSender || senderId) {
+        const { data: profileByPhone } = await supabase
+          .from("profiles")
+          .select("*")
+          .or(`phone.eq.${senderId},phone.eq.${cleanSender}`)
+          .maybeSingle();
+        profile = profileByPhone || null;
+      }
+    }
+
+    const cleanSender = senderId.replace("+975", "").replace(/\D/g, "");
+    const senderName =
+      profile?.name ||
+      profile?.username ||
+      profile?.full_name ||
+      profile?.display_name ||
+      (profile?.phone
+        ? `+975${profile.phone}`
+        : /^\d{8}$/.test(cleanSender)
+          ? `+975${cleanSender}`
+          : senderId.slice(0, 8));
+
+    const senderAvatarUrl =
+      profile?.avatar_url ||
+      profile?.profile_img ||
+      profile?.profileImg ||
+      message?.sender_avatar_url ||
+      null;
+
+    const resolved = { senderName, senderAvatarUrl };
+    senderMetaCacheRef.current[senderId] = resolved;
+    return resolved;
+  }, []);
+
   const refreshUnreadCount = useCallback(async () => {
-    if (!currentUserUUID) {
+    if (!candidateUserIds.length) {
       setUnreadCount(0);
       return;
     }
 
-    const { count } = await supabase
+    const { data, error } = await supabase
       .from("messages")
-      .select("id", { count: "exact", head: true })
-      .eq("receiver_id", currentUserUUID)
+      .select("sender_id")
+      .in("receiver_id", candidateUserIds)
       .eq("is_read", false);
 
-    setUnreadCount(count || 0);
-  }, [currentUserUUID]);
+    if (error || !data) {
+      setUnreadCount(0);
+      return;
+    }
+
+    const uniqueSenders = new Set(
+      data.map((row: any) => String(row.sender_id)).filter(Boolean),
+    );
+    setUnreadCount(uniqueSenders.size);
+  }, [candidateUserIds]);
 
   const buildAndShowBanner = useCallback(async (message: any) => {
     if (!message?.id) return;
@@ -115,29 +197,20 @@ export const UnreadMessagesProvider: React.FC<{ children: React.ReactNode }> = (
     if (latestBannerMessageIdRef.current === messageId) return;
     latestBannerMessageIdRef.current = messageId;
 
-    const { data: senderProfile } = await supabase
-      .from("profiles")
-      .select("name, username, full_name, phone")
-      .eq("id", message.sender_id)
-      .maybeSingle();
-
-    const senderName =
-      senderProfile?.name ||
-      senderProfile?.username ||
-      senderProfile?.full_name ||
-      (senderProfile?.phone ? `+975${senderProfile.phone}` : "New message");
+    const { senderName, senderAvatarUrl } = await resolveSenderMeta(message);
 
     setBanner({
       messageId,
       senderId: String(message.sender_id),
       senderName,
+      senderAvatarUrl,
       content:
         message.content?.trim() ||
         (message.message_type === "image"
           ? "Sent a photo"
           : message.message_type === "audio"
             ? "Sent a voice message"
-            : "New message"),
+            : "Sent a message"),
     });
 
     if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
@@ -145,15 +218,15 @@ export const UnreadMessagesProvider: React.FC<{ children: React.ReactNode }> = (
       setBanner(null);
       bannerTimerRef.current = null;
     }, 5000);
-  }, []);
+  }, [resolveSenderMeta]);
 
   const pollLatestUnreadForBanner = useCallback(async () => {
-    if (!currentUserUUID) return;
+    if (!candidateUserIds.length) return;
 
     const { data: latestUnread } = await supabase
       .from("messages")
       .select("*")
-      .eq("receiver_id", currentUserUUID)
+      .in("receiver_id", candidateUserIds)
       .eq("is_read", false)
       .order("created_at", { ascending: false })
       .limit(1)
@@ -168,39 +241,37 @@ export const UnreadMessagesProvider: React.FC<{ children: React.ReactNode }> = (
   }, [
     activeChatPartnerId,
     buildAndShowBanner,
-    currentUserUUID,
+    candidateUserIds,
     markConversationAsRead,
   ]);
 
   const markConversationAsRead = useCallback(
     async (partnerId: string) => {
-      if (!currentUserUUID || !partnerId) return;
+      const receiverId = currentUserUUID || candidateUserIds[0];
+      if (!receiverId || !partnerId) return;
 
       const { error } = await supabase.rpc("mark_messages_as_read", {
         sender_user_id: partnerId,
-        receiver_user_id: currentUserUUID,
+        receiver_user_id: receiverId,
       });
 
       if (!error) {
         await refreshUnreadCount();
       }
     },
-    [currentUserUUID, refreshUnreadCount],
+    [candidateUserIds, currentUserUUID, refreshUnreadCount],
   );
 
   useEffect(() => {
     let isMounted = true;
 
     const loadUserUUID = async () => {
-      if (!currentUser) {
-        setCurrentUserUUID(null);
-        setUnreadCount(0);
-        return;
-      }
-
       const uuid = await getCurrentUserUUID();
       if (isMounted) {
         setCurrentUserUUID(uuid);
+        if (!uuid) {
+          setUnreadCount(0);
+        }
       }
     };
 
@@ -215,20 +286,24 @@ export const UnreadMessagesProvider: React.FC<{ children: React.ReactNode }> = (
   }, [refreshUnreadCount]);
 
   useEffect(() => {
-    if (!currentUserUUID) return;
+    if (!candidateUserIds.length) return;
 
     const channel = supabase
-      .channel(`unread-messages-${currentUserUUID}`)
+      .channel(`unread-messages-${candidateUserIds.join("_")}`)
       .on(
         "postgres_changes",
         {
           event: "*",
           schema: "public",
           table: "messages",
-          filter: `receiver_id.eq.${currentUserUUID}`,
         },
         async (payload) => {
           const message = payload.new as any;
+          const oldMessage = payload.old as any;
+          const receiverId = String(
+            message?.receiver_id || oldMessage?.receiver_id || "",
+          );
+          if (!candidateUserIds.includes(receiverId)) return;
 
           if (payload.eventType === "INSERT" && message && !message.is_read) {
             if (activeChatPartnerId && message.sender_id === activeChatPartnerId) {
@@ -236,8 +311,7 @@ export const UnreadMessagesProvider: React.FC<{ children: React.ReactNode }> = (
               return;
             }
 
-            setUnreadCount((prev) => prev + 1);
-
+            await refreshUnreadCount();
             await buildAndShowBanner(message);
             return;
           }
@@ -278,7 +352,7 @@ export const UnreadMessagesProvider: React.FC<{ children: React.ReactNode }> = (
   }, [
     activeChatPartnerId,
     buildAndShowBanner,
-    currentUserUUID,
+    candidateUserIds,
     markConversationAsRead,
     pollLatestUnreadForBanner,
     refreshUnreadCount,

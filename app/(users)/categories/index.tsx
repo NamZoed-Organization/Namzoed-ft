@@ -205,8 +205,9 @@ export default function CategoriesScreen() {
           />
         }
       >
-        <View className="px-4 gap-2 mb-20">
+        <View className="mb-20">
           <TopNavbar />
+          <View className="px-4 gap-2">
 
           {/* SEARCH BAR + POST BUTTON */}
           <View className="flex-row items-center gap-3 mb-4">
@@ -562,6 +563,7 @@ export default function CategoriesScreen() {
               )}
             </Animated.View>
           )}
+          </View>
         </View>
       </ScrollView>
 
