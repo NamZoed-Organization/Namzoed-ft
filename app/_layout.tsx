@@ -78,26 +78,7 @@ export default function RootLayout() {
                             gestureDirection: "horizontal",
                             animation: "default",
                           }}
-                        >
-                          <Stack.Screen
-                            name="(users)/chat/[id]"
-                            options={{
-                              gestureEnabled: true,
-                              fullScreenGestureEnabled: true,
-                              gestureDirection: "horizontal",
-                              animation: "slide_from_right",
-                            }}
-                          />
-                          <Stack.Screen
-                            name="(users)/mongoose-chat/[name]"
-                            options={{
-                              gestureEnabled: true,
-                              fullScreenGestureEnabled: true,
-                              gestureDirection: "horizontal",
-                              animation: "slide_from_right",
-                            }}
-                          />
-                        </Stack>
+                        />
                         <InAppChatBanner />
                         <StatusBar style="dark" />
                         <FlashMessage

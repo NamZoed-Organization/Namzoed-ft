@@ -998,7 +998,7 @@ export default function ProfileScreen() {
   }
 
   return (
-    <View className="flex-1 bg-white">
+    <View className="flex-1 bg-background">
       {/* Fixed Header - Absolute Position */}
       <View
         style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 100 }}

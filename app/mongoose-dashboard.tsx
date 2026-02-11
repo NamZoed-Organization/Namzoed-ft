@@ -517,7 +517,7 @@ export default function MongooseDashboard() {
   return (
     <View className="flex-1 bg-gray-50">
       {loading ? (
-        <View className="flex-1 bg-white justify-center items-center">
+        <View className="flex-1 bg-background justify-center items-center">
           <ActivityIndicator size="large" color="#094569" />
           <Text className="mt-4 text-gray-600">Loading dashboard...</Text>
         </View>
@@ -635,7 +635,7 @@ export default function MongooseDashboard() {
             onRequestClose={() => setSelectedBookingForMap(null)}
           >
             <View className="flex-1 bg-black/50">
-              <View className="flex-1 bg-white mt-12 rounded-t-3xl overflow-hidden">
+              <View className="flex-1 bg-background mt-12 rounded-t-3xl overflow-hidden">
                 {/* Modal Header */}
                 <View className="bg-white border-b border-gray-200 p-4">
                   <View className="flex-row justify-between items-center">

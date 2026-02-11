@@ -440,7 +440,7 @@ export default function FeedScreen() {
         statusBarTranslucent={true}
         onRequestClose={() => setShowCreatePost(false)}
       >
-        <View className="flex-1 bg-white">
+        <View className="flex-1 bg-background">
           <CreatePost
             onClose={() => {
               setShowCreatePost(false);
@@ -462,7 +462,7 @@ export default function FeedScreen() {
         {LiveWrapper ? (
           <LiveWrapper onClose={() => setShowLive(false)} />
         ) : (
-          <View className="flex-1 bg-white items-center justify-center">
+          <View className="flex-1 bg-background items-center justify-center">
             <ActivityIndicator size="large" color="#DC2626" />
             <Text className="mt-4 text-gray-600">Loading Live...</Text>
           </View>

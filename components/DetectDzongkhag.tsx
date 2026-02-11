@@ -35,6 +35,7 @@ export default function DetectDzongkhag() {
   const [isLocationLabelExpanded, setIsLocationLabelExpanded] = useState(false);
   const [currentLocation, setCurrentLocation] = useState<{latitude: number, longitude: number} | null>(null);
   const mapRef = useRef<MapView>(null);
+  const isMountedRef = useRef(true);
   const dzongkhagChangeTimerRef = useRef<any>(null);
   const locationLabelAnim = useRef(new Animated.Value(0)).current;
   const hideLocationLabelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
@@ -76,11 +77,21 @@ export default function DetectDzongkhag() {
 
   // Handle dot animation for loading state
   useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
     let interval: any;
     if (loading) {
-      interval = setInterval(() => setDotCount((prev) => (prev + 1) % 4), 400);
+      interval = setInterval(() => {
+        if (!isMountedRef.current) return;
+        setDotCount((prev) => (prev + 1) % 4);
+      }, 400);
     } else {
-      setDotCount(0);
+      if (isMountedRef.current) setDotCount(0);
     }
     return () => clearInterval(interval);
   }, [loading]);
@@ -146,7 +157,9 @@ export default function DetectDzongkhag() {
     }
     hideLocationLabelTimerRef.current = setTimeout(() => {
       animateLocationLabel(false);
-      setIsLocationLabelExpanded(false);
+      if (isMountedRef.current) {
+        setIsLocationLabelExpanded(false);
+      }
       hideLocationLabelTimerRef.current = null;
     }, 2200);
   };
@@ -254,7 +267,9 @@ export default function DetectDzongkhag() {
                         const newLocation = { latitude, longitude };
 
                         // Update avatar marker position immediately
-                        setCurrentLocation(newLocation);
+                        if (isMountedRef.current) {
+                          setCurrentLocation(newLocation);
+                        }
 
                         // Calculate dzongkhag from current GPS coordinates
                         const currentDzongkhag = calculateDzongkhag(latitude, longitude);

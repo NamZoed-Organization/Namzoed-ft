@@ -11,7 +11,7 @@ import { isClosingSaleActive } from "@/utils/timeHelpers";
 import { FlashList } from "@shopify/flash-list";
 import { useRouter } from "expo-router";
 import { ArrowUpDown } from "lucide-react-native";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Text,
@@ -42,6 +42,7 @@ const shuffleArray = <T,>(array: T[]): T[] => {
 
 export default function ForYou() {
   const router = useRouter();
+  const isMountedRef = useRef(true);
   const [products, setProducts] = useState<Product[]>([]);
   const [marketplaceItems, setMarketplaceItems] = useState<MarketplaceItem[]>(
     [],
@@ -55,14 +56,10 @@ export default function ForYou() {
   const [showSortMenu, setShowSortMenu] = useState(false);
 
   useEffect(() => {
-    loadAllData();
-
-    // Check closing sale time every 60 seconds — it only changes at 8pm/10pm
-    const interval = setInterval(() => {
-      setIsClosingSaleTime(isClosingSaleActive());
-    }, 60000);
-
-    return () => clearInterval(interval);
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
   }, []);
 
   const toggleSortMenu = () => {
@@ -140,24 +137,39 @@ export default function ForYou() {
 
   const loadAllData = async () => {
     try {
-      setLoading(true);
+      if (isMountedRef.current) {
+        setLoading(true);
+      }
       const [productsData, marketplaceData, servicesData] = await Promise.all([
         fetchProducts(0, 20),
         fetchMarketplaceItems(0, 20),
         fetchAllProviderServices(0, 20),
       ]);
 
+      if (!isMountedRef.current) return;
+
       setProducts(shuffleArray(productsData.products || []).slice(0, 10));
-      setMarketplaceItems(
-        shuffleArray(marketplaceData.items || []).slice(0, 10),
-      );
+      setMarketplaceItems(shuffleArray(marketplaceData.items || []).slice(0, 10));
       setServices(shuffleArray(servicesData || []).slice(0, 10));
     } catch (error) {
       console.error("Error loading data:", error);
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
   };
+
+  useEffect(() => {
+    loadAllData();
+
+    const interval = setInterval(() => {
+      if (!isMountedRef.current) return;
+      setIsClosingSaleTime(isClosingSaleActive());
+    }, 60000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   const handleProductPress = (product: Product) => {
     router.push(`/(users)/product/${product.id}` as any);
@@ -207,12 +219,12 @@ export default function ForYou() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ paddingLeft: 16 }}
             style={{ height: CARD_LIST_HEIGHT }}
-            ListFooterComponent={
+            ListFooterComponent={() => (
               <HomeCard
                 isSeeMore
                 onPress={() => router.push(viewAllRoute as any)}
               />
-            }
+            )}
           />
         )}
       </View>

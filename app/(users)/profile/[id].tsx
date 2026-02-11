@@ -389,7 +389,7 @@ export default function PublicProfileScreen() {
 
   if (loading) {
     return (
-      <View className="flex-1 bg-white items-center justify-center">
+      <View className="flex-1 bg-background items-center justify-center">
         <ActivityIndicator size="large" color="#059669" />
       </View>
     );
@@ -397,14 +397,14 @@ export default function PublicProfileScreen() {
 
   if (!userProfile) {
     return (
-      <View className="flex-1 bg-white items-center justify-center">
+      <View className="flex-1 bg-background items-center justify-center">
         <Text className="text-gray-500">User not found</Text>
       </View>
     );
   }
 
   return (
-    <View className="flex-1 bg-white">
+    <View className="flex-1 bg-background">
       {/* Set Header Title dynamically if needed, or hide default header */}
       <Stack.Screen options={{ headerShown: false }} />
 

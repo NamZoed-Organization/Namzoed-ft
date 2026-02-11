@@ -28,6 +28,7 @@ export const DzongkhagProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const { currentUser, setCurrentUser } = useUser();
+  const isMountedRef = useRef(true);
   const [name, setName] = useState<string | null>(currentUser?.dzongkhag || null);
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [loading, setLoading] = useState(false);
@@ -51,14 +52,14 @@ export const DzongkhagProvider: React.FC<{ children: React.ReactNode }> = ({
   const lookup = useCallback(async () => {
   if (throttleRef.current) return;
   throttleRef.current = true;
-  setLoading(true);
+  if (isMountedRef.current) setLoading(true);
 
-  setAccessDenied(false);
+  if (isMountedRef.current) setAccessDenied(false);
 
   try {
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== "granted") {
-      setAccessDenied(true);
+      if (isMountedRef.current) setAccessDenied(true);
       return;
     }
 
@@ -66,8 +67,10 @@ export const DzongkhagProvider: React.FC<{ children: React.ReactNode }> = ({
       accuracy: Location.Accuracy.Balanced,
     });
 
-    setAccessDenied(false);
-    setLocation({ latitude: coords.latitude, longitude: coords.longitude });
+    if (isMountedRef.current) {
+      setAccessDenied(false);
+      setLocation({ latitude: coords.latitude, longitude: coords.longitude });
+    }
 
     let nearest = dzongkhagCenters[0];
     let minDist = Infinity;
@@ -84,7 +87,7 @@ export const DzongkhagProvider: React.FC<{ children: React.ReactNode }> = ({
     if (detectedName === "Phuentsholing") detectedName = "Chhukha";
     if (detectedName === "Gelephu") detectedName = "Sarpang";
 
-    setName(detectedName);
+    if (isMountedRef.current) setName(detectedName);
 
     if (currentUser?.id) {
       const locationData = {
@@ -107,17 +110,28 @@ export const DzongkhagProvider: React.FC<{ children: React.ReactNode }> = ({
         // Always update local cache, not just when dzongkhag changes
         const updatedUser = { ...currentUser, dzongkhag: detectedName };
         await AsyncStorage.setItem('currentUser', JSON.stringify(updatedUser));
-        setCurrentUser(updatedUser);
+        if (isMountedRef.current) {
+          setCurrentUser(updatedUser);
+        }
       }
     }
   } catch (err: any) {
-    setAccessDenied(true);
-    setName(null);
+    if (isMountedRef.current) {
+      setAccessDenied(true);
+      setName(null);
+    }
   } finally {
-    setLoading(false);
+    if (isMountedRef.current) setLoading(false);
     throttleRef.current = false;
   }
 }, [currentUser, setCurrentUser]); // Add currentUser as dependency
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (currentUser?.dzongkhag) {
@@ -127,6 +141,7 @@ export const DzongkhagProvider: React.FC<{ children: React.ReactNode }> = ({
 
   // Load saved location from database on mount for fast initial render
   useEffect(() => {
+    let isActive = true;
     const loadSavedLocation = async () => {
       if (currentUser?.id) {
         try {
@@ -136,7 +151,7 @@ export const DzongkhagProvider: React.FC<{ children: React.ReactNode }> = ({
             .eq('id', currentUser.id)
             .single();
 
-          if (data?.location) {
+          if (isActive && data?.location) {
             setLocation({
               latitude: data.location.latitude,
               longitude: data.location.longitude,
@@ -149,6 +164,9 @@ export const DzongkhagProvider: React.FC<{ children: React.ReactNode }> = ({
     };
 
     loadSavedLocation();
+    return () => {
+      isActive = false;
+    };
   }, [currentUser?.id]);
 
   return (

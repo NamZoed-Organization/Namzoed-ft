@@ -91,7 +91,7 @@ export default function GetStarted() {
   });
 
   return (
-    <View className="flex-1 bg-white">
+    <View className="flex-1 bg-background">
       {/* Top bar: counter + skip */}
       <View className="flex-row justify-between items-center px-6 pt-20 pb-4 absolute top-0 left-0 right-0 z-10">
         <Text className="text-gray-400 font-medium text-lg">

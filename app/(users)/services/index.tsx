@@ -129,7 +129,7 @@ export default function ServiceScreen() {
   };
 
   return (
-    <View className="flex-1 bg-white">
+    <View className="flex-1 bg-background">
       <TopNavbar />
 
       <View className="flex-1 px-4 pt-4">

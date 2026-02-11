@@ -7,8 +7,8 @@ import { useUser } from "@/contexts/UserContext";
 import users from "@/data/UserData";
 import { supabase } from "@/lib/supabase";
 import { Ionicons } from "@expo/vector-icons";
-import * as Location from "expo-location";
 import * as Haptics from "expo-haptics";
+import * as Location from "expo-location";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { Bike } from "lucide-react-native";
 
@@ -21,6 +21,7 @@ import React, {
 } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Animated,
   Easing,
   Image,
@@ -82,15 +83,16 @@ type OutgoingDeliveryStatus = "sent" | "delivered" | "seen";
 
 const parseMessageMetaContent = (
   rawContent?: string | null,
-): { text: string; replyMeta: ReplyMeta | null; productMeta: ProductMeta | null } => {
+): {
+  text: string;
+  replyMeta: ReplyMeta | null;
+  productMeta: ProductMeta | null;
+} => {
   let content = typeof rawContent === "string" ? rawContent : "";
   let replyMeta: ReplyMeta | null = null;
   let productMeta: ProductMeta | null = null;
 
-  const tryParsePrefix = <T,>(
-    prefix: string,
-    suffix: string,
-  ): T | null => {
+  const tryParsePrefix = <T,>(prefix: string, suffix: string): T | null => {
     if (!content.startsWith(prefix)) return null;
     const suffixIndex = content.indexOf(suffix);
     if (suffixIndex < 0) return null;
@@ -409,9 +411,10 @@ export default function ChatScreen() {
       id: String(context_product_id),
       title: String(context_product_title),
       price: context_product_price ? String(context_product_price) : undefined,
-      imageUrl: context_product_image ? String(context_product_image) : undefined,
-      source:
-        context_source === "marketplace" ? "marketplace" : "product",
+      imageUrl: context_product_image
+        ? String(context_product_image)
+        : undefined,
+      source: context_source === "marketplace" ? "marketplace" : "product",
     });
   }, [
     context_product_id,
@@ -462,6 +465,28 @@ export default function ChatScreen() {
       return aTime - bTime;
     });
   }, [messages, localMessages]);
+
+  const latestOutgoingMessageId = useMemo(() => {
+    if (!effectiveCurrentUserUUID) return null;
+    for (let i = allMessages.length - 1; i >= 0; i -= 1) {
+      const message = allMessages[i];
+      if (String(message?.sender_id || "") === String(effectiveCurrentUserUUID)) {
+        return message?.id != null ? String(message.id) : null;
+      }
+    }
+    return null;
+  }, [allMessages, effectiveCurrentUserUUID]);
+
+  const replyCountByMessageId = useMemo(() => {
+    const counts: Record<string, number> = {};
+    allMessages.forEach((message) => {
+      const parsed = parseMessageMetaContent(message?.content);
+      const rootId = parsed.replyMeta?.id ? String(parsed.replyMeta.id) : null;
+      if (!rootId) return;
+      counts[rootId] = (counts[rootId] || 0) + 1;
+    });
+    return counts;
+  }, [allMessages]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -607,7 +632,10 @@ export default function ChatScreen() {
   }, []);
 
   const updateOutgoingStatus = useCallback(
-    (messageId: string | number | null | undefined, next: OutgoingDeliveryStatus) => {
+    (
+      messageId: string | number | null | undefined,
+      next: OutgoingDeliveryStatus,
+    ) => {
       if (messageId == null) return;
       const id = String(messageId);
       const rank: Record<OutgoingDeliveryStatus, number> = {
@@ -909,6 +937,7 @@ export default function ChatScreen() {
             },
           )
           .subscribe((status) => {
+            if (!isSubscribed) return;
             console.log("📡 Chat subscription status:", status);
 
             if (status === "SUBSCRIBED") {
@@ -921,6 +950,7 @@ export default function ChatScreen() {
               console.error("❌ Chat subscription ERROR");
               if (!messagesPollRef.current) {
                 messagesPollRef.current = setInterval(() => {
+                  if (!isSubscribed) return;
                   fetchLatestMessages();
                 }, 3000);
               }
@@ -928,6 +958,7 @@ export default function ChatScreen() {
               console.error("⏱️ Chat subscription TIMED OUT");
               if (!messagesPollRef.current) {
                 messagesPollRef.current = setInterval(() => {
+                  if (!isSubscribed) return;
                   fetchLatestMessages();
                 }, 3000);
               }
@@ -1336,17 +1367,34 @@ export default function ChatScreen() {
     if (isSharingLocation || !effectiveCurrentUserUUID || !chatPartnerId)
       return;
 
+    const confirmed = await new Promise<boolean>((resolve) => {
+      Alert.alert(
+        "Share Live Location",
+        "Send your current live location to this chat?",
+        [
+          { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
+          { text: "Share", onPress: () => resolve(true) },
+        ],
+      );
+    });
+
+    if (!confirmed) return;
+
     setIsSharingLocation(true);
 
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
 
       if (status !== "granted") {
-        alert("Location permission is required to share your location");
+        Alert.alert(
+          "Location Permission Required",
+          "Location permission is required to share your live location.",
+        );
         setIsSharingLocation(false);
         return;
       }
 
+      // Capture the user's current live GPS coordinate at send-time.
       const location = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.High,
       });
@@ -1391,7 +1439,7 @@ export default function ChatScreen() {
       if (error) {
         console.error("❌ Location send error:", error.message);
         setLocalMessages((prev) => prev.filter((m) => m.id !== optimisticId));
-        alert("Failed to share location");
+        Alert.alert("Error", "Failed to share live location");
       } else {
         console.log("✅ Location sent to DB");
 
@@ -1407,7 +1455,10 @@ export default function ChatScreen() {
       }
     } catch (error) {
       console.error("❌ Location error:", error);
-      alert("Failed to get location. Please check your permissions.");
+      Alert.alert(
+        "Location Error",
+        "Failed to get your live location. Please check your permissions.",
+      );
     } finally {
       setIsSharingLocation(false);
     }
@@ -1627,7 +1678,11 @@ export default function ChatScreen() {
     }
   };
 
-  const handleMessageTouchEnd = (message: any, messageKey: string, x: number) => {
+  const handleMessageTouchEnd = (
+    message: any,
+    messageKey: string,
+    x: number,
+  ) => {
     const startX = touchStartXByMessageRef.current[messageKey];
     delete touchStartXByMessageRef.current[messageKey];
     if (typeof startX !== "number") return;
@@ -1647,8 +1702,9 @@ export default function ChatScreen() {
     isOptimistic: boolean,
     localStatus: string | undefined,
     connectNext: boolean,
+    isLatestOutgoingMessage: boolean,
   ) => {
-    if (!isCurrentUser || connectNext) return null;
+    if (!isCurrentUser || connectNext || !isLatestOutgoingMessage) return null;
 
     let label = "";
     let tone = "text-gray-400";
@@ -1676,11 +1732,7 @@ export default function ChatScreen() {
 
     if (!label) return null;
 
-    return (
-      <Text className={`text-[11px] mt-1 ${tone} mr-3`}>
-        {label}
-      </Text>
-    );
+    return <Text className={`text-[11px] mt-1 ${tone} mr-3`}>{label}</Text>;
   };
 
   const renderMessage = (
@@ -1695,6 +1747,12 @@ export default function ChatScreen() {
     const isOptimistic = message.isOptimistic;
     const localStatus = message.localStatus;
     const key = message.id != null ? String(message.id) : `idx-${index}`;
+    const isLatestOutgoingMessage =
+      latestOutgoingMessageId != null &&
+      message?.id != null &&
+      String(message.id) === latestOutgoingMessageId;
+    const parentReplyCount =
+      message?.id != null ? (replyCountByMessageId[String(message.id)] || 0) : 0;
     const messageType = message.message_type || "text";
     const isLocation = message.content?.includes("📍 My Location:");
     const isImage = messageType === "image" || message.image_url;
@@ -1765,7 +1823,9 @@ export default function ChatScreen() {
           >
             <Pressable
               onLongPress={() => openMessageActions(message)}
-              onPressIn={(e) => handleMessageTouchStart(key, e.nativeEvent.pageX)}
+              onPressIn={(e) =>
+                handleMessageTouchStart(key, e.nativeEvent.pageX)
+              }
               onTouchMove={(e) =>
                 handleMessageSwipeMove(key, e.nativeEvent.pageX)
               }
@@ -1789,6 +1849,7 @@ export default function ChatScreen() {
             isOptimistic,
             localStatus,
             connectNext,
+            isLatestOutgoingMessage,
           )}
         </View>
       );
@@ -1811,7 +1872,9 @@ export default function ChatScreen() {
             <Pressable
               onPress={handleImagePress}
               onLongPress={() => openMessageActions(message)}
-              onPressIn={(e) => handleMessageTouchStart(key, e.nativeEvent.pageX)}
+              onPressIn={(e) =>
+                handleMessageTouchStart(key, e.nativeEvent.pageX)
+              }
               onTouchMove={(e) =>
                 handleMessageSwipeMove(key, e.nativeEvent.pageX)
               }
@@ -1843,6 +1906,7 @@ export default function ChatScreen() {
             isOptimistic,
             localStatus,
             connectNext,
+            isLatestOutgoingMessage,
           )}
         </View>
       );
@@ -1865,7 +1929,9 @@ export default function ChatScreen() {
             <Pressable
               onPress={handleLocationPress}
               onLongPress={() => openMessageActions(message)}
-              onPressIn={(e) => handleMessageTouchStart(key, e.nativeEvent.pageX)}
+              onPressIn={(e) =>
+                handleMessageTouchStart(key, e.nativeEvent.pageX)
+              }
               onTouchMove={(e) =>
                 handleMessageSwipeMove(key, e.nativeEvent.pageX)
               }
@@ -1880,7 +1946,9 @@ export default function ChatScreen() {
             >
               <MapView
                 style={{ width: 250, height: 150 }}
-                provider={Platform.OS === "android" ? PROVIDER_GOOGLE : undefined}
+                provider={
+                  Platform.OS === "android" ? PROVIDER_GOOGLE : undefined
+                }
                 initialRegion={{
                   latitude: coordinates.latitude,
                   longitude: coordinates.longitude,
@@ -1923,6 +1991,7 @@ export default function ChatScreen() {
             isOptimistic,
             localStatus,
             connectNext,
+            isLatestOutgoingMessage,
           )}
         </View>
       );
@@ -1967,7 +2036,10 @@ export default function ChatScreen() {
                 {embeddedProductMeta.title}
               </Text>
               {embeddedProductMeta.price ? (
-                <Text className="text-[12px] text-gray-500 mt-0.5" numberOfLines={1}>
+                <Text
+                  className="text-[12px] text-gray-500 mt-0.5"
+                  numberOfLines={1}
+                >
                   Nu. {embeddedProductMeta.price}
                 </Text>
               ) : null}
@@ -2043,12 +2115,67 @@ export default function ChatScreen() {
             </Text>
           </Pressable>
         </Animated.View>
+        {parentReplyCount > 0 ? (
+          <View
+            className={`mt-1 flex-row items-center ${
+              isCurrentUser ? "justify-end mr-3" : "justify-start ml-3"
+            }`}
+          >
+            <View
+              style={{
+                width: 12,
+                height: 12,
+                borderLeftWidth: 2,
+                borderBottomWidth: 2,
+                borderColor: isCurrentUser ? "#93c5fd" : "#60a5fa",
+                borderBottomLeftRadius: 8,
+                marginRight: 4,
+                transform: [{ scaleX: isCurrentUser ? -1 : 1 }],
+              }}
+            />
+            <Text
+              className={`text-[12px] font-semibold ${
+                isCurrentUser ? "text-blue-200" : "text-blue-600"
+              }`}
+            >
+              {parentReplyCount} {parentReplyCount === 1 ? "reply" : "replies"}
+            </Text>
+          </View>
+        ) : null}
+        {embeddedReplyMeta ? (
+          <View
+            className={`mt-1 flex-row items-center ${
+              isCurrentUser ? "justify-end mr-3" : "justify-start ml-3"
+            }`}
+          >
+            <View
+              style={{
+                width: 12,
+                height: 12,
+                borderLeftWidth: 2,
+                borderBottomWidth: 2,
+                borderColor: isCurrentUser ? "#93c5fd" : "#9ca3af",
+                borderBottomLeftRadius: 8,
+                marginRight: 4,
+                transform: [{ scaleX: isCurrentUser ? -1 : 1 }],
+              }}
+            />
+            <Text
+              className={`text-[11px] ${
+                isCurrentUser ? "text-blue-100" : "text-gray-500"
+              }`}
+            >
+              Reply to {embeddedReplyMeta.senderName}
+            </Text>
+          </View>
+        ) : null}
         {renderOutgoingStatus(
           message,
           isCurrentUser,
           isOptimistic,
           localStatus,
           connectNext,
+          isLatestOutgoingMessage,
         )}
       </View>
     );
@@ -2249,14 +2376,23 @@ export default function ChatScreen() {
                     />
                   ) : null}
                   <View className="flex-1">
-                    <Text className="text-[11px] font-semibold text-primary" numberOfLines={1}>
+                    <Text
+                      className="text-[11px] font-semibold text-primary"
+                      numberOfLines={1}
+                    >
                       Interested in this product
                     </Text>
-                    <Text className="text-[12px] text-gray-700" numberOfLines={1}>
+                    <Text
+                      className="text-[12px] text-gray-700"
+                      numberOfLines={1}
+                    >
                       {pendingProductContext.title}
                     </Text>
                     {pendingProductContext.price ? (
-                      <Text className="text-[11px] text-gray-500" numberOfLines={1}>
+                      <Text
+                        className="text-[11px] text-gray-500"
+                        numberOfLines={1}
+                      >
                         Nu. {pendingProductContext.price}
                       </Text>
                     ) : null}
@@ -2272,155 +2408,160 @@ export default function ChatScreen() {
             ) : null}
 
             <View className="flex-row items-center px-2 py-2">
-            <Animated.View
-              className="relative h-9 mr-1 overflow-hidden justify-center"
-              style={{
-                width: composerActionsProgress.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [36, 122],
-                }),
-              }}
-            >
               <Animated.View
-                pointerEvents={areComposerActionsCollapsed ? "none" : "auto"}
-                className="absolute left-0 right-0 flex-row items-center"
+                className="relative h-9 mr-1 overflow-hidden justify-center"
                 style={{
-                  opacity: composerActionsProgress,
-                  transform: [
-                    {
-                      translateX: composerActionsProgress.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [-14, 0],
-                      }),
-                    },
-                  ],
+                  width: composerActionsProgress.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [36, 122],
+                  }),
                 }}
               >
-                <ChatImagePicker
-                  currentUserUUID={effectiveCurrentUserUUID || ""}
-                  chatPartnerId={chatPartnerId as string}
-                  onOptimisticImage={handleOptimisticImage}
-                  onUploadSuccess={handleImageUploadSuccess}
-                  onUploadError={handleImageUploadError}
-                />
-                <ChatAudioRecorder
-                  currentUserUUID={effectiveCurrentUserUUID || ""}
-                  chatPartnerId={chatPartnerId as string}
-                  onOptimisticAudio={handleOptimisticAudio}
-                  onUploadSuccess={handleAudioUploadSuccess}
-                  onUploadError={handleAudioUploadError}
-                />
-                <TouchableOpacity
-                  onPress={handleShareLocation}
-                  disabled={isSharingLocation}
-                  className="mr-1 w-9 h-9 items-center justify-center"
+                <Animated.View
+                  pointerEvents={areComposerActionsCollapsed ? "none" : "auto"}
+                  className="absolute left-0 right-0 flex-row items-center"
+                  style={{
+                    opacity: composerActionsProgress,
+                    transform: [
+                      {
+                        translateX: composerActionsProgress.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [-14, 0],
+                        }),
+                      },
+                    ],
+                  }}
                 >
-                  {isSharingLocation ? (
-                    <Text className="text-xs text-gray-500">...</Text>
-                  ) : (
+                  <ChatImagePicker
+                    currentUserUUID={effectiveCurrentUserUUID || ""}
+                    chatPartnerId={chatPartnerId as string}
+                    onOptimisticImage={handleOptimisticImage}
+                    onUploadSuccess={handleImageUploadSuccess}
+                    onUploadError={handleImageUploadError}
+                  />
+                  <ChatAudioRecorder
+                    currentUserUUID={effectiveCurrentUserUUID || ""}
+                    chatPartnerId={chatPartnerId as string}
+                    onOptimisticAudio={handleOptimisticAudio}
+                    onUploadSuccess={handleAudioUploadSuccess}
+                    onUploadError={handleAudioUploadError}
+                  />
+                  <TouchableOpacity
+                    onPress={handleShareLocation}
+                    disabled={isSharingLocation}
+                    className="mr-1 w-9 h-9 items-center justify-center"
+                  >
+                    {isSharingLocation ? (
+                      <Text className="text-xs text-gray-500">...</Text>
+                    ) : (
+                      <Ionicons
+                        name="location-outline"
+                        size={20}
+                        color="#6b7280"
+                      />
+                    )}
+                  </TouchableOpacity>
+                </Animated.View>
+
+                <Animated.View
+                  pointerEvents={areComposerActionsCollapsed ? "auto" : "none"}
+                  className="absolute left-0 right-0 items-center"
+                  style={{
+                    opacity: composerActionsProgress.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [1, 0],
+                    }),
+                    transform: [
+                      {
+                        translateX: composerActionsProgress.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [0, 10],
+                        }),
+                      },
+                    ],
+                  }}
+                >
+                  <TouchableOpacity
+                    onPress={() => setComposerActionsCollapsed(false)}
+                    className="w-9 h-9 items-center justify-center"
+                  >
                     <Ionicons
-                      name="location-outline"
+                      name="chevron-forward"
                       size={20}
                       color="#6b7280"
                     />
-                  )}
-                </TouchableOpacity>
+                  </TouchableOpacity>
+                </Animated.View>
               </Animated.View>
-
-              <Animated.View
-                pointerEvents={areComposerActionsCollapsed ? "auto" : "none"}
-                className="absolute left-0 right-0 items-center"
-                style={{
-                  opacity: composerActionsProgress.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [1, 0],
-                  }),
-                  transform: [
-                    {
-                      translateX: composerActionsProgress.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [0, 10],
-                      }),
-                    },
-                  ],
-                }}
-              >
-                <TouchableOpacity
-                  onPress={() => setComposerActionsCollapsed(false)}
-                  className="w-9 h-9 items-center justify-center"
-                >
-                  <Ionicons name="chevron-forward" size={20} color="#6b7280" />
-                </TouchableOpacity>
-              </Animated.View>
-            </Animated.View>
-            <View className="flex-1 self-center min-h-[36px] justify-center">
-              <TextInput
-                className="w-full px-3 text-[16px]"
-                style={{
-                  paddingTop: 0,
-                  paddingBottom: 0,
-                  marginVertical: 0,
-                  lineHeight: CHAT_INPUT_LINE_HEIGHT,
-                  minHeight: CHAT_INPUT_LINE_HEIGHT,
-                  maxHeight: CHAT_INPUT_MAX_HEIGHT,
-                  ...(Platform.OS === "android"
-                    ? { includeFontPadding: false }
-                    : {}),
-                }}
-                placeholder="Type a message..."
-                value={messageText}
-                onChangeText={handleTextChange}
-                onFocus={() => setComposerActionsCollapsed(true)}
-                multiline
-                maxLength={500}
-                textAlignVertical="center"
-                onContentSizeChange={(e) => {
-                  const nextHeight = Math.round(
-                    e.nativeEvent.contentSize.height || CHAT_INPUT_LINE_HEIGHT,
-                  );
-                  const clamped = Math.max(
-                    CHAT_INPUT_LINE_HEIGHT,
-                    Math.min(nextHeight, CHAT_INPUT_MAX_HEIGHT),
-                  );
-                  if (Math.abs(clamped - composerInputHeight) > 1) {
-                    setComposerInputHeight(clamped);
-                  }
-                }}
-              />
-            </View>
-            {isEditMode && (
-              <TouchableOpacity
-                onPress={() => {
-                  setIsEditMode(false);
-                  setEditingMessageId(null);
-                  setMessageText("");
-                }}
-                className="mr-2 w-9 h-9 items-center justify-center"
-              >
-                <Ionicons name="close" size={18} color="#6b7280" />
-              </TouchableOpacity>
-            )}
-            {messageText.trim() ? (
-              <TouchableOpacity
-                onPress={() => {
-                  if (isEditMode) {
-                    handleUpdateMessage();
-                  } else {
-                    console.log("Send button pressed!");
-                    handleSendMessage();
-                  }
-                }}
-                className={`w-9 h-9 rounded-full items-center justify-center ${
-                  isEditMode ? "bg-green-600" : "bg-primary"
-                }`}
-              >
-                <Ionicons
-                  name={isEditMode ? "checkmark" : "send"}
-                  size={18}
-                  color="white"
+              <View className="flex-1 self-center min-h-[36px] justify-center">
+                <TextInput
+                  className="w-full px-3 text-[16px]"
+                  style={{
+                    paddingTop: 0,
+                    paddingBottom: 0,
+                    marginVertical: 0,
+                    lineHeight: CHAT_INPUT_LINE_HEIGHT,
+                    minHeight: CHAT_INPUT_LINE_HEIGHT,
+                    maxHeight: CHAT_INPUT_MAX_HEIGHT,
+                    ...(Platform.OS === "android"
+                      ? { includeFontPadding: false }
+                      : {}),
+                  }}
+                  placeholder="Type a message..."
+                  value={messageText}
+                  onChangeText={handleTextChange}
+                  onFocus={() => setComposerActionsCollapsed(true)}
+                  multiline
+                  maxLength={500}
+                  textAlignVertical="center"
+                  onContentSizeChange={(e) => {
+                    const nextHeight = Math.round(
+                      e.nativeEvent.contentSize.height ||
+                        CHAT_INPUT_LINE_HEIGHT,
+                    );
+                    const clamped = Math.max(
+                      CHAT_INPUT_LINE_HEIGHT,
+                      Math.min(nextHeight, CHAT_INPUT_MAX_HEIGHT),
+                    );
+                    if (Math.abs(clamped - composerInputHeight) > 1) {
+                      setComposerInputHeight(clamped);
+                    }
+                  }}
                 />
-              </TouchableOpacity>
-            ) : null}
+              </View>
+              {isEditMode && (
+                <TouchableOpacity
+                  onPress={() => {
+                    setIsEditMode(false);
+                    setEditingMessageId(null);
+                    setMessageText("");
+                  }}
+                  className="mr-2 w-9 h-9 items-center justify-center"
+                >
+                  <Ionicons name="close" size={18} color="#6b7280" />
+                </TouchableOpacity>
+              )}
+              {messageText.trim() ? (
+                <TouchableOpacity
+                  onPress={() => {
+                    if (isEditMode) {
+                      handleUpdateMessage();
+                    } else {
+                      console.log("Send button pressed!");
+                      handleSendMessage();
+                    }
+                  }}
+                  className={`w-9 h-9 rounded-full items-center justify-center ${
+                    isEditMode ? "bg-green-600" : "bg-primary"
+                  }`}
+                >
+                  <Ionicons
+                    name={isEditMode ? "checkmark" : "send"}
+                    size={18}
+                    color="white"
+                  />
+                </TouchableOpacity>
+              ) : null}
             </View>
           </View>
         </View>
@@ -2518,16 +2659,16 @@ export default function ChatScreen() {
 
             {selectedMessage?.sender_id === effectiveCurrentUserUUID &&
               selectedMessage?.message_type !== "image" && (
-              <TouchableOpacity
-                onPress={handleEditMessage}
-                className="flex-row items-center px-6 py-4 border-b border-gray-200 active:bg-gray-50"
-              >
-                <Ionicons name="create-outline" size={22} color="#007AFF" />
-                <Text className="ml-4 text-base text-gray-800 font-medium">
-                  Edit Message
-                </Text>
-              </TouchableOpacity>
-            )}
+                <TouchableOpacity
+                  onPress={handleEditMessage}
+                  className="flex-row items-center px-6 py-4 border-b border-gray-200 active:bg-gray-50"
+                >
+                  <Ionicons name="create-outline" size={22} color="#007AFF" />
+                  <Text className="ml-4 text-base text-gray-800 font-medium">
+                    Edit Message
+                  </Text>
+                </TouchableOpacity>
+              )}
 
             {selectedMessage?.sender_id === effectiveCurrentUserUUID && (
               <TouchableOpacity

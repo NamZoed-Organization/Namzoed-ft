@@ -6,23 +6,32 @@ import ForYou from "@/components/ForYou";
 import SearchBar from "@/components/modals/SearchBar";
 import TopNavbar from "@/components/ui/TopNavbar";
 import { Coins, Heart, Radio, Ticket, Users } from "lucide-react-native";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
+  FlatList,
+  ListRenderItem,
   RefreshControl,
   Text,
   TouchableOpacity,
   View
 } from "react-native";
+import Animated, { SlideInLeft, SlideInRight } from "react-native-reanimated";
 
 type TabType = "foryou" | "featured" | "live" | "bidding" | "norbu";
+type HeaderDataItem = { key: string; component: "header" | "content" | "footer" };
 
 export default function HomeScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<TabType>("foryou");
   const [refreshing, setRefreshing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const animationDirection = useRef<"left" | "right">("right");
 
   const handleTabPress = (tab: TabType) => {
+    const tabOrder: TabType[] = ["foryou", "featured", "live", "norbu", "bidding"];
+    const currentIndex = tabOrder.indexOf(activeTab);
+    const nextIndex = tabOrder.indexOf(tab);
+    animationDirection.current = nextIndex >= currentIndex ? "right" : "left";
     setActiveTab(tab);
   };
 
@@ -192,7 +201,7 @@ export default function HomeScreen() {
         data={headerData}
         renderItem={renderItem}
         keyExtractor={(item: HeaderDataItem) => item.key}
-        className="flex-1 bg-white mb-20"
+        className="flex-1 bg-background mb-20"
         showsVerticalScrollIndicator={false}
         scrollEventThrottle={16}
         refreshControl={

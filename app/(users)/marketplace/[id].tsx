@@ -209,7 +209,7 @@ export default function MarketplaceDetailScreen() {
 
   if (isLoading) {
     return (
-      <View className="flex-1 bg-white items-center justify-center">
+      <View className="flex-1 bg-background items-center justify-center">
         <ActivityIndicator size="large" color="#094569" />
         <Text className="text-sm text-gray-600 mt-2">Loading details...</Text>
       </View>
@@ -218,7 +218,7 @@ export default function MarketplaceDetailScreen() {
 
   if (!item) {
     return (
-      <View className="flex-1 bg-white items-center justify-center">
+      <View className="flex-1 bg-background items-center justify-center">
         <Text className="text-lg text-gray-600">Item not found</Text>
         <TouchableOpacity
           onPress={handleGoBack}
@@ -233,7 +233,7 @@ export default function MarketplaceDetailScreen() {
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-      <View className="flex-1 bg-white">
+      <View className="flex-1 bg-background">
         {/* Header */}
         <View className="bg-white border-b border-gray-200 pt-12 pb-4 px-4">
           <View className="flex-row items-center">

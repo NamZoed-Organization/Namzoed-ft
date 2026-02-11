@@ -567,6 +567,7 @@ export default function MessageScreen() {
         },
       )
       .subscribe((status) => {
+        if (!isSubscribed) return;
         console.log("📡 Bookings subscription status:", status);
 
         if (status === "SUBSCRIBED") {
@@ -579,6 +580,7 @@ export default function MessageScreen() {
           console.error("❌ Real-time subscription ERROR");
           if (!bookingsPollRef.current) {
             bookingsPollRef.current = setInterval(() => {
+              if (!isSubscribed) return;
               fetchMongooseBookings();
             }, 8000);
           }
@@ -586,6 +588,7 @@ export default function MessageScreen() {
           console.error("⏱️ Real-time subscription TIMED OUT");
           if (!bookingsPollRef.current) {
             bookingsPollRef.current = setInterval(() => {
+              if (!isSubscribed) return;
               fetchMongooseBookings();
             }, 8000);
           }
@@ -607,8 +610,10 @@ export default function MessageScreen() {
 
   // Subscribe to real-time updates for new messages
   useEffect(() => {
+    let isSubscribed = true;
     const setupRealtimeSubscription = async () => {
       const userUUID = await resolveCurrentUserUUID();
+      if (!isSubscribed) return;
 
       if (!userUUID) {
         console.log("⚠️ Cannot setup real-time: user UUID not found");
@@ -630,6 +635,7 @@ export default function MessageScreen() {
             table: "messages",
           },
           (payload) => {
+            if (!isSubscribed) return;
             const next = payload.new as any;
             const old = payload.old as any;
             const senderId = String(next?.sender_id || old?.sender_id || "");
@@ -648,6 +654,7 @@ export default function MessageScreen() {
           },
         )
         .subscribe((status) => {
+          if (!isSubscribed) return;
           console.log("📡 Conversations subscription status:", status);
 
           if (status === "SUBSCRIBED") {
@@ -658,6 +665,7 @@ export default function MessageScreen() {
           } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
             if (!conversationsPollRef.current) {
               conversationsPollRef.current = setInterval(() => {
+                if (!isSubscribed) return;
                 fetchConversations(false);
               }, 5000);
             }
@@ -679,6 +687,7 @@ export default function MessageScreen() {
     });
 
     return () => {
+      isSubscribed = false;
       cleanup?.();
       if (conversationsPollRef.current) {
         clearInterval(conversationsPollRef.current);
@@ -1232,7 +1241,7 @@ export default function MessageScreen() {
         )}
 
         {/* Content based on active tab */}
-        <View className="flex-1 bg-white">
+        <View className="flex-1 bg-background">
           {activeTab === 0 && (
             <>
               {/* Show search results when searching */}

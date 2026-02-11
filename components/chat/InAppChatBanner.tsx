@@ -63,8 +63,11 @@ export default function InAppChatBanner() {
             <TouchableOpacity
               activeOpacity={0.92}
               onPress={() => {
+                const senderId = banner.senderId;
                 dismissBanner();
-                router.push(`/(users)/chat/${banner.senderId}`);
+                if (senderId) {
+                  router.push(`/(users)/chat/${senderId}`);
+                }
               }}
               className="rounded-2xl overflow-hidden"
             >
@@ -82,7 +85,7 @@ export default function InAppChatBanner() {
                   )}
                   <View className="flex-1">
                     <Text className="text-sm font-semibold text-gray-900 mt-0.5">
-                      {banner.senderName}
+                      {banner.senderName || "New message"}
                     </Text>
                     <Text
                       className="text-sm text-gray-700 mt-0.5"
