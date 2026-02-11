@@ -1,4 +1,5 @@
 import CountdownTimer from "@/components/CountdownTimer";
+import MarketplaceImageViewer from "@/components/modals/MarketplaceImageViewer";
 import ReportProductModal from "@/components/modals/ReportProductModal";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { useUser } from "@/contexts/UserContext";
@@ -116,6 +117,9 @@ export default function ProductDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+
+  // Image viewer state
+  const [showImageViewer, setShowImageViewer] = useState(false);
 
   // Bookmark State
   const [isBookmarked, setIsBookmarked] = useState(false);
@@ -335,11 +339,16 @@ export default function ProductDetail() {
         {/* Hero Image Section */}
         <View style={{ height: IMAGE_HEIGHT }}>
           {mainImage ? (
-            <Image
-              source={mainImage}
-              style={{ width: SCREEN_WIDTH, height: IMAGE_HEIGHT }}
-              resizeMode="cover"
-            />
+            <TouchableOpacity
+              activeOpacity={0.95}
+              onPress={() => setShowImageViewer(true)}
+            >
+              <Image
+                source={mainImage}
+                style={{ width: SCREEN_WIDTH, height: IMAGE_HEIGHT }}
+                resizeMode="cover"
+              />
+            </TouchableOpacity>
           ) : (
             <View
               className="bg-gray-200 items-center justify-center"
@@ -359,6 +368,7 @@ export default function ProductDetail() {
             ]}
             locations={[0, 0.3, 0.7, 1]}
             className="absolute inset-0"
+            pointerEvents="none"
           />
 
           {/* Top Navigation Bar */}
@@ -774,6 +784,16 @@ export default function ProductDetail() {
             setShowReportModal(false);
             showSuccessPopup("Report submitted successfully");
           }}
+        />
+      )}
+
+      {/* Image Viewer Modal */}
+      {images.length > 0 && (
+        <MarketplaceImageViewer
+          visible={showImageViewer}
+          images={images}
+          initialIndex={activeImageIndex}
+          onClose={() => setShowImageViewer(false)}
         />
       )}
 

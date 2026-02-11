@@ -35,6 +35,7 @@ import {
   Dimensions,
   Image,
   Modal,
+  Pressable,
   RefreshControl,
   ScrollView,
   Text,
@@ -832,178 +833,156 @@ export default function PublicProfileScreen() {
                   className="py-12"
                 />
               ) : serviceProvider ? (
-                <View className="px-4 py-6">
-                  {/* Service Provider Header */}
-                  <View className="bg-white rounded-2xl p-6 mb-4 shadow-sm">
-                    <Text className="text-xl font-mbold text-gray-900 mb-6">
-                      Service Provider Profile
+                <View>
+                  {/* Profile Info Section — mirrors main tab style */}
+                  <View className="px-4 py-6 items-center">
+                    {/* Certified badge above avatar */}
+                    {serviceProvider.verification_status === "verified" && (
+                      <View className="flex-row items-center bg-blue-50 border border-blue-100 px-3 py-1 rounded-full mb-3">
+                        <CheckCircle2 size={13} color="#3B82F6" fill="#3B82F6" />
+                        <Text className="text-xs font-msemibold text-blue-600 ml-1">
+                          Certified
+                        </Text>
+                      </View>
+                    )}
+
+                    {/* Avatar */}
+                    <TouchableOpacity
+                      onPress={() =>
+                        handleOpenProfileImage(
+                          serviceProvider.profile_url || userProfile.avatar_url,
+                        )
+                      }
+                      disabled={!serviceProvider.profile_url && !userProfile.avatar_url}
+                      activeOpacity={0.85}
+                      className="w-24 h-24 rounded-full bg-gray-200 overflow-hidden mb-4 border border-gray-100"
+                    >
+                      {serviceProvider.profile_url || userProfile.avatar_url ? (
+                        <Image
+                          source={{
+                            uri: serviceProvider.profile_url || userProfile.avatar_url,
+                          }}
+                          className="w-full h-full"
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <View className="w-full h-full items-center justify-center bg-gray-100">
+                          <Wrench size={32} className="text-gray-400" />
+                        </View>
+                      )}
+                    </TouchableOpacity>
+
+                    {/* Name */}
+                    <Text className="text-2xl font-mbold text-gray-900 text-center mb-1">
+                      {userProfile.name}
                     </Text>
 
-                    {/* Avatar Section */}
-                    <View className="items-center mb-6">
-                      <View className="relative">
-                        <TouchableOpacity
-                          onPress={() =>
-                            handleOpenProfileImage(serviceProvider.profile_url)
-                          }
-                          disabled={!serviceProvider.profile_url}
-                          activeOpacity={0.85}
-                          className="w-24 h-24 rounded-full bg-gray-200 items-center justify-center overflow-hidden"
-                        >
-                          {serviceProvider.profile_url ? (
-                            <Image
-                              source={{ uri: serviceProvider.profile_url }}
-                              className="w-24 h-24 rounded-full"
-                              resizeMode="cover"
-                            />
-                          ) : (
-                            <Wrench size={40} className="text-gray-400" />
-                          )}
-                        </TouchableOpacity>
-                        {/* Verified Badge */}
-                        {serviceProvider.status === "verified" && (
-                          <View className="absolute top-0 right-0 w-7 h-7 bg-blue-500 rounded-full items-center justify-center border-2 border-white">
-                            <CheckCircle2
-                              size={16}
-                              color="white"
-                              fill="white"
-                            />
-                          </View>
+                    {/* Business bio */}
+                    {serviceProvider.master_bio ? (
+                      <Text className="text-sm font-regular text-gray-500 text-center px-8 mb-4">
+                        {serviceProvider.master_bio}
+                      </Text>
+                    ) : null}
+
+                    {/* Contact info row */}
+                    {(serviceProvider.profiles?.email || serviceProvider.profiles?.phone) && (
+                      <View className="flex-row items-center justify-center gap-4 mt-1 mb-2">
+                        {serviceProvider.profiles?.email ? (
+                          <Text className="text-xs font-regular text-gray-500" numberOfLines={1}>
+                            {serviceProvider.profiles.email}
+                          </Text>
+                        ) : null}
+                        {serviceProvider.profiles?.email && serviceProvider.profiles?.phone && (
+                          <View className="w-[1px] h-3 bg-gray-300" />
                         )}
-                      </View>
-                    </View>
-
-                    {/* Form Fields */}
-                    <View className="space-y-4">
-                      {/* Two Column Layout - Email & Phone */}
-                      <View className="flex-row gap-3 mb-4">
-                        {/* Contact Email */}
-                        <View className="flex-1">
-                          <Text className="text-sm font-msemibold text-gray-700 mb-2">
-                            Email
+                        {serviceProvider.profiles?.phone ? (
+                          <Text className="text-xs font-regular text-gray-500">
+                            {serviceProvider.profiles.phone}
                           </Text>
-                          <View className="bg-gray-50 rounded-xl px-4 py-3 border border-gray-200">
-                            <Text
-                              className="text-base font-regular text-gray-900"
-                              numberOfLines={1}
-                            >
-                              {serviceProvider.profiles?.email || "Not set"}
-                            </Text>
-                          </View>
-                        </View>
-
-                        {/* Contact Phone */}
-                        <View className="flex-1">
-                          <Text className="text-sm font-msemibold text-gray-700 mb-2">
-                            Phone
-                          </Text>
-                          <View className="bg-gray-50 rounded-xl px-4 py-3 border border-gray-200">
-                            <Text
-                              className="text-base font-regular text-gray-900"
-                              numberOfLines={1}
-                            >
-                              {serviceProvider.profiles?.phone || "Not set"}
-                            </Text>
-                          </View>
-                        </View>
+                        ) : null}
                       </View>
-
-                      {/* Business Bio - Full Width */}
-                      <View className="mb-4">
-                        <Text className="text-sm font-msemibold text-gray-700 mb-2">
-                          Business Bio
-                        </Text>
-                        <View className="bg-gray-50 rounded-xl px-4 py-3">
-                          <Text className="text-base font-regular text-gray-900">
-                            {serviceProvider.master_bio || (
-                              <Text className="italic text-gray-400">
-                                Not set
-                              </Text>
-                            )}
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
+                    )}
                   </View>
 
+                  {/* Divider */}
+                  <View className="h-[1px] bg-gray-100 mx-4 mb-4" />
+
                   {/* Services Section */}
-                  <View className="bg-white rounded-2xl p-6 shadow-sm">
-                    <Text className="text-lg font-mbold text-gray-900 mb-2">
-                      Services Offered
-                    </Text>
-                    <Text className="text-sm text-gray-500 mb-4">
-                      {providerServices.length > 0
-                        ? `${providerServices.length} service${providerServices.length > 1 ? "s" : ""} offered`
-                        : "No services listed"}
-                    </Text>
+                  <View className="bg-white border-b border-gray-100">
+                    <View className="flex-row items-center justify-between px-4 py-3 border-b border-gray-100">
+                      <Text className="text-base font-mbold text-gray-900">
+                        Services Offered
+                      </Text>
+                      {providerServices.length > 0 && (
+                        <Text className="text-xs font-regular text-gray-400">
+                          {providerServices.length} service{providerServices.length > 1 ? "s" : ""}
+                        </Text>
+                      )}
+                    </View>
 
                     {providerServices.length > 0 ? (
-                      <View className="space-y-3">
+                      <View>
                         {providerServices.map((service) => (
                           <TouchableOpacity
                             key={service.id}
-                            className="bg-gray-50 rounded-xl p-4 border border-gray-200"
+                            className="flex-row items-center px-4 py-4 border-b border-gray-100"
                             onPress={() =>
                               router.push(
                                 `/(users)/servicedetail/${service.id}` as any,
                               )
                             }
                           >
-                            <View className="flex-row">
-                              {/* Service Image */}
-                              {service.images && service.images.length > 0 ? (
-                                <Image
-                                  source={{ uri: service.images[0] }}
-                                  className="w-20 h-20 rounded-lg"
-                                  resizeMode="cover"
-                                />
-                              ) : (
-                                <View className="w-20 h-20 rounded-lg bg-gray-200 items-center justify-center">
-                                  <Wrench size={32} className="text-gray-400" />
-                                </View>
-                              )}
-
-                              {/* Service Info */}
-                              <View className="flex-1 ml-4">
-                                <View className="flex-row items-center justify-between mb-1">
-                                  <Text
-                                    className="text-base font-mbold text-gray-900 flex-1"
-                                    numberOfLines={1}
-                                  >
-                                    {service.name}
-                                  </Text>
-                                  <View
-                                    className={`px-2 py-1 rounded-full ${service.status ? "bg-green-100" : "bg-red-100"}`}
-                                  >
-                                    <Text
-                                      className={`text-xs font-msemibold ${service.status ? "text-green-700" : "text-red-700"}`}
-                                    >
-                                      {service.status ? "Active" : "Inactive"}
-                                    </Text>
-                                  </View>
-                                </View>
-
-                                {service.service_categories && (
-                                  <Text className="text-xs font-regular text-primary mb-1">
-                                    {service.service_categories.name}
-                                  </Text>
-                                )}
-
-                                <Text
-                                  className="text-sm font-regular text-gray-600"
-                                  numberOfLines={2}
-                                >
-                                  {service.description}
-                                </Text>
+                            {/* Service Image */}
+                            {service.images && service.images.length > 0 ? (
+                              <Image
+                                source={{ uri: service.images[0] }}
+                                className="w-16 h-16 rounded-xl"
+                                resizeMode="cover"
+                              />
+                            ) : (
+                              <View className="w-16 h-16 rounded-xl bg-gray-100 items-center justify-center">
+                                <Wrench size={24} className="text-gray-400" />
                               </View>
+                            )}
+
+                            {/* Service Info */}
+                            <View className="flex-1 ml-3">
+                              <Text
+                                className="text-sm font-msemibold text-gray-900 mb-0.5"
+                                numberOfLines={1}
+                              >
+                                {service.name}
+                              </Text>
+                              {service.service_categories && (
+                                <Text className="text-xs font-regular text-primary mb-1">
+                                  {service.service_categories.name}
+                                </Text>
+                              )}
+                              <Text
+                                className="text-xs font-regular text-gray-500"
+                                numberOfLines={2}
+                              >
+                                {service.description}
+                              </Text>
+                            </View>
+
+                            {/* Active badge */}
+                            <View
+                              className={`px-2 py-1 rounded-full ml-2 ${service.status ? "bg-green-100" : "bg-red-100"}`}
+                            >
+                              <Text
+                                className={`text-xs font-msemibold ${service.status ? "text-green-700" : "text-red-700"}`}
+                              >
+                                {service.status ? "Active" : "Inactive"}
+                              </Text>
                             </View>
                           </TouchableOpacity>
                         ))}
                       </View>
                     ) : (
-                      <View className="items-center justify-center py-8 bg-gray-50 rounded-xl">
-                        <Wrench size={48} className="text-gray-400 mb-4" />
-                        <Text className="text-base text-gray-500">
+                      <View className="items-center justify-center py-12">
+                        <Wrench size={40} className="text-gray-300 mb-2" />
+                        <Text className="text-gray-400 font-mmedium">
                           No services listed yet
                         </Text>
                       </View>
@@ -1053,21 +1032,19 @@ export default function PublicProfileScreen() {
       )}
 
       {/* Block/Report Menu Modal */}
-      {showBlockMenu && (
-        <Modal
-          visible={showBlockMenu}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setShowBlockMenu(false)}
+      <Modal
+        visible={showBlockMenu}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowBlockMenu(false)}
+      >
+        <Pressable
+          style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" }}
+          onPress={() => setShowBlockMenu(false)}
         >
-          <TouchableOpacity
-            activeOpacity={1}
-            onPress={() => setShowBlockMenu(false)}
-            className="flex-1 bg-black/50 justify-end"
-          >
+          <Pressable onPress={() => {}}>
             <Animated.View
               entering={SlideInDown.springify()}
-              exiting={SlideOutDown}
               className="bg-white rounded-t-3xl pb-8"
             >
               <View className="px-6 py-4 border-b border-gray-200">
@@ -1120,9 +1097,9 @@ export default function PublicProfileScreen() {
                 </Text>
               </TouchableOpacity>
             </Animated.View>
-          </TouchableOpacity>
-        </Modal>
-      )}
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* Report Modal */}
       {currentUser?.id && userProfile && typeof id === "string" && (

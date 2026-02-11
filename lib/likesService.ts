@@ -2,6 +2,7 @@ import { supabase } from './supabase';
 
 // Check if a user has liked a post
 export const hasUserLikedPost = async (postId: string, userId: string): Promise<boolean> => {
+  if (!postId || !userId) return false;
   try {
     const { data, error } = await supabase
       .from('post_likes')
@@ -24,6 +25,7 @@ export const hasUserLikedPost = async (postId: string, userId: string): Promise<
 
 // Get the number of likes for a post
 export const getPostLikeCount = async (postId: string): Promise<number> => {
+  if (!postId) return 0;
   try {
     const { count, error } = await supabase
       .from('post_likes')
@@ -44,6 +46,7 @@ export const getPostLikeCount = async (postId: string): Promise<number> => {
 
 // Like a post
 export const likePost = async (postId: string, userId: string): Promise<boolean> => {
+  if (!postId || !userId) return false;
   try {
     const { error } = await supabase
       .from('post_likes')
@@ -71,6 +74,7 @@ export const likePost = async (postId: string, userId: string): Promise<boolean>
 
 // Unlike a post
 export const unlikePost = async (postId: string, userId: string): Promise<boolean> => {
+  if (!postId || !userId) return false;
   try {
     const { error } = await supabase
       .from('post_likes')

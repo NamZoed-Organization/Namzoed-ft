@@ -2,6 +2,7 @@ import { supabase } from './supabase';
 
 // Check if a user has bookmarked a post
 export const hasUserBookmarkedPost = async (postId: string, userId: string): Promise<boolean> => {
+  if (!postId || !userId) return false;
   try {
     const { data, error } = await supabase
       .from('user_bookmarks')
@@ -24,6 +25,7 @@ export const hasUserBookmarkedPost = async (postId: string, userId: string): Pro
 
 // Bookmark a post
 export const bookmarkPost = async (postId: string, userId: string): Promise<boolean> => {
+  if (!postId || !userId) return false;
   try {
     const { error } = await supabase
       .from('user_bookmarks')
@@ -51,6 +53,7 @@ export const bookmarkPost = async (postId: string, userId: string): Promise<bool
 
 // Remove bookmark from a post
 export const unbookmarkPost = async (postId: string, userId: string): Promise<boolean> => {
+  if (!postId || !userId) return false;
   try {
     const { error } = await supabase
       .from('user_bookmarks')

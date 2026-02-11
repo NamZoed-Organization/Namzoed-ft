@@ -619,6 +619,7 @@ export default function CreateProductModal({
         <PopupMessage
           visible={showSuccess}
           type="success"
+          title="Success"
           message="Your product is now live and ready for buyers!"
         />
 

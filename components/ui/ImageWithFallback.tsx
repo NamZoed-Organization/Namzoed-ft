@@ -22,8 +22,9 @@ const ImageWithFallback: React.FC<ImageWithFallbackProps> = ({
     setIsLoading(false);
   };
 
-  // Use fallback if there's an error or if source is not valid
-  const imageSource = hasError ? fallbackSource : source;
+  // Use fallback if there's an error, or if source.uri is empty/missing
+  const hasEmptyUri = source && typeof source === 'object' && 'uri' in source && !source.uri;
+  const imageSource = hasError || hasEmptyUri ? fallbackSource : source;
 
   return (
     <Image
