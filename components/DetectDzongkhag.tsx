@@ -1,6 +1,7 @@
 import { useDzongkhag } from "@/contexts/DzongkhagContext";
 import { useUser } from "@/contexts/UserContext";
 import { dzongkhagCenters } from "@/data/dzongkhag";
+import { clamp, useResponsive } from "@/utils/responsive";
 import { BlurView } from "expo-blur";
 import { MapPin, RefreshCw, Settings, X } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
@@ -41,6 +42,24 @@ export default function DetectDzongkhag() {
   const hideLocationLabelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
+  const { ms, vs, wp, hp } = useResponsive();
+  const triggerPaddingY = clamp(vs(8), 6, 12);
+  const triggerIconSize = clamp(ms(20), 18, 24);
+  const labelGap = clamp(ms(6), 4, 8);
+  const labelMaxWidth = clamp(wp(28), 96, 150);
+  const labelFontSize = clamp(ms(14), 12, 16);
+  const overlayTopMargin = clamp(vs(70), 52, 90);
+  const overlayPaddingX = clamp(wp(6), 16, 28);
+  const floatingButtonPadding = clamp(ms(14), 12, 18);
+  const floatingButtonIconSize = clamp(ms(24), 20, 28);
+  const floatingButtonsGap = clamp(ms(24), 16, 28);
+  const floatingButtonsMarginBottom = clamp(vs(24), 18, 30);
+  const modalHeight = clamp(hp(74), 460, 700);
+  const modalRadius = clamp(ms(40), 28, 46);
+  const modalBottomPaddingX = clamp(wp(4), 12, 20);
+  const dzongkhagTextSize = clamp(ms(18), 16, 22);
+  const enableLocationTextSize = clamp(ms(14), 13, 17);
+  const enableLocationGap = clamp(ms(8), 6, 10);
 
   // Helper function to calculate distance between two coordinates
   const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
@@ -171,19 +190,23 @@ export default function DetectDzongkhag() {
         onPress={handleHeaderLocationPress}
         onLongPress={() => setShowOverlay(true)}
         activeOpacity={0.7}
-        className="flex-row items-center justify-end py-2"
+        className="flex-row items-center justify-end"
+        style={{ paddingVertical: triggerPaddingY }}
       >
         <View className="flex-row items-center">
-          <MapPin size={16} color={accessDenied ? "#ef4444" : "#4b5563"} />
+          <MapPin
+            size={triggerIconSize}
+            color={accessDenied ? "#ef4444" : "#4b5563"}
+          />
           <Animated.View
             style={{
               marginLeft: locationLabelAnim.interpolate({
                 inputRange: [0, 1],
-                outputRange: [0, 6],
+                outputRange: [0, labelGap],
               }),
               maxWidth: locationLabelAnim.interpolate({
                 inputRange: [0, 1],
-                outputRange: [0, 120],
+                outputRange: [0, labelMaxWidth],
               }),
               opacity: locationLabelAnim,
             }}
@@ -193,6 +216,7 @@ export default function DetectDzongkhag() {
               className={`text-sm font-medium ${
                 accessDenied ? "text-red-500" : "text-gray-600"
               }`}
+              style={{ fontSize: labelFontSize }}
             >
               {loading
                 ? `Detecting${".".repeat(dotCount)}`
@@ -209,29 +233,43 @@ export default function DetectDzongkhag() {
         onRequestClose={() => setShowOverlay(false)}
       >
         <BlurView intensity={120} tint="light" style={StyleSheet.absoluteFill}>
-          <View className="flex-1 justify-start items-center mt-20 px-6">
+          <View
+            className="flex-1 justify-start items-center"
+            style={{ marginTop: overlayTopMargin, paddingHorizontal: overlayPaddingX }}
+          >
             {/* TOP FLOATING BUTTONS */}
-            <View className="flex-row items-center justify-center mb-6 gap-x-6">
+            <View
+              className="flex-row items-center justify-center"
+              style={{
+                marginBottom: floatingButtonsMarginBottom,
+                columnGap: floatingButtonsGap,
+              }}
+            >
               <TouchableOpacity
                 onPress={refresh}
                 disabled={loading}
-                className="bg-white rounded-full p-4 shadow-xl border border-gray-100"
+                className="bg-white rounded-full shadow-xl border border-gray-100"
+                style={{ padding: floatingButtonPadding }}
               >
-                <RefreshCw size={24} color={loading ? "#9ca3af" : "#3b82f6"} />
+                <RefreshCw
+                  size={floatingButtonIconSize}
+                  color={loading ? "#9ca3af" : "#3b82f6"}
+                />
               </TouchableOpacity>
 
               <TouchableOpacity
                 onPress={() => setShowOverlay(false)}
-                className="bg-white rounded-full p-4 shadow-xl border border-gray-100"
+                className="bg-white rounded-full shadow-xl border border-gray-100"
+                style={{ padding: floatingButtonPadding }}
               >
-                <X size={24} color="#4b5563" />
+                <X size={floatingButtonIconSize} color="#4b5563" />
               </TouchableOpacity>
             </View>
 
             {/* MAIN SOLID MODAL */}
             <View
-              className="bg-white w-full rounded-[40px] overflow-hidden shadow-2xl border border-gray-50"
-              style={{ height: 600 }}
+              className="bg-white w-full overflow-hidden shadow-2xl border border-gray-50"
+              style={{ height: modalHeight, borderRadius: modalRadius }}
             >
               {/* MAP VIEW - 90% */}
               <View style={{ height: "90%" }} className="w-full bg-gray-200">
@@ -340,8 +378,8 @@ export default function DetectDzongkhag() {
 
               {/* DZONGKHAG DISPLAY - 10% */}
               <View
-                style={{ height: "10%" }}
-                className="justify-center items-center px-4"
+                className="justify-center items-center"
+                style={{ height: "10%", paddingHorizontal: modalBottomPaddingX }}
               >
                 {accessDenied ? (
                   <TouchableOpacity
@@ -350,14 +388,21 @@ export default function DetectDzongkhag() {
                       setShowOverlay(false);
                     }}
                     className="flex-row items-center"
+                    style={{ columnGap: enableLocationGap }}
                   >
-                    <Settings size={16} color="#ef4444" />
-                    <Text className="text-red-500 font-semibold ml-2">
+                    <Settings size={clamp(ms(16), 14, 20)} color="#ef4444" />
+                    <Text
+                      className="text-red-500 font-semibold"
+                      style={{ fontSize: enableLocationTextSize }}
+                    >
                       Enable Location
                     </Text>
                   </TouchableOpacity>
                 ) : (
-                  <Text className="text-lg font-bold text-gray-900 text-center">
+                  <Text
+                    className="font-bold text-gray-900 text-center"
+                    style={{ fontSize: dzongkhagTextSize }}
+                  >
                     {loading
                       ? `Detecting${".".repeat(dotCount)}`
                       : dzongkhag || "Unknown Area"}

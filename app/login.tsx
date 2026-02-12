@@ -1,6 +1,7 @@
 import FormInput from "@/components/ui/FormInput";
 import { useUser } from "@/contexts/UserContext";
 import { supabase } from "@/lib/supabase";
+import { clamp, useResponsive } from "@/utils/responsive";
 import { isMongooseUser } from "@/utils/roleCheck";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -65,6 +66,24 @@ export default function Login() {
   const [pendingUserData, setPendingUserData] = useState<any | null>(null);
   const [pendingResolvedEmail, setPendingResolvedEmail] = useState("");
   const { setCurrentUser } = useUser();
+  const { ms, vs, wp } = useResponsive();
+  const screenPaddingX = clamp(wp(10), 20, 44);
+  const headerBottomSpacing = clamp(vs(32), 24, 40);
+  const titleSize = clamp(ms(36), 30, 42);
+  const logoSize = clamp(ms(112), 88, 132);
+  const fieldGap = clamp(vs(12), 10, 16);
+  const loginButtonPaddingY = clamp(vs(20), 14, 22);
+  const loginButtonMarginY = clamp(vs(40), 24, 48);
+  const buttonRadius = clamp(ms(10), 8, 14);
+  const buttonLabelSize = clamp(ms(18), 16, 20);
+  const helperTextSize = clamp(ms(14), 12, 16);
+  const oauthButtonPaddingY = clamp(vs(16), 12, 18);
+  const oauthRadius = clamp(ms(12), 10, 16);
+  const oauthTextSize = clamp(ms(16), 14, 18);
+  const iconSize = clamp(ms(20), 18, 24);
+  const modalPaddingX = clamp(wp(6), 16, 30);
+  const modalCardPadding = clamp(ms(20), 16, 26);
+  const modalTitleSize = clamp(ms(22), 18, 26);
 
   const isValidEmail = (input: string) => {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input);
@@ -101,7 +120,7 @@ export default function Login() {
     if (resolvedEmail && isMongooseUser(resolvedEmail)) {
       router.replace("/mongoose-dashboard");
     } else {
-      router.replace("/(users)");
+      router.replace("/(users)/(tabs)");
     }
   };
 
@@ -362,24 +381,36 @@ export default function Login() {
           behavior={Platform.OS === "ios" ? "padding" : undefined}
           className="flex-1 bg-background"
         >
-          <View className="flex-1 px-[10%] justify-center">
-            <View className="flex-row justify-between items-center mb-8">
+          <View
+            className="flex-1 justify-center"
+            style={{ paddingHorizontal: screenPaddingX }}
+          >
+            <View
+              className="flex-row justify-between items-center"
+              style={{ marginBottom: headerBottomSpacing }}
+            >
               <View>
-                <Text className="text-4xl text-primary/90 font-mbold">
+                <Text
+                  className="text-primary/90 font-mbold"
+                  style={{ fontSize: titleSize }}
+                >
                   Welcome
                 </Text>
-                <Text className="text-4xl text-secondary/90 font-mbold">
+                <Text
+                  className="text-secondary/90 font-mbold"
+                  style={{ fontSize: titleSize }}
+                >
                   Back!
                 </Text>
               </View>
               <Image
                 source={require("../assets/images/logo.png")}
-                className="w-28 h-28"
+                style={{ width: logoSize, height: logoSize }}
                 resizeMode="contain"
               />
             </View>
 
-            <View className="gap-3 flex-2">
+            <View className="flex-2" style={{ rowGap: fieldGap }}>
               <View className="mb-4">
                 <FormInput
                   value={identifier}
@@ -389,9 +420,9 @@ export default function Login() {
                   autoCapitalize="none"
                   leftIcon={
                     isIdentifierEmail ? (
-                      <MaterialIcons name="email" size={20} color="#6B7280" />
+                      <MaterialIcons name="email" size={iconSize} color="#6B7280" />
                     ) : (
-                      <Ionicons name="call" size={20} color="#6B7280" />
+                      <Ionicons name="call" size={iconSize} color="#6B7280" />
                     )
                   }
                   rightAccessory={
@@ -399,7 +430,7 @@ export default function Login() {
                       <Pressable onPress={handleClearIdentifier}>
                         <Ionicons
                           name="close-circle"
-                          size={20}
+                          size={iconSize}
                           color="#9CA3AF"
                         />
                       </Pressable>
@@ -415,13 +446,17 @@ export default function Login() {
                   placeholder="Password"
                   secureTextEntry={!showPassword}
                   leftIcon={
-                    <Ionicons name="lock-closed" size={20} color="#6B7280" />
+                    <Ionicons
+                      name="lock-closed"
+                      size={iconSize}
+                      color="#6B7280"
+                    />
                   }
                   rightAccessory={
                     <Pressable onPress={() => setShowPassword(!showPassword)}>
                       <Ionicons
                         name={showPassword ? "eye" : "eye-off"}
-                        size={20}
+                        size={iconSize}
                         color="#6B7280"
                       />
                     </Pressable>
@@ -430,7 +465,10 @@ export default function Login() {
               </View>
             </View>
 
-            <Text className="text-right text-sm mb-6 font-regular">
+            <Text
+              className="text-right font-regular"
+              style={{ fontSize: helperTextSize, marginBottom: clamp(vs(24), 18, 30) }}
+            >
               <Link href="/forgot" className="text-black font-regular">
                 Forgot Password?
               </Link>
@@ -444,7 +482,7 @@ export default function Login() {
                 loading
               }
               onPress={handleLogin}
-              className={`py-5 rounded-md items-center my-10 ${
+              className={`items-center ${
                 identifier.trim() &&
                 password.length > 0 &&
                 isIdentifierValid &&
@@ -452,25 +490,38 @@ export default function Login() {
                   ? "bg-primary"
                   : "bg-primary/50"
               }`}
+              style={{
+                paddingVertical: loginButtonPaddingY,
+                borderRadius: buttonRadius,
+                marginVertical: loginButtonMarginY,
+              }}
             >
               {loading ? (
                 <ActivityIndicator color="#EDC06D" />
               ) : (
-                <Text className="text-secondary text-center font-semibold text-lg">
+                <Text
+                  className="text-secondary text-center font-semibold"
+                  style={{ fontSize: buttonLabelSize }}
+                >
                   Login
                 </Text>
               )}
             </TouchableOpacity>
 
-            <Text className="text-center font-regular text-gray-500 text-sm mb-2">
+            <Text
+              className="text-center font-regular text-gray-500"
+              style={{ fontSize: helperTextSize, marginBottom: clamp(vs(8), 6, 12) }}
+            >
               - or continue with -
             </Text>
 
             <TouchableOpacity
               disabled={!!oauthLoading}
               onPress={() => handleOAuthLogin("google")}
-              className="bg-white border border-gray-200 py-4 rounded-xl mb-3 flex-row items-center justify-center"
+              className="bg-white border border-gray-200 mb-3 flex-row items-center justify-center"
               style={{
+                paddingVertical: oauthButtonPaddingY,
+                borderRadius: oauthRadius,
                 shadowColor: "#000",
                 shadowOffset: { width: 1, height: 1 },
                 shadowOpacity: 0.1,
@@ -482,8 +533,11 @@ export default function Login() {
                 <ActivityIndicator color="#094569" />
               ) : (
                 <>
-                  <GoogleIcon size={18} />
-                  <Text className="text-gray-900 text-center font-msemibold text-base ml-2">
+                  <GoogleIcon size={clamp(ms(18), 16, 22)} />
+                  <Text
+                    className="text-gray-900 text-center font-msemibold ml-2"
+                    style={{ fontSize: oauthTextSize }}
+                  >
                     Continue with Google
                   </Text>
                 </>
@@ -494,14 +548,25 @@ export default function Login() {
               <TouchableOpacity
                 disabled={!!oauthLoading}
                 onPress={() => handleOAuthLogin("apple")}
-                className="bg-black py-4 rounded-xl mb-4 flex-row items-center justify-center"
+                className="bg-black mb-4 flex-row items-center justify-center"
+                style={{
+                  paddingVertical: oauthButtonPaddingY,
+                  borderRadius: oauthRadius,
+                }}
               >
                 {oauthLoading === "apple" ? (
                   <ActivityIndicator color="white" />
                 ) : (
                   <>
-                    <Ionicons name="logo-apple" size={18} color="white" />
-                    <Text className="text-white text-center font-msemibold text-base ml-2">
+                    <Ionicons
+                      name="logo-apple"
+                      size={clamp(ms(18), 16, 22)}
+                      color="white"
+                    />
+                    <Text
+                      className="text-white text-center font-msemibold ml-2"
+                      style={{ fontSize: oauthTextSize }}
+                    >
                       Continue with Apple
                     </Text>
                   </>
@@ -509,7 +574,10 @@ export default function Login() {
               </TouchableOpacity>
             )}
 
-            <Text className="text-center text-gray-500 font-regular text-sm">
+            <Text
+              className="text-center text-gray-500 font-regular"
+              style={{ fontSize: helperTextSize }}
+            >
               Create an account{" "}
               <Link href="/signup" className="text-black font-medium underline">
                 Sign up
@@ -524,14 +592,23 @@ export default function Login() {
           animationType="fade"
           onRequestClose={() => {}}
         >
-          <View className="flex-1 bg-black/45 justify-center px-6">
-            <View className="bg-white rounded-2xl p-5">
-              <Text className="text-xl font-mbold text-gray-900 mb-2">
+          <View
+            className="flex-1 bg-black/45 justify-center"
+            style={{ paddingHorizontal: modalPaddingX }}
+          >
+            <View
+              className="bg-white rounded-2xl"
+              style={{ padding: modalCardPadding }}
+            >
+              <Text
+                className="font-mbold text-gray-900 mb-2"
+                style={{ fontSize: modalTitleSize }}
+              >
                 Add Phone Number
               </Text>
               <Text className="text-sm text-gray-600 mb-4">
                 First-time sign-in: add your Bhutan number for a better
-                experience. You can skip if you don't have one or prefer not to
+                experience. You can skip if you do not have one or prefer not to
                 share.
               </Text>
 
@@ -540,7 +617,7 @@ export default function Login() {
                 onChangeText={setPhonePromptValue}
                 placeholder="Bhutan phone"
                 keyboardType="phone-pad"
-                leftIcon={<Ionicons name="call" size={20} color="#6B7280" />}
+                leftIcon={<Ionicons name="call" size={iconSize} color="#6B7280" />}
               />
 
               <TouchableOpacity

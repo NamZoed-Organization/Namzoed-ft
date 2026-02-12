@@ -1,5 +1,6 @@
 import { Entypo, MaterialIcons } from "@expo/vector-icons";
 import FormInput from "@/components/ui/FormInput";
+import { clamp, useResponsive } from "@/utils/responsive";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
@@ -21,6 +22,23 @@ export default function Forgot() {
   const [inputType, setInputType] = useState<"email" | "phone" | null>(null);
   const [popup, setPopup] = useState({ visible: false, type: 'error' as 'success' | 'error' | 'warning', title: '', message: '' });
   const router = useRouter();
+  const { ms, vs, wp, hp } = useResponsive();
+  const pagePaddingX = clamp(wp(10), 20, 44);
+  const backTop = clamp(hp(5), 32, 54);
+  const backLeft = clamp(wp(3), 10, 18);
+  const backPadding = clamp(ms(8), 6, 10);
+  const backIconSize = clamp(ms(24), 20, 28);
+  const headerBottom = clamp(vs(32), 24, 40);
+  const titleSize = clamp(ms(36), 30, 42);
+  const logoSize = clamp(ms(112), 88, 132);
+  const inputBottom = clamp(vs(16), 12, 20);
+  const bodyTextSize = clamp(ms(14), 12, 16);
+  const bulletSize = clamp(ms(24), 20, 28);
+  const instructionBottom = clamp(vs(40), 28, 52);
+  const submitPaddingY = clamp(vs(20), 14, 22);
+  const submitRadius = clamp(ms(10), 8, 14);
+  const submitTextSize = clamp(ms(18), 16, 20);
+  const inputIconSize = clamp(ms(20), 18, 24);
 
   const showPopup = (type: 'success' | 'error' | 'warning', title: string, message: string) => {
     setPopup({ visible: true, type, title, message });
@@ -159,7 +177,10 @@ export default function Forgot() {
 
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <View className="flex-1 justify-center items-center bg-white px-[10%]">
+      <View
+        className="flex-1 justify-center items-center bg-white"
+        style={{ paddingHorizontal: pagePaddingX }}
+      >
         {/* Popup Message */}
         <PopupMessage
           visible={popup.visible}
@@ -171,31 +192,45 @@ export default function Forgot() {
         {/* Back Button */}
         <TouchableOpacity
           onPress={() => router.back()}
-          className="absolute top-[5%] left-[3%] z-50 p-2"
+          className="absolute z-50"
+          style={{
+            top: backTop,
+            left: backLeft,
+            padding: backPadding,
+          }}
           activeOpacity={0.6}
         >
-          <Entypo name={"chevron-thin-left"} size={24} color="#094569" />
+          <Entypo name={"chevron-thin-left"} size={backIconSize} color="#094569" />
         </TouchableOpacity>
         <View className="w-full">
           {/* Header */}
-          <View className="flex-row justify-between items-center mb-8">
+          <View
+            className="flex-row justify-between items-center"
+            style={{ marginBottom: headerBottom }}
+          >
             <View>
-              <Text className="text-4xl text-primary/90 font-mbold">
+              <Text
+                className="text-primary/90 font-mbold"
+                style={{ fontSize: titleSize }}
+              >
                 Forgot
               </Text>
-              <Text className="text-4xl text-secondary/90 font-mbold">
+              <Text
+                className="text-secondary/90 font-mbold"
+                style={{ fontSize: titleSize }}
+              >
                 Password?
               </Text>
             </View>
             <Image
               source={require("../assets/images/logo.png")}
-              className="w-28 h-28"
+              style={{ width: logoSize, height: logoSize }}
               resizeMode="contain"
             />
           </View>
 
           {/* Email/Phone Input */}
-          <View className="mb-4">
+          <View style={{ marginBottom: inputBottom }}>
             <FormInput
               value={identifier}
               onChangeText={(text) => {
@@ -208,7 +243,7 @@ export default function Forgot() {
               leftIcon={
                 <MaterialIcons
                   name={inputType === "email" ? "email" : "phone"}
-                  size={20}
+                  size={inputIconSize}
                   color="#6B7280"
                 />
               }
@@ -216,8 +251,11 @@ export default function Forgot() {
           </View>
 
           {/* Instructional Text */}
-          <Text className="flex font-mlight text-gray-400 mb-10">
-            <Text className="text-red-500 text-2xl">• </Text>
+          <Text
+            className="flex font-mlight text-gray-400"
+            style={{ marginBottom: instructionBottom, fontSize: bodyTextSize }}
+          >
+            <Text className="text-red-500" style={{ fontSize: bulletSize }}>• </Text>
             We will send you an OTP to reset your password
           </Text>
 
@@ -226,16 +264,20 @@ export default function Forgot() {
             disabled={(!isValidBhutanesePhone(identifier) && !isValidEmail(identifier)) || loading}
             onPress={handleSubmit}
             activeOpacity={0.8}
-            className={`py-5 rounded-md items-center ${
+            className={`items-center ${
               (isValidBhutanesePhone(identifier) || isValidEmail(identifier)) && !loading
                 ? "bg-primary"
                 : "bg-primary/50"
             }`}
+            style={{ paddingVertical: submitPaddingY, borderRadius: submitRadius }}
           >
             {loading ? (
               <ActivityIndicator color="#EDC06D" />
             ) : (
-              <Text className="text-secondary text-center font-semibold text-lg">
+              <Text
+                className="text-secondary text-center font-semibold"
+                style={{ fontSize: submitTextSize }}
+              >
                 Submit
               </Text>
             )}

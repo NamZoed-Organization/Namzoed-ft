@@ -48,3 +48,36 @@ Join our community of developers creating universal apps.
 
 - [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
 - [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+
+## OneSignal chat push setup
+
+This app is wired to send chat push notifications through OneSignal using Supabase Edge Functions.
+
+### 1) Client env
+
+Set your OneSignal App ID in `.env`:
+
+```bash
+EXPO_PUBLIC_ONESIGNAL_APP_ID=<your-onesignal-app-id>
+```
+
+### 2) Supabase Edge Function secrets
+
+Set these in your Supabase project:
+
+```bash
+supabase secrets set ONESIGNAL_APP_ID=<your-onesignal-app-id>
+supabase secrets set ONESIGNAL_REST_API_KEY=<your-onesignal-rest-api-key>
+```
+
+### 3) Deploy function
+
+```bash
+supabase functions deploy notify-chat-message
+```
+
+### 4) Build requirements
+
+- `onesignal-expo-plugin` is configured in `app.json` with `mode: "development"`.
+- For production/TestFlight/Play Store, switch plugin mode to `"production"` before release builds.
+- Push notifications require a dev build / native build (`npx expo run:ios` or `npx expo run:android`), not Expo Go.

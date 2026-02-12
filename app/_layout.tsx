@@ -4,6 +4,7 @@ import CustomFlashMessage from "@/components/CustomFlashMessage";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { NavigationLogger } from "@/components/NavigationLogger";
 import InAppChatBanner from "@/components/chat/InAppChatBanner";
+import OneSignalBootstrap from "@/components/notifications/OneSignalBootstrap";
 import { UnreadMessagesProvider } from "@/contexts/UnreadMessagesContext";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import {
@@ -66,6 +67,7 @@ export default function RootLayout() {
                 <VideoPlaybackProvider>
                   <VideoCacheProvider>
                     <LiveSessionProvider>
+                      <OneSignalBootstrap />
                       {/* Global Navigation Logger */}
                       <NavigationLogger />
                     <View className="flex-1 bg-background">

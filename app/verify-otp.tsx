@@ -1,6 +1,7 @@
 import { Entypo } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
+import { clamp, useResponsive } from "@/utils/responsive";
 import {
     ActivityIndicator,
     Alert,
@@ -16,7 +17,27 @@ import {
 export default function VerifyOTP() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const { identifier, type, otp, expiresAt } = params;
+  const { identifier, type, otp } = params;
+  const { ms, vs, wp, hp } = useResponsive();
+  const pagePaddingX = clamp(wp(10), 20, 44);
+  const backTop = clamp(hp(5), 32, 54);
+  const backLeft = clamp(wp(3), 10, 18);
+  const backPadding = clamp(ms(8), 6, 10);
+  const backIconSize = clamp(ms(24), 20, 28);
+  const headerBottom = clamp(vs(32), 24, 40);
+  const titleSize = clamp(ms(36), 30, 42);
+  const logoSize = clamp(ms(112), 88, 132);
+  const subtitleSize = clamp(ms(15), 13, 17);
+  const otpValueSize = clamp(ms(16), 14, 18);
+  const otpGap = clamp(ms(14), 10, 20);
+  const otpBoxSize = clamp(ms(64), 52, 72);
+  const otpBoxRadius = clamp(ms(8), 8, 14);
+  const otpTextSize = clamp(ms(24), 20, 30);
+  const timerTextSize = clamp(ms(14), 12, 16);
+  const verifyPaddingY = clamp(vs(20), 14, 22);
+  const verifyRadius = clamp(ms(10), 8, 14);
+  const verifyTextSize = clamp(ms(18), 16, 20);
+  const resendTextSize = clamp(ms(15), 13, 17);
 
   const [otp1, setOtp1] = useState("");
   const [otp2, setOtp2] = useState("");
@@ -49,7 +70,7 @@ export default function VerifyOTP() {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, []);
+  }, [router]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -157,51 +178,83 @@ export default function VerifyOTP() {
 
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <View className="flex-1 justify-center items-center bg-white px-[10%]">
+      <View
+        className="flex-1 justify-center items-center bg-white"
+        style={{ paddingHorizontal: pagePaddingX }}
+      >
         {/* Back Button */}
         <TouchableOpacity
           onPress={() => router.back()}
-          className="absolute top-[5%] left-[3%] z-50 p-2"
+          className="absolute z-50"
+          style={{
+            top: backTop,
+            left: backLeft,
+            padding: backPadding,
+          }}
           activeOpacity={0.6}
         >
-          <Entypo name={"chevron-thin-left"} size={24} color="#094569" />
+          <Entypo name={"chevron-thin-left"} size={backIconSize} color="#094569" />
         </TouchableOpacity>
 
         <View className="w-full">
           {/* Header */}
-          <View className="flex-row justify-between items-center mb-8">
+          <View
+            className="flex-row justify-between items-center"
+            style={{ marginBottom: headerBottom }}
+          >
             <View>
-              <Text className="text-4xl text-primary/90 font-mbold">
+              <Text
+                className="text-primary/90 font-mbold"
+                style={{ fontSize: titleSize }}
+              >
                 Verify
               </Text>
-              <Text className="text-4xl text-secondary/90 font-mbold">
+              <Text
+                className="text-secondary/90 font-mbold"
+                style={{ fontSize: titleSize }}
+              >
                 OTP
               </Text>
             </View>
             <Image
               source={require("../assets/images/logo.png")}
-              className="w-28 h-28"
+              style={{ width: logoSize, height: logoSize }}
               resizeMode="contain"
             />
           </View>
 
           {/* Info Text */}
-          <Text className="text-gray-600 font-regular text-center mb-2">
-            We've sent a 4-digit code to
+          <Text
+            className="text-gray-600 font-regular text-center mb-2"
+            style={{ fontSize: subtitleSize }}
+          >
+            We have sent a 4-digit code to
           </Text>
-          <Text className="text-primary font-semibold text-center mb-8">
+          <Text
+            className="text-primary font-semibold text-center"
+            style={{ fontSize: otpValueSize, marginBottom: headerBottom }}
+          >
             {identifier}
           </Text>
 
           {/* OTP Input Boxes */}
-          <View className="flex-row justify-center gap-4 mb-6">
+          <View
+            className="flex-row justify-center"
+            style={{ columnGap: otpGap, marginBottom: clamp(vs(24), 18, 30) }}
+          >
             <TextInput
               ref={input1Ref}
               value={otp1}
               onChangeText={(val) => handleOtpChange(val, 1)}
               keyboardType="number-pad"
               maxLength={1}
-              className="w-16 h-16 border-2 border-gray-300 rounded-lg text-center text-2xl font-bold text-primary"
+              className="border-2 border-gray-300 text-center font-bold text-primary"
+              style={{
+                width: otpBoxSize,
+                height: otpBoxSize,
+                borderRadius: otpBoxRadius,
+                fontSize: otpTextSize,
+              }}
               selectTextOnFocus
             />
             <TextInput
@@ -211,7 +264,13 @@ export default function VerifyOTP() {
               onKeyPress={(e) => handleKeyPress(e, 2)}
               keyboardType="number-pad"
               maxLength={1}
-              className="w-16 h-16 border-2 border-gray-300 rounded-lg text-center text-2xl font-bold text-primary"
+              className="border-2 border-gray-300 text-center font-bold text-primary"
+              style={{
+                width: otpBoxSize,
+                height: otpBoxSize,
+                borderRadius: otpBoxRadius,
+                fontSize: otpTextSize,
+              }}
               selectTextOnFocus
             />
             <TextInput
@@ -221,7 +280,13 @@ export default function VerifyOTP() {
               onKeyPress={(e) => handleKeyPress(e, 3)}
               keyboardType="number-pad"
               maxLength={1}
-              className="w-16 h-16 border-2 border-gray-300 rounded-lg text-center text-2xl font-bold text-primary"
+              className="border-2 border-gray-300 text-center font-bold text-primary"
+              style={{
+                width: otpBoxSize,
+                height: otpBoxSize,
+                borderRadius: otpBoxRadius,
+                fontSize: otpTextSize,
+              }}
               selectTextOnFocus
             />
             <TextInput
@@ -231,13 +296,22 @@ export default function VerifyOTP() {
               onKeyPress={(e) => handleKeyPress(e, 4)}
               keyboardType="number-pad"
               maxLength={1}
-              className="w-16 h-16 border-2 border-gray-300 rounded-lg text-center text-2xl font-bold text-primary"
+              className="border-2 border-gray-300 text-center font-bold text-primary"
+              style={{
+                width: otpBoxSize,
+                height: otpBoxSize,
+                borderRadius: otpBoxRadius,
+                fontSize: otpTextSize,
+              }}
               selectTextOnFocus
             />
           </View>
 
           {/* Timer */}
-          <Text className="text-center text-gray-500 font-regular mb-8">
+          <Text
+            className="text-center text-gray-500 font-regular"
+            style={{ fontSize: timerTextSize, marginBottom: headerBottom }}
+          >
             Time remaining: <Text className="font-bold text-red-500">{formatTime(timeLeft)}</Text>
           </Text>
 
@@ -246,16 +320,20 @@ export default function VerifyOTP() {
             disabled={!(otp1 && otp2 && otp3 && otp4) || loading}
             onPress={handleVerify}
             activeOpacity={0.8}
-            className={`py-5 rounded-md items-center mb-4 ${
+            className={`items-center mb-4 ${
               (otp1 && otp2 && otp3 && otp4) && !loading
                 ? "bg-primary"
                 : "bg-primary/50"
             }`}
+            style={{ paddingVertical: verifyPaddingY, borderRadius: verifyRadius }}
           >
             {loading ? (
               <ActivityIndicator color="#EDC06D" />
             ) : (
-              <Text className="text-secondary text-center font-semibold text-lg">
+              <Text
+                className="text-secondary text-center font-semibold"
+                style={{ fontSize: verifyTextSize }}
+              >
                 Verify OTP
               </Text>
             )}
@@ -263,8 +341,11 @@ export default function VerifyOTP() {
 
           {/* Resend OTP */}
           <TouchableOpacity onPress={handleResendOtp} activeOpacity={0.7}>
-            <Text className="text-center text-primary font-semibold">
-              Didn't receive the code? <Text className="underline">Resend</Text>
+            <Text
+              className="text-center text-primary font-semibold"
+              style={{ fontSize: resendTextSize }}
+            >
+              Did not receive the code? <Text className="underline">Resend</Text>
             </Text>
           </TouchableOpacity>
         </View>

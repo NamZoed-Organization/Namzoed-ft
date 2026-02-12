@@ -135,7 +135,7 @@ export default function MongooseDashboard() {
           "Access Denied",
           "You don't have permission to access this page.",
         );
-        router.replace("/(users)");
+        router.replace("/(users)/(tabs)");
       } else if (!hasLoadedRef.current) {
         hasLoadedRef.current = true;
         await loadData();

@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { sendChatPushNotification } from "@/services/chatPushService";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from 'expo-image-picker';
 import React, { useState } from "react";
@@ -147,6 +148,12 @@ export default function ChatImagePicker({
 
       console.log('✅ Image message saved to DB:', insertData.id.substring(0, 8));
       onUploadSuccess(insertData, optimisticId);
+
+      void sendChatPushNotification({
+        senderId: String(currentUserUUID),
+        receiverId: String(chatPartnerId),
+        messageType: "image",
+      });
 
     } catch (error) {
       console.error('❌ Upload failed:', error);

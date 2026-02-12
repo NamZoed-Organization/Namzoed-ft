@@ -180,6 +180,10 @@ export default function CategoryDetailScreen() {
   };
 
   const handleBackPress = () => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
     router.push("/categories");
   };
 

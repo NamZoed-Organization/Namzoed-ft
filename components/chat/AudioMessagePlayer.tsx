@@ -1,6 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Audio } from 'expo-av';
-import React, { useEffect, useState } from "react";
+import {
+  createAudioPlayer,
+  setAudioModeAsync,
+  type AudioPlayer,
+  type AudioStatus,
+} from 'expo-audio';
+import React, { useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Text,
@@ -21,56 +26,78 @@ export default function AudioMessagePlayer({
   isCurrentUser,
   isOptimistic = false
 }: AudioMessagePlayerProps) {
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [player, setPlayer] = useState<AudioPlayer | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [currentPosition, setCurrentPosition] = useState(0);
   const [audioDuration, setAudioDuration] = useState(duration);
+  const statusSubscriptionRef = useRef<{ remove: () => void } | null>(null);
 
   useEffect(() => {
     return () => {
-      // Cleanup sound on unmount
-      if (sound) {
-        console.log('🔇 Unloading sound on unmount');
-        sound.unloadAsync();
+      if (statusSubscriptionRef.current) {
+        statusSubscriptionRef.current.remove();
+        statusSubscriptionRef.current = null;
+      }
+
+      if (player) {
+        console.log('🔇 Releasing player on unmount');
+        player.remove();
       }
     };
-  }, [sound]);
+  }, [player]);
+
+  const handlePlaybackStatusUpdate = (status: AudioStatus, currentPlayer: AudioPlayer) => {
+    if (!status.isLoaded) return;
+
+    setCurrentPosition(status.currentTime);
+
+    if (status.duration) {
+      setAudioDuration((prevDuration) => (prevDuration === 0 ? status.duration : prevDuration));
+    }
+
+    if (status.didJustFinish) {
+      setIsPlaying(false);
+      setCurrentPosition(0);
+      currentPlayer.seekTo(0).catch(() => {
+        // Ignore seek reset errors for completed playback.
+      });
+    }
+  };
 
   const handlePlayPause = async () => {
     try {
       if (isPlaying) {
-        // Pause
-        if (sound) {
-          await sound.pauseAsync();
+        if (player) {
+          player.pause();
           setIsPlaying(false);
         }
       } else {
-        // Play
         setIsLoading(true);
 
-        if (sound) {
-          // Resume existing sound
-          await sound.playAsync();
+        if (player) {
+          player.play();
           setIsPlaying(true);
         } else {
-          // Load and play new sound
           console.log('🔊 Loading audio from:', audioUrl);
-          
-          // Configure audio mode
-          await Audio.setAudioModeAsync({
-            allowsRecordingIOS: false,
-            playsInSilentModeIOS: true,
-            staysActiveInBackground: false,
+
+          await setAudioModeAsync({
+            allowsRecording: false,
+            playsInSilentMode: true,
+            shouldPlayInBackground: false,
           });
 
-          const { sound: newSound } = await Audio.Sound.createAsync(
+          const newPlayer = createAudioPlayer(
             { uri: audioUrl },
-            { shouldPlay: true },
-            onPlaybackStatusUpdate
+            { updateInterval: 200 }
           );
+          statusSubscriptionRef.current = newPlayer.addListener(
+            'playbackStatusUpdate',
+            (status) => handlePlaybackStatusUpdate(status, newPlayer)
+          );
+          newPlayer.play();
 
-          setSound(newSound);
+          setPlayer(newPlayer);
           setIsPlaying(true);
         }
 
@@ -80,25 +107,6 @@ export default function AudioMessagePlayer({
       console.error('❌ Audio playback error:', error);
       setIsLoading(false);
       setIsPlaying(false);
-    }
-  };
-
-  const onPlaybackStatusUpdate = (status: any) => {
-    if (status.isLoaded) {
-      setCurrentPosition(status.positionMillis / 1000); // Convert to seconds
-      
-      if (status.durationMillis && audioDuration === 0) {
-        setAudioDuration(status.durationMillis / 1000);
-      }
-
-      if (status.didJustFinish) {
-        setIsPlaying(false);
-        setCurrentPosition(0);
-        // Reset to beginning
-        if (sound) {
-          sound.setPositionAsync(0);
-        }
-      }
     }
   };
 

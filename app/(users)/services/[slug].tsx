@@ -206,6 +206,10 @@ export default function ServiceDetailScreen() {
   );
 
   const handleBackPress = () => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
     router.push('/services');
   };
 

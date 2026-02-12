@@ -178,7 +178,7 @@ export default function FeedScreen() {
   // Register restore handler so mini overlay can reopen the live modal (ensures navigation to feed first)
   useEffect(() => {
     setRestoreHandler(() => () => {
-      router.push("/(users)/feed");
+      router.push("/feed");
       // slight delay to allow navigation stack to settle
       setTimeout(() => setShowLive(true), 30);
     });
@@ -187,7 +187,7 @@ export default function FeedScreen() {
   // If a restore was requested without a handler (e.g., from another screen), open live and consume flag
   useEffect(() => {
     if (pendingRestore) {
-      router.push("/(users)/feed");
+      router.push("/feed");
       setTimeout(() => {
         setShowLive(true);
         consumePendingRestore();

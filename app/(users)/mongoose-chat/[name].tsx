@@ -2,7 +2,15 @@
 import { useUser } from "@/contexts/UserContext";
 import mongooses from "@/data/mongoose";
 import { Ionicons } from "@expo/vector-icons";
-import { Audio } from 'expo-av';
+import {
+  createAudioPlayer,
+  RecordingPresets,
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync,
+  useAudioRecorder,
+  type AudioPlayer,
+  type AudioStatus,
+} from 'expo-audio';
 import * as Location from 'expo-location';
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Mic, Pause, Play, Trash2 } from "lucide-react-native";
@@ -249,11 +257,11 @@ export default function MongooseChatScreen() {
   const [playingMessageIndex, setPlayingMessageIndex] = useState<number | null>(null);
   const [playbackPosition, setPlaybackPosition] = useState(0);
   const scrollViewRef = useRef<ScrollView>(null);
-  const recordingIntervalRef = useRef<number | null>(null);
-  const playbackIntervalRef = useRef<number | null>(null);
-  const recordingRef = useRef<Audio.Recording | null>(null);
-  const soundRef = useRef<Audio.Sound | null>(null);
+  const recordingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const audioPlayerRef = useRef<AudioPlayer | null>(null);
+  const audioPlayerSubscriptionRef = useRef<{ remove: () => void } | null>(null);
   const replyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
 
   // Get mongoose name from route parameter
   const mongooseName = typeof name === 'string' ? name : '';
@@ -384,29 +392,26 @@ export default function MongooseChatScreen() {
   const startRecording = async (mode: 'click' | 'hold') => {
     try {
       // Prevent multiple recordings
-      if (isRecording) return;
+      if (isRecording || recorder.isRecording) return;
 
       console.log(`Starting recording in ${mode} mode...`);
 
       // Request audio permissions
-      const { status } = await Audio.requestPermissionsAsync();
+      const { status } = await requestRecordingPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert('Permission required', 'Please grant microphone permission to record voice messages.');
         return;
       }
 
       // Configure audio mode
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
+      await setAudioModeAsync({
+        allowsRecording: true,
+        playsInSilentMode: true,
       });
 
       // Create and start recording
-      const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
-
-      recordingRef.current = recording;
+      await recorder.prepareToRecordAsync();
+      recorder.record();
       setIsRecording(true);
       setRecordingMode(mode);
       setRecordingDuration(0);
@@ -429,46 +434,50 @@ export default function MongooseChatScreen() {
     }
   };
 
-  const stopRecording = async (shouldSend: boolean = false) => {
+  const stopRecording = async () => {
     try {
-      console.log('Stopping recording...', { shouldSend, recordingMode, isRecording });
+      if (!recorder.isRecording) return;
+
+      console.log('Stopping recording...', { recordingMode, isRecording });
 
       if (recordingIntervalRef.current) {
         clearInterval(recordingIntervalRef.current);
         recordingIntervalRef.current = null;
       }
 
-      if (recordingRef.current) {
-        const result = await recordingRef.current.stopAndUnloadAsync();
-        console.log('Recording stopped, result:', result);
-        const uri = result?.uri;
+      const durationInSeconds = Math.max(
+        1,
+        Math.floor(recorder.getStatus().durationMillis / 1000)
+      );
 
-        if (uri) {
-          console.log('Got URI:', uri);
-          const durationInSeconds = Math.max(1, Math.floor(recordingDuration / 10));
-          const voiceMessage: MongooseMessage = {
-            sender: 'client',
-            content: `Voice message`,
-            timestamp: new Date(),
-            type: 'voice',
-            voiceDuration: durationInSeconds,
-            voiceUri: uri
-          };
+      await recorder.stop();
+      const uri = recorder.uri;
 
-          console.log('Adding voice message:', voiceMessage);
-          setLocalMessages(prev => {
-            const newMessages = [...prev, voiceMessage];
-            console.log('Updated messages:', newMessages);
-            return newMessages;
-          });
-          simulateReply();
-        } else {
-          console.log('No URI in result:', result);
-        }
+      await setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: true,
+      });
 
-        recordingRef.current = null;
+      if (uri) {
+        console.log('Got URI:', uri);
+        const voiceMessage: MongooseMessage = {
+          sender: 'client',
+          content: `Voice message`,
+          timestamp: new Date(),
+          type: 'voice',
+          voiceDuration: durationInSeconds,
+          voiceUri: uri
+        };
+
+        console.log('Adding voice message:', voiceMessage);
+        setLocalMessages(prev => {
+          const newMessages = [...prev, voiceMessage];
+          console.log('Updated messages:', newMessages);
+          return newMessages;
+        });
+        simulateReply();
       } else {
-        console.log('No recording ref found');
+        console.log('No URI found after stopping recorder');
       }
 
       setIsRecording(false);
@@ -491,13 +500,21 @@ export default function MongooseChatScreen() {
       recordingIntervalRef.current = null;
     }
 
-    if (recordingRef.current) {
+    if (recorder.isRecording) {
       try {
-        await recordingRef.current.stopAndUnloadAsync();
-        recordingRef.current = null;
+        await recorder.stop();
       } catch (error) {
         console.error('Error stopping recording:', error);
       }
+    }
+
+    try {
+      await setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: true,
+      });
+    } catch {
+      // Ignore audio mode reset errors while canceling.
     }
 
     setIsRecording(false);
@@ -509,13 +526,13 @@ export default function MongooseChatScreen() {
   const sendVoiceMessage = async () => {
     console.log('Send voice message called', { isRecording, recordingMode });
     if (isRecording && recordingMode === 'click') {
-      await stopRecording(true);
+      await stopRecording();
     }
   };
 
   // Voice message playback functions
-  const playVoiceMessage = async (messageIndex: number, duration: number) => {
-    console.log('Voice message tapped:', { messageIndex, duration, currentlyPlaying: playingMessageIndex });
+  const playVoiceMessage = async (messageIndex: number) => {
+    console.log('Voice message tapped:', { messageIndex, currentlyPlaying: playingMessageIndex });
 
     const message = allMessages[messageIndex];
     if (!message || !message.voiceUri) {
@@ -526,54 +543,53 @@ export default function MongooseChatScreen() {
     if (playingMessageIndex === messageIndex) {
       // Pause current playback
       console.log('Pausing playback');
-      if (soundRef.current) {
-        await soundRef.current.pauseAsync();
-      }
-      if (playbackIntervalRef.current) {
-        clearInterval(playbackIntervalRef.current);
-        playbackIntervalRef.current = null;
+      if (audioPlayerRef.current) {
+        audioPlayerRef.current.pause();
       }
       setPlayingMessageIndex(null);
       setPlaybackPosition(0);
     } else {
       // Stop any current playback
       console.log('Starting new playback');
-      if (soundRef.current) {
-        await soundRef.current.unloadAsync();
-        soundRef.current = null;
+      if (audioPlayerSubscriptionRef.current) {
+        audioPlayerSubscriptionRef.current.remove();
+        audioPlayerSubscriptionRef.current = null;
       }
-      if (playbackIntervalRef.current) {
-        clearInterval(playbackIntervalRef.current);
+      if (audioPlayerRef.current) {
+        audioPlayerRef.current.remove();
+        audioPlayerRef.current = null;
       }
 
       try {
-        // Load and play the audio
-        const { sound } = await Audio.Sound.createAsync(
-          { uri: message.voiceUri },
-          { shouldPlay: true }
-        );
+        await setAudioModeAsync({
+          allowsRecording: false,
+          playsInSilentMode: true,
+          shouldPlayInBackground: false,
+        });
 
-        soundRef.current = sound;
+        const player = createAudioPlayer({ uri: message.voiceUri }, { updateInterval: 200 });
+        audioPlayerRef.current = player;
         setPlayingMessageIndex(messageIndex);
         setPlaybackPosition(0);
 
-        // Set up playback status listener
-        sound.setOnPlaybackStatusUpdate((status) => {
-          if (status.isLoaded) {
+        audioPlayerSubscriptionRef.current = player.addListener(
+          'playbackStatusUpdate',
+          (status: AudioStatus) => {
+            if (!status.isLoaded) return;
+
+            setPlaybackPosition(status.currentTime);
             if (status.didJustFinish) {
-              // Playback finished
               console.log('Playback finished');
               setPlayingMessageIndex(null);
               setPlaybackPosition(0);
-              if (playbackIntervalRef.current) {
-                clearInterval(playbackIntervalRef.current);
-                playbackIntervalRef.current = null;
-              }
-            } else if (status.positionMillis !== undefined && status.durationMillis !== undefined) {
-              setPlaybackPosition(status.positionMillis / 1000); // Convert to seconds
+              player.seekTo(0).catch(() => {
+                // Ignore seek reset errors after playback completion.
+              });
             }
           }
-        });
+        );
+
+        player.play();
 
         console.log('Playing audio...');
       } catch (error) {
@@ -590,17 +606,23 @@ export default function MongooseChatScreen() {
       if (recordingIntervalRef.current) {
         clearInterval(recordingIntervalRef.current);
       }
-      if (playbackIntervalRef.current) {
-        clearInterval(playbackIntervalRef.current);
+
+      if (recorder.isRecording) {
+        recorder.stop().catch(() => {
+          // Ignore recorder cleanup errors on unmount.
+        });
       }
-      if (recordingRef.current) {
-        recordingRef.current.stopAndUnloadAsync();
+
+      if (audioPlayerSubscriptionRef.current) {
+        audioPlayerSubscriptionRef.current.remove();
+        audioPlayerSubscriptionRef.current = null;
       }
-      if (soundRef.current) {
-        soundRef.current.unloadAsync();
+      if (audioPlayerRef.current) {
+        audioPlayerRef.current.remove();
+        audioPlayerRef.current = null;
       }
     };
-  }, []);
+  }, [recorder]);
 
   const simulateReply = () => {
     setIsTyping(true);
@@ -687,7 +709,7 @@ export default function MongooseChatScreen() {
                 isCurrentUser={isCurrentUser}
                 isPlaying={playingMessageIndex === index}
                 playbackPosition={playingMessageIndex === index ? playbackPosition : 0}
-                onPlayPause={() => playVoiceMessage(index, message.voiceDuration || 0)}
+                onPlayPause={() => playVoiceMessage(index)}
               />
             ) : message.type === 'location' ? (
               <View>

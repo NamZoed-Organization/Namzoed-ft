@@ -146,15 +146,15 @@ export default function ServiceDetail() {
   }, [service]);
 
   const handleGoBack = () => {
-    if (service?.category_id) {
+    if (router.canGoBack()) {
+      router.back();
+    } else if (service?.category_id) {
       const categorySlug = service.service_categories?.slug;
       if (categorySlug) {
         router.push(`/services/${categorySlug}` as Href);
       } else {
         router.push("/services" as Href);
       }
-    } else if (router.canGoBack()) {
-      router.back();
     } else {
       router.push("/services" as Href);
     }

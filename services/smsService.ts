@@ -1,21 +1,32 @@
-// Get BT SMS API URL from environment variables
-const BT_SMS_API = process.env.EXPO_PUBLIC_BT_SMS_API;
-
-// Get Tashicell SMS API URL from environment variables
-const TASHI_SMS_API = process.env.EXPO_PUBLIC_TASHI_SMS_API;
+// Support both EXPO_PUBLIC_* (Expo runtime) and legacy unprefixed keys.
+const BT_SMS_API = process.env.EXPO_PUBLIC_BT_SMS_API || process.env.BT_SMS_API;
+const TASHI_SMS_API = process.env.EXPO_PUBLIC_TASHI_SMS_API || process.env.TASHI_SMS_API;
 
 interface SMSPayload {
   phone: string;
   message: string;
 }
 
+interface SMSConfig {
+  btSmsApi: string;
+  tashiSmsApi: string;
+}
+
 /**
- * Validates that required environment variables are set
+ * Reads and validates SMS API environment config
  */
-function validateEnvironment(): void {
+function getSMSConfig(): SMSConfig | null {
   if (!BT_SMS_API || !TASHI_SMS_API) {
-    console.error('SMS API URLs are not configured in environment variables');
+    console.error(
+      'SMS API URLs are not configured. Set EXPO_PUBLIC_BT_SMS_API and EXPO_PUBLIC_TASHI_SMS_API in .env'
+    );
+    return null;
   }
+
+  return {
+    btSmsApi: BT_SMS_API,
+    tashiSmsApi: TASHI_SMS_API,
+  };
 }
 
 /**
@@ -28,11 +39,8 @@ function validateEnvironment(): void {
  */
 export async function sendSMS({ phone, message }: SMSPayload): Promise<boolean> {
   try {
-    // Validate environment variables are set
-    validateEnvironment();
-
-    if (!BT_SMS_API || !TASHI_SMS_API) {
-      console.error('SMS API configuration is missing');
+    const config = getSMSConfig();
+    if (!config) {
       return false;
     }
 
@@ -44,9 +52,9 @@ export async function sendSMS({ phone, message }: SMSPayload): Promise<boolean> 
 
     // Determine which API to use based on phone prefix
     // TypeScript assertion: we've validated these are strings above
-    let apiUrl: string = BT_SMS_API;
+    let apiUrl = config.btSmsApi;
     if (formattedPhone.startsWith('97577')) {
-      apiUrl = TASHI_SMS_API;
+      apiUrl = config.tashiSmsApi;
       console.log('Using Tashicell SMS API');
     } else {
       console.log('Using BT SMS API');

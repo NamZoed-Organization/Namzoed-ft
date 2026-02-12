@@ -106,6 +106,10 @@ export default function MarketplaceDetailScreen() {
   );
 
   const handleGoBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
     router.push("/marketplace");
   };
 

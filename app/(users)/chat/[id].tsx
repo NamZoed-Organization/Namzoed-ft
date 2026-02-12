@@ -6,6 +6,7 @@ import { useUnreadMessages } from "@/contexts/UnreadMessagesContext";
 import { useUser } from "@/contexts/UserContext";
 import users from "@/data/UserData";
 import { supabase } from "@/lib/supabase";
+import { sendChatPushNotification } from "@/services/chatPushService";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
@@ -1172,6 +1173,10 @@ export default function ChatScreen() {
   );
 
   const handleBackNavigation = useCallback(() => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
     router.replace("/(users)/messages");
   }, [router]);
 
@@ -1269,13 +1274,22 @@ export default function ChatScreen() {
         },
       });
     }
-    await sendMessageToServer(messageContent, optimisticId);
+    await sendMessageToServer({
+      messageContent,
+      optimisticId,
+      messagePreview: baseMessageContent,
+    });
   };
 
-  const sendMessageToServer = async (
-    messageContent: string,
-    optimisticId: string,
-  ) => {
+  const sendMessageToServer = async ({
+    messageContent,
+    optimisticId,
+    messagePreview,
+  }: {
+    messageContent: string;
+    optimisticId: string;
+    messagePreview: string;
+  }) => {
     if (!effectiveCurrentUserUUID || !chatPartnerId) return;
 
     try {
@@ -1308,6 +1322,13 @@ export default function ChatScreen() {
         ),
       );
       updateOutgoingStatus(data?.id, "sent");
+
+      void sendChatPushNotification({
+        senderId: String(effectiveCurrentUserUUID),
+        receiverId: String(chatPartnerId),
+        messageType: "text",
+        messagePreview,
+      });
 
       // Fallback: If realtime doesn't pick it up within 2 seconds, add it manually
       setTimeout(() => {
@@ -2062,7 +2083,12 @@ export default function ChatScreen() {
                     m.id === message.id ? { ...m, localStatus: "sending" } : m,
                   ),
                 );
-                sendMessageToServer(message.content, String(message.id));
+                const retryPreview = parseMessageMetaContent(message.content).text;
+                void sendMessageToServer({
+                  messageContent: message.content,
+                  optimisticId: String(message.id),
+                  messagePreview: retryPreview || "Sent a message",
+                });
               }
             }}
             onLongPress={() => {

@@ -196,10 +196,10 @@ export default function ProductDetail() {
   }, [product]);
 
   const handleGoBack = () => {
-    if (product?.category) {
-      router.push(`/categories/${product.category}`);
-    } else if (router.canGoBack()) {
+    if (router.canGoBack()) {
       router.back();
+    } else if (product?.category) {
+      router.push(`/categories/${product.category}`);
     } else {
       router.push("/categories");
     }

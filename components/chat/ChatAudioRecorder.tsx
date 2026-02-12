@@ -1,8 +1,15 @@
 import { supabase } from "@/lib/supabase";
+import { sendChatPushNotification } from "@/services/chatPushService";
 import { Ionicons } from "@expo/vector-icons";
-import { Audio } from 'expo-av';
+import {
+  RecordingPresets,
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync,
+  useAudioRecorder,
+  useAudioRecorderState,
+} from 'expo-audio';
 import * as FileSystem from 'expo-file-system/legacy';
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -30,15 +37,62 @@ export default function ChatAudioRecorder({
 }: ChatAudioRecorderProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
-  const [recordingDuration, setRecordingDuration] = useState(0);
   const [showRecordingModal, setShowRecordingModal] = useState(false);
   const pulseAnim = useState(new Animated.Value(1))[0];
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const recorderState = useAudioRecorderState(recorder, 250);
+  const autoStopIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isMountedRef = useRef(true);
+
+  const getRecorderStatusSafe = () => {
+    try {
+      return recorder.getStatus();
+    } catch {
+      return null;
+    }
+  };
+
+  const isRecorderRecordingSafe = () => {
+    const status = getRecorderStatusSafe();
+    if (status && typeof status.isRecording === "boolean") {
+      return status.isRecording;
+    }
+    return isRecording || recorderState.isRecording;
+  };
+
+  const getRecorderDurationMsSafe = () => {
+    const status = getRecorderStatusSafe();
+    if (status && typeof status.durationMillis === "number") {
+      return status.durationMillis;
+    }
+    return recorderState.durationMillis || 0;
+  };
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (autoStopIntervalRef.current) {
+        clearInterval(autoStopIntervalRef.current);
+        autoStopIntervalRef.current = null;
+      }
+
+      try {
+        void recorder.stop().catch(() => {
+          // Ignore cleanup errors during unmount.
+        });
+      } catch {
+        // Native shared object may already be disposed during unmount.
+      }
+    };
+  }, [recorder]);
 
   const startRecording = async () => {
     try {
+      if (isRecording || isRecorderRecordingSafe()) return;
+
       console.log('🎤 Requesting audio permissions...');
-      const permission = await Audio.requestPermissionsAsync();
+      const permission = await requestRecordingPermissionsAsync();
       
       if (permission.status !== 'granted') {
         Alert.alert('Permission Required', 'Please grant microphone access to send voice messages.');
@@ -46,20 +100,35 @@ export default function ChatAudioRecorder({
       }
 
       // Configure audio mode for recording
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
+      await setAudioModeAsync({
+        allowsRecording: true,
+        playsInSilentMode: true,
       });
 
       console.log('🎤 Starting recording...');
-      const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
+      await recorder.prepareToRecordAsync();
+      recorder.record();
 
-      setRecording(recording);
       setIsRecording(true);
       setShowRecordingModal(true);
-      setRecordingDuration(0);
+
+      if (autoStopIntervalRef.current) {
+        clearInterval(autoStopIntervalRef.current);
+      }
+
+      autoStopIntervalRef.current = setInterval(() => {
+        const elapsedSeconds = Math.floor(getRecorderDurationMsSafe() / 1000);
+        if (elapsedSeconds >= 300) {
+          if (autoStopIntervalRef.current) {
+            clearInterval(autoStopIntervalRef.current);
+            autoStopIntervalRef.current = null;
+          }
+
+          stopRecording().catch((error) => {
+            console.error('❌ Auto-stop failed:', error);
+          });
+        }
+      }, 1000);
 
       // Start pulse animation
       Animated.loop(
@@ -77,22 +146,6 @@ export default function ChatAudioRecorder({
         ])
       ).start();
 
-      // Update duration every second
-      const interval = setInterval(() => {
-        setRecordingDuration((prev) => {
-          const newDuration = prev + 1;
-          // Auto-stop after 5 minutes
-          if (newDuration >= 300) {
-            stopRecording();
-            clearInterval(interval);
-          }
-          return newDuration;
-        });
-      }, 1000);
-
-      // Store interval ID for cleanup
-      (recording as any)._durationInterval = interval;
-
     } catch (error) {
       console.error('❌ Failed to start recording:', error);
       Alert.alert('Error', 'Failed to start recording. Please try again.');
@@ -100,50 +153,70 @@ export default function ChatAudioRecorder({
   };
 
   const stopRecording = async () => {
-    if (!recording) return;
+    if (!isRecorderRecordingSafe()) return;
 
     try {
       console.log('🎤 Stopping recording...');
       
-      // Clear duration interval
-      const interval = (recording as any)._durationInterval;
-      if (interval) clearInterval(interval);
+      if (autoStopIntervalRef.current) {
+        clearInterval(autoStopIntervalRef.current);
+        autoStopIntervalRef.current = null;
+      }
 
-      await recording.stopAndUnloadAsync();
-      const uri = recording.getURI();
+      const durationSeconds = Math.max(
+        1,
+        Math.round(getRecorderDurationMsSafe() / 1000),
+      );
+
+      await recorder.stop();
+      const uri = recorder.uri;
+
+      await setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: true,
+      });
       
-      setRecording(null);
-      setIsRecording(false);
-      setShowRecordingModal(false);
+      if (isMountedRef.current) {
+        setIsRecording(false);
+        setShowRecordingModal(false);
+      }
 
       if (uri) {
         console.log('🎤 Recording saved at:', uri);
-        await uploadAudioToSupabase(uri, recordingDuration);
+        await uploadAudioToSupabase(uri, durationSeconds);
       }
 
     } catch (error) {
       console.error('❌ Failed to stop recording:', error);
-      Alert.alert('Error', 'Failed to save recording.');
-      setIsRecording(false);
-      setShowRecordingModal(false);
+      if (isMountedRef.current) {
+        Alert.alert('Error', 'Failed to save recording.');
+        setIsRecording(false);
+        setShowRecordingModal(false);
+      }
     }
   };
 
   const cancelRecording = async () => {
-    if (!recording) return;
+    if (!isRecorderRecordingSafe()) return;
 
     try {
       console.log('🎤 Canceling recording...');
       
-      // Clear duration interval
-      const interval = (recording as any)._durationInterval;
-      if (interval) clearInterval(interval);
+      if (autoStopIntervalRef.current) {
+        clearInterval(autoStopIntervalRef.current);
+        autoStopIntervalRef.current = null;
+      }
 
-      await recording.stopAndUnloadAsync();
-      setRecording(null);
-      setIsRecording(false);
-      setShowRecordingModal(false);
-      setRecordingDuration(0);
+      await recorder.stop();
+      await setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: true,
+      });
+
+      if (isMountedRef.current) {
+        setIsRecording(false);
+        setShowRecordingModal(false);
+      }
       
     } catch (error) {
       console.error('❌ Failed to cancel recording:', error);
@@ -151,11 +224,14 @@ export default function ChatAudioRecorder({
   };
 
   const uploadAudioToSupabase = async (audioUri: string, duration: number) => {
-    setIsUploading(true);
+    if (isMountedRef.current) {
+      setIsUploading(true);
+    }
+
+    const optimisticId = `temp-${Date.now()}-${Math.random()}`;
 
     try {
       // Create optimistic message
-      const optimisticId = `temp-${Date.now()}-${Math.random()}`;
       const optimisticMessage = {
         id: optimisticId,
         sender_id: currentUserUUID,
@@ -245,13 +321,22 @@ export default function ChatAudioRecorder({
       console.log('✅ Audio message saved to DB:', insertData.id.substring(0, 8));
       onUploadSuccess(insertData, optimisticId);
 
+      void sendChatPushNotification({
+        senderId: String(currentUserUUID),
+        receiverId: String(chatPartnerId),
+        messageType: "audio",
+      });
+
     } catch (error) {
       console.error('❌ Upload error:', error);
-      Alert.alert('Error', 'Failed to send voice message. Please try again.');
-      onUploadError(`temp-${Date.now()}`);
+      if (isMountedRef.current) {
+        Alert.alert('Error', 'Failed to send voice message. Please try again.');
+      }
+      onUploadError(optimisticId);
     } finally {
-      setIsUploading(false);
-      setRecordingDuration(0);
+      if (isMountedRef.current) {
+        setIsUploading(false);
+      }
     }
   };
 
@@ -296,7 +381,7 @@ export default function ChatAudioRecorder({
 
             {/* Recording Duration */}
             <Text className="text-2xl font-bold text-gray-800 mb-2">
-              {formatDuration(recordingDuration)}
+              {formatDuration(Math.floor(recorderState.durationMillis / 1000))}
             </Text>
             <Text className="text-sm text-gray-500 mb-8">
               Recording...

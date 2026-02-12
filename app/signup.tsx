@@ -3,6 +3,7 @@ import {
   MaterialIcons
 } from "@expo/vector-icons";
 import FormInput from "@/components/ui/FormInput";
+import { clamp, useResponsive } from "@/utils/responsive";
 import { Link, useRouter } from "expo-router";
 import React, { useRef, useState } from "react";
 import {
@@ -31,6 +32,18 @@ export default function SignupTab2() {
   const scrollRef = useRef<ScrollView>(null);
 
   const [loading, setLoading] = useState(false);
+  const { ms, vs, wp } = useResponsive();
+  const pagePaddingX = clamp(wp(10), 20, 44);
+  const contentPaddingY = clamp(vs(40), 24, 52);
+  const fieldGap = clamp(vs(15), 12, 20);
+  const headerBottomSpacing = clamp(vs(24), 18, 32);
+  const titleSize = clamp(ms(36), 30, 42);
+  const logoSize = clamp(ms(96), 76, 118);
+  const iconSize = clamp(ms(20), 18, 24);
+  const termsSize = clamp(ms(14), 12, 16);
+  const submitPaddingY = clamp(vs(16), 12, 20);
+  const submitRadius = clamp(ms(8), 8, 12);
+  const submitSize = clamp(ms(16), 14, 18);
 
   // Check if phone number already exists
   const checkPhoneExists = async (phoneNumber: string): Promise<boolean> => {
@@ -158,28 +171,38 @@ export default function SignupTab2() {
     >
       <ScrollView
           ref={scrollRef}
-          className="flex-1 px-[10%]"
+          className="flex-1"
           keyboardShouldPersistTaps="always"
           contentContainerStyle={{
             flexGrow: 1,
             justifyContent: "center",
-            paddingVertical: 40,
-            rowGap: 15,
+            paddingVertical: contentPaddingY,
+            rowGap: fieldGap,
+            paddingHorizontal: pagePaddingX,
           }}
         >
           {/* Header */}
-          <View className="flex-row justify-between items-center mb-6">
+          <View
+            className="flex-row justify-between items-center"
+            style={{ marginBottom: headerBottomSpacing }}
+          >
             <View>
-              <Text className="text-4xl font-mblack text-primary/90 mb-2">
+              <Text
+                className="font-mblack text-primary/90 mb-2"
+                style={{ fontSize: titleSize }}
+              >
                 Create an
               </Text>
-              <Text className="text-4xl font-mbold text-secondary/90">
+              <Text
+                className="font-mbold text-secondary/90"
+                style={{ fontSize: titleSize }}
+              >
                 Account
               </Text>
             </View>
             <Image
               source={require("../assets/images/logo.png")}
-              className="w-24 h-24"
+              style={{ width: logoSize, height: logoSize }}
               resizeMode="contain"
             />
           </View>
@@ -189,7 +212,7 @@ export default function SignupTab2() {
             placeholder="Full Name"
             value={name}
             onChangeText={setName}
-            leftIcon={<MaterialIcons name="person" size={20} color="#6B7280" />}
+            leftIcon={<MaterialIcons name="person" size={iconSize} color="#6B7280" />}
           />
 
           {/* Email */}
@@ -199,7 +222,7 @@ export default function SignupTab2() {
             onChangeText={setEmail}
             keyboardType="email-address"
             autoCapitalize="none"
-            leftIcon={<MaterialIcons name="email" size={20} color="#6B7280" />}
+            leftIcon={<MaterialIcons name="email" size={iconSize} color="#6B7280" />}
           />
 
           {/* Phone */}
@@ -208,7 +231,7 @@ export default function SignupTab2() {
             keyboardType="phone-pad"
             value={phone}
             onChangeText={setPhone}
-            leftIcon={<MaterialIcons name="phone" size={20} color="#6B7280" />}
+            leftIcon={<MaterialIcons name="phone" size={iconSize} color="#6B7280" />}
           />
 
           {/* Password */}
@@ -217,12 +240,12 @@ export default function SignupTab2() {
             secureTextEntry={!showPassword}
             value={password}
             onChangeText={setPassword}
-            leftIcon={<MaterialIcons name="lock" size={20} color="#6B7280" />}
+            leftIcon={<MaterialIcons name="lock" size={iconSize} color="#6B7280" />}
             rightAccessory={
               <Pressable onPress={() => setShowPassword(!showPassword)}>
                 <Ionicons
                   name={showPassword ? "eye" : "eye-off"}
-                  size={20}
+                  size={iconSize}
                   color="#6B7280"
                 />
               </Pressable>
@@ -237,7 +260,7 @@ export default function SignupTab2() {
             onChangeText={setConfirmPassword}
             onFocus={() => setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 300)}
             leftIcon={
-              <MaterialIcons name="lock-outline" size={20} color="#6B7280" />
+              <MaterialIcons name="lock-outline" size={iconSize} color="#6B7280" />
             }
             rightAccessory={
               <Pressable
@@ -245,7 +268,7 @@ export default function SignupTab2() {
               >
                 <Ionicons
                   name={showConfirmPassword ? "eye" : "eye-off"}
-                  size={20}
+                  size={iconSize}
                   color="#6B7280"
                 />
               </Pressable>
@@ -253,7 +276,10 @@ export default function SignupTab2() {
           />
 
           {/* Terms */}
-          <Text className="text-sm font-mlight text-center text-gray-500">
+          <Text
+            className="font-mlight text-center text-gray-500"
+            style={{ fontSize: termsSize }}
+          >
             By clicking the <Text className="text-red-600">Register</Text>{" "}
             button, you agree to the public offer
           </Text>
@@ -261,20 +287,28 @@ export default function SignupTab2() {
           {/* Register Button */}
           <TouchableOpacity
             onPress={handleSignup}
-            className="py-4 rounded-lg"
+            className="rounded-lg"
             activeOpacity={0.8}
             disabled={!isFormValid || loading}
             style={{
               backgroundColor: isFormValid && !loading ? "#094569" : "#09456980",
+              paddingVertical: submitPaddingY,
+              borderRadius: submitRadius,
             }}
           >
-            <Text className="text-secondary text-center font-semibold text-base">
+            <Text
+              className="text-secondary text-center font-semibold"
+              style={{ fontSize: submitSize }}
+            >
               {loading ? "Creating Account..." : "Create Account"}
             </Text>
           </TouchableOpacity>
 
           {/* Already have account */}
-          <Text className="text-center text-gray-500 font-regular">
+          <Text
+            className="text-center text-gray-500 font-regular"
+            style={{ fontSize: termsSize }}
+          >
             Already have an account?{" "}
             <Link href="/login" className="text-primary font-semibold">
               Login

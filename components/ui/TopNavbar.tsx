@@ -3,6 +3,7 @@ import DetectDzongkhag from "@/components/DetectDzongkhag";
 import TabBarButton from "@/components/ui/TabBarButton";
 import { useUnreadMessages } from "@/contexts/UnreadMessagesContext";
 import { useUser } from "@/contexts/UserContext";
+import { clamp, useResponsive } from "@/utils/responsive";
 import { useRouter } from "expo-router";
 import { Send, UserCircle } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
@@ -17,9 +18,25 @@ export default function TopNavbar() {
   const [imageLoadError, setImageLoadError] = useState(false);
   const [showUnreadCount, setShowUnreadCount] = useState(true);
   const badgeModeAnim = useRef(new Animated.Value(1)).current;
+  const { ms, vs, wp } = useResponsive();
   const topInset = Math.max(insets.top, 0);
-  const contentHeight = Platform.OS === "android" ? 48 : 44;
-  const topSpacing = Platform.OS === "android" ? 16 : 10;
+  const contentHeight =
+    Platform.OS === "android" ? clamp(ms(48), 44, 56) : clamp(ms(44), 40, 52);
+  const topSpacing =
+    Platform.OS === "android" ? clamp(vs(16), 12, 22) : clamp(vs(10), 8, 16);
+  const horizontalPadding = clamp(wp(4), 14, 24);
+  const bottomPadding = clamp(vs(8), 6, 12);
+  const logoSize = clamp(ms(40), 34, 46);
+  const logoSpacing = clamp(ms(8), 6, 10);
+  const titleSize = clamp(ms(22), 18, 26);
+  const avatarSize = clamp(ms(30), 26, 36);
+  const actionGap = clamp(ms(16), 12, 22);
+  const sendIconSize = clamp(ms(20), 18, 24);
+  const badgeSize = clamp(ms(12), 10, 16);
+  const badgeDotSize = clamp(ms(8), 6, 10);
+  const badgeTextSize = clamp(ms(8), 7, 10);
+  const badgeBottom = -Math.round(clamp(ms(4), 3, 5));
+  const badgeRight = -Math.round(clamp(ms(8), 6, 10));
 
   // Reset error state when avatar URL changes
   useEffect(() => {
@@ -61,27 +78,38 @@ export default function TopNavbar() {
 
   return (
     <View
-      className="px-4 bg-[#f8f9fa]"
+      className="bg-[#f8f9fa]"
       style={{
         paddingTop: topInset + topSpacing,
         height: topInset + topSpacing + contentHeight,
         justifyContent: "center",
-        paddingBottom: 8,
+        paddingBottom: bottomPadding,
+        paddingHorizontal: horizontalPadding,
       }}
     >
-      <View className="flex-row items-center justify-between h-[44px]">
+      <View
+        className="flex-row items-center justify-between"
+        style={{ height: contentHeight }}
+      >
         <View className="flex-row items-center">
           <Image
             source={require("@/assets/images/logo.png")}
-            className="w-10 h-10 mr-2"
+            style={{
+              width: logoSize,
+              height: logoSize,
+              marginRight: logoSpacing,
+            }}
             resizeMode="contain"
           />
-          <Text className="font-mbold text-xl text-primary">
+          <Text
+            className="font-mbold text-primary"
+            style={{ fontSize: titleSize }}
+          >
             Nam<Text className="text-secondary">Zoed</Text>
           </Text>
         </View>
 
-        <View className="flex-row items-center gap-4">
+        <View className="flex-row items-center" style={{ columnGap: actionGap }}>
           <DetectDzongkhag />
 
           <TabBarButton
@@ -89,18 +117,18 @@ export default function TopNavbar() {
             android_ripple={null}
           >
             <View>
-              <Send size={20} color="#000" strokeWidth={2} />
+              <Send size={sendIconSize} color="#000" strokeWidth={2} />
               {unreadCount > 0 && (
                 <>
                   <Animated.View
                     pointerEvents="none"
                     style={{
                       position: "absolute",
-                      bottom: -4,
-                      right: -8,
-                      minWidth: 12,
-                      height: 12,
-                      paddingHorizontal: 2,
+                      bottom: badgeBottom,
+                      right: badgeRight,
+                      minWidth: badgeSize,
+                      height: badgeSize,
+                      paddingHorizontal: clamp(ms(2), 1, 4),
                       borderRadius: 999,
                       backgroundColor: "#ef4444",
                       alignItems: "center",
@@ -116,7 +144,10 @@ export default function TopNavbar() {
                       ],
                     }}
                   >
-                    <Text className="text-white text-[8px] font-bold">
+                    <Text
+                      className="text-white font-bold"
+                      style={{ fontSize: badgeTextSize }}
+                    >
                       {unreadCount > 99 ? "99+" : unreadCount}
                     </Text>
                   </Animated.View>
@@ -124,10 +155,10 @@ export default function TopNavbar() {
                     pointerEvents="none"
                     style={{
                       position: "absolute",
-                      bottom: -4,
-                      right: -6,
-                      width: 8,
-                      height: 8,
+                      bottom: badgeBottom,
+                      right: -Math.round(clamp(ms(6), 4, 8)),
+                      width: badgeDotSize,
+                      height: badgeDotSize,
                       borderRadius: 999,
                       backgroundColor: "#ef4444",
                       opacity: badgeModeAnim.interpolate({
@@ -156,14 +187,18 @@ export default function TopNavbar() {
             {currentUser?.avatar_url && !imageLoadError ? (
               <Image
                 source={{ uri: currentUser.avatar_url }}
-                className="w-[30px] h-[30px] rounded-full"
+                style={{
+                  width: avatarSize,
+                  height: avatarSize,
+                  borderRadius: avatarSize / 2,
+                }}
                 resizeMode="cover"
                 onError={() => {
                   setImageLoadError(true);
                 }}
               />
             ) : (
-              <UserCircle size={30} stroke="#444" />
+              <UserCircle size={avatarSize} stroke="#444" />
             )}
           </TabBarButton>
         </View>
