@@ -9,6 +9,10 @@ interface ChatPushPayload {
   messagePreview?: string;
 }
 
+const NOTIFY_FUNCTION_NAME = "notify-chat-message";
+const SUPABASE_FUNCTIONS_URL = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/${NOTIFY_FUNCTION_NAME}`;
+
+
 const summarizeInvokeError = async (error: unknown): Promise<string> => {
   const err = error as {
     message?: string;
@@ -70,7 +74,7 @@ export async function sendChatPushNotification({
     const { data, error } = await supabase.functions.invoke<{
       success?: boolean;
       error?: string;
-    }>("notify-chat-message", {
+    }>(NOTIFY_FUNCTION_NAME, {
       body: {
         sender_id: senderId,
         receiver_id: receiverId,
@@ -81,6 +85,11 @@ export async function sendChatPushNotification({
 
     if (error) {
       const detail = await summarizeInvokeError(error);
+      if (detail.includes("status=404") || detail.includes('"code":"NOT_FOUND"')) {
+        console.warn(
+          `${NOTIFY_FUNCTION_NAME} is not deployed on this Supabase project. Deploy it and confirm app env points to the same project. Expected endpoint: ${SUPABASE_FUNCTIONS_URL}`,
+        );
+      }
       console.warn("notify-chat-message invocation error:", detail);
       return false;
     }

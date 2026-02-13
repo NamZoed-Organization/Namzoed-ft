@@ -1,7 +1,9 @@
 import Constants from "expo-constants";
 import { NativeModules } from "react-native";
 
-const ONESIGNAL_APP_ID = process.env.EXPO_PUBLIC_ONESIGNAL_APP_ID;
+const ONESIGNAL_APP_ID =
+  process.env.EXPO_PUBLIC_ONESIGNAL_APP_ID ||
+  (Constants.expoConfig?.extra?.oneSignalAppId as string | undefined);
 
 let initialized = false;
 let warnedMissingAppId = false;
@@ -94,7 +96,7 @@ export const ensureOneSignalInitialized = (): boolean => {
   if (!ONESIGNAL_APP_ID) {
     if (!warnedMissingAppId) {
       console.warn(
-        "OneSignal is not configured. Set EXPO_PUBLIC_ONESIGNAL_APP_ID in .env.",
+        "OneSignal is not configured. Set EXPO_PUBLIC_ONESIGNAL_APP_ID or expo.extra.oneSignalAppId.",
       );
       warnedMissingAppId = true;
     }

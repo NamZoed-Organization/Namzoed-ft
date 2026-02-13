@@ -13,7 +13,11 @@ export default function OneSignalBootstrap() {
   const router = useRouter();
 
   useEffect(() => {
-    ensureOneSignalInitialized();
+    if (!ensureOneSignalInitialized()) return;
+
+    requestOneSignalPermissionIfNeeded().catch((error) => {
+      console.warn("OneSignal permission request failed:", error);
+    });
   }, []);
 
   useEffect(() => {
@@ -44,14 +48,6 @@ export default function OneSignalBootstrap() {
 
   useEffect(() => {
     identifyOneSignalUser(currentUser?.id || null);
-  }, [currentUser?.id]);
-
-  useEffect(() => {
-    if (!currentUser?.id) return;
-
-    requestOneSignalPermissionIfNeeded().catch((error) => {
-      console.warn("OneSignal permission request failed:", error);
-    });
   }, [currentUser?.id]);
 
   return null;
