@@ -1,8 +1,10 @@
+import EarlyAccessBadge from "@/components/EarlyAccessBadge";
+import type { EarlyAccessBadgeType } from "@/lib/earlyAccessService";
+import * as Haptics from "expo-haptics";
+import { ImpactFeedbackStyle } from "expo-haptics";
 import { Edit3, Mail, MoreVertical, User } from "lucide-react-native";
 import React from "react";
 import { Image, Text, TouchableOpacity, View } from "react-native";
-import * as Haptics from "expo-haptics";
-import { ImpactFeedbackStyle } from "expo-haptics";
 
 interface ProfileHeaderProps {
   profileImage: string | null;
@@ -10,11 +12,13 @@ interface ProfileHeaderProps {
   userEmail?: string;
   followerCount: number;
   followingCount: number;
+  badgeType?: EarlyAccessBadgeType;
   onAvatarPress: () => void;
   onAvatarMenuPress: () => void;
   onEditProfile: () => void;
   onFollowingPress: () => void;
   onFollowersPress: () => void;
+  onBadgePress?: () => void;
 }
 
 export default function ProfileHeader({
@@ -23,11 +27,13 @@ export default function ProfileHeader({
   userEmail,
   followerCount,
   followingCount,
+  badgeType,
   onAvatarPress,
   onAvatarMenuPress,
   onEditProfile,
   onFollowingPress,
   onFollowersPress,
+  onBadgePress,
 }: ProfileHeaderProps) {
   return (
     <View className="bg-white border-b border-gray-100 px-4 py-8">
@@ -71,6 +77,16 @@ export default function ProfileHeader({
           <Text className="text-2xl font-mbold text-gray-900 mb-1">
             {userName}
           </Text>
+        )}
+        {badgeType && (
+          <TouchableOpacity
+            className="mb-2"
+            onPress={onBadgePress}
+            disabled={!onBadgePress}
+            activeOpacity={onBadgePress ? 0.7 : 1}
+          >
+            <EarlyAccessBadge badgeType={badgeType} size="md" />
+          </TouchableOpacity>
         )}
         {userEmail && (
           <View className="flex-row items-center mb-2">

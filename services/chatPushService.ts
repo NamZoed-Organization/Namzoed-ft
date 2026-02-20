@@ -74,6 +74,9 @@ export async function sendChatPushNotification({
     const { data, error } = await supabase.functions.invoke<{
       success?: boolean;
       error?: string;
+      warning?: string;
+      delivered?: boolean;
+      recipients?: number;
     }>(NOTIFY_FUNCTION_NAME, {
       body: {
         sender_id: senderId,
@@ -101,6 +104,13 @@ export async function sendChatPushNotification({
         console.warn("notify-chat-message rejected with unexpected payload:", data);
       }
       return false;
+    }
+
+    if (data.warning) {
+      console.info("notify-chat-message accepted with warning:", data.warning, {
+        delivered: data.delivered ?? null,
+        recipients: data.recipients ?? null,
+      });
     }
 
     return true;

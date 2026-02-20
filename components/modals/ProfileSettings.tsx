@@ -1,20 +1,21 @@
 // Path: components/ProfileSettings.tsx
 import {
-  AboutApp,
-  AppVersion,
-  ChangePassword,
-  CommunityGuidelines,
-  ContactUs,
-  DataStorage,
-  HelpCenter,
-  LanguageRegion,
-  Notifications,
-  PrivacyPolicy,
-  SellerPolicy,
-  SendFeedback,
-  TermsOfService
+    AboutApp,
+    AppVersion,
+    AppearanceManager,
+    ChangePassword,
+    CommunityGuidelines,
+    ContactUs,
+    DataStorage,
+    HelpCenter,
+    LanguageRegion,
+    Notifications,
+    PrivacyPolicy,
+    SellerPolicy,
+    SendFeedback,
+    TermsOfService
 } from '@/components/settings';
-import { ArrowLeft, Bell, FileText, Globe, HardDrive, HelpCircle, Info, Key, LogOut, MessageSquare, Phone, ScrollText, Shield, Smartphone, Users } from 'lucide-react-native';
+import { ArrowLeft, Bell, FileText, Globe, HardDrive, HelpCircle, Info, Key, LogOut, MessageSquare, Phone, ScrollText, Shield, Smartphone, Sparkles, Users } from 'lucide-react-native';
 import React, { useRef, useState } from "react";
 import { Animated, Dimensions, PanResponder, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -25,12 +26,13 @@ interface ProfileSettingsProps {
   onLogout: () => Promise<void>;
   panHandlers?: any;
   contentOpacity?: any;
+  initialModal?: string;
 }
 
-export default function ProfileSettings({ onClose, currentUser, onLogout, panHandlers, contentOpacity }: ProfileSettingsProps) {
+export default function ProfileSettings({ onClose, currentUser, onLogout, panHandlers, contentOpacity, initialModal }: ProfileSettingsProps) {
   const insets = useSafeAreaInsets();
   
-  const [modalStack, setModalStack] = useState<string[]>([]);
+  const [modalStack, setModalStack] = useState<string[]>(initialModal ? [initialModal] : []);
   
   // Horizontal slide for nested menus
   const slideAnim = useRef(new Animated.Value(0)).current;
@@ -100,6 +102,7 @@ export default function ProfileSettings({ onClose, currentUser, onLogout, panHan
 
   const renderModalContent = () => {
     switch (activeModal) {
+      case 'appearance': return <AppearanceManager onClose={closeActiveModal} userId={currentUser?.id} />;
       case 'changePassword': return <ChangePassword onClose={closeActiveModal} />;
       case 'privacyPolicy': return <PrivacyPolicy onClose={closeActiveModal} />;
       case 'sellerPolicy': return <SellerPolicy onClose={closeActiveModal} />;
@@ -172,6 +175,29 @@ export default function ProfileSettings({ onClose, currentUser, onLogout, panHan
                   paddingBottom: (insets.bottom || 20) + 10
                 }}
               >
+                {/* Personalisation Section */}
+                <View className="mb-6">
+                  <Text className="text-sm font-msemibold text-gray-500 px-2 py-2 uppercase tracking-wide">
+                    Personalisation
+                  </Text>
+                  <View className="bg-gray-50 rounded-xl overflow-hidden">
+                    <TouchableOpacity
+                      className="flex-row items-center justify-between px-4 py-4"
+                      onPress={() => handleNavigation('appearance')}
+                      activeOpacity={0.7}
+                    >
+                      <View className="flex-row items-center">
+                        <Sparkles size={20} color="#c9a96e" style={{ marginRight: 12 }} />
+                        <View>
+                          <Text className="text-base font-medium text-gray-900">Appearance</Text>
+                          <Text className="text-xs text-gray-400 mt-0.5">Badge style &amp; chat bubble skin</Text>
+                        </View>
+                      </View>
+                      <Text className="text-gray-400 font-bold text-lg">→</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
                 {/* Privacy Section */}
                 <View className="mb-6">
                   <Text className="text-sm font-msemibold text-gray-500 px-2 py-2 uppercase tracking-wide">

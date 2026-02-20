@@ -13,6 +13,17 @@ let warnedExpoGoUnsupported = false;
 
 type OneSignalSdkModule = typeof import("react-native-onesignal");
 type NotificationClickHandler = (event: any) => void;
+export type OneSignalDebugState = {
+  expectedExternalId: string | null;
+  externalId: string | null;
+  oneSignalId: string | null;
+  permission: boolean;
+  canRequestPermission: boolean;
+  permissionNative: number | null;
+  pushSubscriptionId: string | null;
+  pushOptedIn: boolean;
+  pushTokenPrefix: string | null;
+};
 
 let cachedOneSignalSdk: OneSignalSdkModule | null | undefined;
 
@@ -134,13 +145,20 @@ export const requestOneSignalPermissionIfNeeded = async (): Promise<boolean> => 
 
   try {
     const hasPermission = await sdk.OneSignal.Notifications.getPermissionAsync();
-    if (hasPermission) return true;
+    if (hasPermission) {
+      await ensureOneSignalPushOptedIn("permission_already_granted");
+      return true;
+    }
 
     const canRequest =
       await sdk.OneSignal.Notifications.canRequestPermission();
     if (!canRequest) return false;
 
-    return sdk.OneSignal.Notifications.requestPermission(true);
+    const granted = await sdk.OneSignal.Notifications.requestPermission(true);
+    if (granted) {
+      await ensureOneSignalPushOptedIn("permission_just_granted");
+    }
+    return granted;
   } catch {
     if (!warnedRuntimeFailure) {
       console.warn(
@@ -150,6 +168,57 @@ export const requestOneSignalPermissionIfNeeded = async (): Promise<boolean> => 
     }
     return false;
   }
+};
+
+export const ensureOneSignalPushOptedIn = async (
+  context = "ensure_push_opt_in",
+): Promise<boolean> => {
+  if (!ensureOneSignalInitialized()) return false;
+
+  const sdk = getOneSignalSdk();
+  if (!sdk) return false;
+
+  try {
+    const hasPermission = await sdk.OneSignal.Notifications.getPermissionAsync();
+    if (!hasPermission) return false;
+
+    const isOptedIn =
+      await sdk.OneSignal.User.pushSubscription.getOptedInAsync();
+    if (isOptedIn) return true;
+
+    sdk.OneSignal.User.pushSubscription.optIn();
+
+    const isOptedInAfter =
+      await sdk.OneSignal.User.pushSubscription.getOptedInAsync();
+    if (!isOptedInAfter) {
+      console.warn(`[OneSignal Debug][${context}] push subscription still opted out`);
+      return false;
+    }
+
+    console.log(`[OneSignal Debug][${context}] push subscription opted in`);
+    return true;
+  } catch (error) {
+    console.warn(`[OneSignal Debug][${context}] opt-in check failed`, error);
+    return false;
+  }
+};
+
+export const addOneSignalForegroundNotificationHandler = (
+  handler: (event: any) => void,
+): (() => void) | null => {
+  if (!ensureOneSignalInitialized()) return null;
+
+  return withOneSignalGuard((sdk) => {
+    sdk.OneSignal.Notifications.addEventListener("foregroundWillDisplay", handler);
+    return () => {
+      withOneSignalGuard((innerSdk) => {
+        innerSdk.OneSignal.Notifications.removeEventListener(
+          "foregroundWillDisplay",
+          handler,
+        );
+      }, undefined);
+    };
+  }, null);
 };
 
 export const addOneSignalNotificationClickListener = (
@@ -168,4 +237,109 @@ export const addOneSignalNotificationClickListener = (
       }, undefined);
     };
   }, null);
+};
+
+export const logOneSignalDebugState = async (
+  context: string,
+  expectedExternalId?: string | null,
+): Promise<void> => {
+  if (!ensureOneSignalInitialized()) {
+    console.warn(`[OneSignal Debug][${context}] not initialized`);
+    return;
+  }
+
+  const sdk = getOneSignalSdk();
+  if (!sdk) {
+    console.warn(`[OneSignal Debug][${context}] sdk unavailable`);
+    return;
+  }
+
+  try {
+    const [
+      permission,
+      canRequestPermission,
+      permissionNative,
+      externalId,
+      oneSignalId,
+      pushSubscriptionId,
+      pushToken,
+      pushOptedIn,
+    ] = await Promise.all([
+      sdk.OneSignal.Notifications.getPermissionAsync(),
+      sdk.OneSignal.Notifications.canRequestPermission(),
+      sdk.OneSignal.Notifications.permissionNative(),
+      sdk.OneSignal.User.getExternalId(),
+      sdk.OneSignal.User.getOnesignalId(),
+      sdk.OneSignal.User.pushSubscription.getIdAsync(),
+      sdk.OneSignal.User.pushSubscription.getTokenAsync(),
+      sdk.OneSignal.User.pushSubscription.getOptedInAsync(),
+    ]);
+
+    console.log(`[OneSignal Debug][${context}]`, {
+      expectedExternalId: expectedExternalId ?? null,
+      externalId,
+      oneSignalId,
+      permission,
+      canRequestPermission,
+      permissionNative,
+      pushSubscriptionId,
+      pushOptedIn,
+      pushTokenPrefix: pushToken ? String(pushToken).slice(0, 16) : null,
+    });
+
+    if (expectedExternalId && externalId !== String(expectedExternalId)) {
+      console.warn(`[OneSignal Debug][${context}] external_id mismatch`, {
+        expectedExternalId,
+        actualExternalId: externalId,
+      });
+    }
+  } catch (error) {
+    console.warn(`[OneSignal Debug][${context}] failed`, error);
+  }
+};
+
+export const getOneSignalDebugState = async (
+  expectedExternalId?: string | null,
+): Promise<OneSignalDebugState | null> => {
+  if (!ensureOneSignalInitialized()) return null;
+
+  const sdk = getOneSignalSdk();
+  if (!sdk) return null;
+
+  try {
+    const [
+      permission,
+      canRequestPermission,
+      permissionNative,
+      externalId,
+      oneSignalId,
+      pushSubscriptionId,
+      pushToken,
+      pushOptedIn,
+    ] = await Promise.all([
+      sdk.OneSignal.Notifications.getPermissionAsync(),
+      sdk.OneSignal.Notifications.canRequestPermission(),
+      sdk.OneSignal.Notifications.permissionNative(),
+      sdk.OneSignal.User.getExternalId(),
+      sdk.OneSignal.User.getOnesignalId(),
+      sdk.OneSignal.User.pushSubscription.getIdAsync(),
+      sdk.OneSignal.User.pushSubscription.getTokenAsync(),
+      sdk.OneSignal.User.pushSubscription.getOptedInAsync(),
+    ]);
+
+    return {
+      expectedExternalId: expectedExternalId ? String(expectedExternalId) : null,
+      externalId,
+      oneSignalId,
+      permission,
+      canRequestPermission,
+      permissionNative: typeof permissionNative === "number" ? permissionNative : null,
+      pushSubscriptionId,
+      pushOptedIn,
+      pushTokenPrefix: pushToken ? String(pushToken).slice(0, 16) : null,
+    };
+  } catch (error) {
+    console.warn("[OneSignal Debug] getOneSignalDebugState failed", error);
+    return null;
+  }
 };

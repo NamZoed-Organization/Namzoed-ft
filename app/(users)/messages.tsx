@@ -21,12 +21,18 @@ import {
   FlatList,
   Image,
   Pressable,
-  ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Reanimated, {
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from "react-native-reanimated";
 
 // Types
 interface IMessage {
@@ -62,6 +68,73 @@ const getUserData = (phoneNumber: string): IUserData | null => {
   }
 };
 
+/**
+ * SwipeToDeleteRow — left-swipe to reveal delete action.
+ * Runs fully on the UI thread via RNGH v2 + Reanimated.
+ */
+const SwipeToDeleteRow = React.memo(function SwipeToDeleteRow({
+  children,
+  onDelete,
+}: {
+  children: React.ReactNode;
+  onDelete: () => void;
+}) {
+  const translateX = useSharedValue(0);
+  const SNAP_THRESHOLD = -60;
+  const MAX_SWIPE = -96;
+
+  const pan = Gesture.Pan()
+    // Only activate when swiping left ≥10px
+    .activeOffsetX([-Infinity, -10])
+    // Fail if user moves right first — lets taps and right-swipes through
+    .failOffsetX(10)
+    // Fail on vertical drag — lets the list scroll freely
+    .failOffsetY([-20, 20])
+    .onUpdate((e) => {
+      'worklet';
+      translateX.value = Math.max(MAX_SWIPE, Math.min(0, e.translationX));
+    })
+    .onEnd(() => {
+      'worklet';
+      const shouldDelete = translateX.value <= SNAP_THRESHOLD;
+      translateX.value = withSpring(0, { damping: 20, stiffness: 300 });
+      if (shouldDelete) {
+        runOnJS(onDelete)();
+      }
+    });
+
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }));
+
+  return (
+    <GestureDetector gesture={pan}>
+      <View style={{ overflow: 'hidden', width: '100%' }}>
+        {/* Delete action revealed behind */}
+        <View
+          style={{
+            position: 'absolute',
+            right: 0,
+            top: 0,
+            bottom: 0,
+            width: 96,
+            backgroundColor: '#EF4444',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Ionicons name="trash-outline" size={20} color="white" />
+          <Text style={{ color: 'white', fontSize: 11, fontWeight: '600', marginTop: 4 }}>Delete</Text>
+        </View>
+        {/* Sliding foreground */}
+        <Reanimated.View style={[animStyle, { backgroundColor: 'white', width: '100%' }]}>
+          {children}
+        </Reanimated.View>
+      </View>
+    </GestureDetector>
+  );
+});
+
 export default function MessageScreen() {
   const { currentUser } = useUser();
   const { refreshUnreadCount, currentUserUUID } = useUnreadMessages();
@@ -86,12 +159,6 @@ export default function MessageScreen() {
     null,
   );
   const bookingsPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const conversationSwipeStartXRef = useRef<Record<string, number>>({});
-  const didConversationSwipeRef = useRef(false);
-  const [activeConversationSwipeId, setActiveConversationSwipeId] = useState<
-    string | null
-  >(null);
-  const [activeConversationSwipeX, setActiveConversationSwipeX] = useState(0);
   const candidateUserIds = useMemo(() => {
     const ids = new Set<string>();
     if (currentUserUUID) ids.add(String(currentUserUUID));
@@ -125,6 +192,8 @@ export default function MessageScreen() {
       }
     }
 
+    if (message.message_type === "mongoose_invite")
+      return isMine ? "You: 🦡 Mongoose delivery request" : "🦡 Mongoose delivery request";
     if (message.message_type === "image" || message.image_url) return "Photo";
     if (message.message_type === "audio" || message.audio_url)
       return "Voice message";
@@ -810,63 +879,6 @@ export default function MessageScreen() {
     );
   };
 
-  const handleConversationSwipeStart = (conversationId: string, x: number) => {
-    conversationSwipeStartXRef.current[conversationId] = x;
-    didConversationSwipeRef.current = false;
-    setActiveConversationSwipeId(conversationId);
-    setActiveConversationSwipeX(0);
-  };
-
-  const handleConversationSwipeMove = (conversationId: string, x: number) => {
-    const startX = conversationSwipeStartXRef.current[conversationId];
-    if (
-      typeof startX !== "number" ||
-      (activeConversationSwipeId !== null &&
-        activeConversationSwipeId !== conversationId)
-    ) {
-      return;
-    }
-    const deltaX = Math.min(0, Math.max(-96, x - startX));
-    if (Math.abs(deltaX) > 8) {
-      didConversationSwipeRef.current = true;
-    }
-    setActiveConversationSwipeX(deltaX);
-  };
-
-  const handleConversationSwipeEnd = (
-    conversationId: string,
-    partnerId: string,
-    partnerName: string,
-    x: number,
-  ) => {
-    const startX = conversationSwipeStartXRef.current[conversationId];
-    delete conversationSwipeStartXRef.current[conversationId];
-    if (typeof startX !== "number") return;
-
-    const deltaX = Math.min(activeConversationSwipeX, x - startX);
-    const shouldPromptDelete = deltaX <= -72;
-
-    setActiveConversationSwipeX(0);
-    setActiveConversationSwipeId((prev) =>
-      prev === conversationId ? null : prev,
-    );
-
-    if (shouldPromptDelete) {
-      Alert.alert(
-        "Delete Chat?",
-        `Do you want to delete your chat with ${partnerName}?`,
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Delete",
-            style: "destructive",
-            onPress: () => handleDeleteConversation(partnerId, partnerName),
-          },
-        ],
-      );
-    }
-  };
-
   const renderConversationItem = ({ item: conversation }: { item: any }) => {
     // Handle both UUID-based profiles and phone-based profiles
     const userName =
@@ -885,40 +897,25 @@ export default function MessageScreen() {
     const conversationId = String(conversation.partnerId);
 
     return (
-      <View className="border-b border-gray-200 overflow-hidden">
-        <View className="absolute right-0 top-0 bottom-0 w-24 bg-red-500 items-center justify-center">
-          <Ionicons name="trash-outline" size={20} color="white" />
-          <Text className="text-white text-xs font-semibold mt-1">Delete</Text>
-        </View>
-
+      <SwipeToDeleteRow
+        onDelete={() =>
+          Alert.alert(
+            "Delete Chat?",
+            `Do you want to delete your chat with ${userName}?`,
+            [
+              { text: "Cancel", style: "cancel" },
+              {
+                text: "Delete",
+                style: "destructive",
+                onPress: () => handleDeleteConversation(conversation.partnerId, userName),
+              },
+            ],
+          )
+        }
+      >
         <Pressable
-          className="flex-row items-center p-4 bg-white"
-          style={
-            activeConversationSwipeId === conversationId
-              ? { position: "relative", left: activeConversationSwipeX }
-              : undefined
-          }
-          onPress={() => {
-            if (didConversationSwipeRef.current) {
-              didConversationSwipeRef.current = false;
-              return;
-            }
-            router.push(`/(users)/chat/${conversation.partnerId}`);
-          }}
-          onPressIn={(e) =>
-            handleConversationSwipeStart(conversationId, e.nativeEvent.pageX)
-          }
-          onTouchMove={(e) =>
-            handleConversationSwipeMove(conversationId, e.nativeEvent.pageX)
-          }
-          onPressOut={(e) =>
-            handleConversationSwipeEnd(
-              conversationId,
-              conversation.partnerId,
-              userName,
-              e.nativeEvent.pageX,
-            )
-          }
+          className="flex-row items-center py-4 px-4 bg-white"
+          onPress={() => router.push(`/(users)/chat/${conversation.partnerId}`)}
         >
           {avatarUri ? (
             <Image
@@ -933,33 +930,35 @@ export default function MessageScreen() {
               </Text>
             </View>
           )}
-          <View className="flex-1">
-            <Text
-              className={`text-gray-800 ${hasUnreadIncoming ? "font-bold" : "font-semibold"}`}
-            >
-              {userName}
-            </Text>
-            <Text
-              className={`text-sm mt-1 ${hasUnreadIncoming ? "text-gray-800 font-semibold" : "text-gray-500"}`}
-              numberOfLines={1}
-            >
-              {formatConversationPreview(lastMessage, isLastMessageMine)}
-            </Text>
-          </View>
-          <Text className="text-xs text-gray-400 mr-2">
-            {formatConversationTime(conversation.lastMessage?.created_at)}
-          </Text>
-          {conversation.unreadCount > 0 && (
-            <View className="mr-2 min-w-[22px] h-[22px] px-1 rounded-full bg-primary items-center justify-center">
-              <Text className="text-white text-[11px] font-bold">
-                {conversation.unreadCount > 99
-                  ? "99+"
-                  : conversation.unreadCount}
+          <View className="flex-1 flex-row items-center border-b border-gray-200 pb-4 -mb-4">
+            <View className="flex-1">
+              <Text
+                className={`text-gray-800 ${hasUnreadIncoming ? "font-bold" : "font-semibold"}`}
+              >
+                {userName}
+              </Text>
+              <Text
+                className={`text-sm mt-1 ${hasUnreadIncoming ? "text-gray-800 font-semibold" : "text-gray-500"}`}
+                numberOfLines={1}
+              >
+                {formatConversationPreview(lastMessage, isLastMessageMine)}
               </Text>
             </View>
-          )}
+            <Text className="text-xs text-gray-400 mr-2">
+              {formatConversationTime(conversation.lastMessage?.created_at)}
+            </Text>
+            {conversation.unreadCount > 0 && (
+              <View className="mr-2 min-w-[22px] h-[22px] px-1 rounded-full bg-primary items-center justify-center">
+                <Text className="text-white text-[11px] font-bold">
+                  {conversation.unreadCount > 99
+                    ? "99+"
+                    : conversation.unreadCount}
+                </Text>
+              </View>
+            )}
+          </View>
         </Pressable>
-      </View>
+      </SwipeToDeleteRow>
     );
   };
 
@@ -1193,158 +1192,137 @@ export default function MessageScreen() {
         </View>
       </View>
 
-      {/* Scrollable Content */}
-      <ScrollView
-        className="flex-1"
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ flexGrow: 1 }}
-      >
-        {/* Tabs */}
-        <View className="flex-row bg-white border-b border-gray-200">
-          {tabs.map((tab, index) => (
-            <TouchableOpacity
-              key={index}
-              className={`flex-1 py-4 items-center ${
-                activeTab === index ? "border-b-2 border-primary" : ""
+      {/* Tabs — fixed below the header */}
+      <View className="flex-row bg-white border-b border-gray-200">
+        {tabs.map((tab, index) => (
+          <TouchableOpacity
+            key={index}
+            className={`flex-1 py-4 items-center ${
+              activeTab === index ? "border-b-2 border-primary" : ""
+            }`}
+            onPress={() => setActiveTab(index)}
+          >
+            <Text
+              className={`font-medium ${
+                activeTab === index ? "text-primary" : "text-gray-500"
               }`}
-              onPress={() => setActiveTab(index)}
             >
-              <Text
-                className={`font-medium ${
-                  activeTab === index ? "text-primary" : "text-gray-500"
-                }`}
-              >
-                {tab}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+              {tab}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
 
-        {/* Search Bar (only for Messages tab) */}
-        {activeTab === 0 && (
-          <View className="p-4 bg-white border-b border-gray-200">
-            <View className="flex-row items-center bg-gray-100 rounded-lg px-3 py-2">
-              <Ionicons name="search" size={20} color="#666" />
-              <TextInput
-                className="flex-1 ml-2 text-base"
-                placeholder="Search conversations or find new users..."
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-              />
-              {isSearching && (
-                <View className="ml-2">
-                  <Text className="text-xs text-gray-500">Searching...</Text>
-                </View>
-              )}
-            </View>
-          </View>
-        )}
-
-        {/* Content based on active tab */}
-        <View className="flex-1 bg-background">
-          {activeTab === 0 && (
+      {/* Tab 0: Messages — single native FlatList, no nesting */}
+      {activeTab === 0 && (
+        <FlatList
+          style={{ flex: 1 }}
+          data={searchQuery.trim() ? searchResults : conversations}
+          renderItem={
+            searchQuery.trim() ? renderSearchResultItem : renderConversationItem
+          }
+          keyExtractor={(item) =>
+            item.id || item.partnerId || item.phone || item.phone_number
+          }
+          ListHeaderComponent={() => (
             <>
-              {/* Show search results when searching */}
-              {searchQuery.trim() && searchResults.length > 0 && (
-                <>
-                  <View className="px-4 py-2 bg-gray-50 border-b border-gray-200">
-                    <Text className="text-sm font-medium text-gray-600">
-                      Search Results ({searchResults.length})
-                    </Text>
-                  </View>
-                  <FlatList
-                    data={searchResults}
-                    renderItem={renderSearchResultItem}
-                    keyExtractor={(item) =>
-                      item.id || item.phone || item.phone_number
-                    }
-                    scrollEnabled={false}
-                    showsVerticalScrollIndicator={false}
+              {/* Search Bar */}
+              <View className="p-4 bg-white border-b border-gray-200">
+                <View className="flex-row items-center bg-gray-100 rounded-lg px-3 py-2">
+                  <Ionicons name="search" size={20} color="#666" />
+                  <TextInput
+                    className="flex-1 ml-2 text-base"
+                    placeholder="Search conversations or find new users..."
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
                   />
-                </>
-              )}
-
-              {/* Show "no results" when searching but no results */}
-              {searchQuery.trim() &&
-                searchResults.length === 0 &&
-                !isSearching && (
-                  <View className="flex-1 items-center justify-center py-8">
-                    <Text className="text-gray-500 text-center">
-                      No users found for "{searchQuery}"
-                    </Text>
-                  </View>
-                )}
-
-              {/* Show existing conversations when not searching */}
-              {!searchQuery.trim() && (
-                <>
-                  {conversations.length > 0 ? (
-                    <>
-                      <View className="px-4 py-2 bg-gray-50 border-b border-gray-200">
-                        <Text className="text-sm font-medium text-gray-600">
-                          Your Chats ({conversations.length})
-                        </Text>
-                      </View>
-                      <FlatList
-                        data={conversations}
-                        renderItem={renderConversationItem}
-                        keyExtractor={(item) => item.partnerId}
-                        scrollEnabled={false}
-                        showsVerticalScrollIndicator={false}
-                      />
-                    </>
-                  ) : (
-                    <View className="flex-1 items-center justify-center py-8">
-                      <Text className="text-gray-500 text-center">
-                        No conversations yet.
-                      </Text>
-                      <Text className="text-gray-500 text-center mt-1">
-                        Search for users to start chatting!
-                      </Text>
+                  {isSearching && (
+                    <View className="ml-2">
+                      <Text className="text-xs text-gray-500">Searching...</Text>
                     </View>
                   )}
-                </>
+                </View>
+              </View>
+              {/* Section label */}
+              {searchQuery.trim() && searchResults.length > 0 && (
+                <View className="px-4 py-2 bg-gray-50 border-b border-gray-200">
+                  <Text className="text-sm font-medium text-gray-600">
+                    Search Results ({searchResults.length})
+                  </Text>
+                </View>
+              )}
+              {!searchQuery.trim() && conversations.length > 0 && (
+                <View className="px-4 py-2 bg-gray-50 border-b border-gray-200">
+                  <Text className="text-sm font-medium text-gray-600">
+                    Your Chats ({conversations.length})
+                  </Text>
+                </View>
               )}
             </>
           )}
-
-          {activeTab === 1 && (
-            <>
-              {isLoadingMongoose ? (
-                <View className="flex-1 items-center justify-center py-8">
-                  <Text className="text-gray-500">
-                    Loading mongoose users...
+          ListEmptyComponent={() => {
+            if (searchQuery.trim() && !isSearching) {
+              return (
+                <View className="items-center justify-center py-8">
+                  <Text className="text-gray-500 text-center">
+                    No users found for "{searchQuery}"
                   </Text>
                 </View>
-              ) : mongooseUsers.length > 0 ? (
-                <>
+              );
+            }
+            if (!searchQuery.trim()) {
+              return (
+                <View className="items-center justify-center py-8">
+                  <Text className="text-gray-500 text-center">
+                    No conversations yet.
+                  </Text>
+                  <Text className="text-gray-500 text-center mt-1">
+                    Search for users to start chatting!
+                  </Text>
+                </View>
+              );
+            }
+            return null;
+          }}
+          showsVerticalScrollIndicator={false}
+        />
+      )}
+
+      {/* Tab 1: Mongoose — single native FlatList */}
+      {activeTab === 1 && (
+        <FlatList
+          style={{ flex: 1 }}
+          data={mongooseUsers}
+          renderItem={renderMongooseUserItem}
+          keyExtractor={(item) => item.id}
+          ListHeaderComponent={
+            mongooseUsers.length > 0
+              ? () => (
                   <View className="px-4 py-2 bg-gray-50 border-b border-gray-200">
                     <Text className="text-sm font-medium text-gray-600">
                       Mongoose Support ({mongooseUsers.length})
                     </Text>
                   </View>
-                  <FlatList
-                    data={mongooseUsers}
-                    renderItem={renderMongooseUserItem}
-                    keyExtractor={(item) => item.id}
-                    scrollEnabled={false}
-                    showsVerticalScrollIndicator={false}
-                  />
-                </>
-              ) : (
-                <View className="flex-1 items-center justify-center py-8">
-                  <Text className="text-gray-500 text-center">
-                    No mongoose support users found.
-                  </Text>
-                  <Text className="text-gray-500 text-center mt-1">
-                    Contact admin to add mongoose support.
-                  </Text>
-                </View>
+                )
+              : undefined
+          }
+          ListEmptyComponent={() => (
+            <View className="items-center justify-center py-8">
+              <Text className="text-gray-500 text-center">
+                {isLoadingMongoose
+                  ? "Loading mongoose users..."
+                  : "No mongoose support users found."}
+              </Text>
+              {!isLoadingMongoose && (
+                <Text className="text-gray-500 text-center mt-1">
+                  Contact admin to add mongoose support.
+                </Text>
               )}
-            </>
+            </View>
           )}
-        </View>
-      </ScrollView>
+          showsVerticalScrollIndicator={false}
+        />
+      )}
 
       {/* Booking Modal */}
       <BookMongooseModal

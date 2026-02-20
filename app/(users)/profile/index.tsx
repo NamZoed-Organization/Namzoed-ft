@@ -15,6 +15,7 @@ import { useProfileData } from "@/hooks/profile/useProfileData";
 import { useServiceProvider } from "@/hooks/profile/useServiceProvider";
 import { useUserPosts } from "@/hooks/profile/useUserPosts";
 import { useUserProducts } from "@/hooks/profile/useUserProducts";
+import { useEarlyAccessBadge } from "@/hooks/useEarlyAccessBadge";
 // Profile components
 import ProfileHeader from "@/components/profile/ProfileHeader";
 import ProfileTabContent from "@/components/profile/ProfileTabContent";
@@ -22,20 +23,20 @@ import ProfileTabs from "@/components/profile/ProfileTabs";
 import ServiceProviderSection from "@/components/profile/ServiceProviderSection";
 import PopupMessage from "@/components/ui/PopupMessage";
 import {
-  deleteAvatar,
-  updateUserProfile,
-  uploadAvatar,
+    deleteAvatar,
+    updateUserProfile,
+    uploadAvatar,
 } from "@/lib/profileService";
 import {
-  deleteLicenseImage,
-  deleteProviderAvatar,
-  deleteProviderService,
-  ProviderServiceWithDetails,
-  toggleServiceStatus,
-  updateServiceProviderLicense,
-  updateServiceProviderProfile,
-  uploadLicenseImage,
-  uploadProviderAvatar,
+    deleteLicenseImage,
+    deleteProviderAvatar,
+    deleteProviderService,
+    ProviderServiceWithDetails,
+    toggleServiceStatus,
+    updateServiceProviderLicense,
+    updateServiceProviderProfile,
+    uploadLicenseImage,
+    uploadProviderAvatar,
 } from "@/lib/servicesService";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
@@ -43,29 +44,29 @@ import { ImpactFeedbackStyle, NotificationFeedbackType } from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import {
-  Bell,
-  Camera,
-  Eye,
-  ImageIcon,
-  Package,
-  Settings,
-  Trash2,
-  Upload,
-  User,
-  UserPlus,
+    Bell,
+    Camera,
+    Eye,
+    ImageIcon,
+    Package,
+    Settings,
+    Trash2,
+    Upload,
+    User,
+    UserPlus,
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useState } from "react";
 import {
-  Alert,
-  Dimensions,
-  InteractionManager,
-  Modal,
-  Platform,
-  RefreshControl,
-  ScrollView,
-  Text,
-  TouchableOpacity,
-  View,
+    Alert,
+    Dimensions,
+    InteractionManager,
+    Modal,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -73,17 +74,17 @@ const { width: SCREEN_WIDTH } = Dimensions.get("window");
 // --- Reanimated & Gesture Handler ---
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
-  FadeIn,
-  FadeInDown,
-  FadeOut,
-  FadeOutDown,
-  runOnJS,
-  SlideInDown,
-  SlideOutDown,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-  withTiming,
+    FadeIn,
+    FadeInDown,
+    FadeOut,
+    FadeOutDown,
+    runOnJS,
+    SlideInDown,
+    SlideOutDown,
+    useAnimatedStyle,
+    useSharedValue,
+    withSpring,
+    withTiming,
 } from "react-native-reanimated";
 
 // Helper to check if URL is a video
@@ -119,6 +120,7 @@ export default function ProfileScreen() {
   >(null);
   const [showProviderAvatarMenu, setShowProviderAvatarMenu] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [settingsInitialModal, setSettingsInitialModal] = useState<string | undefined>(undefined);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showFollowRequests, setShowFollowRequests] = useState(false);
   const [showPendingRequests, setShowPendingRequests] = useState(false);
@@ -192,6 +194,9 @@ export default function ProfileScreen() {
     followingCount,
     setFollowingCount,
   } = useProfileData(refreshKey);
+
+  // Early-access badge for the logged-in user
+  const badgeType = useEarlyAccessBadge(currentUser?.id);
 
   // Service provider hook
   const {
@@ -1105,9 +1110,14 @@ export default function ProfileScreen() {
                 userEmail={currentUser.email}
                 followerCount={followerCount}
                 followingCount={followingCount}
+                badgeType={badgeType}
                 onAvatarPress={() =>
                   profileImage && setShowProfileImageViewer(true)
                 }
+                onBadgePress={badgeType ? () => {
+                  setSettingsInitialModal('appearance');
+                  setShowSettings(true);
+                } : undefined}
                 onAvatarMenuPress={() => setShowMainAvatarMenu(true)}
                 onEditProfile={handleEditProfile}
                 onFollowingPress={() => {
@@ -1619,10 +1629,12 @@ export default function ProfileScreen() {
             }}
           >
             <ProfileSettings
-              onClose={() => setShowSettings(false)}
+              onClose={() => { setShowSettings(false); setSettingsInitialModal(undefined); }}
               currentUser={currentUser}
+              initialModal={settingsInitialModal}
               onLogout={async () => {
                 setShowSettings(false);
+                setSettingsInitialModal(undefined);
                 await logout();
                 router.replace("/login");
               }}

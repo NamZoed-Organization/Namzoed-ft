@@ -1,14 +1,25 @@
 // app/(users)/chat/[id].tsx
+import MongooseInitiatorModal from "@/components/MongooseInitiatorModal";
+import MongooseInviteCard, {
+  type MongooseInviteData
+} from "@/components/MongooseInviteCard";
+import MongooseResponderModal from "@/components/MongooseResponderModal";
 import AudioMessagePlayer from "@/components/chat/AudioMessagePlayer";
 import ChatAudioRecorder from "@/components/chat/ChatAudioRecorder";
 import ChatImagePicker from "@/components/chat/ChatImagePicker";
+import SingleLocationPicker from "@/components/location/SingleLocationPicker";
+import TrackMongooseModal from "@/components/modals/TrackMongooseModal";
+import { useAppearance } from "@/contexts/AppearanceContext";
 import { useUnreadMessages } from "@/contexts/UnreadMessagesContext";
 import { useUser } from "@/contexts/UserContext";
 import users from "@/data/UserData";
+import { EarlyAccessBadgeType, getEarlyAccessBadge } from "@/lib/earlyAccessService";
 import { supabase } from "@/lib/supabase";
 import { sendChatPushNotification } from "@/services/chatPushService";
 import { Ionicons } from "@expo/vector-icons";
+import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
+import { LinearGradient } from "expo-linear-gradient";
 import * as Location from "expo-location";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { Bike } from "lucide-react-native";
@@ -39,7 +50,18 @@ import {
   View,
 } from "react-native";
 
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
+import Reanimated, {
+  Extrapolation,
+  interpolate,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // Add this User type extension if not already present
 type User = {
@@ -323,6 +345,210 @@ const TypingIndicator = () => {
   );
 };
 
+/** Fires haptic feedback — must be called via runOnJS from a worklet. */
+const triggerSwipeHaptic = () =>
+  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+
+/**
+ * SwipeableRow — wraps a chat message bubble in a native Pan gesture so the
+ * user can swipe right to reply. Uses Reanimated (UI-thread) + RNGH v2
+ * GestureDetector so it:
+ *   - runs off the JS thread → no lag
+ *   - uses activeOffsetX to only claim right swipes → no iOS back-swipe clash
+ *   - uses failOffsetY so vertical scrolls are not blocked
+ */
+const SwipeableRow = React.memo(function SwipeableRow({
+  children,
+  onTriggered,
+  isCurrentUser = false,
+}: {
+  children: React.ReactNode;
+  onTriggered: () => void;
+  isCurrentUser?: boolean;
+}) {
+  const translateX = useSharedValue(0);
+  const hasFired = useSharedValue(false);
+
+  const pan = Gesture.Pan()
+    // Only claim gesture after 10px rightward movement — avoids iOS edge swipe
+    .activeOffsetX([10, Infinity])
+    // Fail if user moves left first — let iOS back gesture win
+    .failOffsetX(-10)
+    // Fail on vertical drag so the scroll view still scrolls freely
+    .failOffsetY([-20, 20])
+    .onUpdate((e) => {
+      'worklet';
+      const clamped = Math.max(0, Math.min(SWIPE_REPLY_MAX, e.translationX));
+      translateX.value = clamped;
+      if (clamped >= SWIPE_REPLY_TRIGGER && !hasFired.value) {
+        hasFired.value = true;
+        runOnJS(triggerSwipeHaptic)();
+      } else if (clamped < SWIPE_REPLY_TRIGGER * 0.6) {
+        hasFired.value = false;
+      }
+    })
+    .onEnd(() => {
+      'worklet';
+      const triggered = translateX.value >= SWIPE_REPLY_TRIGGER;
+      translateX.value = withSpring(0, { damping: 20, stiffness: 300 });
+      hasFired.value = false;
+      if (triggered) {
+        runOnJS(onTriggered)();
+      }
+    });
+
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }));
+
+  // Reply icon fades + scales in as the user drags right
+  const replyIconStyle = useAnimatedStyle(() => {
+    const progress = interpolate(
+      translateX.value,
+      [0, SWIPE_REPLY_TRIGGER],
+      [0, 1],
+      Extrapolation.CLAMP,
+    );
+    return {
+      opacity: progress,
+      transform: [
+        { scale: interpolate(progress, [0, 1], [0.3, 1], Extrapolation.CLAMP) },
+      ],
+    };
+  });
+
+  return (
+    <GestureDetector gesture={pan}>
+      {/*
+       * OUTER: alignSelf:'stretch' so it fills the full row width.
+       * This is essential — percentage-based maxWidth on Pressable children
+       * (max-w-[72%]) would resolve against an unsized parent and collapse
+       * without this explicit stretch.
+       * overflow:'visible' lets the bubble translate past the edge.
+       */}
+      <Reanimated.View style={{ overflow: 'visible', alignSelf: 'stretch' }}>
+        {/* Reply icon — always at the left margin, stays put while bubble slides */}
+        <Reanimated.View
+          pointerEvents="none"
+          style={[
+            replyIconStyle,
+            {
+              position: 'absolute',
+              left: 6,
+              top: 0,
+              bottom: 0,
+              width: 36,
+              alignItems: 'center',
+              justifyContent: 'center',
+            },
+          ]}
+        >
+          <View
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 14,
+              backgroundColor: 'rgba(99,102,241,0.18)',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Ionicons name="arrow-undo" size={14} color="#6366f1" />
+          </View>
+        </Reanimated.View>
+        {/*
+         * Inner animated view fills full width and uses flexDirection:'row' +
+         * justifyContent to align the bubble left or right — identical to what
+         * the outer row container was doing before SwipeableRow was introduced.
+         */}
+        <Reanimated.View
+          style={[
+            animStyle,
+            {
+              flexDirection: 'row',
+              justifyContent: isCurrentUser ? 'flex-end' : 'flex-start',
+            },
+          ]}
+        >
+          {children}
+        </Reanimated.View>
+      </Reanimated.View>
+    </GestureDetector>
+  );
+});
+
+/**
+ * Tracks which reaction pill key-combos have already played their entrance
+ * animation. Module-level so it survives re-renders and re-visits to the chat.
+ * Key format: `${messageId}::${reactions.join('')}`
+ */
+const _playedReactionPills = new Set<string>();
+
+/**
+ * AnimatedReactionPill — fades + scales in on first appearance only.
+ * Pass a stable `animKey` (messageId + reaction content) — if that key has
+ * already animated (even from a previous visit), the pill appears instantly.
+ */
+function AnimatedReactionPill({
+  reactions,
+  isCurrentUser,
+  animKey,
+}: {
+  reactions: string[];
+  isCurrentUser: boolean;
+  animKey: string;
+}) {
+  const alreadyPlayed = _playedReactionPills.has(animKey);
+  const scale = useSharedValue(alreadyPlayed ? 1 : 0.5);
+  const opacity = useSharedValue(alreadyPlayed ? 1 : 0);
+
+  useEffect(() => {
+    if (!alreadyPlayed) {
+      _playedReactionPills.add(animKey);
+      scale.value = withSpring(1, { damping: 22, stiffness: 280, mass: 0.6 });
+      opacity.value = withTiming(1, { duration: 180 });
+    }
+  }, []);
+
+  const pillStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ scale: scale.value }],
+  }));
+
+  return (
+    <Reanimated.View
+      style={[
+        pillStyle,
+        {
+          flexDirection: 'row',
+          alignSelf: isCurrentUser ? 'flex-end' : 'flex-start',
+          marginTop: -8,
+          marginBottom: 2,
+          marginRight: isCurrentUser ? 10 : 0,
+          marginLeft: isCurrentUser ? 0 : 10,
+          backgroundColor: 'rgba(255,255,255,0.95)',
+          borderRadius: 20,
+          paddingHorizontal: 6,
+          paddingVertical: 3,
+          borderWidth: 1,
+          borderColor: '#e5e7eb',
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 1 },
+          shadowOpacity: 0.08,
+          shadowRadius: 4,
+          elevation: 2,
+        },
+      ]}
+    >
+      {reactions.map((emoji, i) => (
+        <Text key={i} style={{ fontSize: 16, marginHorizontal: 2 }}>
+          {emoji}
+        </Text>
+      ))}
+    </Reanimated.View>
+  );
+}
+
 export default function ChatScreen() {
   const { currentUser } = useUser();
   const {
@@ -354,7 +580,18 @@ export default function ChatScreen() {
   const [chatPartnerData, setChatPartnerData] = useState<any>(null);
   const [isLoadingPartner, setIsLoadingPartner] = useState(true);
   const [isAnimatingMongoose, setIsAnimatingMongoose] = useState(false);
+  const [showMongooseInitiator, setShowMongooseInitiator] = useState(false);
+  const [showMongooseResponder, setShowMongooseResponder] = useState(false);
+  const [pendingMongooseInvite, setPendingMongooseInvite] = useState<{
+    messageId: string;
+    data: MongooseInviteData;
+  } | null>(null);
+  const [showMongooseTracker, setShowMongooseTracker] = useState(false);
+  const [mongooseTrackerBooking, setMongooseTrackerBooking] =
+    useState<any>(null);
   const [isSharingLocation, setIsSharingLocation] = useState(false);
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [locationPickerInitial, setLocationPickerInitial] = useState<{ latitude: number; longitude: number } | null>(null);
   const [showMapModal, setShowMapModal] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState<{
     latitude: number;
@@ -362,6 +599,13 @@ export default function ChatScreen() {
   } | null>(null);
   const [selectedMessage, setSelectedMessage] = useState<any>(null);
   const [showMessageActions, setShowMessageActions] = useState(false);
+  const [selectedMessagePageY, setSelectedMessagePageY] = useState(0);
+  const [selectedMessageIsCurrentUser, setSelectedMessageIsCurrentUser] = useState(false);
+  // Local emoji reactions: { [messageId]: emoji[] }
+  const [messageReactions, setMessageReactions] = useState<Record<string, string[]>>({});
+  // Shared values for the context-menu card entry animation
+  const modalCardScale = useSharedValue(0.88);
+  const modalCardOpacity = useSharedValue(0);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [replyingToMessage, setReplyingToMessage] = useState<any | null>(null);
@@ -392,14 +636,36 @@ export default function ChatScreen() {
   const [areComposerActionsCollapsed, setAreComposerActionsCollapsed] =
     useState(false);
   const composerActionsProgress = useRef(new Animated.Value(1)).current;
-  const touchStartXByMessageRef = useRef<Record<string, number>>({});
-  const [activeSwipeMessageKey, setActiveSwipeMessageKey] = useState<
-    string | null
-  >(null);
-  const [activeSwipeX, setActiveSwipeX] = useState(0);
-  const activeSwipeDeltaRef = useRef(0);
-  const hasTriggeredReplyHapticRef = useRef(false);
   const { height: screenHeight, width: screenWidth } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  // Keep insets.bottom in a ref so keyboard-listener callbacks always see the latest value.
+  const insetsBottomRef = useRef(insets.bottom);
+  useEffect(() => { insetsBottomRef.current = insets.bottom; }, [insets.bottom]);
+
+  // Early-access badge types for gradient chat bubbles
+  const [currentUserBadgeType, setCurrentUserBadgeType] = useState<EarlyAccessBadgeType>(null);
+  const [chatPartnerBadgeType, setChatPartnerBadgeType] = useState<EarlyAccessBadgeType>(null);
+  const { bubbleSkin } = useAppearance();
+
+  // Animated style for the context-menu card (scale spring on open)
+  const modalCardAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: modalCardScale.value }],
+  }));
+  // Animated style for the backdrop (fade in/out)
+  const modalBackdropAnimStyle = useAnimatedStyle(() => ({
+    opacity: modalCardOpacity.value,
+  }));
+
+  // Drive modal card animation whenever the sheet opens / closes
+  useEffect(() => {
+    if (showMessageActions) {
+      modalCardScale.value = withSpring(1, { damping: 18, stiffness: 280 });
+      modalCardOpacity.value = withTiming(1, { duration: 160 });
+    } else {
+      modalCardScale.value = withTiming(0.88, { duration: 100 });
+      modalCardOpacity.value = withTiming(0, { duration: 100 });
+    }
+  }, [showMessageActions]);
 
   const isMongooseChat = typeof id === "string" && id.startsWith("mongoose-");
   const mongooseName = isMongooseChat ? id.replace("mongoose-", "") : null;
@@ -730,6 +996,21 @@ export default function ChatScreen() {
     loadChatPartnerData();
   }, [chatPartnerId]);
 
+  // Load badge tiers so badge holders get gradient chat bubbles
+  useEffect(() => {
+    if (!effectiveCurrentUserUUID) return;
+    getEarlyAccessBadge(effectiveCurrentUserUUID)
+      .then(setCurrentUserBadgeType)
+      .catch(() => {});
+  }, [effectiveCurrentUserUUID]);
+
+  useEffect(() => {
+    if (!chatPartnerId) return;
+    getEarlyAccessBadge(String(chatPartnerId))
+      .then(setChatPartnerBadgeType)
+      .catch(() => {});
+  }, [chatPartnerId]);
+
   // Fetch initial messages and subscribe to real-time updates
   useEffect(() => {
     if (!chatPartnerId) {
@@ -802,6 +1083,16 @@ export default function ChatScreen() {
           }
           if (!isSubscribed) return;
           setMessages(messagesData || []);
+          // Seed emoji reactions from the DB data on (re)load
+          const initRxns: Record<string, string[]> = {};
+          for (const m of (messagesData || [])) {
+            const r = m.reactions;
+            if (r && typeof r === 'object' && !Array.isArray(r) && Object.keys(r).length > 0) {
+              const emojis = [...new Set(Object.values(r as Record<string, string>).filter(Boolean))];
+              if (emojis.length > 0) initRxns[String(m.id)] = emojis;
+            }
+          }
+          setMessageReactions(initRxns);
           (messagesData || []).forEach((m: any) => {
             if (String(m?.sender_id) === String(userUUID) && m?.id != null) {
               updateOutgoingStatus(m.id, m.is_read ? "seen" : "delivered");
@@ -910,6 +1201,22 @@ export default function ChatScreen() {
                     m.id === message.id ? { ...m, ...message } : m,
                   ),
                 );
+                // Sync reactions when partner reacts (or reactions change)
+                if (
+                  message.reactions &&
+                  typeof message.reactions === 'object' &&
+                  !Array.isArray(message.reactions)
+                ) {
+                  const rxnEmojis = [
+                    ...new Set(
+                      Object.values(message.reactions as Record<string, string>).filter(Boolean),
+                    ),
+                  ];
+                  setMessageReactions((prev) => ({
+                    ...prev,
+                    [String(message.id)]: rxnEmojis,
+                  }));
+                }
                 setLocalMessages((prev) =>
                   prev.map((m) =>
                     m.id === message.id ? { ...m, ...message } : m,
@@ -1062,8 +1369,14 @@ export default function ChatScreen() {
       (e) => {
         setIsKeyboardVisible(true);
         setKeyboardHeight(e.endCoordinates.height);
+        // On Android with button navigation the keyboard height reported by the OS
+        // includes the navigation-bar area.  Subtract insets.bottom so the input
+        // bar ends up flush with the top of the keyboard instead of overshooting.
+        const offset = Platform.OS === 'android'
+          ? -(e.endCoordinates.height - insetsBottomRef.current)
+          : -e.endCoordinates.height;
         Animated.timing(keyboardOffset, {
-          toValue: -e.endCoordinates.height,
+          toValue: offset,
           duration: Platform.OS === "ios" ? e.duration : 250,
           useNativeDriver: false,
         }).start();
@@ -1385,49 +1698,29 @@ export default function ChatScreen() {
   };
 
   const handleShareLocation = async () => {
-    if (isSharingLocation || !effectiveCurrentUserUUID || !chatPartnerId)
-      return;
-
-    const confirmed = await new Promise<boolean>((resolve) => {
-      Alert.alert(
-        "Share Live Location",
-        "Send your current live location to this chat?",
-        [
-          { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
-          { text: "Share", onPress: () => resolve(true) },
-        ],
-      );
-    });
-
-    if (!confirmed) return;
-
-    setIsSharingLocation(true);
-
+    // Ask for permission and pre-center the map on the user's position
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
-
-      if (status !== "granted") {
-        Alert.alert(
-          "Location Permission Required",
-          "Location permission is required to share your live location.",
-        );
-        setIsSharingLocation(false);
-        return;
+      if (status === "granted") {
+        const pos = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        setLocationPickerInitial({
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+        });
       }
+    } catch {
+      setLocationPickerInitial(null);
+    }
+    setShowLocationPicker(true);
+  };
 
-      // Capture the user's current live GPS coordinate at send-time.
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
-      });
-
-      const { latitude, longitude } = location.coords;
-      const locationMessage = `📍 My Location: https://maps.google.com/?q=${latitude},${longitude}`;
-
-      console.log(
-        "📍 Sharing location:",
-        latitude.toFixed(4),
-        longitude.toFixed(4),
-      );
+  const handleSendPickedLocation = async (loc: { latitude: number; longitude: number; address?: string }) => {
+    if (isSharingLocation || !effectiveCurrentUserUUID || !chatPartnerId) return;
+    setIsSharingLocation(true);
+    try {
+      const locationMessage = `📍 My Location: https://maps.google.com/?q=${loc.latitude},${loc.longitude}`;
 
       // Optimistic message
       const optimisticId = `temp-${Date.now()}-${Math.random()}`;
@@ -1441,45 +1734,35 @@ export default function ChatScreen() {
         isOptimistic: true,
         isLocation: true,
       };
-
       setLocalMessages((prev) => [...prev, optimisticMessage]);
 
       const { data, error } = await supabase
         .from("messages")
-        .insert([
-          {
-            sender_id: effectiveCurrentUserUUID,
-            receiver_id: chatPartnerId,
-            content: locationMessage,
-            is_read: false,
-          },
-        ])
+        .insert([{
+          sender_id: effectiveCurrentUserUUID,
+          receiver_id: chatPartnerId,
+          content: locationMessage,
+          is_read: false,
+        }])
         .select()
         .single();
 
       if (error) {
         console.error("❌ Location send error:", error.message);
         setLocalMessages((prev) => prev.filter((m) => m.id !== optimisticId));
-        Alert.alert("Error", "Failed to share live location");
+        Alert.alert("Error", "Failed to share location.");
       } else {
-        console.log("✅ Location sent to DB");
-
-        // Fallback: add manually if realtime doesn't pick it up
         setTimeout(() => {
           setMessages((prev) => {
             if (prev.some((m) => m.id === data.id)) return prev;
-            console.log("⚡ Fallback: manually adding location");
             return [...prev, data];
           });
           setLocalMessages((prev) => prev.filter((m) => m.id !== optimisticId));
-        }, 2000);
+        }, 1500);
       }
-    } catch (error) {
-      console.error("❌ Location error:", error);
-      Alert.alert(
-        "Location Error",
-        "Failed to get your live location. Please check your permissions.",
-      );
+    } catch (err) {
+      console.error("❌ Location error:", err);
+      Alert.alert("Error", "Failed to share location.");
     } finally {
       setIsSharingLocation(false);
     }
@@ -1641,80 +1924,121 @@ export default function ChatScreen() {
   };
 
   const handleMongooseClick = () => {
-    if (isAnimatingMongoose) return;
-
-    console.log("Mongoose button clicked, starting animation...");
-    setIsAnimatingMongoose(true);
-    bikeAnimationX.setValue(0);
-
-    // Animate the bike across the button
-    Animated.timing(bikeAnimationX, {
-      toValue: 1,
-      duration: 800,
-      useNativeDriver: true,
-    }).start(() => {
-      // Navigate to messages screen with mongoose tab active
-      console.log("Animation complete, navigating to messages with tab=1");
+    if (isMongooseChat) {
+      // Inside a mongoose-support chat: navigate to track tab
       router.push("/(users)/messages?tab=1");
-      // Reset animation state after navigation
-      setTimeout(() => {
-        setIsAnimatingMongoose(false);
-        bikeAnimationX.setValue(0);
-      }, 300);
-    });
-  };
-
-  const openMessageActions = (message: any) => {
-    if (!message || message.isOptimistic) return;
-    setSelectedMessage(message);
-    setShowMessageActions(true);
-  };
-
-  const handleMessageTouchStart = (messageKey: string, x: number) => {
-    setActiveSwipeMessageKey(messageKey);
-    setActiveSwipeX(0);
-    activeSwipeDeltaRef.current = 0;
-    hasTriggeredReplyHapticRef.current = false;
-    touchStartXByMessageRef.current[messageKey] = x;
-  };
-
-  const handleMessageSwipeMove = (messageKey: string, x: number) => {
-    const startX = touchStartXByMessageRef.current[messageKey];
-    if (
-      typeof startX !== "number" ||
-      (activeSwipeMessageKey !== null && activeSwipeMessageKey !== messageKey)
-    ) {
       return;
     }
+    // Regular chat: open initiator flow
+    setShowMongooseInitiator(true);
+  };
 
-    const deltaX = Math.max(0, Math.min(SWIPE_REPLY_MAX, x - startX));
-    activeSwipeDeltaRef.current = deltaX;
-    setActiveSwipeX(deltaX);
-
-    if (deltaX >= SWIPE_REPLY_TRIGGER && !hasTriggeredReplyHapticRef.current) {
-      hasTriggeredReplyHapticRef.current = true;
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    } else if (deltaX < Math.round(SWIPE_REPLY_TRIGGER * 0.6)) {
-      hasTriggeredReplyHapticRef.current = false;
+  /** Called by MongooseInitiatorModal after user fills in role/location/datetime */
+  const handleMongooseInviteSent = async (inviteContent: string) => {
+    if (!effectiveCurrentUserUUID || !chatPartnerId) return;
+    try {
+      const { data, error } = await supabase
+        .from("messages")
+        .insert([
+          {
+            sender_id: effectiveCurrentUserUUID,
+            receiver_id: chatPartnerId,
+            content: inviteContent,
+            message_type: "mongoose_invite",
+            is_read: false,
+          },
+        ])
+        .select()
+        .single();
+      if (error) {
+        console.error("Failed to send mongoose invite:", error);
+        return;
+      }
+      if (data) {
+        // Add to local messages if not already added via realtime
+        setTimeout(() => {
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === data.id)) return prev;
+            return [...prev, data];
+          });
+        }, 1500);
+      }
+    } catch (err) {
+      console.error("Unexpected error sending mongoose invite:", err);
     }
   };
 
-  const handleMessageTouchEnd = (
-    message: any,
-    messageKey: string,
-    x: number,
+  /** Called by MongooseInviteCard when the receiver taps "Confirm Your Location" */
+  const handleMongooseInviteResponse = (
+    messageId: string,
+    data: MongooseInviteData,
   ) => {
-    const startX = touchStartXByMessageRef.current[messageKey];
-    delete touchStartXByMessageRef.current[messageKey];
-    if (typeof startX !== "number") return;
-    const deltaX = Math.max(activeSwipeDeltaRef.current, x - startX);
-    const shouldReply = deltaX >= SWIPE_REPLY_TRIGGER;
-    if (shouldReply) {
-      startReplyToMessage(message);
+    setPendingMongooseInvite({ messageId, data });
+    setShowMongooseResponder(true);
+  };
+
+  /** Called by MongooseResponderModal after booking_request inserted successfully */
+  const handleMongooseConfirmed = async (
+    bookingRequestId: string,
+  ) => {
+    if (!pendingMongooseInvite) return;
+    const { messageId, data } = pendingMongooseInvite;
+
+    // Update the invite message content: mark as confirmed
+    const updatedContent = JSON.stringify({
+      ...data,
+      status: "confirmed",
+      bookingRequestId,
+    });
+
+    // Persist to Supabase
+    await supabase
+      .from("messages")
+      .update({ content: updatedContent })
+      .eq("id", messageId);
+
+    // Optimistic local update
+    setMessages((prev) =>
+      prev.map((m) =>
+        String(m.id) === messageId ? { ...m, content: updatedContent } : m,
+      ),
+    );
+
+    // Send a plain-text success message into the chat
+    await supabase.from("messages").insert([
+      {
+        sender_id: effectiveCurrentUserUUID,
+        receiver_id: chatPartnerId,
+        content:
+          "✅ Mongoose delivery booking confirmed! Use the 'Check Status & Track' button to follow your delivery.",
+        is_read: false,
+      },
+    ]);
+
+    setPendingMongooseInvite(null);
+    setShowMongooseResponder(false);
+  };
+
+  /** Called by MongooseInviteCard's confirmed-state "Track" button */
+  const handleMongooseTrack = async (bookingId: string) => {
+    const { data } = await supabase
+      .from("booking_requests")
+      .select("*")
+      .eq("id", bookingId)
+      .single();
+    if (data) {
+      setMongooseTrackerBooking(data);
+      setShowMongooseTracker(true);
     }
-    activeSwipeDeltaRef.current = 0;
-    setActiveSwipeX(0);
-    setActiveSwipeMessageKey((prev) => (prev === messageKey ? null : prev));
+  };
+
+  const openMessageActions = (message: any, pageY?: number, isCurrentUser?: boolean) => {
+    if (!message || message.isOptimistic) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    setSelectedMessage(message);
+    setSelectedMessagePageY(pageY ?? 0);
+    setSelectedMessageIsCurrentUser(isCurrentUser ?? false);
+    setShowMessageActions(true);
   };
 
   const renderOutgoingStatus = (
@@ -1756,6 +2080,63 @@ export default function ChatScreen() {
     return <Text className={`text-[11px] mt-1 ${tone} mr-3`}>{label}</Text>;
   };
 
+  /** Metallic border gradient — matches the badge's outer frame per tier. */
+  /** Neon glow color per tier. */
+  const getBubbleNeonColor = (badge: EarlyAccessBadgeType): string => {
+    if (badge === 'founding') return '#ff6eb4';
+    if (badge === 'waitlist') return '#ffd235';
+    return '#3de4ff';
+  };
+
+  /** Frosted semi-transparent fill per tier + sender/receiver. */
+  const getBubbleFrostedBg = (badge: EarlyAccessBadgeType, forCurrentUser: boolean): string => {
+    if (badge === 'founding') return forCurrentUser ? 'rgba(100,0,160,0.44)' : 'rgba(70,0,110,0.36)';
+    if (badge === 'waitlist') return forCurrentUser ? 'rgba(150,70,0,0.44)'  : 'rgba(100,50,0,0.36)';
+    return forCurrentUser ? 'rgba(0,50,140,0.44)' : 'rgba(0,35,100,0.36)';
+  };
+
+  /**
+   * Metallic border gradient — matches the badge’s outer frame per tier.
+   * Sender (you) → vivid full-brightness metal.
+   * Receiver (them) → muted, aged version of the same metal.
+   */
+  const getBubbleBorderColors = (badge: EarlyAccessBadgeType, forCurrentUser: boolean): [string, string, string, string] => {
+    if (badge === 'founding') {
+      return forCurrentUser
+        ? ['#c9a96e', '#f0d79a', '#e8c07a', '#c9a96e']  // vivid rose-gold
+        : ['#5a4535', '#7a6048', '#968060', '#7a6048'];  // muted aged bronze
+    }
+    if (badge === 'waitlist') {
+      return forCurrentUser
+        ? ['#a16207', '#d97706', '#f5d264', '#d97706']   // vivid 24k gold
+        : ['#4a3200', '#6a4e00', '#8a6a14', '#6a4e00'];  // muted antique gold
+    }
+    return forCurrentUser
+      ? ['#475569', '#94a3b8', '#e2e8f0', '#94a3b8']    // vivid brushed steel
+      : ['#1e2530', '#2d3748', '#3d4e62', '#2d3748'];   // muted gunmetal
+  };
+
+  /**
+   * Inner dark fill.
+   * Sender → warm, rich tier material (deep violet / cognac / sapphire).
+   * Receiver → cool slate-charcoal — clearly a different read.
+   */
+  const getBubbleGradient = (badge: EarlyAccessBadgeType, forCurrentUser: boolean): [string, string, string] => {
+    if (badge === 'founding') {
+      return forCurrentUser
+        ? ['#3b0f5e', '#200838', '#13042a']   // sender — rich violet-obsidian
+        : ['#12162e', '#0d1124', '#080c1c'];  // receiver — cool slate-indigo
+    }
+    if (badge === 'waitlist') {
+      return forCurrentUser
+        ? ['#3d1b00', '#261100', '#160900']   // sender — warm cognac
+        : ['#141008', '#0e0b06', '#090704'];  // receiver — cool espresso-charcoal
+    }
+    return forCurrentUser
+      ? ['#072040', '#041628', '#020f1c']     // sender — deep sapphire
+      : ['#171c24', '#10141c', '#090d14'];   // receiver — cool steel-charcoal
+  };
+
   const renderMessage = (
     message: any,
     index: number,
@@ -1782,10 +2163,14 @@ export default function ChatScreen() {
     const visibleTextContent = parsedContent.text;
     const embeddedReplyMeta = parsedContent.replyMeta;
     const embeddedProductMeta = parsedContent.productMeta;
+    // Badge tier for this specific message's sender (drives gradient bubbles)
+    const senderBadgeType: EarlyAccessBadgeType = isCurrentUser ? currentUserBadgeType : chatPartnerBadgeType;
     const RADIUS_LARGE = 20;
     const RADIUS_SMALL = 6;
     const rowSpacingClass = connectNext ? "mb-1" : "mb-3";
     const productCardWidth = Math.round(screenWidth * 0.6);
+    // Reactions stored locally for this message
+    const reactionsForMsg = message?.id != null ? (messageReactions[String(message.id)] || []) : [];
     const bubbleRadiusStyle = isCurrentUser
       ? {
           borderTopLeftRadius: RADIUS_LARGE,
@@ -1828,6 +2213,25 @@ export default function ChatScreen() {
       }
     };
 
+    // Render mongoose invite card (before audio/image/text checks)
+    if (message.message_type === "mongoose_invite") {
+      return (
+        <View
+          key={key}
+          className={`${rowSpacingClass} ${isCurrentUser ? "items-end" : "items-start"}`}
+        >
+          <MongooseInviteCard
+            messageId={String(message.id)}
+            rawContent={message.content}
+            isCurrentUser={isCurrentUser}
+            chatPartnerName={chatPartnerName}
+            onTapToRespond={handleMongooseInviteResponse}
+            onTrack={handleMongooseTrack}
+          />
+        </View>
+      );
+    }
+
     // Render audio message
     if (isAudio) {
       return (
@@ -1835,25 +2239,10 @@ export default function ChatScreen() {
           key={key}
           className={`${rowSpacingClass} ${isCurrentUser ? "items-end" : "items-start"}`}
         >
-          <Animated.View
-            style={
-              activeSwipeMessageKey === key
-                ? { position: "relative", left: activeSwipeX }
-                : undefined
-            }
-          >
+          <SwipeableRow onTriggered={() => startReplyToMessage(message)} isCurrentUser={isCurrentUser}>
             <Pressable
-              onLongPress={() => openMessageActions(message)}
-              onPressIn={(e) =>
-                handleMessageTouchStart(key, e.nativeEvent.pageX)
-              }
-              onTouchMove={(e) =>
-                handleMessageSwipeMove(key, e.nativeEvent.pageX)
-              }
-              onPressOut={(e) =>
-                handleMessageTouchEnd(message, key, e.nativeEvent.pageX)
-              }
-              delayLongPress={500}
+              onLongPress={(e) => openMessageActions(message, e.nativeEvent.pageY, isCurrentUser)}
+              delayLongPress={400}
               className={`${isCurrentUser ? "mr-2" : "ml-2"}`}
             >
               <AudioMessagePlayer
@@ -1863,7 +2252,15 @@ export default function ChatScreen() {
                 isOptimistic={isOptimistic}
               />
             </Pressable>
-          </Animated.View>
+          </SwipeableRow>
+          {reactionsForMsg.length > 0 && (
+            <AnimatedReactionPill
+              key={reactionsForMsg.join('-')}
+              animKey={`${key}::${reactionsForMsg.join('')}`}
+              reactions={reactionsForMsg}
+              isCurrentUser={isCurrentUser}
+            />
+          )}
           {renderOutgoingStatus(
             message,
             isCurrentUser,
@@ -1883,26 +2280,11 @@ export default function ChatScreen() {
           key={key}
           className={`${rowSpacingClass} ${isCurrentUser ? "items-end" : "items-start"}`}
         >
-          <Animated.View
-            style={
-              activeSwipeMessageKey === key
-                ? { position: "relative", left: activeSwipeX }
-                : undefined
-            }
-          >
+          <SwipeableRow onTriggered={() => startReplyToMessage(message)} isCurrentUser={isCurrentUser}>
             <Pressable
               onPress={handleImagePress}
-              onLongPress={() => openMessageActions(message)}
-              onPressIn={(e) =>
-                handleMessageTouchStart(key, e.nativeEvent.pageX)
-              }
-              onTouchMove={(e) =>
-                handleMessageSwipeMove(key, e.nativeEvent.pageX)
-              }
-              onPressOut={(e) =>
-                handleMessageTouchEnd(message, key, e.nativeEvent.pageX)
-              }
-              delayLongPress={500}
+              onLongPress={(e) => openMessageActions(message, e.nativeEvent.pageY, isCurrentUser)}
+              delayLongPress={400}
               className={`max-w-[72%] overflow-hidden ${
                 isCurrentUser ? "mr-2" : "ml-2"
               } ${isOptimistic ? "opacity-70" : ""}`}
@@ -1920,7 +2302,15 @@ export default function ChatScreen() {
                 </View>
               )}
             </Pressable>
-          </Animated.View>
+          </SwipeableRow>
+          {reactionsForMsg.length > 0 && (
+            <AnimatedReactionPill
+              key={reactionsForMsg.join('-')}
+              animKey={`${key}::${reactionsForMsg.join('')}`}
+              reactions={reactionsForMsg}
+              isCurrentUser={isCurrentUser}
+            />
+          )}
           {renderOutgoingStatus(
             message,
             isCurrentUser,
@@ -1940,26 +2330,11 @@ export default function ChatScreen() {
           key={key}
           className={`${rowSpacingClass} ${isCurrentUser ? "items-end" : "items-start"}`}
         >
-          <Animated.View
-            style={
-              activeSwipeMessageKey === key
-                ? { position: "relative", left: activeSwipeX }
-                : undefined
-            }
-          >
+          <SwipeableRow onTriggered={() => startReplyToMessage(message)} isCurrentUser={isCurrentUser}>
             <Pressable
               onPress={handleLocationPress}
-              onLongPress={() => openMessageActions(message)}
-              onPressIn={(e) =>
-                handleMessageTouchStart(key, e.nativeEvent.pageX)
-              }
-              onTouchMove={(e) =>
-                handleMessageSwipeMove(key, e.nativeEvent.pageX)
-              }
-              onPressOut={(e) =>
-                handleMessageTouchEnd(message, key, e.nativeEvent.pageX)
-              }
-              delayLongPress={500}
+              onLongPress={(e) => openMessageActions(message, e.nativeEvent.pageY, isCurrentUser)}
+              delayLongPress={400}
               className={`max-w-[72%] overflow-hidden ${
                 isCurrentUser ? "mr-2" : "ml-2"
               } ${isOptimistic ? "opacity-70" : ""}`}
@@ -2005,7 +2380,15 @@ export default function ChatScreen() {
                 </View>
               </View>
             </Pressable>
-          </Animated.View>
+          </SwipeableRow>
+          {reactionsForMsg.length > 0 && (
+            <AnimatedReactionPill
+              key={reactionsForMsg.join('-')}
+              animKey={`${key}::${reactionsForMsg.join('')}`}
+              reactions={reactionsForMsg}
+              isCurrentUser={isCurrentUser}
+            />
+          )}
           {renderOutgoingStatus(
             message,
             isCurrentUser,
@@ -2068,13 +2451,7 @@ export default function ChatScreen() {
           </Pressable>
         ) : null}
 
-        <Animated.View
-          style={
-            activeSwipeMessageKey === key
-              ? { position: "relative", left: activeSwipeX }
-              : undefined
-          }
-        >
+        <SwipeableRow onTriggered={() => startReplyToMessage(message)} isCurrentUser={isCurrentUser}>
           <Pressable
             onPress={() => {
               if (localStatus === "failed") {
@@ -2091,33 +2468,43 @@ export default function ChatScreen() {
                 });
               }
             }}
-            onLongPress={() => {
-              openMessageActions(message);
-            }}
-            onPressIn={(e) => handleMessageTouchStart(key, e.nativeEvent.pageX)}
-            onTouchMove={(e) =>
-              handleMessageSwipeMove(key, e.nativeEvent.pageX)
-            }
-            onPressOut={(e) =>
-              handleMessageTouchEnd(message, key, e.nativeEvent.pageX)
-            }
-            delayLongPress={500}
+            onLongPress={(e) => openMessageActions(message, e.nativeEvent.pageY, isCurrentUser)}
+            delayLongPress={400}
             className={`max-w-[72%] px-4 py-4 ${
-              isCurrentUser ? "bg-primary mr-2" : "bg-gray-200 ml-2"
+              isCurrentUser
+                ? senderBadgeType ? "mr-2" : "bg-primary mr-2"
+                : senderBadgeType ? "ml-2" : "bg-gray-200 ml-2"
             } ${isOptimistic ? "opacity-70" : ""}`}
-            style={bubbleRadiusStyle}
+            style={[bubbleRadiusStyle, { overflow: 'hidden' }]}
           >
+            {/* ── Badge-holder bubble: metallic gradient per tier ── */}
+            {senderBadgeType ? (
+              <>
+                <LinearGradient
+                  colors={getBubbleBorderColors(senderBadgeType, isCurrentUser)}
+                  start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
+                  style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+                />
+                <LinearGradient
+                  colors={getBubbleGradient(senderBadgeType, isCurrentUser)}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                  style={{ position: 'absolute', top: 1.5, left: 1.5, right: 1.5, bottom: 1.5, borderRadius: 18 }}
+                />
+                <View style={{ position: 'absolute', top: 1.5, bottom: 1.5, left: '22%', width: 36, backgroundColor: 'rgba(255,255,255,0.045)', transform: [{ skewX: '-18deg' }] }} pointerEvents="none" />
+                <View style={{ position: 'absolute', top: 1.5, bottom: 1.5, left: '55%', width: 14, backgroundColor: 'rgba(255,255,255,0.025)', transform: [{ skewX: '-18deg' }] }} pointerEvents="none" />
+              </>
+            ) : null}
             {embeddedReplyMeta ? (
               <View
                 className={`mb-2 rounded-xl px-2 py-1.5 border-l-2 ${
-                  isCurrentUser
+                  isCurrentUser || senderBadgeType
                     ? "bg-white/15 border-white/80"
                     : "bg-white border-gray-300"
                 }`}
               >
                 <Text
                   className={`text-[11px] font-semibold ${
-                    isCurrentUser ? "text-blue-100" : "text-gray-700"
+                    isCurrentUser || senderBadgeType ? "text-blue-100" : "text-gray-700"
                   }`}
                   numberOfLines={1}
                 >
@@ -2125,7 +2512,7 @@ export default function ChatScreen() {
                 </Text>
                 <Text
                   className={`text-[12px] ${
-                    isCurrentUser ? "text-blue-100" : "text-gray-600"
+                    isCurrentUser || senderBadgeType ? "text-blue-100" : "text-gray-600"
                   }`}
                   numberOfLines={1}
                 >
@@ -2134,13 +2521,22 @@ export default function ChatScreen() {
               </View>
             ) : null}
             <Text
-              className={`${isCurrentUser ? "text-white" : "text-gray-800"} text-[18px]`}
+              className={`${isCurrentUser || senderBadgeType ? "text-white" : "text-gray-800"} text-[18px]`}
               style={{ lineHeight: 20 }}
             >
               {visibleTextContent}
             </Text>
           </Pressable>
-        </Animated.View>
+        </SwipeableRow>
+        {/* Emoji reactions pill */}
+        {reactionsForMsg.length > 0 && (
+          <AnimatedReactionPill
+            key={reactionsForMsg.join('-')}
+            animKey={`${key}::${reactionsForMsg.join('')}`}
+            reactions={reactionsForMsg}
+            isCurrentUser={isCurrentUser}
+          />
+        )}
         {parentReplyCount > 0 ? (
           <View
             className={`mt-1 flex-row items-center ${
@@ -2219,19 +2615,25 @@ export default function ChatScreen() {
         </TouchableOpacity>
 
         {/* Profile Image or Avatar */}
-        {chatPartnerAvatarUri ? (
-          <Image
-            source={{ uri: chatPartnerAvatarUri }}
-            className="w-10 h-10 rounded-full mr-3"
-            resizeMode="cover"
-          />
-        ) : (
-          <View className="w-10 h-10 bg-primary rounded-full items-center justify-center mr-3">
-            <Text className="text-white font-bold">
-              {chatPartnerName.charAt(0).toUpperCase()}
-            </Text>
-          </View>
-        )}
+        <TouchableOpacity
+          onPress={() => chatPartnerId && router.push(`/(users)/profile/${chatPartnerId}`)}
+          activeOpacity={0.7}
+          className="mr-3"
+        >
+          {chatPartnerAvatarUri ? (
+            <Image
+              source={{ uri: chatPartnerAvatarUri }}
+              className="w-10 h-10 rounded-full"
+              resizeMode="cover"
+            />
+          ) : (
+            <View className="w-10 h-10 bg-primary rounded-full items-center justify-center">
+              <Text className="text-white font-bold">
+                {chatPartnerName.charAt(0).toUpperCase()}
+              </Text>
+            </View>
+          )}
+        </TouchableOpacity>
 
         <View className="flex-1">
           <Text className="font-semibold text-gray-800 text-lg">
@@ -2354,9 +2756,8 @@ export default function ChatScreen() {
         }}
       >
         <View
-          className={`flex-row items-center px-4 pt-2 ${
-            isKeyboardVisible ? "pb-2" : "pb-12"
-          }`}
+          className={`flex-row items-center px-4 pt-2`}
+          style={{ paddingBottom: isKeyboardVisible ? 8 : Math.max(insets.bottom, 12) }}
           onLayout={(e) => {
             const measured = Math.round(e.nativeEvent.layout.height);
             if (measured > 0 && Math.abs(measured - inputBarHeight) > 2) {
@@ -2366,7 +2767,7 @@ export default function ChatScreen() {
         >
           <View className="w-full rounded-[26px] border border-gray-200 bg-gray-100">
             {replyingToMessage ? (
-              <View className="px-3 pt-2 pb-1 border-b border-gray-200/80 flex-row items-center">
+              <View className="px-3 py-4 border-b border-gray-200/80 flex-row items-center">
                 <View className="flex-1">
                   <Text className="text-[11px] font-semibold text-primary">
                     Replying to{" "}
@@ -2651,82 +3052,312 @@ export default function ChatScreen() {
         </View>
       </Modal>
 
-      {/* Message Actions Modal */}
+      {/* Message Actions Modal — WhatsApp / Instagram style */}
       <Modal
         visible={showMessageActions}
         transparent
-        animationType="fade"
+        animationType="none"
         onRequestClose={() => setShowMessageActions(false)}
+        statusBarTranslucent
       >
+        {/* Outer animated wrapper — fades the whole overlay in/out */}
+        <Reanimated.View style={[modalBackdropAnimStyle, { flex: 1 }]}>
+        {/* Blurred backdrop */}
+        <BlurView
+          intensity={55}
+          tint="dark"
+          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+        />
+        {/* Dismiss on background tap */}
         <TouchableOpacity
           activeOpacity={1}
           onPress={() => setShowMessageActions(false)}
-          className="flex-1 bg-black/50 justify-center items-center"
-        >
-          <View
-            className="bg-white rounded-2xl w-64 overflow-hidden"
-            style={{
-              elevation: 5,
-              shadowColor: "#000",
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.25,
-              shadowRadius: 4,
-            }}
-          >
-            <TouchableOpacity
-              onPress={handleReplyFromActions}
-              className="flex-row items-center px-6 py-4 border-b border-gray-200 active:bg-gray-50"
-            >
-              <Ionicons name="arrow-undo-outline" size={22} color="#007AFF" />
-              <Text className="ml-4 text-base text-gray-800 font-medium">
-                Reply
-              </Text>
-            </TouchableOpacity>
+          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+        />
 
-            {selectedMessage?.sender_id === effectiveCurrentUserUUID &&
-              selectedMessage?.message_type !== "image" && (
-                <TouchableOpacity
-                  onPress={handleEditMessage}
-                  className="flex-row items-center px-6 py-4 border-b border-gray-200 active:bg-gray-50"
+        {selectedMessage && (() => {
+          const parsed = parseMessageMetaContent(selectedMessage.content);
+          const msgText = parsed.text;
+          const isOwnMsg = String(selectedMessage.sender_id) === String(effectiveCurrentUserUUID);
+          const isImg = selectedMessage.message_type === 'image' || selectedMessage.image_url;
+          const isAud = selectedMessage.message_type === 'audio' || selectedMessage.audio_url;
+          const isLoc = selectedMessage.content?.includes?.('📍 My Location:');
+          const previewText = isImg
+            ? '📷  Photo'
+            : isAud
+            ? '🎵  Voice message'
+            : isLoc
+            ? '📍  Location'
+            : msgText;
+
+          // Compute safe vertical position so the full card fits on screen
+          const BUBBLE_H = 72;
+          const REACTIONS_H = 58;
+          const editRow = isOwnMsg && !isImg && selectedMessage.message_type !== 'mongoose_invite' ? 52 : 0;
+          const deleteRow = isOwnMsg ? 52 : 0;
+          const ACTIONS_H = 52 + editRow + deleteRow + 52;
+          const TOTAL_H = BUBBLE_H + REACTIONS_H + ACTIONS_H + 32;
+          const rawTop = selectedMessagePageY - BUBBLE_H - 4;
+          const cardTop = Math.min(
+            Math.max(rawTop, 60),
+            screenHeight - TOTAL_H - 40,
+          );
+
+          const EMOJIS: string[] = ['❤️', '😂', '😮', '😢', '👏', '👍'];
+          const SEP = 'rgba(0,0,0,0.06)';
+          const currentReactions = messageReactions[String(selectedMessage.id)] || [];
+
+          return (
+            <Reanimated.View
+              pointerEvents="box-none"
+              style={[modalCardAnimStyle, { position: 'absolute', top: cardTop, left: 0, right: 0, paddingHorizontal: 14 }]}
+            >
+              {/* Mini message bubble preview */}
+              <View style={{ alignItems: isOwnMsg ? 'flex-end' : 'flex-start', marginBottom: 8 }}>
+                <View
+                  style={{
+                    maxWidth: '72%',
+                    paddingHorizontal: 14,
+                    paddingVertical: 10,
+                    borderRadius: 18,
+                    backgroundColor: isOwnMsg ? '#3b82f6' : '#e5e7eb',
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 3 },
+                    shadowOpacity: 0.2,
+                    shadowRadius: 6,
+                    elevation: 4,
+                  }}
                 >
-                  <Ionicons name="create-outline" size={22} color="#007AFF" />
-                  <Text className="ml-4 text-base text-gray-800 font-medium">
-                    Edit Message
+                  <Text
+                    style={{ color: isOwnMsg ? 'white' : '#1f2937', fontSize: 15, lineHeight: 20 }}
+                    numberOfLines={3}
+                  >
+                    {previewText}
                   </Text>
-                </TouchableOpacity>
-              )}
+                </View>
+              </View>
 
-            {selectedMessage?.sender_id === effectiveCurrentUserUUID && (
-              <TouchableOpacity
-                onPress={handleDeleteMessage}
-                className="flex-row items-center px-6 py-4 active:bg-gray-50"
+              {/* Emoji reaction strip */}
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignSelf: 'center',
+                  backgroundColor: 'rgba(255,255,255,0.97)',
+                  borderRadius: 36,
+                  paddingHorizontal: 10,
+                  paddingVertical: 7,
+                  marginBottom: 8,
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.15,
+                  shadowRadius: 8,
+                  elevation: 6,
+                }}
               >
-                <Ionicons name="trash-outline" size={22} color="#FF3B30" />
-                <Text className="ml-4 text-base text-red-600 font-medium">
-                  Delete Message
-                </Text>
-              </TouchableOpacity>
-            )}
+                {EMOJIS.map((emoji) => {
+                  const isSelected = currentReactions.includes(emoji);
+                  return (
+                  <TouchableOpacity
+                    key={emoji}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                      const msgId = String(selectedMessage.id);
+                      // Build updated per-user reactions object
+                      const currentDb: Record<string, string> = {
+                        ...(selectedMessage.reactions &&
+                          typeof selectedMessage.reactions === 'object' &&
+                          !Array.isArray(selectedMessage.reactions)
+                          ? (selectedMessage.reactions as Record<string, string>)
+                          : {}),
+                      };
+                      const userId = String(effectiveCurrentUserUUID);
+                      if (currentDb[userId] === emoji) {
+                        delete currentDb[userId]; // toggle off
+                      } else {
+                        currentDb[userId] = emoji; // switch / add
+                      }
+                      const rxnEmojis = [...new Set(Object.values(currentDb).filter(Boolean))];
+                      // Optimistic local update
+                      setMessageReactions((prev) => ({ ...prev, [msgId]: rxnEmojis }));
+                      setMessages((prev) =>
+                        prev.map((m) =>
+                          m.id === selectedMessage.id ? { ...m, reactions: currentDb } : m,
+                        ),
+                      );
+                      // Persist to Supabase (fire-and-forget)
+                      supabase
+                        .from('messages')
+                        .update({ reactions: currentDb })
+                        .eq('id', selectedMessage.id)
+                        .then(({ error: rxnErr }) => {
+                          if (rxnErr) console.warn('⚠️ Reaction save failed:', rxnErr.message);
+                        });
+                      setShowMessageActions(false);
+                    }}
+                    activeOpacity={0.65}
+                    style={[
+                      { marginHorizontal: 4, borderRadius: 20, padding: 4 },
+                      isSelected && { backgroundColor: 'rgba(99,102,241,0.12)' },
+                    ]}
+                  >
+                    <Text style={{ fontSize: 26, opacity: isSelected ? 1 : 0.85 }}>{emoji}</Text>
+                  </TouchableOpacity>
+                  );
+                })}
+              </View>
 
-            <TouchableOpacity
-              onPress={() => setShowMessageActions(false)}
-              className="flex-row items-center px-6 py-4 border-t border-gray-200 bg-gray-50 active:bg-gray-100"
-            >
-              <Ionicons name="close-circle-outline" size={22} color="#666" />
-              <Text className="ml-4 text-base text-gray-600 font-medium">
-                Cancel
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
+              {/* Action list */}
+              <View
+                style={{
+                  backgroundColor: 'rgba(255,255,255,0.97)',
+                  borderRadius: 16,
+                  overflow: 'hidden',
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.12,
+                  shadowRadius: 14,
+                  elevation: 8,
+                }}
+              >
+                {/* Reply */}
+                <TouchableOpacity
+                  onPress={handleReplyFromActions}
+                  activeOpacity={0.7}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    paddingHorizontal: 20,
+                    paddingVertical: 15,
+                    borderBottomWidth: 0.5,
+                    borderBottomColor: SEP,
+                  }}
+                >
+                  <Ionicons name="arrow-undo-outline" size={22} color="#374151" />
+                  <Text style={{ marginLeft: 14, fontSize: 16, color: '#111827', fontWeight: '500' }}>Reply</Text>
+                </TouchableOpacity>
+
+                {/* Edit — own non-image, non-invite messages only */}
+                {isOwnMsg && !isImg && selectedMessage.message_type !== 'mongoose_invite' && (
+                  <TouchableOpacity
+                    onPress={handleEditMessage}
+                    activeOpacity={0.7}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      paddingHorizontal: 20,
+                      paddingVertical: 15,
+                      borderBottomWidth: 0.5,
+                      borderBottomColor: SEP,
+                    }}
+                  >
+                    <Ionicons name="create-outline" size={22} color="#374151" />
+                    <Text style={{ marginLeft: 14, fontSize: 16, color: '#111827', fontWeight: '500' }}>Edit</Text>
+                  </TouchableOpacity>
+                )}
+
+                {/* Delete — own messages only */}
+                {isOwnMsg && (
+                  <TouchableOpacity
+                    onPress={handleDeleteMessage}
+                    activeOpacity={0.7}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      paddingHorizontal: 20,
+                      paddingVertical: 15,
+                    }}
+                  >
+                    <Ionicons name="trash-outline" size={22} color="#ef4444" />
+                    <Text style={{ marginLeft: 14, fontSize: 16, color: '#ef4444', fontWeight: '500' }}>Delete</Text>
+                  </TouchableOpacity>
+                )}
+
+                {/* Cancel — for received messages (no delete row to close with) */}
+                {!isOwnMsg && (
+                  <TouchableOpacity
+                    onPress={() => setShowMessageActions(false)}
+                    activeOpacity={0.7}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      paddingHorizontal: 20,
+                      paddingVertical: 15,
+                    }}
+                  >
+                    <Ionicons name="close-circle-outline" size={22} color="#6b7280" />
+                    <Text style={{ marginLeft: 14, fontSize: 16, color: '#6b7280', fontWeight: '500' }}>Cancel</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </Reanimated.View>
+          );
+        })()}
+        </Reanimated.View>{/* end backdrop wrapper */}
       </Modal>
+
+      {/* ── Location Picker Modal ────────────────────────────── */}
+      <SingleLocationPicker
+        visible={showLocationPicker}
+        onClose={() => setShowLocationPicker(false)}
+        onConfirm={(loc) => {
+          setShowLocationPicker(false);
+          handleSendPickedLocation(loc);
+        }}
+        initialLocation={locationPickerInitial}
+        title="Pick a Location to Share"
+      />
+
+      {/* ── Mongoose Initiator Modal ─────────────────────────── */}
+      <MongooseInitiatorModal
+        visible={showMongooseInitiator}
+        onClose={() => setShowMongooseInitiator(false)}
+        chatPartnerName={chatPartnerName}
+        currentUserName={
+          currentUser?.name || (currentUser as any)?.username || "You"
+        }
+        currentUserId={effectiveCurrentUserUUID || ""}
+        onInviteSent={(content) => {
+          setShowMongooseInitiator(false);
+          handleMongooseInviteSent(content);
+        }}
+      />
+
+      {/* ── Mongoose Responder Modal ─────────────────────────── */}
+      {pendingMongooseInvite && (
+        <MongooseResponderModal
+          visible={showMongooseResponder}
+          onClose={() => {
+            setShowMongooseResponder(false);
+            setPendingMongooseInvite(null);
+          }}
+          messageId={pendingMongooseInvite.messageId}
+          inviteData={pendingMongooseInvite.data}
+          responderName={
+            currentUser?.name || (currentUser as any)?.username || "You"
+          }
+          responderId={effectiveCurrentUserUUID || ""}
+          onConfirmed={handleMongooseConfirmed}
+        />
+      )}
+
+      {/* ── Mongoose Tracker Modal ───────────────────────────── */}
+      {mongooseTrackerBooking && (
+        <TrackMongooseModal
+          visible={showMongooseTracker}
+          onClose={() => {
+            setShowMongooseTracker(false);
+            setMongooseTrackerBooking(null);
+          }}
+          booking={mongooseTrackerBooking}
+        />
+      )}
 
       {/* Image Preview Modal */}
       <Modal
         visible={showImagePreview}
         animationType="fade"
-        onRequestClose={() => setShowImagePreview(false)}
-      >
+        onRequestClose={() => setShowImagePreview(false)}>
+
         <View className="flex-1 bg-black">
           {/* Header */}
           <View

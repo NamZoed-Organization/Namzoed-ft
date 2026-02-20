@@ -8,9 +8,9 @@ import OneSignalBootstrap from "@/components/notifications/OneSignalBootstrap";
 import { UnreadMessagesProvider } from "@/contexts/UnreadMessagesContext";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import {
-  DarkTheme,
-  DefaultTheme,
-  ThemeProvider,
+    DarkTheme,
+    DefaultTheme,
+    ThemeProvider,
 } from "@react-navigation/native";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
@@ -22,6 +22,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "../global.css";
 
 // 1. import your Dzongkhag provider
+import { AppearanceProvider } from "@/contexts/AppearanceContext";
 import { DzongkhagProvider } from "@/contexts/DzongkhagContext";
 import { LiveSessionProvider } from "@/contexts/LiveSessionProvider";
 import { UserProvider } from "@/contexts/UserContext";
@@ -62,6 +63,7 @@ export default function RootLayout() {
         >
           {/* 2. wrap your entire app in the provider */}
           <UserProvider>
+            <AppearanceProvider>
             <UnreadMessagesProvider>
               <DzongkhagProvider>
                 <VideoPlaybackProvider>
@@ -95,6 +97,7 @@ export default function RootLayout() {
                 </VideoPlaybackProvider>
               </DzongkhagProvider>
             </UnreadMessagesProvider>
+            </AppearanceProvider>
           </UserProvider>
         </ThemeProvider>
       </GestureHandlerRootView>

@@ -1,46 +1,48 @@
-import ReportUserModal from "@/components/modals/ReportUserModal";
-import ProfileImageViewer from "@/components/modals/ProfileImageViewer";
+import EarlyAccessBadge from "@/components/EarlyAccessBadge";
 import FollowRequestsOverlay from "@/components/modals/FollowRequestsOverlay";
+import ProfileImageViewer from "@/components/modals/ProfileImageViewer";
+import ReportUserModal from "@/components/modals/ReportUserModal";
 import { useUser } from "@/contexts/UserContext";
 import { blockUser, isUserBlocked, unblockUser } from "@/lib/blockService";
+import { EarlyAccessBadgeType, getEarlyAccessBadge } from "@/lib/earlyAccessService";
 import { followUser, isFollowing, unfollowUser } from "@/lib/followService";
 import { fetchUserPosts, Post } from "@/lib/postsService";
 import { fetchUserProducts, Product } from "@/lib/productsService";
 import { fetchUserProfile } from "@/lib/profileService";
 import {
-  fetchServiceProviderProfile,
-  fetchUserProviderServices,
-  ProviderServiceWithDetails,
+    fetchServiceProviderProfile,
+    fetchUserProviderServices,
+    ProviderServiceWithDetails,
 } from "@/lib/servicesService";
 import * as Haptics from "expo-haptics";
 import { Redirect, Stack, useLocalSearchParams, useRouter } from "expo-router";
 import {
-  AlertCircle,
-  ArrowLeft,
-  Ban,
-  CheckCircle2,
-  Grid,
-  Image as ImageLucide,
-  Play,
-  ShoppingBag,
-  User,
-  UserCheck,
-  UserPlus,
-  Wrench,
+    AlertCircle,
+    ArrowLeft,
+    Ban,
+    CheckCircle2,
+    Grid,
+    Image as ImageLucide,
+    Play,
+    ShoppingBag,
+    User,
+    UserCheck,
+    UserPlus,
+    Wrench,
 } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Dimensions,
-  Image,
-  Modal,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Dimensions,
+    Image,
+    Modal,
+    Pressable,
+    RefreshControl,
+    ScrollView,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import Animated, { SlideInDown, SlideOutDown } from "react-native-reanimated";
 
@@ -98,6 +100,9 @@ export default function PublicProfileScreen() {
     "followers" | "following"
   >("followers");
 
+  // Early-access badge for this profile
+  const [badgeType, setBadgeType] = useState<EarlyAccessBadgeType>(null);
+
   // Horizontal scroll ref
   const horizontalScrollRef = React.useRef<ScrollView>(null);
 
@@ -117,6 +122,9 @@ export default function PublicProfileScreen() {
         // 1. Fetch Profile Data
         const profile = await fetchUserProfile(id);
         setUserProfile(profile);
+
+        // 1b. Fetch early-access badge (non-blocking, fails silently)
+        getEarlyAccessBadge(id).then(setBadgeType).catch(() => {});
 
         // 2. Fetch Posts
         const posts = await fetchUserPosts(id);
@@ -190,6 +198,9 @@ export default function PublicProfileScreen() {
         // 1. Fetch Profile Data
         const profile = await fetchUserProfile(id);
         setUserProfile(profile);
+
+        // 1b. Badge (non-blocking)
+        getEarlyAccessBadge(id).then(setBadgeType).catch(() => {});
 
         // 2. Fetch Posts
         const posts = await fetchUserPosts(id);
@@ -517,6 +528,11 @@ export default function PublicProfileScreen() {
                 <Text className="text-2xl font-mbold text-gray-900 text-center mb-1">
                   {userProfile.name}
                 </Text>
+                {badgeType && (
+                  <View className="mb-3">
+                    <EarlyAccessBadge badgeType={badgeType} size="md" />
+                  </View>
+                )}
                 {userProfile.bio && (
                   <Text className="text-sm font-regular text-gray-500 text-center px-8 mb-4">
                     {userProfile.bio}

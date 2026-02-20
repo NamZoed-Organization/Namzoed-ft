@@ -29,7 +29,7 @@ const UserCard = ({ user, onPress, onFollow, onUnfollow, isFollowed }: {
   isFollowed: boolean;
 }) => (
   <TouchableOpacity
-    className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-4"
+    className="bg-white rounded-lg shadow-sm border border-gray-100 p-2 mb-2"
     style={{ width: cardWidth }}
     onPress={onPress}
     activeOpacity={0.7}
@@ -411,11 +411,11 @@ const FeaturedSellers = () => {
             </Text>
           </View>
         ) : (
-          <View>
+          <View className='flex justify-center items-center'>
             {Array.from({ length: Math.ceil(users.length / 2) }, (_, rowIndex) => {
               const rowUsers = users.slice(rowIndex * 2, rowIndex * 2 + 2);
               return (
-                <View key={rowIndex} className="flex-row justify-between">
+                <View key={rowIndex} className=" gap-2 flex-row">
                   {rowUsers.map((user) => {
                     const isFollowed = (followingIds.includes(user.id) || newlyFollowedIds.includes(user.id)) && !unfollowedIds.includes(user.id);
                     return (

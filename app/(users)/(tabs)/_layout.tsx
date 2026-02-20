@@ -2,19 +2,17 @@ import { CategoriesIcon, HomeIcon } from "@/components/icons/index";
 import FeedTabButton from "@/components/ui/FeedTabButton";
 import TabBarButton from "@/components/ui/TabBarButton";
 import { clamp, useResponsive } from "@/utils/responsive";
+import { BottomTabBar } from "@react-navigation/bottom-tabs";
 import { Tabs, usePathname } from "expo-router";
 import { Plus, Store, Wrench } from "lucide-react-native";
 import React from "react";
-import { View } from "react-native";
+import { Platform, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function UsersTabsLayout() {
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const { ms, vs } = useResponsive();
-  const tabBarBaseHeight = clamp(vs(76), 68, 92);
-  const tabBarPaddingTop = clamp(vs(4), 2, 8);
-  const tabBarHeight = tabBarBaseHeight + Math.max(insets.bottom - 4, 0);
   const fabSize = clamp(ms(62), 56, 70);
   const fabOffset = clamp(vs(24), 20, 30);
   const plusSize = clamp(ms(28), 24, 32);
@@ -23,16 +21,32 @@ export default function UsersTabsLayout() {
   return (
     <View className="flex-1 bg-background">
       <Tabs
+        safeAreaInsets={{ bottom: 0 }}
+        tabBar={(props) => (
+          <View
+            style={{
+              backgroundColor: "#fff",
+              borderTopWidth: 0,
+              elevation: 0,
+              position: "absolute",
+              bottom: 0,
+              left: 0,
+              right: 0,
+              paddingBottom: Platform.OS === "android" ? 12 : Math.max(insets.bottom, 4) - 10,
+              paddingTop: 5,
+            }}
+          >
+            {/* Pass bottom:0 insets so BottomTabBar adds zero padding of its own */}
+            <BottomTabBar {...props} insets={{ ...props.insets, bottom: 0 }} />
+          </View>
+        )}
         screenOptions={{
           headerShown: false,
           tabBarShowLabel: false,
           tabBarStyle: {
-            height: tabBarHeight,
             backgroundColor: "#fff",
             borderTopWidth: 0,
-            position: "absolute",
-            paddingTop: tabBarPaddingTop,
-            paddingBottom: Math.max(insets.bottom - 2, 0),
+            elevation: 0,
           },
         }}
       >

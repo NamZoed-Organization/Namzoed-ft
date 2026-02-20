@@ -46,6 +46,28 @@ const buildPreview = (
   return "Sent a message";
 };
 
+const asStringArray = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => {
+    if (typeof item === "string") return item;
+    if (item && typeof item === "object") {
+      const message = (item as { message?: unknown }).message;
+      if (typeof message === "string") return message;
+      try {
+        return JSON.stringify(item);
+      } catch {
+        return String(item);
+      }
+    }
+    return String(item);
+  });
+};
+
+const getRecipientsCount = (payload: Record<string, unknown> | null): number => {
+  const recipients = Number(payload?.recipients ?? 0);
+  return Number.isFinite(recipients) ? recipients : 0;
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -133,55 +155,116 @@ serve(async (req) => {
   const senderName = String(senderProfile?.name || "New message");
   const textPreview = buildPreview(messageType, preview);
 
-  const oneSignalResponse = await fetch(
-    "https://api.onesignal.com/notifications?c=push",
-    {
+  const baseNotification = {
+    app_id: ONESIGNAL_APP_ID,
+    headings: {
+      en: senderName,
+    },
+    contents: {
+      en: textPreview,
+    },
+    data: {
+      type: "chat_message",
+      sender_id: senderId,
+      receiver_id: receiverId,
+      chat_partner_id: senderId,
+      message_type: messageType,
+      route: `/chat/${senderId}`,
+    },
+  };
+
+  const sendOneSignalNotification = async (body: Record<string, unknown>) => {
+    const response = await fetch("https://api.onesignal.com/notifications?c=push", {
       method: "POST",
       headers: {
         Authorization: `Key ${ONESIGNAL_REST_API_KEY}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        app_id: ONESIGNAL_APP_ID,
-        target_channel: "push",
-        include_aliases: {
-          external_id: [receiverId],
-        },
-        headings: {
-          en: senderName,
-        },
-        contents: {
-          en: textPreview,
-        },
-        data: {
-          type: "chat_message",
-          sender_id: senderId,
-          receiver_id: receiverId,
-          chat_partner_id: senderId,
-          message_type: messageType,
-          route: `/chat/${senderId}`,
-        },
-      }),
+      body: JSON.stringify(body),
+    });
+
+    const responsePayload =
+      (await response.json().catch(() => null)) as Record<string, unknown> | null;
+
+    return { response, responsePayload };
+  };
+
+  const primary = await sendOneSignalNotification({
+    ...baseNotification,
+    target_channel: "push",
+    include_aliases: {
+      external_id: [receiverId],
     },
-  );
+  });
 
-  const oneSignalPayload =
-    (await oneSignalResponse.json().catch(() => null)) ?? null;
+  console.log("OneSignal API response", {
+    status: primary.response.status,
+    id: primary.responsePayload?.id ?? null,
+    recipients: primary.responsePayload?.recipients ?? null,
+    errors: primary.responsePayload?.errors ?? null,
+  });
 
-  if (!oneSignalResponse.ok) {
-    console.error("OneSignal API error:", oneSignalPayload);
+  if (!primary.response.ok) {
+    console.error("OneSignal API error:", primary.responsePayload);
     return jsonResponse(
       {
         success: false,
         error: "Failed to send notification via OneSignal.",
-        status: oneSignalResponse.status,
+        status: primary.response.status,
       },
       502,
     );
   }
 
+  const recipients = getRecipientsCount(primary.responsePayload);
+  const oneSignalErrors = asStringArray(primary.responsePayload?.errors);
+
+  if (!Number.isFinite(recipients) || recipients < 1) {
+    const notSubscribed = oneSignalErrors.some((message) =>
+      message.toLowerCase().includes("not subscribed")
+    );
+    const warning = notSubscribed
+      ? "Notification accepted, but receiver has no subscribed OneSignal device."
+      : "Notification request accepted by OneSignal but no recipients were matched.";
+
+    console.warn("OneSignal accepted request but no recipients were matched.", {
+      receiverId,
+      oneSignalPayload: primary.responsePayload,
+    });
+    console.info("notify-chat-message delivery summary", {
+      senderId,
+      receiverId,
+      delivered: false,
+      recipients: 0,
+      targetingMode: "alias_external_id",
+      oneSignalNotificationId: primary.responsePayload?.id ?? null,
+    });
+    return jsonResponse(
+      {
+        success: true,
+        id: primary.responsePayload?.id ?? null,
+        recipients: 0,
+        delivered: false,
+        warning,
+        reason: notSubscribed ? "not_subscribed" : "no_recipient_match",
+      },
+      200,
+    );
+  }
+
+  console.info("notify-chat-message delivery summary", {
+    senderId,
+    receiverId,
+    delivered: true,
+    recipients,
+    targetingMode: "alias_external_id",
+    oneSignalNotificationId: primary.responsePayload?.id ?? null,
+  });
+
   return jsonResponse({
     success: true,
-    id: (oneSignalPayload as Record<string, unknown> | null)?.id ?? null,
+    id: primary.responsePayload?.id ?? null,
+    recipients,
+    delivered: true,
   });
 });
