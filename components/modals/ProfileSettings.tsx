@@ -1,19 +1,19 @@
 // Path: components/ProfileSettings.tsx
 import {
-    AboutApp,
-    AppVersion,
-    AppearanceManager,
-    ChangePassword,
-    CommunityGuidelines,
-    ContactUs,
-    DataStorage,
-    HelpCenter,
-    LanguageRegion,
-    Notifications,
-    PrivacyPolicy,
-    SellerPolicy,
-    SendFeedback,
-    TermsOfService
+  AboutApp,
+  AppVersion,
+  AppearanceManager,
+  ChangePassword,
+  CommunityGuidelines,
+  ContactUs,
+  DataStorage,
+  HelpCenter,
+  LanguageRegion,
+  Notifications,
+  PrivacyPolicy,
+  SellerPolicy,
+  SendFeedback,
+  TermsOfService
 } from '@/components/settings';
 import { ArrowLeft, Bell, FileText, Globe, HardDrive, HelpCircle, Info, Key, LogOut, MessageSquare, Phone, ScrollText, Shield, Smartphone, Sparkles, Users } from 'lucide-react-native';
 import React, { useRef, useState } from "react";
@@ -209,14 +209,14 @@ export default function ProfileSettings({ onClose, currentUser, onLogout, panHan
                       onPress={() => handleNavigation("changePassword")}
                       activeOpacity={0.7}
                     >
-                      <View className="flex-row items-center">
+                      <View className="flex-row items-center gap-2">
                         <Key size={20} className="text-gray-700 mr-3" />
                         <Text className="text-base font-medium text-gray-900">Change Password</Text>
                       </View>
                       <Text className="text-gray-400 font-bold text-lg">→</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      className="flex-row items-center px-4 py-4"
+                      className="flex-row items-center px-4 py-4 gap-2"
                       onPress={onLogout}
                       activeOpacity={0.7}
                     >
@@ -231,28 +231,28 @@ export default function ProfileSettings({ onClose, currentUser, onLogout, panHan
                   <Text className="text-sm font-msemibold text-gray-500 px-2 py-2 uppercase tracking-wide">Policies</Text>
                   <View className="bg-gray-50 rounded-xl overflow-hidden">
                     <TouchableOpacity className="flex-row items-center justify-between px-4 py-4 border-b border-gray-200" onPress={() => handleNavigation("privacyPolicy")}>
-                      <View className="flex-row items-center">
+                      <View className="flex-row items-center gap-2">
                         <Shield size={20} className="text-gray-700 mr-3" />
                         <Text className="text-base font-medium text-gray-900">Privacy Policy</Text>
                       </View>
                       <Text className="text-gray-400 font-bold text-lg">→</Text>
                     </TouchableOpacity>
                     <TouchableOpacity className="flex-row items-center justify-between px-4 py-4 border-b border-gray-200" onPress={() => handleNavigation("sellerPolicy")}>
-                      <View className="flex-row items-center">
+                      <View className="flex-row items-center gap-2">
                         <FileText size={20} className="text-gray-700 mr-3" />
                         <Text className="text-base font-medium text-gray-900">Seller Policy</Text>
                       </View>
                       <Text className="text-gray-400 font-bold text-lg">→</Text>
                     </TouchableOpacity>
                     <TouchableOpacity className="flex-row items-center justify-between px-4 py-4 border-b border-gray-200" onPress={() => handleNavigation("termsOfService")}>
-                      <View className="flex-row items-center">
+                      <View className="flex-row items-center gap-2">
                         <ScrollText size={20} className="text-gray-700 mr-3" />
                         <Text className="text-base font-medium text-gray-900">Terms of Service</Text>
                       </View>
                       <Text className="text-gray-400 font-bold text-lg">→</Text>
                     </TouchableOpacity>
                     <TouchableOpacity className="flex-row items-center justify-between px-4 py-4" onPress={() => handleNavigation("communityGuidelines")}>
-                      <View className="flex-row items-center">
+                      <View className="flex-row items-center gap-2">
                         <Users size={20} className="text-gray-700 mr-3" />
                         <Text className="text-base font-medium text-gray-900">Community Guidelines</Text>
                       </View>
@@ -266,21 +266,21 @@ export default function ProfileSettings({ onClose, currentUser, onLogout, panHan
                   <Text className="text-sm font-msemibold text-gray-500 px-2 py-2 uppercase tracking-wide">Account</Text>
                   <View className="bg-gray-50 rounded-xl overflow-hidden">
                     <TouchableOpacity className="flex-row items-center justify-between px-4 py-4 border-b border-gray-200" onPress={() => handleNavigation("notifications")}>
-                      <View className="flex-row items-center">
+                      <View className="flex-row items-center gap-2">
                         <Bell size={20} className="text-gray-700 mr-3" />
                         <Text className="text-base font-medium text-gray-900">Notifications</Text>
                       </View>
                       <Text className="text-gray-400 font-bold text-lg">→</Text>
                     </TouchableOpacity>
                     <TouchableOpacity className="flex-row items-center justify-between px-4 py-4 border-b border-gray-200" onPress={() => handleNavigation("dataStorage")}>
-                      <View className="flex-row items-center">
+                      <View className="flex-row items-center gap-2">
                         <HardDrive size={20} className="text-gray-700 mr-3" />
                         <Text className="text-base font-medium text-gray-900">Data & Storage</Text>
                       </View>
                       <Text className="text-gray-400 font-bold text-lg">→</Text>
                     </TouchableOpacity>
                     <TouchableOpacity className="flex-row items-center justify-between px-4 py-4" onPress={() => handleNavigation("languageRegion")}>
-                      <View className="flex-row items-center">
+                      <View className="flex-row items-center gap-2">
                         <Globe size={20} className="text-gray-700 mr-3" />
                         <Text className="text-base font-medium text-gray-900">Language & Region</Text>
                       </View>
@@ -294,21 +294,21 @@ export default function ProfileSettings({ onClose, currentUser, onLogout, panHan
                   <Text className="text-sm font-msemibold text-gray-500 px-2 py-2 uppercase tracking-wide">Support</Text>
                   <View className="bg-gray-50 rounded-xl overflow-hidden">
                     <TouchableOpacity className="flex-row items-center justify-between px-4 py-4 border-b border-gray-200" onPress={() => handleNavigation("helpCenter")}>
-                      <View className="flex-row items-center">
+                      <View className="flex-row items-center gap-2">
                         <HelpCircle size={20} className="text-gray-700 mr-3" />
                         <Text className="text-base font-medium text-gray-900">Help Center</Text>
                       </View>
                       <Text className="text-gray-400 font-bold text-lg">→</Text>
                     </TouchableOpacity>
                     <TouchableOpacity className="flex-row items-center justify-between px-4 py-4 border-b border-gray-200" onPress={() => handleNavigation("contactUs")}>
-                      <View className="flex-row items-center">
+                      <View className="flex-row items-center gap-2">
                         <Phone size={20} className="text-gray-700 mr-3" />
                         <Text className="text-base font-medium text-gray-900">Contact Us</Text>
                       </View>
                       <Text className="text-gray-400 font-bold text-lg">→</Text>
                     </TouchableOpacity>
                     <TouchableOpacity className="flex-row items-center justify-between px-4 py-4" onPress={() => handleNavigation("sendFeedback")}>
-                      <View className="flex-row items-center">
+                      <View className="flex-row items-center gap-2">
                         <MessageSquare size={20} className="text-gray-700 mr-3" />
                         <Text className="text-base font-medium text-gray-900">Send Feedback</Text>
                       </View>
@@ -322,14 +322,14 @@ export default function ProfileSettings({ onClose, currentUser, onLogout, panHan
                   <Text className="text-sm font-msemibold text-gray-500 px-2 py-2 uppercase tracking-wide">About</Text>
                   <View className="bg-gray-50 rounded-xl overflow-hidden">
                     <TouchableOpacity className="flex-row items-center justify-between px-4 py-4 border-b border-gray-200" onPress={() => handleNavigation("appVersion")}>
-                      <View className="flex-row items-center">
+                      <View className="flex-row items-center gap-2">
                         <Smartphone size={20} className="text-gray-700 mr-3" />
                         <Text className="text-base font-medium text-gray-900">App Version</Text>
                       </View>
                       <Text className="text-sm text-gray-500">v1.0.0</Text>
                     </TouchableOpacity>
                     <TouchableOpacity className="flex-row items-center justify-between px-4 py-4" onPress={() => handleNavigation("aboutApp")}>
-                      <View className="flex-row items-center">
+                      <View className="flex-row items-center gap-2">
                         <Info size={20} className="text-gray-700 mr-3" />
                         <Text className="text-base font-medium text-gray-900">About App</Text>
                       </View>

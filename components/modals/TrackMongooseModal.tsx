@@ -1,15 +1,37 @@
 import { supabase } from "@/lib/supabase";
 import { Ionicons } from "@expo/vector-icons";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Modal,
-  Pressable,
-  Text,
-  View,
+    ActivityIndicator,
+    Modal,
+    Platform,
+    Pressable,
+    Text,
+    View,
 } from "react-native";
-import { Platform } from "react-native";
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
+
+type LatLng = { latitude: number; longitude: number };
+
+/** Fetch a road-following route from OSRM (free, no API key). Falls back to straight line. */
+async function fetchOSRMRoute(from: LatLng, to: LatLng): Promise<LatLng[]> {
+  try {
+    const url =
+      `https://router.project-osrm.org/route/v1/driving/` +
+      `${from.longitude},${from.latitude};${to.longitude},${to.latitude}` +
+      `?overview=full&geometries=geojson`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    const data = await res.json();
+    if (data.code === 'Ok' && data.routes?.[0]?.geometry?.coordinates?.length > 0) {
+      return data.routes[0].geometry.coordinates.map(
+        ([lon, lat]: [number, number]) => ({ latitude: lat, longitude: lon }),
+      );
+    }
+  } catch (e) {
+    console.warn('OSRM route unavailable, using straight line:', e);
+  }
+  return [from, to];
+}
 
 interface TrackMongooseModalProps {
   visible: boolean;
@@ -40,24 +62,40 @@ export default function TrackMongooseModal({
 }: TrackMongooseModalProps) {
   const [mongooseLocation, setMongooseLocation] = useState<MongooseLocation | null>(null);
   const [loading, setLoading] = useState(true);
-  const [mapType, setMapType] = useState<'standard' | 'satellite' | 'hybrid'>('standard');
-  const [mapRegion, setMapRegion] = useState({
+  const [routeToPickup, setRouteToPickup] = useState<LatLng[]>([]);
+  const [routePickupToDelivery, setRoutePickupToDelivery] = useState<LatLng[]>([]);
+  const mapRef = useRef<MapView>(null);
+
+  const pickup: LatLng = {
     latitude: booking.pickup_latitude,
     longitude: booking.pickup_longitude,
-    latitudeDelta: 0.05,
-    longitudeDelta: 0.05,
-  });
+  };
+  const delivery: LatLng = {
+    latitude: booking.delivery_latitude,
+    longitude: booking.delivery_longitude,
+  };
 
+  // Fetch the static pickup→delivery road route once when the modal opens
   useEffect(() => {
     if (!visible) return;
+    fetchOSRMRoute(pickup, delivery).then(setRoutePickupToDelivery);
+  }, [visible, booking.id]);
 
-    console.log('🗺️ TrackMongooseModal opened for booking:', booking.id);
+  // Re-fetch mongoose→pickup road route whenever mongoose moves
+  useEffect(() => {
+    if (!mongooseLocation) return;
+    const mongoosePt: LatLng = {
+      latitude: mongooseLocation.latitude,
+      longitude: mongooseLocation.longitude,
+    };
+    fetchOSRMRoute(mongoosePt, pickup).then(setRouteToPickup);
+  }, [mongooseLocation]);
 
-    // Fetch initial mongoose location
+  // Real-time location subscription + initial fetch
+  useEffect(() => {
+    if (!visible) return;
     fetchMongooseLocation();
 
-    // Subscribe to real-time location updates
-    console.log('📡 Subscribing to mongoose location updates...');
     const channel = supabase
       .channel(`mongoose_location:${booking.id}`)
       .on(
@@ -69,33 +107,26 @@ export default function TrackMongooseModal({
           filter: `booking_id=eq.${booking.id}`,
         },
         (payload) => {
-          console.log('🔔 Mongoose location update received:', payload);
           if (payload.new) {
-            const newLocation = {
+            setMongooseLocation({
               latitude: (payload.new as any).latitude,
               longitude: (payload.new as any).longitude,
               timestamp: (payload.new as any).updated_at,
-            };
-            console.log('📍 Setting new mongoose location:', newLocation);
-            setMongooseLocation(newLocation);
+            });
           }
-        }
+        },
       )
-      .subscribe((status) => {
-        console.log('📡 Subscription status:', status);
-      });
+      .subscribe();
 
     return () => {
-      console.log('🔌 Unsubscribing from mongoose location updates');
       supabase.removeChannel(channel);
     };
   }, [visible, booking.id]);
 
   const fetchMongooseLocation = async () => {
     try {
-      console.log('🔍 Fetching mongoose location for booking:', booking.id);
       setLoading(true);
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('mongoose_locations')
         .select('*')
         .eq('booking_id', booking.id)
@@ -103,68 +134,48 @@ export default function TrackMongooseModal({
         .limit(1)
         .single();
 
-      if (error) {
-        console.log('⚠️ No mongoose location found yet:', error.message);
-        // Don't set a default location - wait for actual GPS data
-        setMongooseLocation(null);
-      } else if (data) {
-        console.log('✅ Mongoose location found:', data);
+      if (data) {
         setMongooseLocation({
           latitude: data.latitude,
           longitude: data.longitude,
           timestamp: data.updated_at,
         });
+      } else {
+        setMongooseLocation(null);
       }
-    } catch (error) {
-      console.error('Error fetching location:', error);
+    } catch {
+      setMongooseLocation(null);
     } finally {
       setLoading(false);
     }
   };
 
   const getMapRegion = () => {
-    if (!mongooseLocation) return mapRegion;
-
-    // Calculate center point between mongoose, pickup, and delivery
-    const latitudes = [
-      mongooseLocation.latitude,
-      booking.pickup_latitude,
-      booking.delivery_latitude,
-    ];
-    const longitudes = [
-      mongooseLocation.longitude,
-      booking.pickup_longitude,
-      booking.delivery_longitude,
-    ];
-
-    const centerLat = latitudes.reduce((sum, lat) => sum + lat, 0) / latitudes.length;
-    const centerLng = longitudes.reduce((sum, lng) => sum + lng, 0) / longitudes.length;
-
-    const maxLat = Math.max(...latitudes);
-    const minLat = Math.min(...latitudes);
-    const maxLng = Math.max(...longitudes);
-    const minLng = Math.min(...longitudes);
-
-    const latDelta = (maxLat - minLat) * 1.5; // Add 50% padding
-    const lngDelta = (maxLng - minLng) * 1.5;
-
+    const pts: LatLng[] = [pickup, delivery];
+    if (mongooseLocation) {
+      pts.push({ latitude: mongooseLocation.latitude, longitude: mongooseLocation.longitude });
+    }
+    const lats = pts.map((p) => p.latitude);
+    const lngs = pts.map((p) => p.longitude);
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+    const minLng = Math.min(...lngs);
+    const maxLng = Math.max(...lngs);
     return {
-      latitude: centerLat,
-      longitude: centerLng,
-      latitudeDelta: Math.max(latDelta, 0.02), // Minimum delta
-      longitudeDelta: Math.max(lngDelta, 0.02),
+      latitude: (minLat + maxLat) / 2,
+      longitude: (minLng + maxLng) / 2,
+      latitudeDelta: Math.max((maxLat - minLat) * 1.6, 0.02),
+      longitudeDelta: Math.max((maxLng - minLng) * 1.6, 0.02),
     };
   };
 
-  const formatTimestamp = (timestamp: string) => {
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString('en-US', { 
-      hour: 'numeric', 
+  const formatTimestamp = (ts: string) =>
+    new Date(ts).toLocaleTimeString('en-US', {
+      hour: 'numeric',
       minute: '2-digit',
       second: '2-digit',
-      hour12: true 
+      hour12: true,
     });
-  };
 
   return (
     <Modal
@@ -173,185 +184,267 @@ export default function TrackMongooseModal({
       transparent={true}
       onRequestClose={onClose}
     >
-      <View className="flex-1 bg-black/50">
-        <View className="flex-1 bg-white mt-12 rounded-t-3xl overflow-hidden">
-          {/* Header */}
-          <View className="bg-white border-b border-gray-200 p-4">
-            <View className="flex-row justify-between items-center mb-3">
-              <View className="flex-1">
-                <Text className="text-xl font-bold text-gray-900">
+      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }}>
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: 'white',
+            marginTop: 48,
+            borderTopLeftRadius: 24,
+            borderTopRightRadius: 24,
+            overflow: 'hidden',
+          }}
+        >
+          {/* ── Header ──────────────────────────────────────── */}
+          <View
+            style={{
+              backgroundColor: 'white',
+              borderBottomWidth: 1,
+              borderBottomColor: '#e5e7eb',
+              padding: 16,
+            }}
+          >
+            <View
+              style={{
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: 10,
+              }}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 19, fontWeight: '700', color: '#111827' }}>
                   Track Mongoose
                 </Text>
-                <Text className="text-sm text-gray-600 mt-1">
-                  Live location tracking
+                <Text style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>
+                  Live delivery tracking
                 </Text>
               </View>
               <Pressable
                 onPress={onClose}
-                className="bg-gray-100 p-2 rounded-full"
+                style={{ backgroundColor: '#f3f4f6', padding: 8, borderRadius: 20 }}
               >
-                <Ionicons name="close" size={24} color="#374151" />
+                <Ionicons name="close" size={22} color="#374151" />
               </Pressable>
             </View>
 
-            {/* Booking info */}
-            <View className="bg-blue-50 p-3 rounded-lg">
-              <View className="flex-row items-center">
-                <Ionicons name="calendar" size={16} color="#1e40af" />
-                <Text className="text-sm text-blue-900 font-medium ml-2">
-                  {booking.booking_date} at {booking.booking_time}
-                </Text>
+            {/* Date badge */}
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                backgroundColor: '#f0f9ff',
+                paddingHorizontal: 10,
+                paddingVertical: 6,
+                borderRadius: 8,
+                alignSelf: 'flex-start',
+                marginBottom: 10,
+              }}
+            >
+              <Ionicons name="calendar-outline" size={13} color="#0369a1" />
+              <Text style={{ fontSize: 12, color: '#0369a1', fontWeight: '500', marginLeft: 5 }}>
+                {booking.booking_date} · {booking.booking_time}
+              </Text>
+            </View>
+
+            {/* Legend */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: '#16a34a', marginRight: 5 }} />
+                <Text style={{ fontSize: 11, color: '#374151' }}>Pickup</Text>
               </View>
-            </View>
-
-            {/* Map Type Toggle */}
-            <View className="flex-row gap-2 mt-3">
-              <Pressable
-                onPress={() => setMapType('standard')}
-                className={`flex-1 py-2 px-3 rounded-lg border ${mapType === 'standard' ? 'bg-blue-100 border-blue-500' : 'bg-gray-50 border-gray-300'}`}
-              >
-                <Text className={`text-xs font-medium text-center ${mapType === 'standard' ? 'text-blue-700' : 'text-gray-600'}`}>
-                  Standard
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={() => setMapType('satellite')}
-                className={`flex-1 py-2 px-3 rounded-lg border ${mapType === 'satellite' ? 'bg-blue-100 border-blue-500' : 'bg-gray-50 border-gray-300'}`}
-              >
-                <Text className={`text-xs font-medium text-center ${mapType === 'satellite' ? 'text-blue-700' : 'text-gray-600'}`}>
-                  Satellite
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={() => setMapType('hybrid')}
-                className={`flex-1 py-2 px-3 rounded-lg border ${mapType === 'hybrid' ? 'bg-blue-100 border-blue-500' : 'bg-gray-50 border-gray-300'}`}
-              >
-                <Text className={`text-xs font-medium text-center ${mapType === 'hybrid' ? 'text-blue-700' : 'text-gray-600'}`}>
-                  Hybrid
-                </Text>
-              </Pressable>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: '#1d4ed8', marginRight: 5 }} />
+                <Text style={{ fontSize: 11, color: '#374151' }}>Delivery</Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: '#f97316', marginRight: 5 }} />
+                <Text style={{ fontSize: 11, color: '#374151' }}>Mongoose</Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <View style={{ width: 16, height: 3, backgroundColor: '#f97316', borderRadius: 2, marginRight: 5 }} />
+                <Text style={{ fontSize: 11, color: '#374151' }}>Live route</Text>
+              </View>
             </View>
           </View>
 
-          {/* Map */}
-          <View className="flex-1 relative">
+          {/* ── Map ─────────────────────────────────────────── */}
+          <View style={{ flex: 1, position: 'relative' }}>
             {loading ? (
-              <View className="flex-1 items-center justify-center bg-gray-50">
-                <ActivityIndicator size="large" color="#10b981" />
-                <Text className="text-gray-600 mt-3">Loading location...</Text>
+              <View
+                style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f9fafb' }}
+              >
+                <ActivityIndicator size="large" color="#094569" />
+                <Text style={{ color: '#6b7280', marginTop: 12 }}>Loading location...</Text>
               </View>
             ) : (
               <MapView
-                provider={Platform.OS === "android" ? PROVIDER_GOOGLE : undefined}
-                mapType={mapType}
+                ref={mapRef}
+                provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
                 style={{ flex: 1 }}
                 region={getMapRegion()}
                 showsUserLocation
                 showsMyLocationButton
               >
-                {/* Pickup location (green pin) */}
+                {/* Pickup marker — green */}
                 <Marker
-                  coordinate={{
-                    latitude: booking.pickup_latitude,
-                    longitude: booking.pickup_longitude,
-                  }}
+                  coordinate={pickup}
                   title="Pickup Location"
                   description={booking.pickup_address}
                 >
-                  <View className="items-center">
-                    <View className="bg-green-600 w-10 h-10 rounded-full items-center justify-center border-4 border-white shadow-lg">
-                      <Ionicons name="location" size={24} color="white" />
-                    </View>
-                    <View className="w-0 h-0 border-l-8 border-r-8 border-t-8 border-transparent border-t-green-600 -mt-1" />
+                  <View
+                    style={{
+                      width: 38,
+                      height: 38,
+                      borderRadius: 19,
+                      backgroundColor: '#16a34a',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderWidth: 3,
+                      borderColor: 'white',
+                    }}
+                  >
+                    <Ionicons name="arrow-up-circle" size={20} color="white" />
                   </View>
                 </Marker>
 
-                {/* Delivery location (blue pin) */}
+                {/* Delivery marker — blue */}
                 <Marker
-                  coordinate={{
-                    latitude: booking.delivery_latitude,
-                    longitude: booking.delivery_longitude,
-                  }}
+                  coordinate={delivery}
                   title="Delivery Location"
                   description={booking.delivery_address}
                 >
-                  <View className="items-center">
-                    <View className="bg-blue-600 w-10 h-10 rounded-full items-center justify-center border-4 border-white shadow-lg">
-                      <Ionicons name="location" size={24} color="white" />
-                    </View>
-                    <View className="w-0 h-0 border-l-8 border-r-8 border-t-8 border-transparent border-t-blue-600 -mt-1" />
+                  <View
+                    style={{
+                      width: 38,
+                      height: 38,
+                      borderRadius: 19,
+                      backgroundColor: '#1d4ed8',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderWidth: 3,
+                      borderColor: 'white',
+                    }}
+                  >
+                    <Ionicons name="flag" size={18} color="white" />
                   </View>
                 </Marker>
 
-                {/* Mongoose current location (animated orange pin) */}
+                {/* Mongoose marker — orange bike */}
                 {mongooseLocation && (
                   <Marker
                     coordinate={{
                       latitude: mongooseLocation.latitude,
                       longitude: mongooseLocation.longitude,
                     }}
-                    title="Mongoose Location"
-                    description={`Last updated: ${formatTimestamp(mongooseLocation.timestamp)}`}
+                    title="Mongoose"
+                    description={`Updated: ${formatTimestamp(mongooseLocation.timestamp)}`}
                   >
-                    <View className="items-center">
-                      <View className="bg-orange-500 w-12 h-12 rounded-full items-center justify-center border-4 border-white shadow-lg">
-                        <Text className="text-2xl">🦡</Text>
-                      </View>
-                      <View className="w-0 h-0 border-l-8 border-r-8 border-t-8 border-transparent border-t-orange-500 -mt-1" />
+                    <View
+                      style={{
+                        width: 44,
+                        height: 44,
+                        borderRadius: 22,
+                        backgroundColor: '#f97316',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderWidth: 3,
+                        borderColor: 'white',
+                      }}
+                    >
+                      <Ionicons name="bicycle" size={22} color="white" />
                     </View>
                   </Marker>
                 )}
 
-                {/* Route line from pickup to delivery */}
-                <Polyline
-                  coordinates={[
-                    { latitude: booking.pickup_latitude, longitude: booking.pickup_longitude },
-                    { latitude: booking.delivery_latitude, longitude: booking.delivery_longitude },
-                  ]}
-                  strokeColor="#9ca3af"
-                  strokeWidth={3}
-                  lineDashPattern={[10, 5]}
-                />
+                {/* Road route: mongoose → pickup (orange solid) */}
+                {routeToPickup.length > 1 && (
+                  <Polyline
+                    coordinates={routeToPickup}
+                    strokeColor="#f97316"
+                    strokeWidth={4}
+                  />
+                )}
+
+                {/* Road route: pickup → delivery (blue dashed) */}
+                {routePickupToDelivery.length > 1 && (
+                  <Polyline
+                    coordinates={routePickupToDelivery}
+                    strokeColor="#1d4ed8"
+                    strokeWidth={3}
+                    lineDashPattern={[8, 5]}
+                  />
+                )}
               </MapView>
             )}
 
-            {/* Location status indicator */}
+            {/* Status card overlaid on bottom of map */}
             {!loading && (
-              <View className="absolute bottom-4 left-4 right-4">
+              <View style={{ position: 'absolute', bottom: 12, left: 12, right: 12 }}>
                 {mongooseLocation ? (
-                  <View className="bg-white rounded-lg shadow-lg p-4">
-                    <View className="flex-row items-center justify-between">
-                      <View className="flex-row items-center flex-1">
-                        <View className="bg-orange-500 w-3 h-3 rounded-full animate-pulse mr-2" />
-                        <View className="flex-1">
-                          <Text className="text-sm font-semibold text-gray-900">
-                            Mongoose is on the way
-                          </Text>
-                          <Text className="text-xs text-gray-600 mt-0.5">
-                            Last updated: {formatTimestamp(mongooseLocation.timestamp)}
-                          </Text>
-                        </View>
-                      </View>
-                      <Pressable
-                        onPress={fetchMongooseLocation}
-                        className="bg-green-100 p-2 rounded-full ml-2"
-                      >
-                        <Ionicons name="refresh" size={20} color="#059669" />
-                      </Pressable>
+                  <View
+                    style={{
+                      backgroundColor: 'white',
+                      borderRadius: 12,
+                      padding: 14,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      shadowColor: '#000',
+                      shadowOffset: { width: 0, height: 2 },
+                      shadowOpacity: 0.12,
+                      shadowRadius: 8,
+                      elevation: 4,
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: 10,
+                        height: 10,
+                        borderRadius: 5,
+                        backgroundColor: '#f97316',
+                        marginRight: 10,
+                      }}
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 13, fontWeight: '600', color: '#111827' }}>
+                        Mongoose is on the way
+                      </Text>
+                      <Text style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>
+                        Updated {formatTimestamp(mongooseLocation.timestamp)}
+                      </Text>
                     </View>
+                    <Pressable
+                      onPress={fetchMongooseLocation}
+                      style={{
+                        backgroundColor: '#f0f9ff',
+                        padding: 8,
+                        borderRadius: 8,
+                        marginLeft: 8,
+                      }}
+                    >
+                      <Ionicons name="refresh" size={18} color="#0369a1" />
+                    </Pressable>
                   </View>
                 ) : (
-                  <View className="bg-amber-50 border-2 border-amber-300 rounded-lg p-4">
-                    <View className="flex-row items-center">
-                      <Ionicons name="information-circle" size={24} color="#d97706" />
-                      <View className="flex-1 ml-3">
-                        <Text className="text-sm font-semibold text-amber-900">
-                          Waiting for mongoose location...
-                        </Text>
-                        <Text className="text-xs text-amber-700 mt-1">
-                          Mongoose hasn't started sharing location yet
-                        </Text>
-                      </View>
+                  <View
+                    style={{
+                      backgroundColor: '#fffbeb',
+                      borderWidth: 1.5,
+                      borderColor: '#fcd34d',
+                      borderRadius: 12,
+                      padding: 14,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <Ionicons name="time-outline" size={20} color="#d97706" />
+                    <View style={{ flex: 1, marginLeft: 10 }}>
+                      <Text style={{ fontSize: 13, fontWeight: '600', color: '#92400e' }}>
+                        Waiting for mongoose…
+                      </Text>
+                      <Text style={{ fontSize: 11, color: '#b45309', marginTop: 2 }}>
+                        Mongoose hasn't started sharing location yet
+                      </Text>
                     </View>
                   </View>
                 )}
@@ -359,32 +452,56 @@ export default function TrackMongooseModal({
             )}
           </View>
 
-          {/* Location Info */}
-          <View className="bg-white border-t border-gray-200 p-4">
-            <View className="space-y-2">
-              <View className="bg-green-50 p-3 rounded-lg">
-                <View className="flex-row items-center mb-1">
-                  <View className="w-3 h-3 bg-green-600 rounded-full mr-2" />
-                  <Text className="text-xs font-bold text-green-900">
-                    PICKUP LOCATION
-                  </Text>
-                </View>
-                <Text className="text-xs text-green-800 ml-5">
-                  {booking.pickup_address || `${booking.pickup_latitude.toFixed(6)}, ${booking.pickup_longitude.toFixed(6)}`}
+          {/* ── Address panel ───────────────────────────────── */}
+          <View
+            style={{
+              backgroundColor: 'white',
+              borderTopWidth: 1,
+              borderTopColor: '#e5e7eb',
+              padding: 14,
+              gap: 8,
+            }}
+          >
+            <View
+              style={{
+                backgroundColor: '#f0fdf4',
+                padding: 12,
+                borderRadius: 10,
+                borderWidth: 1,
+                borderColor: '#bbf7d0',
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 3 }}>
+                <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: '#16a34a', marginRight: 7 }} />
+                <Text style={{ fontSize: 10, fontWeight: '700', color: '#14532d', letterSpacing: 0.5 }}>
+                  PICKUP
                 </Text>
               </View>
+              <Text style={{ fontSize: 12, color: '#166534', marginLeft: 14 }}>
+                {booking.pickup_address ||
+                  `${booking.pickup_latitude.toFixed(5)}, ${booking.pickup_longitude.toFixed(5)}`}
+              </Text>
+            </View>
 
-              <View className="bg-blue-50 p-3 rounded-lg">
-                <View className="flex-row items-center mb-1">
-                  <View className="w-3 h-3 bg-blue-600 rounded-full mr-2" />
-                  <Text className="text-xs font-bold text-blue-900">
-                    DELIVERY LOCATION
-                  </Text>
-                </View>
-                <Text className="text-xs text-blue-800 ml-5">
-                  {booking.delivery_address || `${booking.delivery_latitude.toFixed(6)}, ${booking.delivery_longitude.toFixed(6)}`}
+            <View
+              style={{
+                backgroundColor: '#eff6ff',
+                padding: 12,
+                borderRadius: 10,
+                borderWidth: 1,
+                borderColor: '#bfdbfe',
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 3 }}>
+                <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: '#1d4ed8', marginRight: 7 }} />
+                <Text style={{ fontSize: 10, fontWeight: '700', color: '#1e3a8a', letterSpacing: 0.5 }}>
+                  DELIVERY
                 </Text>
               </View>
+              <Text style={{ fontSize: 12, color: '#1e40af', marginLeft: 14 }}>
+                {booking.delivery_address ||
+                  `${booking.delivery_latitude.toFixed(5)}, ${booking.delivery_longitude.toFixed(5)}`}
+              </Text>
             </View>
           </View>
         </View>
@@ -392,3 +509,4 @@ export default function TrackMongooseModal({
     </Modal>
   );
 }
+

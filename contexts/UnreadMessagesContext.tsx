@@ -1,13 +1,13 @@
 import { useUser } from "@/contexts/UserContext";
 import { supabase } from "@/lib/supabase";
 import React, {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
+    createContext,
+    useCallback,
+    useContext,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
 } from "react";
 
 type IncomingBanner = {
@@ -184,11 +184,26 @@ export const UnreadMessagesProvider: React.FC<{ children: React.ReactNode }> = (
       return;
     }
 
-    const uniqueSenders = new Set(
-      data.map((row: any) => String(row.sender_id)).filter(Boolean),
-    );
+    const allSenderIds = [
+      ...new Set(data.map((r: any) => String(r.sender_id)).filter(Boolean)),
+    ];
+
+    // Exclude senders who have a pending (un-accepted) message request to me
+    let pendingSet = new Set<string>();
+    const myId = currentUserUUID || candidateUserIds[0];
+    if (myId && allSenderIds.length > 0) {
+      const { data: pending } = await supabase
+        .from("message_requests")
+        .select("sender_id")
+        .eq("receiver_id", myId)
+        .eq("status", "pending")
+        .in("sender_id", allSenderIds);
+      pendingSet = new Set((pending ?? []).map((r: any) => String(r.sender_id)));
+    }
+
+    const uniqueSenders = new Set(allSenderIds.filter((id) => !pendingSet.has(id)));
     setUnreadCount(uniqueSenders.size);
-  }, [candidateUserIds]);
+  }, [candidateUserIds, currentUserUUID]);
 
   const buildAndShowBanner = useCallback(async (message: any) => {
     if (!message?.id) return;
@@ -237,11 +252,25 @@ export const UnreadMessagesProvider: React.FC<{ children: React.ReactNode }> = (
       await markConversationAsRead(activeChatPartnerId);
       return;
     }
+
+    // Suppress banner for pending request senders
+    const myId = currentUserUUID || candidateUserIds[0];
+    if (myId && latestUnread.sender_id) {
+      const { data: reqRow } = await supabase
+        .from("message_requests")
+        .select("status")
+        .eq("sender_id", latestUnread.sender_id)
+        .eq("receiver_id", myId)
+        .maybeSingle();
+      if (reqRow?.status === "pending") return;
+    }
+
     await buildAndShowBanner(latestUnread);
   }, [
     activeChatPartnerId,
     buildAndShowBanner,
     candidateUserIds,
+    currentUserUUID,
     markConversationAsRead,
   ]);
 
@@ -309,6 +338,21 @@ export const UnreadMessagesProvider: React.FC<{ children: React.ReactNode }> = (
             if (activeChatPartnerId && message.sender_id === activeChatPartnerId) {
               await markConversationAsRead(activeChatPartnerId);
               return;
+            }
+
+            // Suppress banner + count for messages sitting in the requests tray
+            const myId = currentUserUUID || candidateUserIds[0];
+            if (myId && message.sender_id) {
+              const { data: reqRow } = await supabase
+                .from("message_requests")
+                .select("status")
+                .eq("sender_id", message.sender_id)
+                .eq("receiver_id", myId)
+                .maybeSingle();
+              if (reqRow?.status === "pending") {
+                // Don't notify — user will see it only after accepting the request
+                return;
+              }
             }
 
             await refreshUnreadCount();

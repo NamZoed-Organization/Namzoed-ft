@@ -145,9 +145,9 @@ export default function MongooseResponderModal({
         .from("booking_requests")
         .insert([
           {
-            user_id: inviteData.initiatorId,
-            user_name: inviteData.initiatorName,
-            user_email: null,
+            user_id: responderId,
+            user_name: responderName,
+            user_email: responderEmail ?? "",
             mongoose_email: "mongoose@gmail.com",
             booking_date: inviteData.date,
             booking_time: inviteData.time,
@@ -213,7 +213,7 @@ export default function MongooseResponderModal({
   return (
     <>
       <Modal
-        visible={visible}
+        visible={visible && !showMapPicker}
         animationType="slide"
         transparent
         onRequestClose={onClose}

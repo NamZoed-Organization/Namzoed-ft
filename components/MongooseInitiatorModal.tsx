@@ -180,7 +180,7 @@ export default function MongooseInitiatorModal({
   return (
     <>
       <Modal
-        visible={visible}
+        visible={visible && !showMapPicker}
         animationType="slide"
         transparent
         onRequestClose={handleClose}

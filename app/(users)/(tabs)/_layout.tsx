@@ -32,7 +32,7 @@ export default function UsersTabsLayout() {
               bottom: 0,
               left: 0,
               right: 0,
-              paddingBottom: Platform.OS === "android" ? 12 : Math.max(insets.bottom, 4) - 10,
+              paddingBottom: Platform.OS === "android" ? Math.max(insets.bottom, 12) : Math.max(insets.bottom, 4) - 10,
               paddingTop: 5,
             }}
           >

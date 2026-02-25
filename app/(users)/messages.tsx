@@ -146,6 +146,8 @@ export default function MessageScreen() {
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [conversations, setConversations] = useState<any[]>([]);
+  const [requestConversations, setRequestConversations] = useState<any[]>([]);
+  const [showMessageRequests, setShowMessageRequests] = useState(false);
   const [isLoadingConversations, setIsLoadingConversations] = useState(false);
   const [debugInfo, setDebugInfo] = useState<string>("");
   const [mongooseUsers, setMongooseUsers] = useState<any[]>([]);
@@ -193,7 +195,7 @@ export default function MessageScreen() {
     }
 
     if (message.message_type === "mongoose_invite")
-      return isMine ? "You: 🦡 Mongoose delivery request" : "🦡 Mongoose delivery request";
+      return isMine ? "You:  Mongoose delivery request" : " Mongoose delivery request";
     if (message.message_type === "image" || message.image_url) return "Photo";
     if (message.message_type === "audio" || message.audio_url)
       return "Voice message";
@@ -254,7 +256,7 @@ export default function MessageScreen() {
     }
   }, [tab]);
 
-  // Search users from Supabase profiles table
+  // Search only among users the current user follows
   useEffect(() => {
     const searchUsers = async () => {
       if (!searchQuery.trim()) {
@@ -263,27 +265,40 @@ export default function MessageScreen() {
         return;
       }
 
+      const myId = currentUserUUID || currentUser?.id;
+      if (!myId) {
+        setSearchResults([]);
+        setIsSearching(false);
+        return;
+      }
+
       setIsSearching(true);
       try {
-        // First, let's see what columns are available
-        const { data, error } = await supabase
-          .from("profiles")
-          .select("*")
-          .limit(1);
+        // 1. Fetch the IDs of users I follow
+        const { data: followData, error: followError } = await supabase
+          .from("follows")
+          .select("following_id")
+          .eq("follower_id", myId);
 
-        if (error) {
-          console.error("Error checking profiles structure:", error);
-        } else {
-          console.log(
-            "Available profiles columns:",
-            data?.[0] ? Object.keys(data[0]) : "No data",
-          );
+        if (followError) {
+          console.error("Error fetching following list:", followError);
+          setSearchResults([]);
+          return;
         }
 
-        // Try a simple search by name only for now
+        const followingIds = (followData ?? []).map((r: any) => r.following_id as string);
+
+        if (followingIds.length === 0) {
+          // Not following anyone — no results to show
+          setSearchResults([]);
+          return;
+        }
+
+        // 2. Search by name only within followed users
         const { data: searchData, error: searchError } = await supabase
           .from("profiles")
           .select("*")
+          .in("id", followingIds)
           .ilike("name", `%${searchQuery}%`)
           .limit(10);
 
@@ -291,7 +306,6 @@ export default function MessageScreen() {
           console.error("Error searching users:", searchError);
           setSearchResults([]);
         } else {
-          console.log("Search results:", searchData);
           setSearchResults(searchData || []);
         }
       } catch (e) {
@@ -304,7 +318,7 @@ export default function MessageScreen() {
 
     const debounceTimer = setTimeout(searchUsers, 300);
     return () => clearTimeout(debounceTimer);
-  }, [searchQuery, currentUser?.phone_number]);
+  }, [searchQuery, currentUserUUID, currentUser?.id]);
 
   const resolveCurrentUserUUID = useCallback(async () => {
     if (currentUserUUID) return currentUserUUID;
@@ -455,13 +469,39 @@ export default function MessageScreen() {
           profiles = profileData || [];
         }
 
-        const supabaseConversations = partnerIds
+        // --- Mutual-follow + request gating ---
+        // 1. Who does the current user follow?
+        const { data: myFollowingData } = await supabase
+          .from("follows")
+          .select("following_id")
+          .eq("follower_id", resolvedUUID);
+        const myFollowingSet = new Set<string>(
+          (myFollowingData ?? []).map((r: any) => String(r.following_id)),
+        );
+
+        // 2. Who follows the current user?
+        const { data: myFollowersData } = await supabase
+          .from("follows")
+          .select("follower_id")
+          .eq("following_id", resolvedUUID);
+        const myFollowersSet = new Set<string>(
+          (myFollowersData ?? []).map((r: any) => String(r.follower_id)),
+        );
+
+        // 3. Fetch message_requests where I am the receiver
+        const { data: incomingRequests } = await supabase
+          .from("message_requests")
+          .select("sender_id, status")
+          .eq("receiver_id", resolvedUUID);
+        // Map sender_id → status
+        const requestStatusMap = new Map<string, string>(
+          (incomingRequests ?? []).map((r: any) => [String(r.sender_id), r.status]),
+        );
+
+        const allConversations = partnerIds
           .map((pid) => {
             const lastMessage = partnerMap.get(pid);
             const partnerProfile = profiles.find((p) => p.id === pid);
-            console.log(
-              `Building conversation for ${partnerProfile?.name || "Unknown"} (${pid?.substring(0, 8)})`,
-            );
             return {
               partnerId: pid,
               partnerProfile,
@@ -476,18 +516,40 @@ export default function MessageScreen() {
               new Date(a.created_at).getTime(),
           );
 
-        console.log("Final conversations built:", supabaseConversations.length);
-        console.log(
-          "Conversation partners:",
-          supabaseConversations.map(
-            (c) => c.partnerProfile?.name || c.partnerId?.substring(0, 8),
-          ),
-        );
+        // Classify each conversation
+        const mainConvos: any[] = [];
+        const reqConvos: any[] = [];
 
-        setConversations(supabaseConversations);
+        for (const convo of allConversations) {
+          const pid = String(convo.partnerId);
+          const isMutual = myFollowingSet.has(pid) && myFollowersSet.has(pid);
+          const requestStatus = requestStatusMap.get(pid); // only set when partner sent me a request
+
+          if (isMutual || requestStatus === "accepted") {
+            // Mutual follow or accepted request → main inbox
+            mainConvos.push(convo);
+          } else if (requestStatus === "pending") {
+            // Partner sent me a message request → requests tray
+            reqConvos.push(convo);
+          } else {
+            // No request row yet — check who sent the last message.
+            // If I sent it, I'm the initiator → show in my main inbox.
+            // If they sent it to me without mutual follow, treat as a pending request.
+            const lastSenderId = String(convo.lastMessage?.sender_id || "");
+            const iAmSender = idsForQuery.includes(lastSenderId);
+            if (iAmSender) {
+              mainConvos.push(convo);
+            } else {
+              reqConvos.push(convo);
+            }
+          }
+        }
+
+        setConversations(mainConvos);
+        setRequestConversations(reqConvos);
         await refreshUnreadCount();
-        setDebugInfo(`${supabaseConversations.length} chat partners`);
-        console.log("State updated with conversations");
+        setDebugInfo(`${mainConvos.length} chats · ${reqConvos.length} requests`);
+        console.log("Conversations split:", mainConvos.length, "main +", reqConvos.length, "requests");
       } catch (e) {
         console.error("Error fetching conversations:", e);
         setDebugInfo(`Error: ${(e as any).message}`);
@@ -785,6 +847,89 @@ export default function MessageScreen() {
     // Here you would remove from followers or block
   };
 
+  const handleAcceptMessageRequest = async (senderId: string) => {
+    const myId = currentUserUUID || currentUser?.id;
+    if (!myId) {
+      Alert.alert("Error", "Could not identify your account. Please try again.");
+      return;
+    }
+
+    try {
+      // Upsert so it works whether or not the row was pre-created by the sender
+      const { error } = await supabase
+        .from("message_requests")
+        .upsert(
+          { sender_id: senderId, receiver_id: myId, status: "accepted" },
+          { onConflict: "sender_id,receiver_id" },
+        );
+
+      if (error) {
+        console.error("Accept request error:", error.message);
+        // If the table doesn't exist, still move the conversation optimistically
+        if (!error.message.includes("does not exist")) {
+          Alert.alert("Error", "Failed to accept request: " + error.message);
+          return;
+        }
+      }
+
+      // Move from requests tray → main inbox
+      setRequestConversations((prev) => {
+        const moved = prev.find((c) => c.partnerId === senderId);
+        if (moved) setConversations((main) => [moved, ...main]);
+        return prev.filter((c) => c.partnerId !== senderId);
+      });
+    } catch (e: any) {
+      console.error("Accept request exception:", e);
+      Alert.alert("Error", e?.message || "An unexpected error occurred.");
+    }
+  };
+
+  const handleDeclineMessageRequest = async (senderId: string, partnerName: string) => {
+    Alert.alert(
+      "Delete Request",
+      `Delete the message request from ${partnerName}? They won't be notified.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            const myId = currentUserUUID || currentUser?.id;
+            if (!myId) {
+              Alert.alert("Error", "Could not identify your account. Please try again.");
+              return;
+            }
+
+            try {
+              // Upsert declined status (handles missing row gracefully)
+              const { error } = await supabase
+                .from("message_requests")
+                .upsert(
+                  { sender_id: senderId, receiver_id: myId, status: "declined" },
+                  { onConflict: "sender_id,receiver_id" },
+                );
+
+              if (error) {
+                console.warn("Decline request error (proceeding anyway):", error.message);
+              }
+
+              // Always remove from UI regardless of DB result
+              setRequestConversations((prev) =>
+                prev.filter((c) => c.partnerId !== senderId),
+              );
+            } catch (e: any) {
+              console.error("Decline request exception:", e);
+              // Still remove from UI
+              setRequestConversations((prev) =>
+                prev.filter((c) => c.partnerId !== senderId),
+              );
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const renderMessageItem = ({ item: phoneNumber }: { item: string }) => {
     const user = getUserByPhone(phoneNumber);
     const messagesObj = userData?.messages as Record<string, IMessage[]>;
@@ -996,103 +1141,209 @@ export default function MessageScreen() {
     const userName =
       user.name || user.username || user.full_name || "Mongoose User";
     const userEmail = user.email || "No email";
-    const userId = user.id;
 
-    // Find latest booking for this mongoose user (from current user)
+    // Latest booking from current user for this mongoose
     const userBooking = mongooseBookings
       .filter(
-        (booking) =>
-          booking.mongoose_email === userEmail &&
-          booking.user_id === currentUser?.id,
+        (b) => b.mongoose_email === userEmail && b.user_id === currentUser?.id,
       )
       .sort(
         (a, b) =>
           new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
       )[0];
 
-    // Check if mongoose has ANY accepted booking from ANY user (to show if busy)
-    const hasActiveBooking = mongooseBookings.some(
-      (booking) =>
-        booking.mongoose_email === userEmail && booking.status === "accepted",
+    // Is this mongoose currently busy with ANY user's accepted booking?
+    const isBusy = mongooseBookings.some(
+      (b) => b.mongoose_email === userEmail && b.status === "accepted",
     );
 
-    const latestBooking = userBooking;
-
-    const getStatusBadge = () => {
-      if (!latestBooking) return null;
-
-      const statusConfig = {
-        pending: { color: "bg-yellow-500", text: "Pending", icon: "time" },
-        accepted: {
-          color: "bg-green-500",
-          text: "Accepted",
-          icon: "checkmark-circle",
-        },
-        rejected: {
-          color: "bg-red-500",
-          text: "Rejected",
-          icon: "close-circle",
-        },
-      };
-
-      const config =
-        statusConfig[latestBooking.status as keyof typeof statusConfig];
-      if (!config) return null;
-
-      return (
-        <View
-          className={`${config.color} px-2 py-1 rounded-full flex-row items-center mr-2`}
-        >
-          <Ionicons name={config.icon as any} size={14} color="white" />
-          <Text className="text-white text-xs font-semibold ml-1">
-            {config.text}
-          </Text>
-        </View>
-      );
-    };
-
-    // Check if booking is disabled (has accepted booking)
-    const isBookingDisabled = latestBooking?.status === "accepted";
     const hasLocationData =
-      latestBooking?.pickup_latitude && latestBooking?.delivery_latitude;
+      userBooking?.pickup_latitude && userBooking?.delivery_latitude;
 
     const handleTrackPress = () => {
-      if (latestBooking && hasLocationData) {
-        setSelectedBookingForTracking(latestBooking);
+      if (userBooking && hasLocationData) {
+        setSelectedBookingForTracking(userBooking);
         setShowTrackingModal(true);
       }
     };
 
+    // Booking status label + color for the current user's request
+    const bookingStatusConfig: Record<
+      string,
+      { label: string; bg: string; text: string; icon: string }
+    > = {
+      pending: { label: "Pending", bg: "#fef3c7", text: "#92400e", icon: "time-outline" },
+      accepted: { label: "Accepted", bg: "#dbeafe", text: "#1e40af", icon: "checkmark-circle-outline" },
+      rejected: { label: "Rejected", bg: "#fee2e2", text: "#991b1b", icon: "close-circle-outline" },
+      completed: { label: "Delivered", bg: "#d1fae5", text: "#065f46", icon: "checkmark-done-outline" },
+    };
+    const statusCfg = userBooking ? bookingStatusConfig[userBooking.status] : null;
+
     return (
-      <View className="flex-row items-center p-4 border-b border-gray-200">
-        <View className="w-12 h-12 bg-green-600 rounded-full items-center justify-center mr-3">
-          <Text className="text-white font-bold text-lg">🦡</Text>
-        </View>
-        <View className="flex-1">
-          <Text className="font-semibold text-gray-800">{userName}</Text>
-          <Text className="text-sm text-gray-500 mt-1">{userEmail}</Text>
-        </View>
-        {getStatusBadge()}
-        {latestBooking?.status === "accepted" && hasLocationData ? (
-          <TouchableOpacity
-            className="bg-orange-500 px-4 py-2 rounded-lg flex-row items-center"
-            onPress={handleTrackPress}
+      <View
+        style={{
+          backgroundColor: "white",
+          borderBottomWidth: 1,
+          borderBottomColor: "#f3f4f6",
+          padding: 14,
+        }}
+      >
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          {/* Avatar */}
+          <View
+            style={{
+              width: 46,
+              height: 46,
+              borderRadius: 23,
+              backgroundColor: isBusy ? "#f97316" : "#094569",
+              alignItems: "center",
+              justifyContent: "center",
+              marginRight: 12,
+            }}
           >
-            <Ionicons name="navigate" size={18} color="white" />
-            <Text className="text-white font-semibold ml-2">Track</Text>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity
-            className={`${isBookingDisabled ? "bg-gray-400" : "bg-green-600"} px-4 py-2 rounded-lg flex-row items-center`}
-            onPress={() => !isBookingDisabled && setShowBookingModal(true)}
-            disabled={isBookingDisabled}
-          >
-            <Ionicons name="calendar" size={18} color="white" />
-            <Text className="text-white font-semibold ml-2">
-              {isBookingDisabled ? "In Progress" : "Book"}
+            <Ionicons name="bicycle" size={22} color="white" />
+          </View>
+
+          {/* Name + email */}
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <Text style={{ fontSize: 15, fontWeight: "600", color: "#111827" }}>
+                {userName}
+              </Text>
+              {/* Free / Busy badge */}
+              <View
+                style={{
+                  backgroundColor: isBusy ? "#fff7ed" : "#f0fdf4",
+                  borderRadius: 10,
+                  paddingHorizontal: 8,
+                  paddingVertical: 2,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  borderWidth: 1,
+                  borderColor: isBusy ? "#fed7aa" : "#bbf7d0",
+                }}
+              >
+                <View
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: 3,
+                    backgroundColor: isBusy ? "#f97316" : "#16a34a",
+                    marginRight: 4,
+                  }}
+                />
+                <Text
+                  style={{
+                    fontSize: 11,
+                    fontWeight: "600",
+                    color: isBusy ? "#c2410c" : "#15803d",
+                  }}
+                >
+                  {isBusy ? "Busy" : "Free"}
+                </Text>
+              </View>
+            </View>
+
+            <Text style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
+              {userEmail}
             </Text>
-          </TouchableOpacity>
-        )}
+
+            {/* Current user's booking status chip */}
+            {statusCfg && (
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  marginTop: 5,
+                  backgroundColor: statusCfg.bg,
+                  borderRadius: 8,
+                  paddingHorizontal: 8,
+                  paddingVertical: 3,
+                  alignSelf: "flex-start",
+                }}
+              >
+                <Ionicons name={statusCfg.icon as any} size={13} color={statusCfg.text} />
+                <Text
+                  style={{
+                    fontSize: 11,
+                    fontWeight: "600",
+                    color: statusCfg.text,
+                    marginLeft: 4,
+                  }}
+                >
+                  Your booking: {statusCfg.label}
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Action button */}
+          {userBooking?.status === "accepted" && hasLocationData ? (
+            <TouchableOpacity
+              style={{
+                backgroundColor: "#f97316",
+                paddingHorizontal: 14,
+                paddingVertical: 9,
+                borderRadius: 10,
+                flexDirection: "row",
+                alignItems: "center",
+              }}
+              onPress={handleTrackPress}
+            >
+              <Ionicons name="navigate" size={17} color="white" />
+              <Text style={{ color: "white", fontWeight: "600", marginLeft: 5, fontSize: 13 }}>
+                Track
+              </Text>
+            </TouchableOpacity>
+          ) : userBooking?.status === "completed" ? (
+            <View
+              style={{
+                backgroundColor: "#d1fae5",
+                paddingHorizontal: 12,
+                paddingVertical: 9,
+                borderRadius: 10,
+                flexDirection: "row",
+                alignItems: "center",
+              }}
+            >
+              <Ionicons name="checkmark-done" size={17} color="#065f46" />
+              <Text style={{ color: "#065f46", fontWeight: "600", marginLeft: 5, fontSize: 13 }}>
+                Done
+              </Text>
+            </View>
+          ) : userBooking?.status === "pending" || userBooking?.status === "accepted" ? (
+            <View
+              style={{
+                backgroundColor: "#f3f4f6",
+                paddingHorizontal: 12,
+                paddingVertical: 9,
+                borderRadius: 10,
+              }}
+            >
+              <Text style={{ color: "#6b7280", fontWeight: "600", fontSize: 13 }}>
+                Booked
+              </Text>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={{
+                backgroundColor: isBusy ? "#d1d5db" : "#094569",
+                paddingHorizontal: 14,
+                paddingVertical: 9,
+                borderRadius: 10,
+                flexDirection: "row",
+                alignItems: "center",
+              }}
+              onPress={() => !isBusy && setShowBookingModal(true)}
+              disabled={isBusy}
+            >
+              <Ionicons name="calendar-outline" size={17} color="white" />
+              <Text style={{ color: "white", fontWeight: "600", marginLeft: 5, fontSize: 13 }}>
+                {isBusy ? "Busy" : "Book"}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
     );
   };
@@ -1213,8 +1464,8 @@ export default function MessageScreen() {
         ))}
       </View>
 
-      {/* Tab 0: Messages — single native FlatList, no nesting */}
-      {activeTab === 0 && (
+      {/* Tab 0: Messages */}
+      {activeTab === 0 && !showMessageRequests && (
         <FlatList
           style={{ flex: 1 }}
           data={searchQuery.trim() ? searchResults : conversations}
@@ -1243,6 +1494,92 @@ export default function MessageScreen() {
                   )}
                 </View>
               </View>
+
+              {/* Message Requests banner */}
+              {!searchQuery.trim() && requestConversations.length > 0 && (
+                <TouchableOpacity
+                  onPress={() => setShowMessageRequests(true)}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    paddingHorizontal: 16,
+                    paddingVertical: 14,
+                    backgroundColor: "white",
+                    borderBottomWidth: 1,
+                    borderBottomColor: "#f3f4f6",
+                  }}
+                >
+                  {/* Avatar stack */}
+                  <View style={{ width: 46, height: 46, marginRight: 12, position: "relative" }}>
+                    <View
+                      style={{
+                        width: 38,
+                        height: 38,
+                        borderRadius: 19,
+                        backgroundColor: "#e0e7ef",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        borderWidth: 2,
+                        borderColor: "white",
+                      }}
+                    >
+                      <Ionicons name="person" size={18} color="#6b7280" />
+                    </View>
+                    {requestConversations.length > 1 && (
+                      <View
+                        style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: 16,
+                          backgroundColor: "#cbd5e1",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          position: "absolute",
+                          bottom: 0,
+                          right: 0,
+                          borderWidth: 2,
+                          borderColor: "white",
+                        }}
+                      >
+                        <Ionicons name="person" size={14} color="#6b7280" />
+                      </View>
+                    )}
+                  </View>
+
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 15, fontWeight: "600", color: "#111827" }}>
+                      Message Requests
+                    </Text>
+                    <Text style={{ fontSize: 13, color: "#6b7280", marginTop: 1 }}>
+                      {requestConversations.length}{" "}
+                      {requestConversations.length === 1 ? "request" : "requests"}
+                    </Text>
+                  </View>
+
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <View
+                      style={{
+                        minWidth: 20,
+                        height: 20,
+                        borderRadius: 10,
+                        backgroundColor: "#094569",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        paddingHorizontal: 5,
+                      }}
+                    >
+                      <Text style={{ color: "white", fontSize: 11, fontWeight: "700" }}>
+                        {requestConversations.length}
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={16} color="#9ca3af" />
+                  </View>
+                </TouchableOpacity>
+              )}
+
               {/* Section label */}
               {searchQuery.trim() && searchResults.length > 0 && (
                 <View className="px-4 py-2 bg-gray-50 border-b border-gray-200">
@@ -1263,9 +1600,12 @@ export default function MessageScreen() {
           ListEmptyComponent={() => {
             if (searchQuery.trim() && !isSearching) {
               return (
-                <View className="items-center justify-center py-8">
+                <View className="items-center justify-center py-8 px-6">
                   <Text className="text-gray-500 text-center">
-                    No users found for "{searchQuery}"
+                    No followed users match "{searchQuery}".
+                  </Text>
+                  <Text className="text-gray-400 text-center text-xs mt-1">
+                    You can only message people you follow.
                   </Text>
                 </View>
               );
@@ -1277,13 +1617,172 @@ export default function MessageScreen() {
                     No conversations yet.
                   </Text>
                   <Text className="text-gray-500 text-center mt-1">
-                    Search for users to start chatting!
+                    Search for someone you follow to start chatting.
                   </Text>
                 </View>
               );
             }
             return null;
           }}
+          showsVerticalScrollIndicator={false}
+        />
+      )}
+
+      {/* Message Requests view */}
+      {activeTab === 0 && showMessageRequests && (
+        <FlatList
+          style={{ flex: 1 }}
+          data={requestConversations}
+          keyExtractor={(item) => item.partnerId}
+          renderItem={({ item: convo }) => {
+            const name =
+              convo.partnerProfile?.name ||
+              convo.partnerProfile?.username ||
+              "Unknown";
+            const preview = formatConversationPreview(
+              convo.lastMessage,
+              false,
+            );
+            const initials = name.charAt(0).toUpperCase();
+            return (
+              <View
+                style={{
+                  backgroundColor: "white",
+                  borderBottomWidth: 1,
+                  borderBottomColor: "#f3f4f6",
+                  paddingHorizontal: 16,
+                  paddingVertical: 14,
+                }}
+              >
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                  {/* Avatar */}
+                  <TouchableOpacity
+                    onPress={() => {
+                      setShowMessageRequests(false);
+                      router.push(`/(users)/chat/${convo.partnerId}`);
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: 50,
+                        height: 50,
+                        borderRadius: 25,
+                        backgroundColor: "#e0e7ef",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        marginRight: 12,
+                      }}
+                    >
+                      {convo.partnerProfile?.avatar_url ? (
+                        <Image
+                          source={{ uri: convo.partnerProfile.avatar_url }}
+                          style={{ width: 50, height: 50, borderRadius: 25 }}
+                        />
+                      ) : (
+                        <Text style={{ fontSize: 18, fontWeight: "700", color: "#6b7280" }}>
+                          {initials}
+                        </Text>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+
+                  {/* Name + preview */}
+                  <TouchableOpacity
+                    style={{ flex: 1 }}
+                    onPress={() => {
+                      setShowMessageRequests(false);
+                      router.push(`/(users)/chat/${convo.partnerId}`);
+                    }}
+                  >
+                    <Text style={{ fontSize: 15, fontWeight: "600", color: "#111827" }}>
+                      {name}
+                    </Text>
+                    <Text
+                      style={{ fontSize: 13, color: "#6b7280", marginTop: 2 }}
+                      numberOfLines={1}
+                    >
+                      {preview}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Accept / Delete buttons */}
+                <View
+                  style={{
+                    flexDirection: "row",
+                    gap: 10,
+                    marginTop: 12,
+                    marginLeft: 62,
+                  }}
+                >
+                  <TouchableOpacity
+                    onPress={() => handleAcceptMessageRequest(convo.partnerId)}
+                    style={{
+                      flex: 1,
+                      backgroundColor: "#094569",
+                      paddingVertical: 9,
+                      borderRadius: 10,
+                      alignItems: "center",
+                    }}
+                  >
+                    <Text style={{ color: "white", fontWeight: "600", fontSize: 14 }}>
+                      Accept
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => handleDeclineMessageRequest(convo.partnerId, name)}
+                    style={{
+                      flex: 1,
+                      backgroundColor: "#f3f4f6",
+                      paddingVertical: 9,
+                      borderRadius: 10,
+                      alignItems: "center",
+                    }}
+                  >
+                    <Text style={{ color: "#374151", fontWeight: "600", fontSize: 14 }}>
+                      Delete
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            );
+          }}
+          ListHeaderComponent={() => (
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                paddingHorizontal: 16,
+                paddingVertical: 14,
+                backgroundColor: "white",
+                borderBottomWidth: 1,
+                borderBottomColor: "#e5e7eb",
+              }}
+            >
+              <TouchableOpacity
+                onPress={() => setShowMessageRequests(false)}
+                style={{ marginRight: 12 }}
+              >
+                <Ionicons name="arrow-back" size={22} color="#094569" />
+              </TouchableOpacity>
+              <Text style={{ fontSize: 18, fontWeight: "700", color: "#111827" }}>
+                Message Requests
+              </Text>
+              <View style={{ flex: 1 }} />
+              <Text style={{ fontSize: 13, color: "#6b7280" }}>
+                {requestConversations.length}{" "}
+                {requestConversations.length === 1 ? "request" : "requests"}
+              </Text>
+            </View>
+          )}
+          ListEmptyComponent={() => (
+            <View style={{ alignItems: "center", justifyContent: "center", paddingVertical: 48 }}>
+              <Ionicons name="chatbubbles-outline" size={48} color="#d1d5db" />
+              <Text style={{ color: "#6b7280", marginTop: 12, fontSize: 15 }}>
+                No message requests
+              </Text>
+            </View>
+          )}
           showsVerticalScrollIndicator={false}
         />
       )}

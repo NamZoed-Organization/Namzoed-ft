@@ -10,39 +10,38 @@ import { fetchUserPosts, Post } from "@/lib/postsService";
 import { fetchUserProducts, Product } from "@/lib/productsService";
 import { fetchUserProfile } from "@/lib/profileService";
 import {
-    fetchServiceProviderProfile,
-    fetchUserProviderServices,
-    ProviderServiceWithDetails,
+  fetchServiceProviderProfile,
+  fetchUserProviderServices,
+  ProviderServiceWithDetails,
 } from "@/lib/servicesService";
 import * as Haptics from "expo-haptics";
 import { Redirect, Stack, useLocalSearchParams, useRouter } from "expo-router";
 import {
-    AlertCircle,
-    ArrowLeft,
-    Ban,
-    CheckCircle2,
-    Grid,
-    Image as ImageLucide,
-    Play,
-    ShoppingBag,
-    User,
-    UserCheck,
-    UserPlus,
-    Wrench,
+  AlertCircle,
+  Ban,
+  CheckCircle2,
+  ChevronLeft,
+  Grid,
+  Image as ImageLucide,
+  MessageCircle,
+  Play,
+  ShoppingBag,
+  User,
+  Wrench
 } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Dimensions,
-    Image,
-    Modal,
-    Pressable,
-    RefreshControl,
-    ScrollView,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  Image,
+  Modal,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import Animated, { SlideInDown, SlideOutDown } from "react-native-reanimated";
 
@@ -284,9 +283,10 @@ export default function PublicProfileScreen() {
             text: "Unfollow",
             style: "destructive",
             onPress: async () => {
+              if (!currentUser?.id || typeof id !== "string") return;
               setLoadingFollow(true);
               try {
-                const result = await unfollowUser(currentUser.id, id as string);
+                const result = await unfollowUser(currentUser.id, id);
                 if (result.success) {
                   setIsFollowingUser(false);
                 } else {
@@ -338,7 +338,8 @@ export default function PublicProfileScreen() {
             text: "Unblock",
             style: "default",
             onPress: async () => {
-              const result = await unblockUser(currentUser.id, id as string);
+              if (!currentUser?.id || typeof id !== "string") return;
+              const result = await unblockUser(currentUser.id, id);
               if (result.success) {
                 setIsBlocked(false);
                 Haptics.notificationAsync(
@@ -363,7 +364,8 @@ export default function PublicProfileScreen() {
             text: "Block",
             style: "destructive",
             onPress: async () => {
-              const result = await blockUser(currentUser.id, id as string);
+              if (!currentUser?.id || typeof id !== "string") return;
+              const result = await blockUser(currentUser.id, id);
               if (result.success) {
                 setIsBlocked(true);
                 Haptics.notificationAsync(
@@ -416,7 +418,7 @@ export default function PublicProfileScreen() {
 
   return (
     <View className="flex-1 bg-background">
-      {/* Set Header Title dynamically if needed, or hide default header */}
+
       <Stack.Screen options={{ headerShown: false }} />
 
       {/* Fixed Header */}
@@ -425,17 +427,17 @@ export default function PublicProfileScreen() {
         className="bg-white"
       >
         {/* Custom Header */}
-        <View className="flex-row items-center justify-between px-4 pt-12 pb-3 bg-white border-b border-gray-100">
+        <View className="flex-row items-center justify-between px-4 pt-12 pb-3 bg-white">
           <TouchableOpacity
             onPress={() => router.back()}
             className="w-10 h-10 items-center justify-center -ml-2"
           >
-            <ArrowLeft size={24} className="text-gray-800" />
+            <ChevronLeft size={24} className="text-gray-800" />
           </TouchableOpacity>
 
-          <Text className="text-lg font-mbold text-gray-900" numberOfLines={1}>
+          {/* <Text className="text-lg font-mbold text-gray-900" numberOfLines={1}>
             {userProfile.username || userProfile.name || "Profile"}
-          </Text>
+          </Text> */}
 
           <TouchableOpacity
             onPress={() => {
@@ -502,98 +504,99 @@ export default function PublicProfileScreen() {
                 />
               }
             >
-              {/* Profile Info Section */}
-              <View className="px-4 py-6 items-center">
-                {/* Avatar */}
-                <TouchableOpacity
-                  onPress={() => handleOpenProfileImage(userProfile.avatar_url)}
-                  disabled={!userProfile.avatar_url}
-                  activeOpacity={0.85}
-                  className="w-24 h-24 rounded-full bg-gray-200 overflow-hidden mb-4 border border-gray-100"
-                >
-                  {userProfile.avatar_url ? (
-                    <Image
-                      source={{ uri: userProfile.avatar_url }}
-                      className="w-full h-full"
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <View className="w-full h-full items-center justify-center bg-gray-100">
-                      <User size={32} className="text-gray-400" />
-                    </View>
-                  )}
-                </TouchableOpacity>
+              {/* Profile Info Section — Instagram style */}
+              <View className="px-4 pt-5 pb-4">
+                {/* Row: Avatar + Stats */}
+                <View className="flex-row items-center mb-3">
+                  {/* Avatar */}
+                  <TouchableOpacity
+                    onPress={() => handleOpenProfileImage(userProfile.avatar_url)}
+                    disabled={!userProfile.avatar_url}
+                    activeOpacity={0.85}
+                    className="w-[86px] h-[86px] rounded-full bg-gray-200 overflow-hidden border-2 border-gray-100"
+                  >
+                    {userProfile.avatar_url ? (
+                      <Image
+                        source={{ uri: userProfile.avatar_url }}
+                        className="w-full h-full"
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View className="w-full h-full items-center justify-center bg-gray-100">
+                        <User size={34} color="#9ca3af" />
+                      </View>
+                    )}
+                  </TouchableOpacity>
 
-                {/* Name & Bio */}
-                <Text className="text-2xl font-mbold text-gray-900 text-center mb-1">
-                  {userProfile.name}
-                </Text>
-                {badgeType && (
-                  <View className="mb-3">
-                    <EarlyAccessBadge badgeType={badgeType} size="md" />
+                  {/* Stats row */}
+                  <View className="flex-1 flex-row items-center justify-around ml-4">
+                    <View className="items-center">
+                      <Text className="text-lg font-mbold text-gray-900">
+                        {userPosts.length}
+                      </Text>
+                      <Text className="text-xs font-regular text-gray-500">
+                        Posts
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      className="items-center"
+                      onPress={() => {
+                        if (!id || typeof id !== "string") return;
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        setFollowRequestsTab("followers");
+                        setShowFollowRequests(true);
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <Text className="text-lg font-mbold text-gray-900">
+                        {userProfile.follower_count || 0}
+                      </Text>
+                      <Text className="text-xs font-regular text-gray-500">
+                        Followers
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      className="items-center"
+                      onPress={() => {
+                        if (!id || typeof id !== "string") return;
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        setFollowRequestsTab("following");
+                        setShowFollowRequests(true);
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <Text className="text-lg font-mbold text-gray-900">
+                        {userProfile.following_count || 0}
+                      </Text>
+                      <Text className="text-xs font-regular text-gray-500">
+                        Following
+                      </Text>
+                    </TouchableOpacity>
                   </View>
-                )}
+                </View>
+
+                {/* Name, Badge & Bio */}
+                <View className="flex-row items-center gap-4 mb-0.5 flex-wrap">
+                  <Text className="text-base font-mbold text-gray-900">
+                    {userProfile.name}
+                  </Text>
+                  {badgeType && (
+                    <EarlyAccessBadge badgeType={badgeType} size="sm" />
+                  )}
+                </View>
                 {userProfile.bio && (
-                  <Text className="text-sm font-regular text-gray-500 text-center px-8 mb-4">
+                  <Text className="text-sm font-regular text-gray-600 mb-3">
                     {userProfile.bio}
                   </Text>
                 )}
 
-                {/* Stats */}
-                <View className="flex-row items-center justify-center space-x-8 mt-2 mb-6">
-                  <View className="items-center">
-                    <Text className="text-lg font-mbold text-gray-900">
-                      {userProducts.length}
-                    </Text>
-                    <Text className="text-xs font-regular text-gray-500">
-                      Products
-                    </Text>
-                  </View>
-                  <View className="w-[1px] h-8 bg-gray-200" />
-                  <TouchableOpacity
-                    className="items-center"
-                    onPress={() => {
-                      if (!id || typeof id !== "string") return;
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      setFollowRequestsTab("followers");
-                      setShowFollowRequests(true);
-                    }}
-                    activeOpacity={0.8}
-                  >
-                    <Text className="text-lg font-mbold text-gray-900">
-                      {userProfile.follower_count || 0}
-                    </Text>
-                    <Text className="text-xs font-regular text-gray-500">
-                      Followers
-                    </Text>
-                  </TouchableOpacity>
-                  <View className="w-[1px] h-8 bg-gray-200" />
-                  <TouchableOpacity
-                    className="items-center"
-                    onPress={() => {
-                      if (!id || typeof id !== "string") return;
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      setFollowRequestsTab("following");
-                      setShowFollowRequests(true);
-                    }}
-                    activeOpacity={0.8}
-                  >
-                    <Text className="text-lg font-mbold text-gray-900">
-                      {userProfile.following_count || 0}
-                    </Text>
-                    <Text className="text-xs font-regular text-gray-500">
-                      Following
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-
                 {/* Action Buttons */}
-                <View className="flex-row gap-3 w-full px-4">
-                  {/* Main Button: Follow OR Followed (tap to unfollow) */}
+                <View className="flex-row gap-2 mt-2">
+                  {/* Follow / Following button */}
                   <TouchableOpacity
                     onPress={handleMainAction}
                     disabled={loadingFollow}
-                    className={`flex-1 py-3 rounded-xl flex-row items-center justify-center ${
+                    className={`flex-1 py-[9px] rounded-lg flex-row items-center justify-center ${
                       isFollowingUser
                         ? "bg-gray-100 border border-gray-300"
                         : "bg-primary"
@@ -602,31 +605,35 @@ export default function PublicProfileScreen() {
                     {loadingFollow ? (
                       <ActivityIndicator
                         size="small"
-                        color={isFollowingUser ? "black" : "white"}
+                        color={isFollowingUser ? "#374151" : "white"}
                       />
                     ) : (
-                      <>
-                        {isFollowingUser ? (
-                          <>
-                            <UserCheck
-                              size={18}
-                              className="text-gray-600 mr-2"
-                            />
-                            <Text className="text-gray-600 font-msemibold">
-                              Followed
-                            </Text>
-                          </>
-                        ) : (
-                          <>
-                            <UserPlus size={18} className="text-white mr-2" />
-                            <Text className="text-white font-msemibold">
-                              Follow
-                            </Text>
-                          </>
-                        )}
-                      </>
+                      <Text
+                        className={`text-sm font-semibold ${
+                          isFollowingUser ? "text-gray-800" : "text-white"
+                        }`}
+                      >
+                        {isFollowingUser ? "Following" : "Follow"}
+                      </Text>
                     )}
                   </TouchableOpacity>
+
+                  {/* Message button — visible only when following */}
+                  {isFollowingUser && (
+                    <TouchableOpacity
+                      onPress={() => {
+                        if (typeof id !== "string") return;
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        router.push(`/(users)/chat/${id}` as any);
+                      }}
+                      className="flex-1 py-[9px] rounded-lg flex-row items-center justify-center gap-1.5 bg-gray-100 border border-gray-300"
+                    >
+
+                      <Text className="text-sm font-semibold text-gray-800">
+                        Message
+                      </Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               </View>
 
@@ -726,7 +733,7 @@ export default function PublicProfileScreen() {
                         return (
                           <View
                             key={index}
-                            className="w-[33.33%] aspect-square p-[1px]"
+                            className="w-[33.33%] aspect-[9/12] p-[1px]"
                           >
                             <TouchableOpacity className="flex-1 bg-gray-100 relative">
                               <Image
@@ -850,11 +857,11 @@ export default function PublicProfileScreen() {
                 />
               ) : serviceProvider ? (
                 <View>
-                  {/* Profile Info Section — mirrors main tab style */}
-                  <View className="px-4 py-6 items-center">
+                  {/* Profile Info Section — Instagram style */}
+                  <View className="px-4 pt-5 pb-2">
                     {/* Certified badge above avatar */}
                     {serviceProvider.verification_status === "verified" && (
-                      <View className="flex-row items-center bg-blue-50 border border-blue-100 px-3 py-1 rounded-full mb-3">
+                      <View className="flex-row items-center bg-blue-50 border border-blue-100 px-3 py-1 rounded-full mb-3 self-start">
                         <CheckCircle2 size={13} color="#3B82F6" fill="#3B82F6" />
                         <Text className="text-xs font-msemibold text-blue-600 ml-1">
                           Certified
@@ -862,47 +869,140 @@ export default function PublicProfileScreen() {
                       </View>
                     )}
 
-                    {/* Avatar */}
-                    <TouchableOpacity
-                      onPress={() =>
-                        handleOpenProfileImage(
-                          serviceProvider.profile_url || userProfile.avatar_url,
-                        )
-                      }
-                      disabled={!serviceProvider.profile_url && !userProfile.avatar_url}
-                      activeOpacity={0.85}
-                      className="w-24 h-24 rounded-full bg-gray-200 overflow-hidden mb-4 border border-gray-100"
-                    >
-                      {serviceProvider.profile_url || userProfile.avatar_url ? (
-                        <Image
-                          source={{
-                            uri: serviceProvider.profile_url || userProfile.avatar_url,
-                          }}
-                          className="w-full h-full"
-                          resizeMode="cover"
-                        />
-                      ) : (
-                        <View className="w-full h-full items-center justify-center bg-gray-100">
-                          <Wrench size={32} className="text-gray-400" />
+                    {/* Row: Avatar + Stats */}
+                    <View className="flex-row items-center mb-3 w-full">
+                      {/* Avatar */}
+                      <TouchableOpacity
+                        onPress={() =>
+                          handleOpenProfileImage(
+                            serviceProvider.profile_url || userProfile.avatar_url,
+                          )
+                        }
+                        disabled={!serviceProvider.profile_url && !userProfile.avatar_url}
+                        activeOpacity={0.85}
+                        className="w-[86px] h-[86px] rounded-full bg-gray-200 overflow-hidden border-2 border-gray-100"
+                      >
+                        {serviceProvider.profile_url || userProfile.avatar_url ? (
+                          <Image
+                            source={{
+                              uri: serviceProvider.profile_url || userProfile.avatar_url,
+                            }}
+                            className="w-full h-full"
+                            resizeMode="cover"
+                          />
+                        ) : (
+                          <View className="w-full h-full items-center justify-center bg-gray-100">
+                            <Wrench size={32} color="#9ca3af" />
+                          </View>
+                        )}
+                      </TouchableOpacity>
+
+                      {/* Work stats */}
+                      <View className="flex-1 flex-row items-center justify-around ml-4">
+                        <View className="items-center">
+                          <Text className="text-lg font-mbold text-gray-900">
+                            {providerServices.length}
+                          </Text>
+                          <Text className="text-xs font-regular text-gray-500">
+                            Services
+                          </Text>
                         </View>
-                      )}
-                    </TouchableOpacity>
+                        <TouchableOpacity
+                          className="items-center"
+                          onPress={() => {
+                            if (!id || typeof id !== "string") return;
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            setFollowRequestsTab("followers");
+                            setShowFollowRequests(true);
+                          }}
+                          activeOpacity={0.8}
+                        >
+                          <Text className="text-lg font-mbold text-gray-900">
+                            {userProfile.follower_count || 0}
+                          </Text>
+                          <Text className="text-xs font-regular text-gray-500">
+                            Followers
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          className="items-center"
+                          onPress={() => {
+                            if (!id || typeof id !== "string") return;
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            setFollowRequestsTab("following");
+                            setShowFollowRequests(true);
+                          }}
+                          activeOpacity={0.8}
+                        >
+                          <Text className="text-lg font-mbold text-gray-900">
+                            {userProfile.following_count || 0}
+                          </Text>
+                          <Text className="text-xs font-regular text-gray-500">
+                            Following
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
 
                     {/* Name */}
-                    <Text className="text-2xl font-mbold text-gray-900 text-center mb-1">
+                    <Text className="text-base font-mbold text-gray-900 mb-0.5">
                       {userProfile.name}
                     </Text>
 
                     {/* Business bio */}
                     {serviceProvider.master_bio ? (
-                      <Text className="text-sm font-regular text-gray-500 text-center px-8 mb-4">
+                      <Text className="text-sm font-regular text-gray-500 mb-3">
                         {serviceProvider.master_bio}
                       </Text>
                     ) : null}
 
+                    {/* Action Buttons for Work tab */}
+                    <View className="flex-row gap-2 mt-1">
+                      <TouchableOpacity
+                        onPress={handleMainAction}
+                        disabled={loadingFollow}
+                        className={`flex-1 py-[9px] rounded-lg flex-row items-center justify-center ${
+                          isFollowingUser
+                            ? "bg-gray-100 border border-gray-300"
+                            : "bg-primary"
+                        }`}
+                      >
+                        {loadingFollow ? (
+                          <ActivityIndicator
+                            size="small"
+                            color={isFollowingUser ? "#374151" : "white"}
+                          />
+                        ) : (
+                          <Text
+                            className={`text-sm font-msemibold ${
+                              isFollowingUser ? "text-gray-800" : "text-white"
+                            }`}
+                          >
+                            {isFollowingUser ? "Following" : "Follow"}
+                          </Text>
+                        )}
+                      </TouchableOpacity>
+
+                      {isFollowingUser && (
+                        <TouchableOpacity
+                          onPress={() => {
+                            if (typeof id !== "string") return;
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            router.push(`/(users)/chat/${id}` as any);
+                          }}
+                          className="flex-1 py-[9px] rounded-lg flex-row items-center justify-center gap-1.5 bg-gray-100 border border-gray-300"
+                        >
+                          <MessageCircle size={16} color="#374151" />
+                          <Text className="text-sm font-msemibold text-gray-800">
+                            Message
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+
                     {/* Contact info row */}
                     {(serviceProvider.profiles?.email || serviceProvider.profiles?.phone) && (
-                      <View className="flex-row items-center justify-center gap-4 mt-1 mb-2">
+                      <View className="flex-row items-center gap-3 mt-2">
                         {serviceProvider.profiles?.email ? (
                           <Text className="text-xs font-regular text-gray-500" numberOfLines={1}>
                             {serviceProvider.profiles.email}

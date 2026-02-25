@@ -390,7 +390,7 @@ const SwipeableRow = React.memo(function SwipeableRow({
     .onEnd(() => {
       'worklet';
       const triggered = translateX.value >= SWIPE_REPLY_TRIGGER;
-      translateX.value = withSpring(0, { damping: 20, stiffness: 300 });
+      translateX.value = withTiming(0, { duration: 180 });
       hasFired.value = false;
       if (triggered) {
         runOnJS(onTriggered)();
@@ -659,7 +659,7 @@ export default function ChatScreen() {
   // Drive modal card animation whenever the sheet opens / closes
   useEffect(() => {
     if (showMessageActions) {
-      modalCardScale.value = withSpring(1, { damping: 18, stiffness: 280 });
+      modalCardScale.value = withTiming(1, { duration: 160 });
       modalCardOpacity.value = withTiming(1, { duration: 160 });
     } else {
       modalCardScale.value = withTiming(0.88, { duration: 100 });
@@ -1369,11 +1369,11 @@ export default function ChatScreen() {
       (e) => {
         setIsKeyboardVisible(true);
         setKeyboardHeight(e.endCoordinates.height);
-        // On Android with button navigation the keyboard height reported by the OS
-        // includes the navigation-bar area.  Subtract insets.bottom so the input
-        // bar ends up flush with the top of the keyboard instead of overshooting.
-        const offset = Platform.OS === 'android'
-          ? -(e.endCoordinates.height - insetsBottomRef.current)
+        // On Android, endCoordinates.height is the key pane only — it does NOT include
+        // the suggestions/toolbar row (emoji, clipboard, Samsung Pass, etc.) that floats
+        // just above the keys.  Add an extra 50dp to push the input clear of that bar.
+        const offset = Platform.OS === "android"
+          ? -(e.endCoordinates.height + 50)
           : -e.endCoordinates.height;
         Animated.timing(keyboardOffset, {
           toValue: offset,
@@ -1642,6 +1642,29 @@ export default function ChatScreen() {
         messageType: "text",
         messagePreview,
       });
+
+      // Create a message request if the receiver doesn't follow the sender back
+      // (i.e. not a mutual follow). Uses INSERT ... ON CONFLICT DO NOTHING so it
+      // only fires once and never overwrites an already-accepted request.
+      void (async () => {
+        const { data: reverseFollow } = await supabase
+          .from("follows")
+          .select("id")
+          .eq("follower_id", chatPartnerId)
+          .eq("following_id", effectiveCurrentUserUUID)
+          .maybeSingle();
+
+        if (!reverseFollow) {
+          await supabase.from("message_requests").upsert(
+            {
+              sender_id: effectiveCurrentUserUUID,
+              receiver_id: chatPartnerId,
+              status: "pending",
+            },
+            { onConflict: "sender_id,receiver_id", ignoreDuplicates: true },
+          );
+        }
+      })();
 
       // Fallback: If realtime doesn't pick it up within 2 seconds, add it manually
       setTimeout(() => {
@@ -1968,6 +1991,25 @@ export default function ChatScreen() {
     }
   };
 
+  /** Called by MongooseInviteCard when the initiator taps "Cancel Request" */
+  const handleMongooseCancelRequest = async (messageId: string) => {
+    const updatedContent = JSON.stringify({
+      ...JSON.parse(
+        messages.find((m) => String(m.id) === messageId)?.content ?? "{}",
+      ),
+      status: "cancelled",
+    });
+    await supabase
+      .from("messages")
+      .update({ content: updatedContent })
+      .eq("id", messageId);
+    setMessages((prev) =>
+      prev.map((m) =>
+        String(m.id) === messageId ? { ...m, content: updatedContent } : m,
+      ),
+    );
+  };
+
   /** Called by MongooseInviteCard when the receiver taps "Confirm Your Location" */
   const handleMongooseInviteResponse = (
     messageId: string,
@@ -2010,7 +2052,7 @@ export default function ChatScreen() {
         sender_id: effectiveCurrentUserUUID,
         receiver_id: chatPartnerId,
         content:
-          "✅ Mongoose delivery booking confirmed! Use the 'Check Status & Track' button to follow your delivery.",
+          " Mongoose delivery booking confirmed! Use the 'Check Status & Track' button to follow your delivery.",
         is_read: false,
       },
     ]);
@@ -2227,6 +2269,7 @@ export default function ChatScreen() {
             chatPartnerName={chatPartnerName}
             onTapToRespond={handleMongooseInviteResponse}
             onTrack={handleMongooseTrack}
+            onCancel={handleMongooseCancelRequest}
           />
         </View>
       );
@@ -3120,7 +3163,7 @@ export default function ChatScreen() {
                     paddingHorizontal: 14,
                     paddingVertical: 10,
                     borderRadius: 18,
-                    backgroundColor: isOwnMsg ? '#3b82f6' : '#e5e7eb',
+                    backgroundColor: isOwnMsg ? '#094569' : '#e5e7eb',
                     shadowColor: '#000',
                     shadowOffset: { width: 0, height: 3 },
                     shadowOpacity: 0.2,

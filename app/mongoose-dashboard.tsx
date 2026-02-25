@@ -7,16 +7,16 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Modal,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  Switch,
-  Text,
-  View,
+    ActivityIndicator,
+    Alert,
+    FlatList,
+    Modal,
+    Pressable,
+    RefreshControl,
+    ScrollView,
+    Switch,
+    Text,
+    View,
 } from "react-native";
 import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
 
@@ -254,66 +254,98 @@ export default function MongooseDashboard() {
 
   // Handle completing an accepted booking
   const handleCompleteBooking = async (bookingId: string, userName: string) => {
+    // Find the booking to get the user_id for the delivery-done chat message
+    const booking = bookingRequests.find((b) => b.id === bookingId);
+
     Alert.alert(
       "Mark as Done",
-      `Complete the booking with ${userName}? This will allow them to book again.`,
+      `Mark delivery for ${userName} as completed?`,
       [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
+        { text: "Cancel", style: "cancel" },
         {
           text: "Done",
           onPress: async () => {
             try {
-              console.log("Attempting to delete booking:", bookingId);
-
-              const { data, error } = await supabase
+              // 1. Update booking status to "completed" (not delete)
+              const { error: updateError } = await supabase
                 .from("booking_requests")
-                .delete()
-                .eq("id", bookingId)
-                .select();
+                .update({ status: "completed" })
+                .eq("id", bookingId);
 
-              console.log("Delete response - data:", data, "error:", error);
-
-              if (error) {
-                console.error("Error completing booking:", error);
-                Alert.alert(
-                  "Error",
-                  `Failed to complete booking: ${error.message}\nCode: ${error.code}`,
-                );
-              } else if (!data || data.length === 0) {
-                // No rows were deleted - likely RLS policy issue
-                console.error(
-                  "No rows deleted - possible RLS policy restriction",
-                );
-                Alert.alert(
-                  "Permission Error",
-                  "Unable to delete booking. This is likely a database permission issue (RLS policy). Please check your Supabase RLS policies for the booking_requests table.",
-                );
-              } else {
-                console.log(
-                  "Booking deleted successfully:",
-                  data.length,
-                  "row(s)",
-                );
-
-                // Reload booking requests first
-                console.log("Reloading booking requests...");
-                await loadBookingRequests();
-
-                // Check if there are any more accepted bookings
-                await loadAvailabilityStatus();
-                console.log("🟢 Mongoose availability status updated");
-
-                Alert.alert("Success", "Booking completed successfully");
+              if (updateError) {
+                console.error("Error completing booking:", updateError);
+                Alert.alert("Error", `Failed: ${updateError.message}`);
+                return;
               }
+
+              console.log("✅ Booking marked completed:", bookingId);
+
+              // 2. Resolve buyer + seller IDs to notify both parties
+              if (booking?.user_id && currentUser?.id) {
+                // Attempt to parse seller from the chat-initiated booking message JSON
+                let sellerId: string | null = null;
+                let buyerId: string = booking.user_id;
+
+                try {
+                  const meta = JSON.parse(booking.message ?? "");
+                  if (meta?.initiatedFromChat) {
+                    // The party with role "seller" is at the pickup point
+                    if (meta.initiatorRole === "seller") {
+                      sellerId = meta.initiatorId ?? null;
+                      buyerId = meta.responderId ?? booking.user_id;
+                    } else {
+                      sellerId = meta.responderId ?? null;
+                      buyerId = meta.initiatorId ?? booking.user_id;
+                    }
+                  }
+                } catch {
+                  // message is plain text (BookMongooseModal) — no seller to notify
+                }
+
+                const notifications: Array<{
+                  sender_id: string;
+                  receiver_id: string;
+                  content: string;
+                  is_read: boolean;
+                }> = [];
+
+                // Always notify the buyer
+                notifications.push({
+                  sender_id: currentUser.id,
+                  receiver_id: buyerId,
+                  content:
+                    "Your delivery has been successfully completed! Thank you for using Mongoose delivery. 🎉",
+                  is_read: false,
+                });
+
+                // Notify the seller if we know their ID (and they're a different person)
+                if (sellerId && sellerId !== buyerId && sellerId !== currentUser.id) {
+                  notifications.push({
+                    sender_id: currentUser.id,
+                    receiver_id: sellerId,
+                    content:
+                      "The delivery for your item has been successfully completed by Mongoose! 📦✅",
+                    is_read: false,
+                  });
+                }
+
+                const { error: msgError } = await supabase
+                  .from("messages")
+                  .insert(notifications);
+
+                if (msgError) {
+                  console.warn("Could not send delivery-done messages:", msgError.message);
+                } else {
+                  console.log(`📩 Delivery-done messages sent to ${notifications.length} recipient(s)`);
+                }
+              }
+
+              // 3. Refresh local state
+              await Promise.all([loadBookingRequests(), loadAvailabilityStatus()]);
+              Alert.alert("Delivery Complete", `Booking for ${userName} has been marked as delivered.`);
             } catch (error: any) {
               console.error("Error completing booking:", error);
-              Alert.alert(
-                "Error",
-                `An unexpected error occurred: ${error?.message || "Unknown error"}`,
-              );
+              Alert.alert("Error", error?.message || "An unexpected error occurred.");
             }
           },
         },

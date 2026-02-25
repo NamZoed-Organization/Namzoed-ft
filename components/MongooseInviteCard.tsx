@@ -9,11 +9,18 @@
  *  • confirmed                     – "Booking confirmed · Track delivery"
  */
 import { Ionicons } from "@expo/vector-icons";
+import {
+    CheckCircle2,
+    Package,
+    ShoppingBag,
+    Truck,
+    XCircle,
+} from "lucide-react-native";
 import React from "react";
 import { Text, TouchableOpacity, View } from "react-native";
 
 export interface MongooseInviteData {
-  status: "awaiting_response" | "confirmed";
+  status: "awaiting_response" | "confirmed" | "cancelled";
   bookingRequestId: string | null;
   initiatorRole: "seller" | "buyer";
   responderRole: "seller" | "buyer";
@@ -36,6 +43,8 @@ interface Props {
   onTapToRespond: (messageId: string, data: MongooseInviteData) => void;
   /** Called when either user taps "Track delivery" on a confirmed booking */
   onTrack: (bookingId: string) => void;
+  /** Called when the initiator cancels a pending (awaiting_response) request */
+  onCancel?: (messageId: string) => void;
 }
 
 export function parseMongooseInvite(raw: string): MongooseInviteData | null {
@@ -46,9 +55,9 @@ export function parseMongooseInvite(raw: string): MongooseInviteData | null {
   }
 }
 
-const SELLER_COLOR = "#15803d";
+const SELLER_COLOR = "#b45309";
 const BUYER_COLOR = "#1d4ed8";
-const SELLER_BG = "#dcfce7";
+const SELLER_BG = "#fef3c7";
 const BUYER_BG = "#dbeafe";
 
 export default function MongooseInviteCard({
@@ -58,6 +67,7 @@ export default function MongooseInviteCard({
   chatPartnerName,
   onTapToRespond,
   onTrack,
+  onCancel,
 }: Props) {
   const data = parseMongooseInvite(rawContent);
 
@@ -69,10 +79,14 @@ export default function MongooseInviteCard({
           borderRadius: 14,
           padding: 12,
           maxWidth: 280,
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 8,
         }}
       >
+        <Truck size={14} color="#9ca3af" strokeWidth={1.75} />
         <Text style={{ color: "#9ca3af", fontSize: 13 }}>
-          🦡 Mongoose delivery request (unsupported format)
+          Mongoose delivery request (unsupported format)
         </Text>
       </View>
     );
@@ -81,15 +95,18 @@ export default function MongooseInviteCard({
   const roleColor =
     data.initiatorRole === "seller" ? SELLER_COLOR : BUYER_COLOR;
   const roleBg = data.initiatorRole === "seller" ? SELLER_BG : BUYER_BG;
-  const roleEmoji = data.initiatorRole === "seller" ? "📦" : "🛍️";
+  const RoleIcon = data.initiatorRole === "seller" ? Package : ShoppingBag;
   const roleLabel =
     data.initiatorRole === "seller" ? "Seller (Pickup)" : "Buyer (Delivery)";
 
-  const responderRoleEmoji = data.responderRole === "seller" ? "📦" : "🛍️";
+  const ResponderRoleIcon = data.responderRole === "seller" ? Package : ShoppingBag;
+  const responderRoleColor =
+    data.responderRole === "seller" ? SELLER_COLOR : BUYER_COLOR;
   const responderRoleLabel =
     data.responderRole === "seller" ? "Seller (Pickup)" : "Buyer (Delivery)";
 
   const isConfirmed = data.status === "confirmed";
+  const isCancelled = data.status === "cancelled";
 
   // Abbreviated address for the card (first two comma-separated parts)
   const shortAddress = data.initiatorAddress
@@ -103,7 +120,7 @@ export default function MongooseInviteCard({
         borderRadius: 18,
         backgroundColor: "white",
         borderWidth: 1.5,
-        borderColor: isConfirmed ? "#86efac" : "#e5e7eb",
+        borderColor: isConfirmed ? "#bfdbfe" : isCancelled ? "#e5e7eb" : "#e5e7eb",
         overflow: "hidden",
         shadowColor: "#000",
         shadowOffset: { width: 0, height: 2 },
@@ -115,24 +132,45 @@ export default function MongooseInviteCard({
       {/* ── Header stripe ───────────────────────────────── */}
       <View
         style={{
-          backgroundColor: isConfirmed ? "#f0fdf4" : "#f8faff",
+          backgroundColor: isConfirmed ? "#eff6ff" : isCancelled ? "#f9fafb" : "#f8faff",
           paddingHorizontal: 14,
           paddingVertical: 11,
           flexDirection: "row",
           alignItems: "center",
           borderBottomWidth: 1,
-          borderBottomColor: isConfirmed ? "#bbf7d0" : "#e5e7eb",
+          borderBottomColor: isConfirmed ? "#bfdbfe" : isCancelled ? "#e5e7eb" : "#e5e7eb",
         }}
       >
-        <Text style={{ fontSize: 20 }}>🦡</Text>
+        <View
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: 8,
+            backgroundColor: isConfirmed ? "#dbeafe" : isCancelled ? "#e5e7eb" : "#e0e7ef",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Truck size={17} color={isConfirmed ? "#1d4ed8" : isCancelled ? "#9ca3af" : "#374151"} strokeWidth={1.75} />
+        </View>
         <View style={{ flex: 1, marginLeft: 8 }}>
           <Text style={{ fontSize: 13, fontWeight: "700", color: "#111827" }}>
-            Mongoose Delivery Request
+            Mongoose Delivery
           </Text>
           {isConfirmed && (
-            <Text style={{ fontSize: 11, color: "#16a34a", fontWeight: "600" }}>
-              ✅ Booking confirmed
-            </Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 1 }}>
+              <CheckCircle2 size={11} color="#1d4ed8" strokeWidth={2} />
+              <Text style={{ fontSize: 11, color: "#1d4ed8", fontWeight: "600" }}>Booking confirmed</Text>
+            </View>
+          )}
+          {isCancelled && (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 1 }}>
+              <XCircle size={11} color="#9ca3af" strokeWidth={2} />
+              <Text style={{ fontSize: 11, color: "#9ca3af", fontWeight: "600" }}>Request cancelled</Text>
+            </View>
+          )}
+          {!isConfirmed && !isCancelled && (
+            <Text style={{ fontSize: 11, color: "#6b7280", marginTop: 1 }}>Delivery request</Text>
           )}
         </View>
       </View>
@@ -158,7 +196,7 @@ export default function MongooseInviteCard({
               marginRight: 8,
             }}
           >
-            <Text style={{ fontSize: 13 }}>{roleEmoji}</Text>
+            <RoleIcon size={13} color={roleColor} strokeWidth={2} />
             <Text
               style={{
                 fontSize: 11,
@@ -230,13 +268,13 @@ export default function MongooseInviteCard({
             <View
               style={{ flexDirection: "row", alignItems: "center" }}
             >
-              <Text style={{ fontSize: 14 }}>{responderRoleEmoji}</Text>
+              <ResponderRoleIcon size={13} color={responderRoleColor} strokeWidth={2} />
               <Text
                 style={{
                   marginLeft: 5,
                   fontSize: 12,
                   fontWeight: "700",
-                  color: data.responderRole === "seller" ? SELLER_COLOR : BUYER_COLOR,
+                  color: responderRoleColor,
                 }}
               >
                 {responderRoleLabel}
@@ -259,7 +297,7 @@ export default function MongooseInviteCard({
           disabled={!data.bookingRequestId}
           style={{
             margin: 10,
-            backgroundColor: "#16a34a",
+            backgroundColor: "#094569",
             borderRadius: 12,
             paddingVertical: 11,
             flexDirection: "row",
@@ -279,12 +317,12 @@ export default function MongooseInviteCard({
             Check Status & Track
           </Text>
         </TouchableOpacity>
-      ) : isCurrentUser ? (
-        // Sender — waiting status
+      ) : isCancelled ? (
+        // Cancelled state — shown to both sides
         <View
           style={{
             margin: 10,
-            backgroundColor: "#f9fafb",
+            backgroundColor: "#f3f4f6",
             borderRadius: 12,
             paddingVertical: 11,
             paddingHorizontal: 14,
@@ -292,17 +330,50 @@ export default function MongooseInviteCard({
             alignItems: "center",
           }}
         >
-          <Ionicons name="time-outline" size={16} color="#9ca3af" />
-          <Text
+          <XCircle size={16} color="#9ca3af" strokeWidth={1.75} />
+          <Text style={{ color: "#6b7280", fontSize: 12, marginLeft: 6, flex: 1 }}>
+            {isCurrentUser ? "You cancelled this request." : "This request was cancelled."}
+          </Text>
+        </View>
+      ) : isCurrentUser ? (
+        // Sender — waiting status + cancel button
+        <View style={{ margin: 10, gap: 8 }}>
+          <View
             style={{
-              color: "#6b7280",
-              fontSize: 12,
-              marginLeft: 6,
-              flex: 1,
+              backgroundColor: "#f9fafb",
+              borderRadius: 12,
+              paddingVertical: 11,
+              paddingHorizontal: 14,
+              flexDirection: "row",
+              alignItems: "center",
             }}
           >
-            Waiting for {chatPartnerName} to confirm their location…
-          </Text>
+            <Ionicons name="time-outline" size={16} color="#9ca3af" />
+            <Text style={{ color: "#6b7280", fontSize: 12, marginLeft: 6, flex: 1 }}>
+              Waiting for {chatPartnerName} to confirm their location…
+            </Text>
+          </View>
+          {onCancel && (
+            <TouchableOpacity
+              onPress={() => onCancel(messageId)}
+              style={{
+                backgroundColor: "#f3f4f6",
+                borderRadius: 12,
+                paddingVertical: 10,
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                borderWidth: 1,
+                borderColor: "#e5e7eb",
+              }}
+              activeOpacity={0.75}
+            >
+              <XCircle size={16} color="#6b7280" strokeWidth={1.75} />
+              <Text style={{ color: "#374151", fontSize: 12, fontWeight: "600", marginLeft: 6 }}>
+                Cancel Request
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       ) : (
         // Receiver — tap to respond
