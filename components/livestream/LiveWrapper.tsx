@@ -22,7 +22,6 @@ try {
   const LiveModule = require("@/components/livestream/Live");
   LiveScreen = LiveModule.default || LiveModule;
 } catch (error) {
-  console.warn("Live streaming module unavailable:", error);
   importError = error as Error;
 }
 
@@ -58,7 +57,6 @@ export default function LiveWrapper({ onClose }: LiveWrapperProps) {
           setIsRetrying(false);
         }
       } catch (error) {
-        console.warn("Retry failed:", error);
         setIsRetrying(false);
       }
     }, 1000);

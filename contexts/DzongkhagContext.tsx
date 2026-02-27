@@ -158,7 +158,6 @@ export const DzongkhagProvider: React.FC<{ children: React.ReactNode }> = ({
             });
           }
         } catch (error) {
-          console.log('Could not load saved location');
         }
       }
     };

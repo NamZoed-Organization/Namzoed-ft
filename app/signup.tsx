@@ -121,9 +121,7 @@ export default function SignupTab2() {
           // Send welcome SMS (non-blocking, only for 97517 numbers)
           sendWelcomeSMS(userPhone).then((success) => {
             if (success) {
-              console.log('Welcome SMS sent successfully to:', userPhone);
             } else {
-              console.warn('SMS not sent or failed, but signup was successful');
             }
           }).catch((err) => {
             console.error('SMS sending error:', err);
@@ -227,11 +225,19 @@ export default function SignupTab2() {
 
           {/* Phone */}
           <FormInput
-            placeholder="Phone Number"
+            placeholder="XXXXXXXX"
             keyboardType="phone-pad"
             value={phone}
             onChangeText={setPhone}
-            leftIcon={<MaterialIcons name="phone" size={iconSize} color="#6B7280" />}
+            maxLength={8}
+            leftIcon={
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <MaterialIcons name="phone" size={iconSize} color="#6B7280" />
+                <Text style={{ color: "#374151", fontSize: clamp(ms(15), 13, 17), fontWeight: "500" }}>
+                  975 -
+                </Text>
+              </View>
+            }
           />
 
           {/* Password */}

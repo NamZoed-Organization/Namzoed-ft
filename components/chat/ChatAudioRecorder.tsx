@@ -91,7 +91,6 @@ export default function ChatAudioRecorder({
     try {
       if (isRecording || isRecorderRecordingSafe()) return;
 
-      console.log('🎤 Requesting audio permissions...');
       const permission = await requestRecordingPermissionsAsync();
       
       if (permission.status !== 'granted') {
@@ -105,7 +104,6 @@ export default function ChatAudioRecorder({
         playsInSilentMode: true,
       });
 
-      console.log('🎤 Starting recording...');
       await recorder.prepareToRecordAsync();
       recorder.record();
 
@@ -156,8 +154,6 @@ export default function ChatAudioRecorder({
     if (!isRecorderRecordingSafe()) return;
 
     try {
-      console.log('🎤 Stopping recording...');
-      
       if (autoStopIntervalRef.current) {
         clearInterval(autoStopIntervalRef.current);
         autoStopIntervalRef.current = null;
@@ -182,7 +178,6 @@ export default function ChatAudioRecorder({
       }
 
       if (uri) {
-        console.log('🎤 Recording saved at:', uri);
         await uploadAudioToSupabase(uri, durationSeconds);
       }
 
@@ -200,8 +195,6 @@ export default function ChatAudioRecorder({
     if (!isRecorderRecordingSafe()) return;
 
     try {
-      console.log('🎤 Canceling recording...');
-      
       if (autoStopIntervalRef.current) {
         clearInterval(autoStopIntervalRef.current);
         autoStopIntervalRef.current = null;
@@ -245,7 +238,6 @@ export default function ChatAudioRecorder({
         isOptimistic: true
       };
 
-      console.log('🎤 Creating optimistic audio message');
       onOptimisticAudio(optimisticMessage);
 
       // Generate conversation key (sorted UUIDs for consistency)
@@ -255,8 +247,6 @@ export default function ChatAudioRecorder({
       const timestamp = Date.now();
       const fileName = `${optimisticId}_${timestamp}.m4a`;
       const filePath = `${conversationKey}/${fileName}`;
-
-      console.log('📤 Uploading audio to:', filePath);
 
       // Read file as base64
       const fileInfo = await FileSystem.getInfoAsync(audioUri);
@@ -288,16 +278,12 @@ export default function ChatAudioRecorder({
         throw uploadError;
       }
 
-      console.log('✅ Upload successful:', uploadData.path);
-
       // Get public URL
       const { data: urlData } = supabase.storage
         .from('chat-audio')
         .getPublicUrl(filePath);
 
       const publicUrl = urlData.publicUrl;
-      console.log('🔗 Public URL:', publicUrl);
-
       // Insert message into database
       const { data: insertData, error: insertError } = await supabase
         .from('messages')

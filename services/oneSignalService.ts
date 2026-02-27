@@ -48,9 +48,6 @@ const getOneSignalSdk = (): OneSignalSdkModule | null => {
   if (isExpoGoRuntime()) {
     cachedOneSignalSdk = null;
     if (!warnedExpoGoUnsupported) {
-      console.warn(
-        "OneSignal is not available in Expo Go. Use a development build or standalone app for push.",
-      );
       warnedExpoGoUnsupported = true;
     }
     return cachedOneSignalSdk;
@@ -59,9 +56,6 @@ const getOneSignalSdk = (): OneSignalSdkModule | null => {
   if (!hasOneSignalNativeModule()) {
     cachedOneSignalSdk = null;
     if (!warnedMissingNativeModule) {
-      console.warn(
-        "OneSignal native module is unavailable. Push will be disabled in this runtime.",
-      );
       warnedMissingNativeModule = true;
     }
     return cachedOneSignalSdk;
@@ -74,9 +68,6 @@ const getOneSignalSdk = (): OneSignalSdkModule | null => {
   } catch {
     cachedOneSignalSdk = null;
     if (!warnedMissingNativeModule) {
-      console.warn(
-        "OneSignal native module is unavailable. Push will be disabled in this runtime.",
-      );
       warnedMissingNativeModule = true;
     }
   }
@@ -92,9 +83,6 @@ const withOneSignalGuard = <T>(fn: (sdk: OneSignalSdkModule) => T, fallback: T):
     return fn(sdk);
   } catch {
     if (!warnedRuntimeFailure) {
-      console.warn(
-        "OneSignal runtime call failed. Push features are disabled for this session.",
-      );
       warnedRuntimeFailure = true;
     }
     return fallback;
@@ -106,9 +94,6 @@ export const ensureOneSignalInitialized = (): boolean => {
 
   if (!ONESIGNAL_APP_ID) {
     if (!warnedMissingAppId) {
-      console.warn(
-        "OneSignal is not configured. Set EXPO_PUBLIC_ONESIGNAL_APP_ID or expo.extra.oneSignalAppId.",
-      );
       warnedMissingAppId = true;
     }
     return false;
@@ -161,9 +146,6 @@ export const requestOneSignalPermissionIfNeeded = async (): Promise<boolean> => 
     return granted;
   } catch {
     if (!warnedRuntimeFailure) {
-      console.warn(
-        "OneSignal permission API is unavailable in this runtime.",
-      );
       warnedRuntimeFailure = true;
     }
     return false;
@@ -191,14 +173,11 @@ export const ensureOneSignalPushOptedIn = async (
     const isOptedInAfter =
       await sdk.OneSignal.User.pushSubscription.getOptedInAsync();
     if (!isOptedInAfter) {
-      console.warn(`[OneSignal Debug][${context}] push subscription still opted out`);
       return false;
     }
 
-    console.log(`[OneSignal Debug][${context}] push subscription opted in`);
     return true;
   } catch (error) {
-    console.warn(`[OneSignal Debug][${context}] opt-in check failed`, error);
     return false;
   }
 };
@@ -244,13 +223,11 @@ export const logOneSignalDebugState = async (
   expectedExternalId?: string | null,
 ): Promise<void> => {
   if (!ensureOneSignalInitialized()) {
-    console.warn(`[OneSignal Debug][${context}] not initialized`);
     return;
   }
 
   const sdk = getOneSignalSdk();
   if (!sdk) {
-    console.warn(`[OneSignal Debug][${context}] sdk unavailable`);
     return;
   }
 
@@ -288,13 +265,8 @@ export const logOneSignalDebugState = async (
     });
 
     if (expectedExternalId && externalId !== String(expectedExternalId)) {
-      console.warn(`[OneSignal Debug][${context}] external_id mismatch`, {
-        expectedExternalId,
-        actualExternalId: externalId,
-      });
     }
   } catch (error) {
-    console.warn(`[OneSignal Debug][${context}] failed`, error);
   }
 };
 
@@ -339,7 +311,6 @@ export const getOneSignalDebugState = async (
       pushTokenPrefix: pushToken ? String(pushToken).slice(0, 16) : null,
     };
   } catch (error) {
-    console.warn("[OneSignal Debug] getOneSignalDebugState failed", error);
     return null;
   }
 };

@@ -152,7 +152,6 @@ class GetStreamService {
     try {
       await call.get();
     } catch (error) {
-      console.warn("Unable to fetch livestream metadata", error);
     }
     return call;
   }

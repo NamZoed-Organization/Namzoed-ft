@@ -41,7 +41,6 @@ export default function AudioMessagePlayer({
       }
 
       if (player) {
-        console.log('🔇 Releasing player on unmount');
         player.remove();
       }
     };
@@ -79,8 +78,6 @@ export default function AudioMessagePlayer({
           player.play();
           setIsPlaying(true);
         } else {
-          console.log('🔊 Loading audio from:', audioUrl);
-
           await setAudioModeAsync({
             allowsRecording: false,
             playsInSilentMode: true,

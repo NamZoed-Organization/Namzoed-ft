@@ -366,7 +366,6 @@ export default function Login() {
       Alert.alert("Error", error.message);
     } finally {
       setLoading(false);
-      console.log("Login process completed");
     }
   };
 

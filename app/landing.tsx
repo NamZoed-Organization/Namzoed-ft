@@ -18,7 +18,7 @@ export default function Landing() {
   return (
     <View style={styles.container}>
       <Image
-        source={require('../assets/images/react-logo.png')} // Add this image
+        source={require('../assets/images/logo.png')}
         style={styles.logo}
         resizeMode="contain"
       />

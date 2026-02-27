@@ -33,8 +33,8 @@ import React, {
 import {
   ActivityIndicator,
   Alert,
+  FlatList,
   RefreshControl,
-  ScrollView,
   Text,
   TouchableOpacity,
   View
@@ -178,10 +178,6 @@ export default function ManageListingsOverlay({
         ]);
 
       // Debug logging
-      console.log("📚 Raw bookmarks data:", bookmarksData);
-      console.log("❌ Bookmarks error:", bookmarksError);
-      console.log("👤 User ID:", userId);
-
       setProducts(productsData || []);
       setMarketplaceItems(marketplaceData || []);
 
@@ -207,9 +203,6 @@ export default function ManageListingsOverlay({
         .filter(
           (item) => item.products || item.marketplace || item.posts,
         ) as BookmarkedItem[];
-
-      console.log("✅ Formatted bookmarks:", formattedBookmarks);
-      console.log("📊 Bookmark count:", formattedBookmarks.length);
 
       setBookmarks(formattedBookmarks || []);
     } catch (error) {
@@ -772,7 +765,10 @@ export default function ManageListingsOverlay({
               <ActivityIndicator size="large" color="#094569" />
             </View>
           ) : (
-            <ScrollView
+            <FlatList
+              data={currentListData}
+              renderItem={renderItem}
+              keyExtractor={(item) => item.id}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={{ paddingTop: 20, paddingBottom: 150 }}
               refreshControl={
@@ -783,8 +779,7 @@ export default function ManageListingsOverlay({
                   progressViewOffset={20}
                 />
               }
-            >
-              {currentListData.length === 0 ? (
+              ListEmptyComponent={
                 <View className="flex-1 items-center justify-center pt-32 px-10">
                   <View className="w-16 h-16 bg-gray-100 rounded-full items-center justify-center mb-4">
                     <Package size={28} color="#94A3B8" />
@@ -796,14 +791,12 @@ export default function ManageListingsOverlay({
                     Items in this category will appear here.
                   </Text>
                 </View>
-              ) : (
-                currentListData.map((item) => (
-                  <View key={item.id}>
-                    {renderItem({ item })}
-                  </View>
-                ))
-              )}
-            </ScrollView>
+              }
+              removeClippedSubviews={true}
+              maxToRenderPerBatch={10}
+              windowSize={10}
+              initialNumToRender={8}
+            />
           )}
         </View>
       )}

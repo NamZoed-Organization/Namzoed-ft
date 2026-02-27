@@ -21,7 +21,6 @@ export default function OneSignalBootstrap() {
     if (!ensureOneSignalInitialized()) return;
 
     requestOneSignalPermissionIfNeeded().catch((error) => {
-      console.warn("OneSignal permission request failed:", error);
     });
 
     // Temporary diagnostics for TestFlight/device push mapping.

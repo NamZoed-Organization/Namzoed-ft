@@ -112,10 +112,7 @@ export default function Forgot() {
       if (isPhone) {
         // Send OTP via SMS - wrapped in try-catch for detailed error logging
         try {
-          console.log('Attempting to send SMS to:', identifier, 'with OTP:', otp);
           const smsSent = await sendOTPSMS(identifier, otp);
-          console.log('SMS result:', smsSent);
-
           if (smsSent) {
             router.push({
               pathname: "/verify-otp",

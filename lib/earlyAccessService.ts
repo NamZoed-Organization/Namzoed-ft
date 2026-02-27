@@ -76,7 +76,6 @@ export async function getPrimaryBadgeWithSkin(
       .in('badge_id', EARLY_ACCESS_PRIORITY);
 
     if (error) {
-      console.warn('[EarlyAccess] Badge fetch failed:', error.message);
       return null;
     }
 
@@ -94,7 +93,6 @@ export async function getPrimaryBadgeWithSkin(
     primaryBadgeCache.set(userId, result);
     return result;
   } catch (err) {
-    console.warn('[EarlyAccess] Badge fetch exception:', err);
     return null;
   }
 }
@@ -118,7 +116,6 @@ export async function getUserBadgesWithSkins(userId: string): Promise<UserBadge[
       .order('earned_at', { ascending: true });
 
     if (error) {
-      console.warn('[EarlyAccess] Full badges fetch failed:', error.message);
       return [];
     }
 
@@ -126,7 +123,6 @@ export async function getUserBadgesWithSkins(userId: string): Promise<UserBadge[
     allBadgesCache.set(userId, badges);
     return badges;
   } catch (err) {
-    console.warn('[EarlyAccess] Full badges fetch exception:', err);
     return [];
   }
 }
@@ -150,7 +146,6 @@ export async function updateBadgeSkin(
       .eq('badge_id', badgeId);
 
     if (error) {
-      console.warn('[EarlyAccess] Skin update failed:', error.message);
       return false;
     }
 
@@ -159,7 +154,6 @@ export async function updateBadgeSkin(
     allBadgesCache.delete(userId);
     return true;
   } catch (err) {
-    console.warn('[EarlyAccess] Skin update exception:', err);
     return false;
   }
 }
@@ -223,7 +217,6 @@ export async function getActiveBadge(userId: string): Promise<EarlyAccessBadgeTy
     activeBadgeCache.set(userId, fallback);
     return fallback;
   } catch (err) {
-    console.warn('[EarlyAccess] getActiveBadge exception:', err);
     return null;
   }
 }
@@ -242,12 +235,10 @@ export async function getUserBadges(userId: string): Promise<UserBadge[]> {
       .order('earned_at', { ascending: true });
 
     if (error) {
-      console.warn('[EarlyAccess] getUserBadges failed:', error.message);
       return [];
     }
     return (data ?? []) as UserBadge[];
   } catch (err) {
-    console.warn('[EarlyAccess] getUserBadges exception:', err);
     return [];
   }
 }
@@ -266,7 +257,6 @@ export async function setActiveBadge(userId: string, badgeId: string): Promise<b
       .eq('id', userId);
 
     if (error) {
-      console.warn('[EarlyAccess] setActiveBadge failed:', error.message);
       return false;
     }
 
@@ -275,7 +265,6 @@ export async function setActiveBadge(userId: string, badgeId: string): Promise<b
     activeBadgeSubs.get(userId)?.forEach(cb => cb(tier));
     return true;
   } catch (err) {
-    console.warn('[EarlyAccess] setActiveBadge exception:', err);
     return false;
   }
 }

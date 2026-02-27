@@ -91,7 +91,6 @@ const LazyProductCard = memo(
       e.preventDefault();
       e.stopPropagation();
       // Handle message functionality
-      console.log(`Message seller for product: ${product.name}`);
     };
 
     return (

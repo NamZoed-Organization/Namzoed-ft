@@ -14,6 +14,7 @@ import {
 } from "@react-navigation/native";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
+import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect } from "react";
 import { Text, View } from "react-native";
@@ -29,10 +30,13 @@ import { UserProvider } from "@/contexts/UserContext";
 import { VideoCacheProvider } from "@/contexts/VideoCacheContext";
 import { VideoPlaybackProvider } from "@/contexts/VideoPlaybackContext";
 
+// Keep the splash screen visible while loading fonts
+SplashScreen.preventAutoHideAsync();
+
 export default function RootLayout() {
   const colorScheme = useColorScheme();
 
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     "Montserrat-Regular": require("../assets/fonts/Montserrat-Regular.ttf"),
     "Montserrat-Light": require("../assets/fonts/Montserrat-Light.ttf"),
     "Montserrat-Medium": require("../assets/fonts/Montserrat-Medium.ttf"),
@@ -42,18 +46,21 @@ export default function RootLayout() {
   });
 
   useEffect(() => {
-    if (fontsLoaded) {
-      (Text as any).defaultProps = (Text as any).defaultProps || {};
-      (Text as any).defaultProps.style = [
-        { fontFamily: "Montserrat-Regular" },
-        ...(Array.isArray((Text as any).defaultProps.style)
-          ? (Text as any).defaultProps.style
-          : [(Text as any).defaultProps.style]),
-      ];
+    if (fontsLoaded || fontError) {
+      if (fontsLoaded) {
+        (Text as any).defaultProps = (Text as any).defaultProps || {};
+        (Text as any).defaultProps.style = [
+          { fontFamily: "Montserrat-Regular" },
+          ...(Array.isArray((Text as any).defaultProps.style)
+            ? (Text as any).defaultProps.style
+            : [(Text as any).defaultProps.style]),
+        ];
+      }
+      SplashScreen.hideAsync();
     }
-  }, [fontsLoaded]);
+  }, [fontsLoaded, fontError]);
 
-  if (!fontsLoaded) return null;
+  if (!fontsLoaded && !fontError) return null;
 
   return (
     <ErrorBoundary>

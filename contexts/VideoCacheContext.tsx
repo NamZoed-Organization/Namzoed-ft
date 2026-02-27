@@ -36,8 +36,6 @@ export const VideoCacheProvider = ({ children }: { children: React.ReactNode }) 
     // Remove oldest entries until we're under the limit
     const toRemove = entries.slice(0, entries.length - MAX_CACHED_PLAYERS);
 
-    console.log(`[VideoCacheContext] LRU eviction: removing ${toRemove.length} old players`);
-
     toRemove.forEach(([videoId, cached]) => {
       try {
         if (cached.player) {
@@ -47,11 +45,9 @@ export const VideoCacheProvider = ({ children }: { children: React.ReactNode }) 
         }
         cache.delete(videoId);
       } catch (error) {
-        console.warn('Error cleaning up player:', error);
       }
     });
 
-    console.log(`[VideoCacheContext] Cache size after cleanup: ${cache.size}`);
   }, []);
 
   const getCachedPlayer = useCallback((videoId: string): VideoPlayer | null => {
@@ -70,7 +66,6 @@ export const VideoCacheProvider = ({ children }: { children: React.ReactNode }) 
         cached.player.pause();
         cached.player.replace(null);
       } catch (error) {
-        console.warn('Error releasing player:', error);
       }
       videoCache.current.delete(videoId);
     }
@@ -85,7 +80,6 @@ export const VideoCacheProvider = ({ children }: { children: React.ReactNode }) 
           cached.player.replace(null);
         }
       } catch (error) {
-        console.warn('Error clearing player:', error);
       }
     });
     videoCache.current.clear();
@@ -100,7 +94,6 @@ export const VideoCacheProvider = ({ children }: { children: React.ReactNode }) 
         existing.player.pause();
         existing.player.replace(null);
       } catch (error) {
-        console.warn('Error replacing existing player:', error);
       }
     }
 

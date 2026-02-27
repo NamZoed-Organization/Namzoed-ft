@@ -21,6 +21,7 @@ import ProfileHeader from "@/components/profile/ProfileHeader";
 import ProfileTabContent from "@/components/profile/ProfileTabContent";
 import ProfileTabs from "@/components/profile/ProfileTabs";
 import ServiceProviderSection from "@/components/profile/ServiceProviderSection";
+import BottomNavBar from "@/components/ui/BottomNavBar";
 import PopupMessage from "@/components/ui/PopupMessage";
 import {
     deleteAvatar,
@@ -69,7 +70,7 @@ import {
     View,
 } from "react-native";
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 // --- Reanimated & Gesture Handler ---
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
@@ -433,7 +434,6 @@ export default function ProfileScreen() {
       await AsyncStorage.setItem("currentUser", JSON.stringify(updatedUser));
       setCurrentUser(updatedUser);
 
-      console.log("Profile image updated successfully:", publicUrl);
       showSuccessPopup("Profile has been changed successfully");
     } catch (error) {
       console.error("Failed to save profile image:", error);
@@ -1090,10 +1090,12 @@ export default function ProfileScreen() {
           className="flex-1"
         >
           {/* Main Profile Page */}
-          <View style={{ width: SCREEN_WIDTH }}>
+          <View style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT - 120 }}>
             <ScrollView
-              className="flex-1"
+              style={{ flex: 1 }}
               showsVerticalScrollIndicator={false}
+              nestedScrollEnabled
+              contentContainerStyle={{ paddingBottom: 100 }}
               refreshControl={
                 <RefreshControl
                   refreshing={refreshing}
@@ -1145,15 +1147,16 @@ export default function ProfileScreen() {
                   userProducts={userProducts}
                 />
               </View>
-              <View className="h-8" />
             </ScrollView>
           </View>
 
           {/* Work Profile Page (Service Provider) */}
-          <View style={{ width: SCREEN_WIDTH }}>
+          <View style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT - 120 }}>
             <ScrollView
-              className="flex-1"
+              style={{ flex: 1 }}
               showsVerticalScrollIndicator={false}
+              nestedScrollEnabled
+              contentContainerStyle={{ paddingBottom: 100 }}
               refreshControl={
                 <RefreshControl
                   refreshing={refreshing}
@@ -1232,7 +1235,6 @@ export default function ProfileScreen() {
                 </Animated.View>
               )}
 
-              <View className="h-8" />
             </ScrollView>
           </View>
         </ScrollView>
@@ -1929,6 +1931,8 @@ export default function ProfileScreen() {
         message={popupMessage}
       />
       <PopupMessage visible={showError} type="error" message={popupMessage} />
+
+      <BottomNavBar />
     </View>
   );
 }

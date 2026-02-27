@@ -89,19 +89,13 @@ export async function sendChatPushNotification({
     if (error) {
       const detail = await summarizeInvokeError(error);
       if (detail.includes("status=404") || detail.includes('"code":"NOT_FOUND"')) {
-        console.warn(
-          `${NOTIFY_FUNCTION_NAME} is not deployed on this Supabase project. Deploy it and confirm app env points to the same project. Expected endpoint: ${SUPABASE_FUNCTIONS_URL}`,
-        );
       }
-      console.warn("notify-chat-message invocation error:", detail);
       return false;
     }
 
     if (!data?.success) {
       if (data?.error) {
-        console.warn("notify-chat-message rejected:", data.error);
       } else {
-        console.warn("notify-chat-message rejected with unexpected payload:", data);
       }
       return false;
     }
@@ -115,7 +109,6 @@ export async function sendChatPushNotification({
 
     return true;
   } catch (err) {
-    console.warn("notify-chat-message exception:", err);
     return false;
   }
 }

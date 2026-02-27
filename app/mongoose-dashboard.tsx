@@ -71,10 +71,6 @@ export default function MongooseDashboard() {
       } else {
         // If there are accepted bookings, mongoose is busy (not available)
         const available = !acceptedBookings || acceptedBookings.length === 0;
-        console.log(
-          "📊 Mongoose availability status:",
-          available ? "AVAILABLE" : "IN PROGRESS",
-        );
         setIsAvailable(available);
       }
     } catch (error) {
@@ -98,15 +94,11 @@ export default function MongooseDashboard() {
           error.code === "PGRST205" ||
           error.message.includes("could not find")
         ) {
-          console.log(
-            "Info: booking_requests table not created yet. Run the migration first.",
-          );
           setBookingRequests([]);
         } else {
           console.error("Error loading bookings:", error);
         }
       } else {
-        console.log("Fresh data from database:", data?.length || 0, "bookings");
         setBookingRequests(data || []);
       }
     } catch (error) {
@@ -147,8 +139,6 @@ export default function MongooseDashboard() {
   useEffect(() => {
     if (!currentUser || !isMongooseUser(currentUser.email)) return;
 
-    console.log("🔔 Setting up real-time subscription for mongoose dashboard");
-
     const channel = supabase
       .channel("mongoose_dashboard_realtime")
       .on(
@@ -160,15 +150,12 @@ export default function MongooseDashboard() {
           filter: `mongoose_email=eq.${MONGOOSE_EMAIL}`,
         },
         (payload) => {
-          console.log("📨 Booking changed in real-time:", payload.eventType);
-
           // Debounce the refresh to prevent rapid consecutive updates
           if (debounceTimerRef.current) {
             clearTimeout(debounceTimerRef.current);
           }
 
           debounceTimerRef.current = setTimeout(() => {
-            console.log("🔄 Refreshing data after debounce...");
             loadBookingRequests();
             loadAvailabilityStatus();
           }, 1000); // Wait 1 second before updating
@@ -177,7 +164,6 @@ export default function MongooseDashboard() {
       .subscribe();
 
     return () => {
-      console.log("🔕 Cleaning up real-time subscription");
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
       }
@@ -242,7 +228,6 @@ export default function MongooseDashboard() {
         // Real-time update: Immediately update availability status
         if (action === "accept") {
           setIsAvailable(false);
-          console.log("🔴 Mongoose now IN PROGRESS");
         }
 
         await loadBookingRequests();
@@ -277,8 +262,6 @@ export default function MongooseDashboard() {
                 Alert.alert("Error", `Failed: ${updateError.message}`);
                 return;
               }
-
-              console.log("✅ Booking marked completed:", bookingId);
 
               // 2. Resolve buyer + seller IDs to notify both parties
               if (booking?.user_id && currentUser?.id) {
@@ -334,7 +317,6 @@ export default function MongooseDashboard() {
                   .insert(notifications);
 
                 if (msgError) {
-                  console.warn("Could not send delivery-done messages:", msgError.message);
                 } else {
                   console.log(`📩 Delivery-done messages sent to ${notifications.length} recipient(s)`);
                 }

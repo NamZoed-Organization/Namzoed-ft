@@ -55,14 +55,8 @@ export async function sendSMS({ phone, message }: SMSPayload): Promise<boolean> 
     let apiUrl = config.btSmsApi;
     if (formattedPhone.startsWith('97577')) {
       apiUrl = config.tashiSmsApi;
-      console.log('Using Tashicell SMS API');
     } else {
-      console.log('Using BT SMS API');
     }
-
-    console.log('Sending SMS to:', formattedPhone);
-    console.log('Message:', message);
-    console.log('API URL:', apiUrl);
 
     const payload = {
       number: formattedPhone,
@@ -79,12 +73,8 @@ export async function sendSMS({ phone, message }: SMSPayload): Promise<boolean> 
       body: JSON.stringify(payload),
     });
 
-    console.log('Response status:', response.status);
-    
     // Try to get response text for debugging
     const responseText = await response.text();
-    console.log('Response body:', responseText);
-
     if (!response.ok) {
       console.error('SMS API error:', response.status, response.statusText);
       console.error('Error details:', responseText);
@@ -93,9 +83,7 @@ export async function sendSMS({ phone, message }: SMSPayload): Promise<boolean> 
 
     try {
       const data = JSON.parse(responseText);
-      console.log('SMS sent successfully:', data);
     } catch (e) {
-      console.log('Response was not JSON, but request succeeded');
     }
     
     return true;
@@ -120,7 +108,6 @@ export async function sendWelcomeSMS(phone: string): Promise<boolean> {
     phone.startsWith('97577') || phone.startsWith('77');
   
   if (!shouldSendSMS) {
-    console.log('SMS not sent: Phone number does not start with 97517 or 97577');
     return false;
   }
 
@@ -142,7 +129,6 @@ export async function sendOTPSMS(phone: string, otp: string): Promise<boolean> {
     phone.startsWith('97577') || phone.startsWith('77');
   
   if (!shouldSendSMS) {
-    console.log('SMS not sent: Phone number does not start with 97517 or 97577');
     return false;
   }
 

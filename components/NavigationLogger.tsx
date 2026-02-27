@@ -16,16 +16,10 @@ export function NavigationLogger() {
     if (pathname !== prevPathRef.current) {
       const timestamp = new Date().toLocaleTimeString();
 
-      console.log("─────────────────────────────────────────");
-      console.log(`🧭 [${timestamp}] NAVIGATION`);
-      console.log("📍 Current Path:", pathname);
       console.log("📂 Segments:", segments.join(" → "));
 
       if (prevPathRef.current) {
-        console.log("⬅️  From:", prevPathRef.current);
       }
-
-      console.log("─────────────────────────────────────────");
 
       prevPathRef.current = pathname;
     }

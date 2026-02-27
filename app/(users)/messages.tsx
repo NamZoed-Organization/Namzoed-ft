@@ -20,18 +20,18 @@ import {
   Alert,
   FlatList,
   Image,
-  Pressable,
+
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import * as Haptics from "expo-haptics";
 import Reanimated, {
-  runOnJS,
+  interpolateColor,
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
+  withTiming,
 } from "react-native-reanimated";
 
 // Types
@@ -69,69 +69,45 @@ const getUserData = (phoneNumber: string): IUserData | null => {
 };
 
 /**
- * SwipeToDeleteRow — left-swipe to reveal delete action.
- * Runs fully on the UI thread via RNGH v2 + Reanimated.
+ * PressableRow — tap to navigate, long press to delete.
  */
-const SwipeToDeleteRow = React.memo(function SwipeToDeleteRow({
+const PressableRow = React.memo(function PressableRow({
   children,
   onDelete,
+  onPress,
 }: {
   children: React.ReactNode;
   onDelete: () => void;
+  onPress: () => void;
 }) {
-  const translateX = useSharedValue(0);
-  const SNAP_THRESHOLD = -60;
-  const MAX_SWIPE = -96;
+  const heldProgress = useSharedValue(0);
 
-  const pan = Gesture.Pan()
-    // Only activate when swiping left ≥10px
-    .activeOffsetX([-Infinity, -10])
-    // Fail if user moves right first — lets taps and right-swipes through
-    .failOffsetX(10)
-    // Fail on vertical drag — lets the list scroll freely
-    .failOffsetY([-20, 20])
-    .onUpdate((e) => {
-      'worklet';
-      translateX.value = Math.max(MAX_SWIPE, Math.min(0, e.translationX));
-    })
-    .onEnd(() => {
-      'worklet';
-      const shouldDelete = translateX.value <= SNAP_THRESHOLD;
-      translateX.value = withSpring(0, { damping: 20, stiffness: 300 });
-      if (shouldDelete) {
-        runOnJS(onDelete)();
-      }
-    });
-
-  const animStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: translateX.value }],
+  const heldBgStyle = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(
+      heldProgress.value,
+      [0, 1],
+      ['#ffffff', '#dbeafe'],
+    ),
   }));
 
   return (
-    <GestureDetector gesture={pan}>
-      <View style={{ overflow: 'hidden', width: '100%' }}>
-        {/* Delete action revealed behind */}
-        <View
-          style={{
-            position: 'absolute',
-            right: 0,
-            top: 0,
-            bottom: 0,
-            width: 96,
-            backgroundColor: '#EF4444',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Ionicons name="trash-outline" size={20} color="white" />
-          <Text style={{ color: 'white', fontSize: 11, fontWeight: '600', marginTop: 4 }}>Delete</Text>
-        </View>
-        {/* Sliding foreground */}
-        <Reanimated.View style={[animStyle, { backgroundColor: 'white', width: '100%' }]}>
-          {children}
-        </Reanimated.View>
-      </View>
-    </GestureDetector>
+    <Reanimated.View style={[heldBgStyle, { width: '100%' }]}>
+      <TouchableOpacity
+        onPress={onPress}
+        onLongPress={() => {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          heldProgress.value = withTiming(1, { duration: 150 });
+          onDelete();
+        }}
+        onPressOut={() => {
+          heldProgress.value = withTiming(0, { duration: 300 });
+        }}
+        delayLongPress={500}
+        activeOpacity={0.7}
+      >
+        {children}
+      </TouchableOpacity>
+    </Reanimated.View>
   );
 });
 
@@ -248,9 +224,7 @@ export default function MessageScreen() {
   useEffect(() => {
     if (tab) {
       const tabIndex = parseInt(tab as string, 10);
-      console.log("Tab parameter detected:", tab, "Parsed index:", tabIndex);
       if (!isNaN(tabIndex) && tabIndex >= 0 && tabIndex <= 2) {
-        console.log("Setting active tab to:", tabIndex);
         setActiveTab(tabIndex);
       }
     }
@@ -363,16 +337,8 @@ export default function MessageScreen() {
         setIsLoadingConversations(true);
       }
       try {
-        console.log("=== FETCHING CONVERSATIONS ===");
-        console.log("Current user object:", JSON.stringify(currentUser));
-        console.log(
-          "Current user properties:",
-          currentUser ? Object.keys(currentUser) : "null",
-        );
-
         const resolvedUUID = await resolveCurrentUserUUID();
         if (!resolvedUUID) {
-          console.log("❌ Current user UUID not found");
           setConversations([]);
           setDebugInfo("Current user not found in profiles table");
           if (showLoader) setIsLoadingConversations(false);
@@ -390,15 +356,7 @@ export default function MessageScreen() {
           .or(`sender_id.in.(${inClause}),receiver_id.in.(${inClause})`)
           .order("created_at", { ascending: false });
 
-        console.log(
-          "Messages fetched:",
-          messages?.length,
-          "error:",
-          error?.message,
-        );
-
         if (error || !messages || messages.length === 0) {
-          console.log("No messages found from database");
           setConversations([]);
           setDebugInfo("No conversations for this user");
           setIsLoadingConversations(false);
@@ -406,7 +364,6 @@ export default function MessageScreen() {
         }
 
         // Extract unique partner UUIDs
-        console.log("Processing messages to extract partners...");
         const partnerMap = new Map();
         const unreadMap = new Map<string, number>();
         for (const message of messages) {
@@ -416,10 +373,6 @@ export default function MessageScreen() {
           const partnerId = isCurrentUserSender
             ? message.receiver_id
             : message.sender_id;
-
-          console.log(
-            `Message: sender=${message.sender_id?.substring(0, 8)}, receiver=${message.receiver_id?.substring(0, 8)}, partnerId=${partnerId?.substring(0, 8)}`,
-          );
 
           if (
             !partnerMap.has(partnerId) ||
@@ -439,11 +392,6 @@ export default function MessageScreen() {
         }
 
         const partnerIds = Array.from(partnerMap.keys());
-        console.log("Unique partner IDs found:", partnerIds.length);
-        console.log(
-          "Partner IDs:",
-          partnerIds.map((id) => id?.substring(0, 8)),
-        );
 
         let profiles: any[] = [];
 
@@ -452,19 +400,6 @@ export default function MessageScreen() {
           .from("profiles")
           .select("id, name, phone, avatar_url")
           .in("id", partnerIds);
-
-          console.log(
-            "Profiles fetched:",
-            profileData?.length,
-            "error:",
-            profileError?.message,
-          );
-          if (profileData) {
-            console.log(
-              "Profile names:",
-              profileData.map((p) => p.name),
-            );
-          }
 
           profiles = profileData || [];
         }
@@ -549,7 +484,6 @@ export default function MessageScreen() {
         setRequestConversations(reqConvos);
         await refreshUnreadCount();
         setDebugInfo(`${mainConvos.length} chats · ${reqConvos.length} requests`);
-        console.log("Conversations split:", mainConvos.length, "main +", reqConvos.length, "requests");
       } catch (e) {
         console.error("Error fetching conversations:", e);
         setDebugInfo(`Error: ${(e as any).message}`);
@@ -565,7 +499,6 @@ export default function MessageScreen() {
 
   useEffect(() => {
     // Fetch conversations from Supabase (prioritize database over local data)
-    console.log("useEffect triggered, fetching conversations...");
     fetchConversations(true);
   }, [fetchConversations]);
 
@@ -573,8 +506,6 @@ export default function MessageScreen() {
   const fetchMongooseUsers = async () => {
     setIsLoadingMongoose(true);
     try {
-      console.log("=== FETCHING MONGOOSE USERS ===");
-
       const { data: mongooseProfiles, error } = await supabase
         .from("profiles")
         .select("*")
@@ -585,7 +516,6 @@ export default function MessageScreen() {
         console.error("❌ Error fetching mongoose users:", error);
         setMongooseUsers([]);
       } else {
-        console.log("✅ Mongoose users found:", mongooseProfiles?.length || 0);
         setMongooseUsers(mongooseProfiles || []);
       }
     } catch (e) {
@@ -615,7 +545,6 @@ export default function MessageScreen() {
       if (allError) {
         console.error("Error fetching all bookings:", allError);
       } else {
-        console.log("✅ Fetched all bookings:", allBookings?.length);
         // Store ALL bookings to properly calculate mongoose availability
         setMongooseBookings(allBookings || []);
       }
@@ -635,11 +564,6 @@ export default function MessageScreen() {
   useEffect(() => {
     if (!currentUser?.id) return;
 
-    console.log(
-      "🔔 Setting up booking real-time subscription for user:",
-      currentUser.id,
-    );
-
     // Use unique channel name to prevent conflicts on reload
     const channelName = `all_bookings_${Date.now()}`;
     let isSubscribed = true;
@@ -657,17 +581,6 @@ export default function MessageScreen() {
         (payload) => {
           if (!isSubscribed) return; // Ignore if already unsubscribed
 
-          console.log("⚡ INSTANT booking update:", {
-            eventType: payload.eventType,
-            userId:
-              (payload.new as any)?.user_id || (payload.old as any)?.user_id,
-            status:
-              (payload.new as any)?.status || (payload.old as any)?.status,
-            mongoose:
-              (payload.new as any)?.mongoose_email ||
-              (payload.old as any)?.mongoose_email,
-          });
-
           // Handle different event types
           if (
             payload.eventType === "INSERT" ||
@@ -683,7 +596,6 @@ export default function MessageScreen() {
                   new Date(b.created_at).getTime() -
                   new Date(a.created_at).getTime(),
               );
-              console.log("✅ INSTANT bookings update, total:", updated.length);
               return updated;
             });
           } else if (payload.eventType === "DELETE") {
@@ -691,7 +603,6 @@ export default function MessageScreen() {
 
             setMongooseBookings((prev) => {
               const updated = prev.filter((b) => b.id !== deletedBooking.id);
-              console.log("✅ Removed deleted booking, total:", updated.length);
               return updated;
             });
           }
@@ -699,10 +610,7 @@ export default function MessageScreen() {
       )
       .subscribe((status) => {
         if (!isSubscribed) return;
-        console.log("📡 Bookings subscription status:", status);
-
         if (status === "SUBSCRIBED") {
-          console.log("✅ Real-time subscription ACTIVE");
           if (bookingsPollRef.current) {
             clearInterval(bookingsPollRef.current);
             bookingsPollRef.current = null;
@@ -724,12 +632,10 @@ export default function MessageScreen() {
             }, 8000);
           }
         } else if (status === "CLOSED") {
-          console.log("🔒 Real-time subscription CLOSED");
         }
       });
 
     return () => {
-      console.log("🔌 Cleaning up booking subscription:", channelName);
       isSubscribed = false;
       supabase.removeChannel(bookingsChannel);
       if (bookingsPollRef.current) {
@@ -747,14 +653,8 @@ export default function MessageScreen() {
       if (!isSubscribed) return;
 
       if (!userUUID) {
-        console.log("⚠️ Cannot setup real-time: user UUID not found");
         return;
       }
-
-      console.log(
-        "🔔 Setting up real-time subscription for user:",
-        userUUID.substring(0, 8),
-      );
 
       const channel = supabase
         .channel(`conversations_${userUUID}`)
@@ -780,14 +680,11 @@ export default function MessageScreen() {
               receiverId === String(userUUID);
 
             if (!isRelevant) return;
-            console.log("📨 Message event detected, refreshing conversations");
             fetchConversations(false);
           },
         )
         .subscribe((status) => {
           if (!isSubscribed) return;
-          console.log("📡 Conversations subscription status:", status);
-
           if (status === "SUBSCRIBED") {
             if (conversationsPollRef.current) {
               clearInterval(conversationsPollRef.current);
@@ -838,12 +735,10 @@ export default function MessageScreen() {
   };
 
   const handleFollowBack = (phoneNumber: string) => {
-    console.log("Following back:", phoneNumber);
     // Here you would update the backend and local state
   };
 
   const handleReject = (phoneNumber: string) => {
-    console.log("Rejecting request:", phoneNumber);
     // Here you would remove from followers or block
   };
 
@@ -985,7 +880,6 @@ export default function MessageScreen() {
               // Get current user's UUID
               const resolvedUUID = await resolveCurrentUserUUID();
               if (!resolvedUUID) {
-                console.log("❌ User profile not found");
                 return;
               }
 
@@ -1004,7 +898,6 @@ export default function MessageScreen() {
                   "Failed to delete conversation. Please try again.",
                 );
               } else {
-                console.log(`✅ Deleted conversation with ${partnerName}`);
                 // Remove from local state immediately
                 setConversations((prev) =>
                   prev.filter((c) => c.partnerId !== partnerId),
@@ -1042,7 +935,8 @@ export default function MessageScreen() {
     const conversationId = String(conversation.partnerId);
 
     return (
-      <SwipeToDeleteRow
+      <PressableRow
+        onPress={() => router.push(`/(users)/chat/${conversation.partnerId}`)}
         onDelete={() =>
           Alert.alert(
             "Delete Chat?",
@@ -1058,10 +952,7 @@ export default function MessageScreen() {
           )
         }
       >
-        <Pressable
-          className="flex-row items-center py-4 px-4 bg-white"
-          onPress={() => router.push(`/(users)/chat/${conversation.partnerId}`)}
-        >
+        <View className="flex-row items-center py-4 px-4">
           {avatarUri ? (
             <Image
               source={{ uri: avatarUri }}
@@ -1102,8 +993,8 @@ export default function MessageScreen() {
               </View>
             )}
           </View>
-        </Pressable>
-      </SwipeToDeleteRow>
+        </View>
+      </PressableRow>
     );
   };
 

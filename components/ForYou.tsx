@@ -150,7 +150,33 @@ export default function ForYou() {
 
       setProducts(shuffleArray(productsData.products || []).slice(0, 10));
       setMarketplaceItems(shuffleArray(marketplaceData.items || []).slice(0, 10));
-      setServices(shuffleArray(servicesData || []).slice(0, 10));
+      // Trim service objects to only the fields needed for card rendering
+      // (drops `description` and excess images to reduce memory pressure)
+      setServices(
+        shuffleArray(servicesData || [])
+          .slice(0, 10)
+          .map((s) => ({
+            id: s.id,
+            name: s.name,
+            images: s.images?.slice(0, 1) ?? [],
+            description: "",
+            service_categories: s.service_categories
+              ? { name: s.service_categories.name }
+              : undefined,
+            service_providers: s.service_providers
+              ? {
+                  name: s.service_providers.name,
+                  profile_url: s.service_providers.profile_url,
+                  profiles: s.service_providers.profiles
+                    ? {
+                        name: s.service_providers.profiles.name,
+                        avatar_url: s.service_providers.profiles.avatar_url,
+                      }
+                    : undefined,
+                }
+              : undefined,
+          } as ProviderServiceWithDetails))
+      );
     } catch (error) {
       console.error("Error loading data:", error);
     } finally {
@@ -219,12 +245,14 @@ export default function ForYou() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ paddingLeft: 16 }}
             style={{ height: CARD_LIST_HEIGHT }}
-            ListFooterComponent={() => (
+            bounces={false}
+            overScrollMode="never"
+            ListFooterComponent={
               <HomeCard
                 isSeeMore
                 onPress={() => router.push(viewAllRoute as any)}
               />
-            )}
+            }
           />
         )}
       </View>
@@ -302,6 +330,8 @@ export default function ForYou() {
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={{ paddingLeft: 16 }}
                 style={{ height: CARD_LIST_HEIGHT }}
+                bounces={false}
+                overScrollMode="never"
                 renderItem={({ item }) => {
                   const discountedPrice = item.discount_percent
                     ? item.price - (item.price * item.discount_percent) / 100

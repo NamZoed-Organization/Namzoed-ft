@@ -102,7 +102,6 @@ function HostLivestreamUI({ callId }: { callId: string }) {
               try {
                 await camera.flip();
               } catch (error) {
-                console.warn("Failed to switch camera:", error);
               }
             }}
             className={`px-4 py-2 rounded-xl ${

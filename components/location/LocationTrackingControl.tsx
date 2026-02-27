@@ -74,13 +74,10 @@ export default function LocationTrackingControl({
 
   const startLocationTracking = async () => {
     try {
-      console.log('🚀 Starting location tracking for booking:', bookingId);
-      
       // Request location permissions
       const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync();
       
       if (foregroundStatus !== 'granted') {
-        console.log('❌ Location permission denied');
         Alert.alert(
           'Permission Required',
           'Location permission is needed to track your location for deliveries.'
@@ -88,14 +85,10 @@ export default function LocationTrackingControl({
         return;
       }
 
-      console.log('✅ Location permission granted, getting current position...');
-      
       // Get current location first
       const location = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.High,
       });
-
-      console.log('📍 Current position:', location.coords);
 
       // Save initial location
       await updateLocationInDatabase(
@@ -109,8 +102,6 @@ export default function LocationTrackingControl({
       });
       setLastUpdateTime(new Date().toISOString());
 
-      console.log('👁️ Setting up location watcher...');
-      
       // Start watching location updates (every 30 seconds or when moved 50 meters)
       const subscription = await Location.watchPositionAsync(
         {
@@ -119,7 +110,6 @@ export default function LocationTrackingControl({
           distanceInterval: 50, // Or when moved 50 meters
         },
         async (newLocation) => {
-          console.log('🔄 New location update:', newLocation.coords);
           setCurrentLocation({
             latitude: newLocation.coords.latitude,
             longitude: newLocation.coords.longitude,
@@ -138,8 +128,6 @@ export default function LocationTrackingControl({
 
       locationSubscription.current = subscription;
       setIsTracking(true);
-      
-      console.log('✅ Location tracking started successfully');
       
       Alert.alert(
         'Tracking Started',
@@ -179,8 +167,6 @@ export default function LocationTrackingControl({
 
   const updateLocationInDatabase = async (latitude: number, longitude: number) => {
     try {
-      console.log('📍 Updating mongoose location:', { bookingId, latitude, longitude });
-      
       // First, try to update existing location
       const { data: existingData, error: fetchError } = await supabase
         .from('mongoose_locations')
@@ -191,7 +177,6 @@ export default function LocationTrackingControl({
 
       if (existingData) {
         // Update existing record
-        console.log('✏️ Updating existing location record:', existingData.id);
         const { data: updateData, error: updateError } = await supabase
           .from('mongoose_locations')
           .update({
@@ -205,11 +190,9 @@ export default function LocationTrackingControl({
         if (updateError) {
           console.error('❌ Error updating location:', updateError);
         } else {
-          console.log('✅ Location updated successfully:', updateData);
         }
       } else {
         // Insert new record
-        console.log('➕ Inserting new location record');
         const { data: insertData, error: insertError } = await supabase
           .from('mongoose_locations')
           .insert({
@@ -226,7 +209,6 @@ export default function LocationTrackingControl({
             `Failed to save location: ${insertError.message}\n\nPlease ensure the mongoose_locations table exists and RLS policies are configured.`
           );
         } else {
-          console.log('✅ Location inserted successfully:', insertData);
         }
       }
     } catch (error) {

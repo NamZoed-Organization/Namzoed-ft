@@ -45,6 +45,9 @@ export default function SearchBar({
   const inputRef = useRef<TextInput>(null);
   const tabScrollRef = useRef<ScrollView>(null);
   const touchStartX = useRef(0);
+  const tabLayouts = useRef<{ [key: string]: { x: number; width: number } }>({});
+  const tabBarVisibleWidth = useRef(0);
+
   const router = useRouter();
   const { currentUser } = useUser();
 
@@ -118,14 +121,6 @@ export default function SearchBar({
     return () => backHandler.remove();
   }, [isFocused]);
 
-  // Auto-scroll tab bar when active tab changes
-  useEffect(() => {
-    if (tabScrollRef.current && searchResults) {
-      const tabIndex = tabs.findIndex((tab) => tab.key === activeTab);
-      // Scroll to show the active tab (approximate position)
-      tabScrollRef.current.scrollTo({ x: tabIndex * 100, animated: true });
-    }
-  }, [activeTab, searchResults]);
 
   const closeOverlay = () => {
     Animated.parallel([
@@ -497,61 +492,22 @@ export default function SearchBar({
     }
   };
 
-  // Tab Bar Component
-  const TabBar = () => {
-    return (
-      <ScrollView
-        ref={tabScrollRef}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        className="mb-3"
-        contentContainerStyle={{ paddingHorizontal: 4 }}
-      >
-        {tabs.map((tab) => {
-          const count = getTabCount(tab.key);
-          const isActive = activeTab === tab.key;
+  const handleTabPress = (tabKey: string, tabIndex: number) => {
+    setActiveTab(tabKey as any);
+    const layout = tabLayouts.current[tabKey];
+    const visibleWidth = tabBarVisibleWidth.current;
+    if (!layout || !visibleWidth) return;
 
-          return (
-            <TouchableOpacity
-              key={tab.key}
-              onPress={() => setActiveTab(tab.key as any)}
-              className={`mr-2 px-4 py-2 rounded-full flex-row items-center ${
-                isActive ? "bg-primary" : "bg-white border border-gray-200"
-              }`}
-              activeOpacity={0.7}
-            >
-              <Ionicons
-                name={tab.icon as any}
-                size={16}
-                color={isActive ? "white" : "#6B7280"}
-              />
-              <Text
-                className={`ml-1.5 text-sm font-msemibold ${
-                  isActive ? "text-white" : "text-gray-700"
-                }`}
-              >
-                {tab.label}
-              </Text>
-              {count > 0 && (
-                <View
-                  className={`ml-1.5 px-1.5 py-0.5 rounded-full min-w-[18px] items-center ${
-                    isActive ? "bg-white/20" : "bg-gray-200"
-                  }`}
-                >
-                  <Text
-                    className={`text-xs font-semibold ${
-                      isActive ? "text-white" : "text-gray-600"
-                    }`}
-                  >
-                    {count}
-                  </Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
-    );
+    let targetX: number;
+    if (tabIndex === 0) {
+      targetX = 0;
+    } else if (tabIndex === tabs.length - 1) {
+      targetX = 99999;
+    } else {
+      targetX = layout.x - visibleWidth / 2 + layout.width / 2;
+    }
+
+    tabScrollRef.current?.scrollTo({ x: Math.max(0, targetX), animated: true });
   };
 
   return (
@@ -665,7 +621,65 @@ export default function SearchBar({
               {!isSearching && searchResults && throttledValue.length >= 2 && (
                 <>
                   {/* Tab Bar */}
-                  <TabBar />
+                  <ScrollView
+                    ref={tabScrollRef}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    className="mb-3"
+                    contentContainerStyle={{ paddingHorizontal: 4 }}
+                    onLayout={(e) => {
+                      tabBarVisibleWidth.current = e.nativeEvent.layout.width;
+                    }}
+                  >
+                    {tabs.map((tab, index) => {
+                      const count = getTabCount(tab.key);
+                      const isActive = activeTab === tab.key;
+                      return (
+                        <TouchableOpacity
+                          key={tab.key}
+                          onPress={() => handleTabPress(tab.key, index)}
+                          onLayout={(e) => {
+                            tabLayouts.current[tab.key] = {
+                              x: e.nativeEvent.layout.x,
+                              width: e.nativeEvent.layout.width,
+                            };
+                          }}
+                          className={`mr-2 px-4 py-2 rounded-full flex-row items-center ${
+                            isActive ? "bg-primary" : "bg-white border border-gray-200"
+                          }`}
+                          activeOpacity={0.7}
+                        >
+                          <Ionicons
+                            name={tab.icon as any}
+                            size={16}
+                            color={isActive ? "white" : "#6B7280"}
+                          />
+                          <Text
+                            className={`ml-1.5 text-sm font-msemibold ${
+                              isActive ? "text-white" : "text-gray-700"
+                            }`}
+                          >
+                            {tab.label}
+                          </Text>
+                          {count > 0 && (
+                            <View
+                              className={`ml-1.5 px-1.5 py-0.5 rounded-full min-w-[18px] items-center ${
+                                isActive ? "bg-white/20" : "bg-gray-200"
+                              }`}
+                            >
+                              <Text
+                                className={`text-xs font-semibold ${
+                                  isActive ? "text-white" : "text-gray-600"
+                                }`}
+                              >
+                                {count}
+                              </Text>
+                            </View>
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
 
                   {/* Filtered Results */}
                   {activeTab === "all" ? (

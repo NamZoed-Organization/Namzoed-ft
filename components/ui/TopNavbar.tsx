@@ -25,10 +25,10 @@ export default function TopNavbar() {
   const topSpacing =
     Platform.OS === "android" ? clamp(vs(16), 12, 22) : clamp(vs(10), 8, 16);
   const horizontalPadding = clamp(wp(4), 14, 24);
-  const bottomPadding = clamp(vs(8), 6, 12);
+  const bottomPadding = clamp(vs(16), 14, 22);
   const logoSize = clamp(ms(40), 34, 46);
   const logoSpacing = clamp(ms(8), 6, 10);
-  const titleSize = clamp(ms(22), 18, 26);
+  const titleSize = clamp(ms(16), 13, 19);
   const avatarSize = clamp(ms(30), 26, 36);
   const actionGap = clamp(ms(16), 12, 22);
   const sendIconSize = clamp(ms(20), 18, 24);

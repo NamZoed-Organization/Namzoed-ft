@@ -67,7 +67,6 @@ export default function ChatImagePicker({
         isOptimistic: true
       };
 
-      console.log('📸 Creating optimistic image message');
       onOptimisticImage(optimisticMessage);
 
       // Upload to Supabase Storage
@@ -89,8 +88,6 @@ export default function ChatImagePicker({
       const timestamp = Date.now();
       const fileName = `${optimisticId}_${timestamp}.jpg`;
       const filePath = `${conversationKey}/${fileName}`;
-
-      console.log('📤 Uploading to:', filePath);
 
       // Fetch the image as blob
       const response = await fetch(imageUri);
@@ -117,16 +114,12 @@ export default function ChatImagePicker({
         throw uploadError;
       }
 
-      console.log('✅ Upload successful:', uploadData.path);
-
       // Get public URL
       const { data: urlData } = supabase.storage
         .from('chat-images')
         .getPublicUrl(filePath);
 
       const publicUrl = urlData.publicUrl;
-      console.log('🔗 Public URL:', publicUrl);
-
       // Insert message into database
       const { data: insertData, error: insertError } = await supabase
         .from('messages')

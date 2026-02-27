@@ -37,7 +37,6 @@ export const bookmarkPost = async (postId: string, userId: string): Promise<bool
     if (error) {
       // If error is due to duplicate, it's already bookmarked - treat as success
       if (error.code === '23505') {
-        console.log('Post already bookmarked');
         return true;
       }
       console.error('Error bookmarking post:', error);

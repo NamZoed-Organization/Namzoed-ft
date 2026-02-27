@@ -341,7 +341,6 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose }) => {
         try {
           await call.leave();
         } catch (error) {
-          console.warn("Failed to leave Stream call", error);
         }
       }
 
@@ -549,7 +548,6 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose }) => {
         try {
           await call.stopLive?.();
         } catch (stopError) {
-          console.warn("Unable to stop live broadcast", stopError);
         }
       }
 
@@ -1458,9 +1456,7 @@ const HostCallContainer: React.FC<HostCallContainerProps> = ({
             user_id: request.user_id,
             grant_permissions: ["send-audio", "send-video", "screenshare"],
           });
-          console.log(`Granted speaking permissions to ${request.username}`);
         } catch (permError) {
-          console.warn("Could not grant permissions via SDK:", permError);
           // Continue anyway - the viewer side will try to enable camera/mic
         }
       }
@@ -2252,7 +2248,6 @@ const HostCallContainer: React.FC<HostCallContainerProps> = ({
                   try {
                     await camera.flip();
                   } catch (error) {
-                    console.warn("Failed to switch camera:", error);
                   }
                 }}
                 className={`p-3 rounded-full ${
@@ -2495,7 +2490,6 @@ const ViewerCallContainer: React.FC<ViewerCallContainerProps> = ({
     // Rate limiting - prevent spam
     const now = Date.now();
     if (now - lastRequestTime < REQUEST_RATE_LIMIT_MS) {
-      console.log("Rate limited - please wait before requesting again");
       return;
     }
 
@@ -2560,8 +2554,6 @@ const ViewerCallContainer: React.FC<ViewerCallContainerProps> = ({
     if (!call) return;
 
     try {
-      console.log("Enabling speaker mode for co-host...");
-
       // First, try to re-join the call with publishing capabilities
       // This may be needed because viewers join without publish rights
       const currentState = call.state.callingState;
@@ -2572,21 +2564,16 @@ const ViewerCallContainer: React.FC<ViewerCallContainerProps> = ({
           const cameraGranted = await ensureCameraPermission();
           if (cameraGranted) {
             await call.camera.enable();
-            console.log("Camera enabled successfully");
           }
         } catch (camError) {
-          console.warn("Could not enable camera:", camError);
         }
 
         try {
           await call.microphone.enable();
-          console.log("Microphone enabled successfully");
         } catch (micError) {
-          console.warn("Could not enable microphone:", micError);
         }
       }
 
-      console.log("Speaker mode enabled - camera and microphone activated");
     } catch (error) {
       console.error("Failed to enable speaker mode:", error);
     }
@@ -2705,7 +2692,6 @@ const ViewerCallContainer: React.FC<ViewerCallContainerProps> = ({
         .catch((err: any) => {
           // Common SDK error when join() was already triggered elsewhere.
           // Log for visibility but don't spam further attempts.
-          console.warn("Viewer join attempt failed", err);
         })
         .finally(() => {
           // keep a small debounce before allowing another join attempt
@@ -2755,9 +2741,6 @@ const ViewerCallContainer: React.FC<ViewerCallContainerProps> = ({
   }, [call?.id]);
 
   useEffect(() => {
-    console.log("Calling State:", callingState);
-    console.log("Participants Count:", participants.length);
-    console.log("Is Live:", isLive);
   }, [participants, callingState, isLive]);
 
   const hostParticipant = participants.find(

@@ -17,8 +17,6 @@ export default function MongooseMessages({ mongooseChats }: MongooseMessagesProp
   const allMongooses = Object.keys(mongooses);
   
   // Debug log
-  console.log('All mongooses:', allMongooses);
-
   // Get existing messages for current user with mongoose
   const getExistingMessages = (mongooseName: string) => {
     const mongooseData = mongooses[mongooseName as keyof typeof mongooses];
@@ -34,8 +32,6 @@ export default function MongooseMessages({ mongooseChats }: MongooseMessagesProp
     const lastMessage = existingMessages[existingMessages.length - 1];
     
     // Debug log
-    console.log('Rendering mongoose:', mongooseName, 'Messages:', existingMessages.length);
-    
     return (
       <TouchableOpacity 
         className="flex-row items-center p-4 border-b border-gray-200"

@@ -62,7 +62,6 @@ export default function FeedScreen() {
           setLiveWrapperLoading(false);
         })
         .catch((error) => {
-          console.warn("Failed to load LiveWrapper:", error);
           setLiveWrapperLoading(false);
         });
     }
@@ -132,7 +131,6 @@ export default function FeedScreen() {
 
       // Add null check for fetchedPosts
       if (!fetchedPosts || !Array.isArray(fetchedPosts)) {
-        console.warn("No posts returned from fetchPosts");
         setNewPosts([]);
         return;
       }
@@ -225,7 +223,6 @@ export default function FeedScreen() {
     await loadNewPosts(); // Reload posts from Supabase
     await refresh();
     setRefreshing(false);
-    console.log("Feed refreshed!");
   }, [refresh]);
 
   // Listen for double-tap events from the feed tab button

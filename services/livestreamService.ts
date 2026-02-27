@@ -127,7 +127,6 @@ function _createChannel() {
       } else if (status === "CHANNEL_ERROR") {
         // log so we can surface issues in app logs
         // eslint-disable-next-line no-console
-        console.warn("livestreams channel error", status);
       }
     });
   } catch (err) {

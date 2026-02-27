@@ -97,7 +97,6 @@ export default function ServiceDetailScreen() {
 
   // Shuffle services
   const handleShuffle = async () => {
-    console.log('Shuffling');
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setShuffling(true);
     setIsShuffled(true);
@@ -126,7 +125,6 @@ export default function ServiceDetailScreen() {
 
   // Shuffle providers
   const handleProviderShuffle = async () => {
-    console.log('Shuffling Providers');
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setProviderShuffling(true);
     setIsProviderShuffled(true);

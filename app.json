@@ -4,9 +4,15 @@
     "slug": "Namzoed",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./icon.png",
     "scheme": "namzoed",
     "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./icon.png",
+      "imageWidth": 200,
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
     "ios": {
       "bundleIdentifier": "com.namzoed.Namzoed",
       "supportsTablet": true,
@@ -48,7 +54,7 @@
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./icon.png"
     },
     "plugins": [
       [
@@ -63,7 +69,7 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/logo.png",
+          "image": "./icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"

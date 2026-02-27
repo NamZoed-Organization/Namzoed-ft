@@ -15,7 +15,7 @@ import {
   TouchableOpacity,
   View
 } from "react-native";
-import Animated, { SlideInLeft, SlideInRight } from "react-native-reanimated";
+import Animated, { FadeInLeft, FadeInRight } from "react-native-reanimated";
 
 type TabType = "foryou" | "featured" | "live" | "bidding" | "norbu";
 type HeaderDataItem = { key: string; component: "header" | "content" | "footer" };
@@ -174,8 +174,8 @@ export default function HomeScreen() {
             key={activeTab}
             entering={
               isMovingRight
-                ? SlideInRight.duration(180)
-                : SlideInLeft.duration(180)
+                ? FadeInRight.duration(200)
+                : FadeInLeft.duration(200)
             }
           >
             {renderTabContent()}
@@ -201,7 +201,8 @@ export default function HomeScreen() {
         data={headerData}
         renderItem={renderItem}
         keyExtractor={(item: HeaderDataItem) => item.key}
-        className="flex-1 bg-background mb-20"
+        className="flex-1 bg-background"
+        contentContainerStyle={{ paddingBottom: 80 }}
         showsVerticalScrollIndicator={false}
         scrollEventThrottle={16}
         refreshControl={

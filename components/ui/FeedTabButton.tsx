@@ -12,7 +12,6 @@ const FeedTabButton = React.forwardRef<any, any>((props, ref) => {
     if (currentTime - lastTapTime.current < 300) {
       // Double tap detected - emit scroll to top event
       feedEvents.emit('scrollToTop');
-      console.log('Double tap detected on feed tab!');
     }
     
     lastTapTime.current = currentTime;

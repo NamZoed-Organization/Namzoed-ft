@@ -268,7 +268,6 @@ export default function MongooseChatScreen() {
     }
 
     // Debug log to check the mongoose name
-    console.log('Looking for mongoose:', mongooseName);
     console.log('Available mongooses:', Object.keys(mongooses));
 
     const mongooseData = mongooses[mongooseName as keyof typeof mongooses];
@@ -276,16 +275,11 @@ export default function MongooseChatScreen() {
     const demoPhone = '+97517123456';
     
     // Debug log to check if mongoose data exists
-    console.log('Mongoose data found:', !!mongooseData);
-    console.log('Demo phone:', demoPhone);
-    
     if (mongooseData) {
       console.log('Client chats available:', Object.keys((mongooseData.clientChats as any) || {}));
     }
     
     const messages = (mongooseData?.clientChats as any)?.[demoPhone] || [];
-    console.log('Found messages:', messages.length, 'for mongoose', mongooseName);
-    
     return {
       originalMessages: messages,
       chatPartnerName: mongooseData ? `${mongooseData.name} (Mongoose)` : `${mongooseName} (Mongoose)`
@@ -389,8 +383,6 @@ export default function MongooseChatScreen() {
       // Prevent multiple recordings
       if (isRecording || recorder.isRecording) return;
 
-      console.log(`Starting recording in ${mode} mode...`);
-
       // Request audio permissions
       const { status } = await requestRecordingPermissionsAsync();
       if (status !== 'granted') {
@@ -433,8 +425,6 @@ export default function MongooseChatScreen() {
     try {
       if (!recorder.isRecording) return;
 
-      console.log('Stopping recording...', { recordingMode, isRecording });
-
       if (recordingIntervalRef.current) {
         clearInterval(recordingIntervalRef.current);
         recordingIntervalRef.current = null;
@@ -454,7 +444,6 @@ export default function MongooseChatScreen() {
       });
 
       if (uri) {
-        console.log('Got URI:', uri);
         const voiceMessage: MongooseMessage = {
           sender: 'client',
           content: `Voice message`,
@@ -464,15 +453,12 @@ export default function MongooseChatScreen() {
           voiceUri: uri
         };
 
-        console.log('Adding voice message:', voiceMessage);
         setLocalMessages(prev => {
           const newMessages = [...prev, voiceMessage];
-          console.log('Updated messages:', newMessages);
           return newMessages;
         });
         simulateReply();
       } else {
-        console.log('No URI found after stopping recorder');
       }
 
       setIsRecording(false);
@@ -488,8 +474,6 @@ export default function MongooseChatScreen() {
   };
 
   const cancelRecording = async () => {
-    console.log('Cancelling recording...');
-
     if (recordingIntervalRef.current) {
       clearInterval(recordingIntervalRef.current);
       recordingIntervalRef.current = null;
@@ -519,7 +503,6 @@ export default function MongooseChatScreen() {
   };
 
   const sendVoiceMessage = async () => {
-    console.log('Send voice message called', { isRecording, recordingMode });
     if (isRecording && recordingMode === 'click') {
       await stopRecording();
     }
@@ -527,17 +510,13 @@ export default function MongooseChatScreen() {
 
   // Voice message playback functions
   const playVoiceMessage = async (messageIndex: number) => {
-    console.log('Voice message tapped:', { messageIndex, currentlyPlaying: playingMessageIndex });
-
     const message = allMessages[messageIndex];
     if (!message || !message.voiceUri) {
-      console.log('No voice URI found for message');
       return;
     }
 
     if (playingMessageIndex === messageIndex) {
       // Pause current playback
-      console.log('Pausing playback');
       if (audioPlayerRef.current) {
         audioPlayerRef.current.pause();
       }
@@ -545,7 +524,6 @@ export default function MongooseChatScreen() {
       setPlaybackPosition(0);
     } else {
       // Stop any current playback
-      console.log('Starting new playback');
       if (audioPlayerSubscriptionRef.current) {
         audioPlayerSubscriptionRef.current.remove();
         audioPlayerSubscriptionRef.current = null;
@@ -574,7 +552,6 @@ export default function MongooseChatScreen() {
 
             setPlaybackPosition(status.currentTime);
             if (status.didJustFinish) {
-              console.log('Playback finished');
               setPlayingMessageIndex(null);
               setPlaybackPosition(0);
               player.seekTo(0).catch(() => {
@@ -586,7 +563,6 @@ export default function MongooseChatScreen() {
 
         player.play();
 
-        console.log('Playing audio...');
       } catch (error) {
         console.error('Failed to play audio:', error);
         setPlayingMessageIndex(null);

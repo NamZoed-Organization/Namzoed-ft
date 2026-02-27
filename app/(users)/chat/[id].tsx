@@ -1,7 +1,7 @@
 // app/(users)/chat/[id].tsx
 import MongooseInitiatorModal from "@/components/MongooseInitiatorModal";
 import MongooseInviteCard, {
-  type MongooseInviteData
+  type MongooseInviteData,
 } from "@/components/MongooseInviteCard";
 import MongooseResponderModal from "@/components/MongooseResponderModal";
 import AudioMessagePlayer from "@/components/chat/AudioMessagePlayer";
@@ -13,7 +13,10 @@ import { useAppearance } from "@/contexts/AppearanceContext";
 import { useUnreadMessages } from "@/contexts/UnreadMessagesContext";
 import { useUser } from "@/contexts/UserContext";
 import users from "@/data/UserData";
-import { EarlyAccessBadgeType, getEarlyAccessBadge } from "@/lib/earlyAccessService";
+import {
+  EarlyAccessBadgeType,
+  getEarlyAccessBadge,
+} from "@/lib/earlyAccessService";
 import { supabase } from "@/lib/supabase";
 import { sendChatPushNotification } from "@/services/chatPushService";
 import { Ionicons } from "@expo/vector-icons";
@@ -223,9 +226,7 @@ const getUserData = async (identifier: string) => {
         name: profileData.name,
       };
     }
-  } catch (e) {
-    console.log("Supabase fetch failed, trying local data:", e);
-  }
+  } catch (e) {}
 
   // Fallback to local user data
   const cleanIdentifier = identifier.replace("+975", "");
@@ -377,7 +378,7 @@ const SwipeableRow = React.memo(function SwipeableRow({
     // Fail on vertical drag so the scroll view still scrolls freely
     .failOffsetY([-20, 20])
     .onUpdate((e) => {
-      'worklet';
+      "worklet";
       const clamped = Math.max(0, Math.min(SWIPE_REPLY_MAX, e.translationX));
       translateX.value = clamped;
       if (clamped >= SWIPE_REPLY_TRIGGER && !hasFired.value) {
@@ -388,7 +389,7 @@ const SwipeableRow = React.memo(function SwipeableRow({
       }
     })
     .onEnd(() => {
-      'worklet';
+      "worklet";
       const triggered = translateX.value >= SWIPE_REPLY_TRIGGER;
       translateX.value = withTiming(0, { duration: 180 });
       hasFired.value = false;
@@ -426,20 +427,20 @@ const SwipeableRow = React.memo(function SwipeableRow({
        * without this explicit stretch.
        * overflow:'visible' lets the bubble translate past the edge.
        */}
-      <Reanimated.View style={{ overflow: 'visible', alignSelf: 'stretch' }}>
+      <Reanimated.View style={{ overflow: "visible", alignSelf: "stretch" }}>
         {/* Reply icon — always at the left margin, stays put while bubble slides */}
         <Reanimated.View
           pointerEvents="none"
           style={[
             replyIconStyle,
             {
-              position: 'absolute',
+              position: "absolute",
               left: 6,
               top: 0,
               bottom: 0,
               width: 36,
-              alignItems: 'center',
-              justifyContent: 'center',
+              alignItems: "center",
+              justifyContent: "center",
             },
           ]}
         >
@@ -448,9 +449,9 @@ const SwipeableRow = React.memo(function SwipeableRow({
               width: 28,
               height: 28,
               borderRadius: 14,
-              backgroundColor: 'rgba(99,102,241,0.18)',
-              alignItems: 'center',
-              justifyContent: 'center',
+              backgroundColor: "rgba(99,102,241,0.18)",
+              alignItems: "center",
+              justifyContent: "center",
             }}
           >
             <Ionicons name="arrow-undo" size={14} color="#6366f1" />
@@ -465,8 +466,8 @@ const SwipeableRow = React.memo(function SwipeableRow({
           style={[
             animStyle,
             {
-              flexDirection: 'row',
-              justifyContent: isCurrentUser ? 'flex-end' : 'flex-start',
+              flexDirection: "row",
+              justifyContent: isCurrentUser ? "flex-end" : "flex-start",
             },
           ]}
         >
@@ -520,19 +521,19 @@ function AnimatedReactionPill({
       style={[
         pillStyle,
         {
-          flexDirection: 'row',
-          alignSelf: isCurrentUser ? 'flex-end' : 'flex-start',
+          flexDirection: "row",
+          alignSelf: isCurrentUser ? "flex-end" : "flex-start",
           marginTop: -8,
           marginBottom: 2,
           marginRight: isCurrentUser ? 10 : 0,
           marginLeft: isCurrentUser ? 0 : 10,
-          backgroundColor: 'rgba(255,255,255,0.95)',
+          backgroundColor: "rgba(255,255,255,0.95)",
           borderRadius: 20,
           paddingHorizontal: 6,
           paddingVertical: 3,
           borderWidth: 1,
-          borderColor: '#e5e7eb',
-          shadowColor: '#000',
+          borderColor: "#e5e7eb",
+          shadowColor: "#000",
           shadowOffset: { width: 0, height: 1 },
           shadowOpacity: 0.08,
           shadowRadius: 4,
@@ -591,7 +592,10 @@ export default function ChatScreen() {
     useState<any>(null);
   const [isSharingLocation, setIsSharingLocation] = useState(false);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
-  const [locationPickerInitial, setLocationPickerInitial] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [locationPickerInitial, setLocationPickerInitial] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
   const [showMapModal, setShowMapModal] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState<{
     latitude: number;
@@ -600,9 +604,12 @@ export default function ChatScreen() {
   const [selectedMessage, setSelectedMessage] = useState<any>(null);
   const [showMessageActions, setShowMessageActions] = useState(false);
   const [selectedMessagePageY, setSelectedMessagePageY] = useState(0);
-  const [selectedMessageIsCurrentUser, setSelectedMessageIsCurrentUser] = useState(false);
+  const [selectedMessageIsCurrentUser, setSelectedMessageIsCurrentUser] =
+    useState(false);
   // Local emoji reactions: { [messageId]: emoji[] }
-  const [messageReactions, setMessageReactions] = useState<Record<string, string[]>>({});
+  const [messageReactions, setMessageReactions] = useState<
+    Record<string, string[]>
+  >({});
   // Shared values for the context-menu card entry animation
   const modalCardScale = useSharedValue(0.88);
   const modalCardOpacity = useSharedValue(0);
@@ -640,11 +647,15 @@ export default function ChatScreen() {
   const insets = useSafeAreaInsets();
   // Keep insets.bottom in a ref so keyboard-listener callbacks always see the latest value.
   const insetsBottomRef = useRef(insets.bottom);
-  useEffect(() => { insetsBottomRef.current = insets.bottom; }, [insets.bottom]);
+  useEffect(() => {
+    insetsBottomRef.current = insets.bottom;
+  }, [insets.bottom]);
 
   // Early-access badge types for gradient chat bubbles
-  const [currentUserBadgeType, setCurrentUserBadgeType] = useState<EarlyAccessBadgeType>(null);
-  const [chatPartnerBadgeType, setChatPartnerBadgeType] = useState<EarlyAccessBadgeType>(null);
+  const [currentUserBadgeType, setCurrentUserBadgeType] =
+    useState<EarlyAccessBadgeType>(null);
+  const [chatPartnerBadgeType, setChatPartnerBadgeType] =
+    useState<EarlyAccessBadgeType>(null);
   const { bubbleSkin } = useAppearance();
 
   // Animated style for the context-menu card (scale spring on open)
@@ -737,7 +748,9 @@ export default function ChatScreen() {
     if (!effectiveCurrentUserUUID) return null;
     for (let i = allMessages.length - 1; i >= 0; i -= 1) {
       const message = allMessages[i];
-      if (String(message?.sender_id || "") === String(effectiveCurrentUserUUID)) {
+      if (
+        String(message?.sender_id || "") === String(effectiveCurrentUserUUID)
+      ) {
         return message?.id != null ? String(message.id) : null;
       }
     }
@@ -979,7 +992,6 @@ export default function ChatScreen() {
       try {
         const partnerData = await getUserData(chatPartnerId as string);
         setChatPartnerData(partnerData);
-        console.log("partner Data", partnerData);
       } catch (error) {
         console.error("Error loading chat partner data:", error);
         // Fallback to basic info
@@ -1014,7 +1026,6 @@ export default function ChatScreen() {
   // Fetch initial messages and subscribe to real-time updates
   useEffect(() => {
     if (!chatPartnerId) {
-      console.log("⚠️ Missing chat partner ID");
       return;
     }
 
@@ -1085,10 +1096,19 @@ export default function ChatScreen() {
           setMessages(messagesData || []);
           // Seed emoji reactions from the DB data on (re)load
           const initRxns: Record<string, string[]> = {};
-          for (const m of (messagesData || [])) {
+          for (const m of messagesData || []) {
             const r = m.reactions;
-            if (r && typeof r === 'object' && !Array.isArray(r) && Object.keys(r).length > 0) {
-              const emojis = [...new Set(Object.values(r as Record<string, string>).filter(Boolean))];
+            if (
+              r &&
+              typeof r === "object" &&
+              !Array.isArray(r) &&
+              Object.keys(r).length > 0
+            ) {
+              const emojis = [
+                ...new Set(
+                  Object.values(r as Record<string, string>).filter(Boolean),
+                ),
+              ];
               if (emojis.length > 0) initRxns[String(m.id)] = emojis;
             }
           }
@@ -1164,7 +1184,6 @@ export default function ChatScreen() {
                 // Add to messages if not duplicate
                 setMessages((prev) => {
                   if (prev.some((m) => m.id === message.id)) {
-                    console.log("⚠️ Duplicate message ignored");
                     return prev;
                   }
                   return [...prev, message];
@@ -1186,7 +1205,6 @@ export default function ChatScreen() {
                         new Date(message.created_at).getTime(),
                     );
                     if (isSameContent && timeDiff < 5000) {
-                      console.log("✅ Removed optimistic message");
                       return false;
                     }
                     return true;
@@ -1204,12 +1222,14 @@ export default function ChatScreen() {
                 // Sync reactions when partner reacts (or reactions change)
                 if (
                   message.reactions &&
-                  typeof message.reactions === 'object' &&
+                  typeof message.reactions === "object" &&
                   !Array.isArray(message.reactions)
                 ) {
                   const rxnEmojis = [
                     ...new Set(
-                      Object.values(message.reactions as Record<string, string>).filter(Boolean),
+                      Object.values(
+                        message.reactions as Record<string, string>,
+                      ).filter(Boolean),
                     ),
                   ];
                   setMessageReactions((prev) => ({
@@ -1246,10 +1266,7 @@ export default function ChatScreen() {
           )
           .subscribe((status) => {
             if (!isSubscribed) return;
-            console.log("📡 Chat subscription status:", status);
-
             if (status === "SUBSCRIBED") {
-              console.log("✅ Real-time chat ACTIVE");
               if (messagesPollRef.current) {
                 clearInterval(messagesPollRef.current);
                 messagesPollRef.current = null;
@@ -1280,7 +1297,6 @@ export default function ChatScreen() {
     setupChatRealtime();
 
     return () => {
-      console.log("🔌 Cleaning up chat subscription:", channelName);
       isSubscribed = false;
 
       if (channelRef.current) {
@@ -1372,9 +1388,10 @@ export default function ChatScreen() {
         // On Android, endCoordinates.height is the key pane only — it does NOT include
         // the suggestions/toolbar row (emoji, clipboard, Samsung Pass, etc.) that floats
         // just above the keys.  Add an extra 50dp to push the input clear of that bar.
-        const offset = Platform.OS === "android"
-          ? -(e.endCoordinates.height + 50)
-          : -e.endCoordinates.height;
+        const offset =
+          Platform.OS === "android"
+            ? -(e.endCoordinates.height + 50)
+            : -e.endCoordinates.height;
         Animated.timing(keyboardOffset, {
           toValue: offset,
           duration: Platform.OS === "ios" ? e.duration : 250,
@@ -1548,7 +1565,6 @@ export default function ChatScreen() {
   const handleSendMessage = async () => {
     const baseMessageContent = messageText.trim();
     if (!baseMessageContent || !effectiveCurrentUserUUID || !chatPartnerId) {
-      console.log("⚠️ Cannot send: missing content, userUUID, or partnerId");
       return;
     }
     const replyMeta = replyingToMessage
@@ -1739,8 +1755,13 @@ export default function ChatScreen() {
     setShowLocationPicker(true);
   };
 
-  const handleSendPickedLocation = async (loc: { latitude: number; longitude: number; address?: string }) => {
-    if (isSharingLocation || !effectiveCurrentUserUUID || !chatPartnerId) return;
+  const handleSendPickedLocation = async (loc: {
+    latitude: number;
+    longitude: number;
+    address?: string;
+  }) => {
+    if (isSharingLocation || !effectiveCurrentUserUUID || !chatPartnerId)
+      return;
     setIsSharingLocation(true);
     try {
       const locationMessage = `📍 My Location: https://maps.google.com/?q=${loc.latitude},${loc.longitude}`;
@@ -1761,12 +1782,14 @@ export default function ChatScreen() {
 
       const { data, error } = await supabase
         .from("messages")
-        .insert([{
-          sender_id: effectiveCurrentUserUUID,
-          receiver_id: chatPartnerId,
-          content: locationMessage,
-          is_read: false,
-        }])
+        .insert([
+          {
+            sender_id: effectiveCurrentUserUUID,
+            receiver_id: chatPartnerId,
+            content: locationMessage,
+            is_read: false,
+          },
+        ])
         .select()
         .single();
 
@@ -1809,7 +1832,6 @@ export default function ChatScreen() {
         setLocalMessages((prev) =>
           prev.filter((m) => m.id !== selectedMessage.id),
         );
-        console.log("Message deleted successfully");
       }
     } catch (e) {
       console.error("Exception deleting message:", e);
@@ -1884,7 +1906,6 @@ export default function ChatScreen() {
               : m,
           ),
         );
-        console.log("Message updated successfully");
       }
     } catch (e) {
       console.error("Exception updating message:", e);
@@ -1906,10 +1927,8 @@ export default function ChatScreen() {
     setTimeout(() => {
       setMessages((prev) => {
         if (prev.some((m) => m.id === finalMsg.id)) {
-          console.log("✅ Realtime already added image message");
           return prev;
         }
-        console.log("⚡ Fallback: manually adding image message");
         return [...prev, finalMsg];
       });
       // Remove optimistic message
@@ -1931,10 +1950,8 @@ export default function ChatScreen() {
     setTimeout(() => {
       setMessages((prev) => {
         if (prev.some((m) => m.id === finalMsg.id)) {
-          console.log("✅ Realtime already added audio message");
           return prev;
         }
-        console.log("⚡ Fallback: manually adding audio message");
         return [...prev, finalMsg];
       });
       // Remove optimistic message
@@ -2020,9 +2037,7 @@ export default function ChatScreen() {
   };
 
   /** Called by MongooseResponderModal after booking_request inserted successfully */
-  const handleMongooseConfirmed = async (
-    bookingRequestId: string,
-  ) => {
+  const handleMongooseConfirmed = async (bookingRequestId: string) => {
     if (!pendingMongooseInvite) return;
     const { messageId, data } = pendingMongooseInvite;
 
@@ -2074,7 +2089,11 @@ export default function ChatScreen() {
     }
   };
 
-  const openMessageActions = (message: any, pageY?: number, isCurrentUser?: boolean) => {
+  const openMessageActions = (
+    message: any,
+    pageY?: number,
+    isCurrentUser?: boolean,
+  ) => {
     if (!message || message.isOptimistic) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     setSelectedMessage(message);
@@ -2125,16 +2144,21 @@ export default function ChatScreen() {
   /** Metallic border gradient — matches the badge's outer frame per tier. */
   /** Neon glow color per tier. */
   const getBubbleNeonColor = (badge: EarlyAccessBadgeType): string => {
-    if (badge === 'founding') return '#ff6eb4';
-    if (badge === 'waitlist') return '#ffd235';
-    return '#3de4ff';
+    if (badge === "founding") return "#ff6eb4";
+    if (badge === "waitlist") return "#ffd235";
+    return "#3de4ff";
   };
 
   /** Frosted semi-transparent fill per tier + sender/receiver. */
-  const getBubbleFrostedBg = (badge: EarlyAccessBadgeType, forCurrentUser: boolean): string => {
-    if (badge === 'founding') return forCurrentUser ? 'rgba(100,0,160,0.44)' : 'rgba(70,0,110,0.36)';
-    if (badge === 'waitlist') return forCurrentUser ? 'rgba(150,70,0,0.44)'  : 'rgba(100,50,0,0.36)';
-    return forCurrentUser ? 'rgba(0,50,140,0.44)' : 'rgba(0,35,100,0.36)';
+  const getBubbleFrostedBg = (
+    badge: EarlyAccessBadgeType,
+    forCurrentUser: boolean,
+  ): string => {
+    if (badge === "founding")
+      return forCurrentUser ? "rgba(100,0,160,0.44)" : "rgba(70,0,110,0.36)";
+    if (badge === "waitlist")
+      return forCurrentUser ? "rgba(150,70,0,0.44)" : "rgba(100,50,0,0.36)";
+    return forCurrentUser ? "rgba(0,50,140,0.44)" : "rgba(0,35,100,0.36)";
   };
 
   /**
@@ -2142,20 +2166,23 @@ export default function ChatScreen() {
    * Sender (you) → vivid full-brightness metal.
    * Receiver (them) → muted, aged version of the same metal.
    */
-  const getBubbleBorderColors = (badge: EarlyAccessBadgeType, forCurrentUser: boolean): [string, string, string, string] => {
-    if (badge === 'founding') {
+  const getBubbleBorderColors = (
+    badge: EarlyAccessBadgeType,
+    forCurrentUser: boolean,
+  ): [string, string, string, string] => {
+    if (badge === "founding") {
       return forCurrentUser
-        ? ['#c9a96e', '#f0d79a', '#e8c07a', '#c9a96e']  // vivid rose-gold
-        : ['#5a4535', '#7a6048', '#968060', '#7a6048'];  // muted aged bronze
+        ? ["#c9a96e", "#f0d79a", "#e8c07a", "#c9a96e"] // vivid rose-gold
+        : ["#5a4535", "#7a6048", "#968060", "#7a6048"]; // muted aged bronze
     }
-    if (badge === 'waitlist') {
+    if (badge === "waitlist") {
       return forCurrentUser
-        ? ['#a16207', '#d97706', '#f5d264', '#d97706']   // vivid 24k gold
-        : ['#4a3200', '#6a4e00', '#8a6a14', '#6a4e00'];  // muted antique gold
+        ? ["#a16207", "#d97706", "#f5d264", "#d97706"] // vivid 24k gold
+        : ["#4a3200", "#6a4e00", "#8a6a14", "#6a4e00"]; // muted antique gold
     }
     return forCurrentUser
-      ? ['#475569', '#94a3b8', '#e2e8f0', '#94a3b8']    // vivid brushed steel
-      : ['#1e2530', '#2d3748', '#3d4e62', '#2d3748'];   // muted gunmetal
+      ? ["#475569", "#94a3b8", "#e2e8f0", "#94a3b8"] // vivid brushed steel
+      : ["#1e2530", "#2d3748", "#3d4e62", "#2d3748"]; // muted gunmetal
   };
 
   /**
@@ -2163,20 +2190,23 @@ export default function ChatScreen() {
    * Sender → warm, rich tier material (deep violet / cognac / sapphire).
    * Receiver → cool slate-charcoal — clearly a different read.
    */
-  const getBubbleGradient = (badge: EarlyAccessBadgeType, forCurrentUser: boolean): [string, string, string] => {
-    if (badge === 'founding') {
+  const getBubbleGradient = (
+    badge: EarlyAccessBadgeType,
+    forCurrentUser: boolean,
+  ): [string, string, string] => {
+    if (badge === "founding") {
       return forCurrentUser
-        ? ['#3b0f5e', '#200838', '#13042a']   // sender — rich violet-obsidian
-        : ['#12162e', '#0d1124', '#080c1c'];  // receiver — cool slate-indigo
+        ? ["#3b0f5e", "#200838", "#13042a"] // sender — rich violet-obsidian
+        : ["#12162e", "#0d1124", "#080c1c"]; // receiver — cool slate-indigo
     }
-    if (badge === 'waitlist') {
+    if (badge === "waitlist") {
       return forCurrentUser
-        ? ['#3d1b00', '#261100', '#160900']   // sender — warm cognac
-        : ['#141008', '#0e0b06', '#090704'];  // receiver — cool espresso-charcoal
+        ? ["#3d1b00", "#261100", "#160900"] // sender — warm cognac
+        : ["#141008", "#0e0b06", "#090704"]; // receiver — cool espresso-charcoal
     }
     return forCurrentUser
-      ? ['#072040', '#041628', '#020f1c']     // sender — deep sapphire
-      : ['#171c24', '#10141c', '#090d14'];   // receiver — cool steel-charcoal
+      ? ["#072040", "#041628", "#020f1c"] // sender — deep sapphire
+      : ["#171c24", "#10141c", "#090d14"]; // receiver — cool steel-charcoal
   };
 
   const renderMessage = (
@@ -2196,7 +2226,7 @@ export default function ChatScreen() {
       message?.id != null &&
       String(message.id) === latestOutgoingMessageId;
     const parentReplyCount =
-      message?.id != null ? (replyCountByMessageId[String(message.id)] || 0) : 0;
+      message?.id != null ? replyCountByMessageId[String(message.id)] || 0 : 0;
     const messageType = message.message_type || "text";
     const isLocation = message.content?.includes("📍 My Location:");
     const isImage = messageType === "image" || message.image_url;
@@ -2206,13 +2236,16 @@ export default function ChatScreen() {
     const embeddedReplyMeta = parsedContent.replyMeta;
     const embeddedProductMeta = parsedContent.productMeta;
     // Badge tier for this specific message's sender (drives gradient bubbles)
-    const senderBadgeType: EarlyAccessBadgeType = isCurrentUser ? currentUserBadgeType : chatPartnerBadgeType;
+    const senderBadgeType: EarlyAccessBadgeType = isCurrentUser
+      ? currentUserBadgeType
+      : chatPartnerBadgeType;
     const RADIUS_LARGE = 20;
     const RADIUS_SMALL = 6;
     const rowSpacingClass = connectNext ? "mb-1" : "mb-3";
     const productCardWidth = Math.round(screenWidth * 0.6);
     // Reactions stored locally for this message
-    const reactionsForMsg = message?.id != null ? (messageReactions[String(message.id)] || []) : [];
+    const reactionsForMsg =
+      message?.id != null ? messageReactions[String(message.id)] || [] : [];
     const bubbleRadiusStyle = isCurrentUser
       ? {
           borderTopLeftRadius: RADIUS_LARGE,
@@ -2282,9 +2315,14 @@ export default function ChatScreen() {
           key={key}
           className={`${rowSpacingClass} ${isCurrentUser ? "items-end" : "items-start"}`}
         >
-          <SwipeableRow onTriggered={() => startReplyToMessage(message)} isCurrentUser={isCurrentUser}>
+          <SwipeableRow
+            onTriggered={() => startReplyToMessage(message)}
+            isCurrentUser={isCurrentUser}
+          >
             <Pressable
-              onLongPress={(e) => openMessageActions(message, e.nativeEvent.pageY, isCurrentUser)}
+              onLongPress={(e) =>
+                openMessageActions(message, e.nativeEvent.pageY, isCurrentUser)
+              }
               delayLongPress={400}
               className={`${isCurrentUser ? "mr-2" : "ml-2"}`}
             >
@@ -2298,8 +2336,8 @@ export default function ChatScreen() {
           </SwipeableRow>
           {reactionsForMsg.length > 0 && (
             <AnimatedReactionPill
-              key={reactionsForMsg.join('-')}
-              animKey={`${key}::${reactionsForMsg.join('')}`}
+              key={reactionsForMsg.join("-")}
+              animKey={`${key}::${reactionsForMsg.join("")}`}
               reactions={reactionsForMsg}
               isCurrentUser={isCurrentUser}
             />
@@ -2323,10 +2361,15 @@ export default function ChatScreen() {
           key={key}
           className={`${rowSpacingClass} ${isCurrentUser ? "items-end" : "items-start"}`}
         >
-          <SwipeableRow onTriggered={() => startReplyToMessage(message)} isCurrentUser={isCurrentUser}>
+          <SwipeableRow
+            onTriggered={() => startReplyToMessage(message)}
+            isCurrentUser={isCurrentUser}
+          >
             <Pressable
               onPress={handleImagePress}
-              onLongPress={(e) => openMessageActions(message, e.nativeEvent.pageY, isCurrentUser)}
+              onLongPress={(e) =>
+                openMessageActions(message, e.nativeEvent.pageY, isCurrentUser)
+              }
               delayLongPress={400}
               className={`max-w-[72%] overflow-hidden ${
                 isCurrentUser ? "mr-2" : "ml-2"
@@ -2348,8 +2391,8 @@ export default function ChatScreen() {
           </SwipeableRow>
           {reactionsForMsg.length > 0 && (
             <AnimatedReactionPill
-              key={reactionsForMsg.join('-')}
-              animKey={`${key}::${reactionsForMsg.join('')}`}
+              key={reactionsForMsg.join("-")}
+              animKey={`${key}::${reactionsForMsg.join("")}`}
               reactions={reactionsForMsg}
               isCurrentUser={isCurrentUser}
             />
@@ -2373,10 +2416,15 @@ export default function ChatScreen() {
           key={key}
           className={`${rowSpacingClass} ${isCurrentUser ? "items-end" : "items-start"}`}
         >
-          <SwipeableRow onTriggered={() => startReplyToMessage(message)} isCurrentUser={isCurrentUser}>
+          <SwipeableRow
+            onTriggered={() => startReplyToMessage(message)}
+            isCurrentUser={isCurrentUser}
+          >
             <Pressable
               onPress={handleLocationPress}
-              onLongPress={(e) => openMessageActions(message, e.nativeEvent.pageY, isCurrentUser)}
+              onLongPress={(e) =>
+                openMessageActions(message, e.nativeEvent.pageY, isCurrentUser)
+              }
               delayLongPress={400}
               className={`max-w-[72%] overflow-hidden ${
                 isCurrentUser ? "mr-2" : "ml-2"
@@ -2426,8 +2474,8 @@ export default function ChatScreen() {
           </SwipeableRow>
           {reactionsForMsg.length > 0 && (
             <AnimatedReactionPill
-              key={reactionsForMsg.join('-')}
-              animKey={`${key}::${reactionsForMsg.join('')}`}
+              key={reactionsForMsg.join("-")}
+              animKey={`${key}::${reactionsForMsg.join("")}`}
               reactions={reactionsForMsg}
               isCurrentUser={isCurrentUser}
             />
@@ -2494,7 +2542,10 @@ export default function ChatScreen() {
           </Pressable>
         ) : null}
 
-        <SwipeableRow onTriggered={() => startReplyToMessage(message)} isCurrentUser={isCurrentUser}>
+        <SwipeableRow
+          onTriggered={() => startReplyToMessage(message)}
+          isCurrentUser={isCurrentUser}
+        >
           <Pressable
             onPress={() => {
               if (localStatus === "failed") {
@@ -2503,7 +2554,9 @@ export default function ChatScreen() {
                     m.id === message.id ? { ...m, localStatus: "sending" } : m,
                   ),
                 );
-                const retryPreview = parseMessageMetaContent(message.content).text;
+                const retryPreview = parseMessageMetaContent(
+                  message.content,
+                ).text;
                 void sendMessageToServer({
                   messageContent: message.content,
                   optimisticId: String(message.id),
@@ -2511,30 +2564,73 @@ export default function ChatScreen() {
                 });
               }
             }}
-            onLongPress={(e) => openMessageActions(message, e.nativeEvent.pageY, isCurrentUser)}
+            onLongPress={(e) =>
+              openMessageActions(message, e.nativeEvent.pageY, isCurrentUser)
+            }
             delayLongPress={400}
             className={`max-w-[72%] px-4 py-4 ${
               isCurrentUser
-                ? senderBadgeType ? "mr-2" : "bg-primary mr-2"
-                : senderBadgeType ? "ml-2" : "bg-gray-200 ml-2"
+                ? senderBadgeType
+                  ? "mr-2"
+                  : "bg-primary mr-2"
+                : senderBadgeType
+                  ? "ml-2"
+                  : "bg-gray-200 ml-2"
             } ${isOptimistic ? "opacity-70" : ""}`}
-            style={[bubbleRadiusStyle, { overflow: 'hidden' }]}
+            style={[bubbleRadiusStyle, { overflow: "hidden" }]}
           >
             {/* ── Badge-holder bubble: metallic gradient per tier ── */}
             {senderBadgeType ? (
               <>
                 <LinearGradient
                   colors={getBubbleBorderColors(senderBadgeType, isCurrentUser)}
-                  start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
-                  style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+                  start={{ x: 0, y: 0.5 }}
+                  end={{ x: 1, y: 0.5 }}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                  }}
                 />
                 <LinearGradient
                   colors={getBubbleGradient(senderBadgeType, isCurrentUser)}
-                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                  style={{ position: 'absolute', top: 1.5, left: 1.5, right: 1.5, bottom: 1.5, borderRadius: 18 }}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={{
+                    position: "absolute",
+                    top: 1.5,
+                    left: 1.5,
+                    right: 1.5,
+                    bottom: 1.5,
+                    borderRadius: 18,
+                  }}
                 />
-                <View style={{ position: 'absolute', top: 1.5, bottom: 1.5, left: '22%', width: 36, backgroundColor: 'rgba(255,255,255,0.045)', transform: [{ skewX: '-18deg' }] }} pointerEvents="none" />
-                <View style={{ position: 'absolute', top: 1.5, bottom: 1.5, left: '55%', width: 14, backgroundColor: 'rgba(255,255,255,0.025)', transform: [{ skewX: '-18deg' }] }} pointerEvents="none" />
+                <View
+                  style={{
+                    position: "absolute",
+                    top: 1.5,
+                    bottom: 1.5,
+                    left: "22%",
+                    width: 36,
+                    backgroundColor: "rgba(255,255,255,0.045)",
+                    transform: [{ skewX: "-18deg" }],
+                  }}
+                  pointerEvents="none"
+                />
+                <View
+                  style={{
+                    position: "absolute",
+                    top: 1.5,
+                    bottom: 1.5,
+                    left: "55%",
+                    width: 14,
+                    backgroundColor: "rgba(255,255,255,0.025)",
+                    transform: [{ skewX: "-18deg" }],
+                  }}
+                  pointerEvents="none"
+                />
               </>
             ) : null}
             {embeddedReplyMeta ? (
@@ -2547,7 +2643,9 @@ export default function ChatScreen() {
               >
                 <Text
                   className={`text-[11px] font-semibold ${
-                    isCurrentUser || senderBadgeType ? "text-blue-100" : "text-gray-700"
+                    isCurrentUser || senderBadgeType
+                      ? "text-blue-100"
+                      : "text-gray-700"
                   }`}
                   numberOfLines={1}
                 >
@@ -2555,7 +2653,9 @@ export default function ChatScreen() {
                 </Text>
                 <Text
                   className={`text-[12px] ${
-                    isCurrentUser || senderBadgeType ? "text-blue-100" : "text-gray-600"
+                    isCurrentUser || senderBadgeType
+                      ? "text-blue-100"
+                      : "text-gray-600"
                   }`}
                   numberOfLines={1}
                 >
@@ -2564,7 +2664,7 @@ export default function ChatScreen() {
               </View>
             ) : null}
             <Text
-              className={`${isCurrentUser || senderBadgeType ? "text-white" : "text-gray-800"} text-[18px]`}
+              className={`${isCurrentUser || senderBadgeType ? "text-white" : "text-gray-800"} text-[14px]`}
               style={{ lineHeight: 20 }}
             >
               {visibleTextContent}
@@ -2574,8 +2674,8 @@ export default function ChatScreen() {
         {/* Emoji reactions pill */}
         {reactionsForMsg.length > 0 && (
           <AnimatedReactionPill
-            key={reactionsForMsg.join('-')}
-            animKey={`${key}::${reactionsForMsg.join('')}`}
+            key={reactionsForMsg.join("-")}
+            animKey={`${key}::${reactionsForMsg.join("")}`}
             reactions={reactionsForMsg}
             isCurrentUser={isCurrentUser}
           />
@@ -2647,7 +2747,7 @@ export default function ChatScreen() {
   };
 
   return (
-    <View className="flex-1 bg-background">
+    <View className="flex-1 bg-white">
       {/* Status Bar Space */}
       <View className="h-12 bg-white" />
 
@@ -2659,7 +2759,9 @@ export default function ChatScreen() {
 
         {/* Profile Image or Avatar */}
         <TouchableOpacity
-          onPress={() => chatPartnerId && router.push(`/(users)/profile/${chatPartnerId}`)}
+          onPress={() =>
+            chatPartnerId && router.push(`/(users)/profile/${chatPartnerId}`)
+          }
           activeOpacity={0.7}
           className="mr-3"
         >
@@ -2800,7 +2902,9 @@ export default function ChatScreen() {
       >
         <View
           className={`flex-row items-center px-4 pt-2`}
-          style={{ paddingBottom: isKeyboardVisible ? 8 : Math.max(insets.bottom, 12) }}
+          style={{
+            paddingBottom: isKeyboardVisible ? 8 : Math.max(insets.bottom, 12),
+          }}
           onLayout={(e) => {
             const measured = Math.round(e.nativeEvent.layout.height);
             if (measured > 0 && Math.abs(measured - inputBarHeight) > 2) {
@@ -3017,7 +3121,6 @@ export default function ChatScreen() {
                     if (isEditMode) {
                       handleUpdateMessage();
                     } else {
-                      console.log("Send button pressed!");
                       handleSendMessage();
                     }
                   }}
@@ -3105,237 +3208,367 @@ export default function ChatScreen() {
       >
         {/* Outer animated wrapper — fades the whole overlay in/out */}
         <Reanimated.View style={[modalBackdropAnimStyle, { flex: 1 }]}>
-        {/* Blurred backdrop */}
-        <BlurView
-          intensity={55}
-          tint="dark"
-          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-        />
-        {/* Dismiss on background tap */}
-        <TouchableOpacity
-          activeOpacity={1}
-          onPress={() => setShowMessageActions(false)}
-          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-        />
+          {/* Blurred backdrop */}
+          <BlurView
+            intensity={55}
+            tint="dark"
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+            }}
+          />
+          {/* Dismiss on background tap */}
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={() => setShowMessageActions(false)}
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+            }}
+          />
 
-        {selectedMessage && (() => {
-          const parsed = parseMessageMetaContent(selectedMessage.content);
-          const msgText = parsed.text;
-          const isOwnMsg = String(selectedMessage.sender_id) === String(effectiveCurrentUserUUID);
-          const isImg = selectedMessage.message_type === 'image' || selectedMessage.image_url;
-          const isAud = selectedMessage.message_type === 'audio' || selectedMessage.audio_url;
-          const isLoc = selectedMessage.content?.includes?.('📍 My Location:');
-          const previewText = isImg
-            ? '📷  Photo'
-            : isAud
-            ? '🎵  Voice message'
-            : isLoc
-            ? '📍  Location'
-            : msgText;
+          {selectedMessage &&
+            (() => {
+              const parsed = parseMessageMetaContent(selectedMessage.content);
+              const msgText = parsed.text;
+              const isOwnMsg =
+                String(selectedMessage.sender_id) ===
+                String(effectiveCurrentUserUUID);
+              const isImg =
+                selectedMessage.message_type === "image" ||
+                selectedMessage.image_url;
+              const isAud =
+                selectedMessage.message_type === "audio" ||
+                selectedMessage.audio_url;
+              const isLoc =
+                selectedMessage.content?.includes?.("📍 My Location:");
+              const previewText = isImg
+                ? "📷  Photo"
+                : isAud
+                  ? "🎵  Voice message"
+                  : isLoc
+                    ? "📍  Location"
+                    : msgText;
 
-          // Compute safe vertical position so the full card fits on screen
-          const BUBBLE_H = 72;
-          const REACTIONS_H = 58;
-          const editRow = isOwnMsg && !isImg && selectedMessage.message_type !== 'mongoose_invite' ? 52 : 0;
-          const deleteRow = isOwnMsg ? 52 : 0;
-          const ACTIONS_H = 52 + editRow + deleteRow + 52;
-          const TOTAL_H = BUBBLE_H + REACTIONS_H + ACTIONS_H + 32;
-          const rawTop = selectedMessagePageY - BUBBLE_H - 4;
-          const cardTop = Math.min(
-            Math.max(rawTop, 60),
-            screenHeight - TOTAL_H - 40,
-          );
+              // Compute safe vertical position so the full card fits on screen
+              const BUBBLE_H = 72;
+              const REACTIONS_H = 58;
+              const editRow =
+                isOwnMsg &&
+                !isImg &&
+                selectedMessage.message_type !== "mongoose_invite"
+                  ? 52
+                  : 0;
+              const deleteRow = isOwnMsg ? 52 : 0;
+              const ACTIONS_H = 52 + editRow + deleteRow + 52;
+              const TOTAL_H = BUBBLE_H + REACTIONS_H + ACTIONS_H + 32;
+              const rawTop = selectedMessagePageY - BUBBLE_H - 4;
+              const cardTop = Math.min(
+                Math.max(rawTop, 60),
+                screenHeight - TOTAL_H - 40,
+              );
 
-          const EMOJIS: string[] = ['❤️', '😂', '😮', '😢', '👏', '👍'];
-          const SEP = 'rgba(0,0,0,0.06)';
-          const currentReactions = messageReactions[String(selectedMessage.id)] || [];
+              const EMOJIS: string[] = ["❤️", "😂", "😮", "😢", "👏", "👍"];
+              const SEP = "rgba(0,0,0,0.06)";
+              const currentReactions =
+                messageReactions[String(selectedMessage.id)] || [];
 
-          return (
-            <Reanimated.View
-              pointerEvents="box-none"
-              style={[modalCardAnimStyle, { position: 'absolute', top: cardTop, left: 0, right: 0, paddingHorizontal: 14 }]}
-            >
-              {/* Mini message bubble preview */}
-              <View style={{ alignItems: isOwnMsg ? 'flex-end' : 'flex-start', marginBottom: 8 }}>
-                <View
-                  style={{
-                    maxWidth: '72%',
-                    paddingHorizontal: 14,
-                    paddingVertical: 10,
-                    borderRadius: 18,
-                    backgroundColor: isOwnMsg ? '#094569' : '#e5e7eb',
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 3 },
-                    shadowOpacity: 0.2,
-                    shadowRadius: 6,
-                    elevation: 4,
-                  }}
+              return (
+                <Reanimated.View
+                  pointerEvents="box-none"
+                  style={[
+                    modalCardAnimStyle,
+                    {
+                      position: "absolute",
+                      top: cardTop,
+                      left: 0,
+                      right: 0,
+                      paddingHorizontal: 14,
+                    },
+                  ]}
                 >
-                  <Text
-                    style={{ color: isOwnMsg ? 'white' : '#1f2937', fontSize: 15, lineHeight: 20 }}
-                    numberOfLines={3}
+                  {/* Mini message bubble preview */}
+                  <View
+                    style={{
+                      alignItems: isOwnMsg ? "flex-end" : "flex-start",
+                      marginBottom: 8,
+                    }}
                   >
-                    {previewText}
-                  </Text>
-                </View>
-              </View>
+                    <View
+                      style={{
+                        maxWidth: "72%",
+                        paddingHorizontal: 14,
+                        paddingVertical: 10,
+                        borderRadius: 18,
+                        backgroundColor: isOwnMsg ? "#094569" : "#e5e7eb",
+                        shadowColor: "#000",
+                        shadowOffset: { width: 0, height: 3 },
+                        shadowOpacity: 0.2,
+                        shadowRadius: 6,
+                        elevation: 4,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: isOwnMsg ? "white" : "#1f2937",
+                          fontSize: 15,
+                          lineHeight: 20,
+                        }}
+                        numberOfLines={3}
+                      >
+                        {previewText}
+                      </Text>
+                    </View>
+                  </View>
 
-              {/* Emoji reaction strip */}
-              <View
-                style={{
-                  flexDirection: 'row',
-                  alignSelf: 'center',
-                  backgroundColor: 'rgba(255,255,255,0.97)',
-                  borderRadius: 36,
-                  paddingHorizontal: 10,
-                  paddingVertical: 7,
-                  marginBottom: 8,
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.15,
-                  shadowRadius: 8,
-                  elevation: 6,
-                }}
-              >
-                {EMOJIS.map((emoji) => {
-                  const isSelected = currentReactions.includes(emoji);
-                  return (
-                  <TouchableOpacity
-                    key={emoji}
-                    onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                      const msgId = String(selectedMessage.id);
-                      // Build updated per-user reactions object
-                      const currentDb: Record<string, string> = {
-                        ...(selectedMessage.reactions &&
-                          typeof selectedMessage.reactions === 'object' &&
-                          !Array.isArray(selectedMessage.reactions)
-                          ? (selectedMessage.reactions as Record<string, string>)
-                          : {}),
-                      };
-                      const userId = String(effectiveCurrentUserUUID);
-                      if (currentDb[userId] === emoji) {
-                        delete currentDb[userId]; // toggle off
-                      } else {
-                        currentDb[userId] = emoji; // switch / add
-                      }
-                      const rxnEmojis = [...new Set(Object.values(currentDb).filter(Boolean))];
-                      // Optimistic local update
-                      setMessageReactions((prev) => ({ ...prev, [msgId]: rxnEmojis }));
-                      setMessages((prev) =>
-                        prev.map((m) =>
-                          m.id === selectedMessage.id ? { ...m, reactions: currentDb } : m,
-                        ),
+                  {/* Emoji reaction strip */}
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignSelf: "center",
+                      backgroundColor: "rgba(255,255,255,0.97)",
+                      borderRadius: 36,
+                      paddingHorizontal: 10,
+                      paddingVertical: 7,
+                      marginBottom: 8,
+                      shadowColor: "#000",
+                      shadowOffset: { width: 0, height: 2 },
+                      shadowOpacity: 0.15,
+                      shadowRadius: 8,
+                      elevation: 6,
+                    }}
+                  >
+                    {EMOJIS.map((emoji) => {
+                      const isSelected = currentReactions.includes(emoji);
+                      return (
+                        <TouchableOpacity
+                          key={emoji}
+                          onPress={() => {
+                            Haptics.impactAsync(
+                              Haptics.ImpactFeedbackStyle.Light,
+                            ).catch(() => {});
+                            const msgId = String(selectedMessage.id);
+                            // Build updated per-user reactions object
+                            const currentDb: Record<string, string> = {
+                              ...(selectedMessage.reactions &&
+                              typeof selectedMessage.reactions === "object" &&
+                              !Array.isArray(selectedMessage.reactions)
+                                ? (selectedMessage.reactions as Record<
+                                    string,
+                                    string
+                                  >)
+                                : {}),
+                            };
+                            const userId = String(effectiveCurrentUserUUID);
+                            if (currentDb[userId] === emoji) {
+                              delete currentDb[userId]; // toggle off
+                            } else {
+                              currentDb[userId] = emoji; // switch / add
+                            }
+                            const rxnEmojis = [
+                              ...new Set(
+                                Object.values(currentDb).filter(Boolean),
+                              ),
+                            ];
+                            // Optimistic local update
+                            setMessageReactions((prev) => ({
+                              ...prev,
+                              [msgId]: rxnEmojis,
+                            }));
+                            setMessages((prev) =>
+                              prev.map((m) =>
+                                m.id === selectedMessage.id
+                                  ? { ...m, reactions: currentDb }
+                                  : m,
+                              ),
+                            );
+                            // Persist to Supabase (fire-and-forget)
+                            supabase
+                              .from("messages")
+                              .update({ reactions: currentDb })
+                              .eq("id", selectedMessage.id)
+                              .then(({ error: rxnErr }) => {
+                                if (rxnErr)
+                                  console.warn(
+                                    "⚠️ Reaction save failed:",
+                                    rxnErr.message,
+                                  );
+                              });
+                            setShowMessageActions(false);
+                          }}
+                          activeOpacity={0.65}
+                          style={[
+                            {
+                              marginHorizontal: 4,
+                              borderRadius: 20,
+                              padding: 4,
+                            },
+                            isSelected && {
+                              backgroundColor: "rgba(99,102,241,0.12)",
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={{
+                              fontSize: 26,
+                              opacity: isSelected ? 1 : 0.85,
+                            }}
+                          >
+                            {emoji}
+                          </Text>
+                        </TouchableOpacity>
                       );
-                      // Persist to Supabase (fire-and-forget)
-                      supabase
-                        .from('messages')
-                        .update({ reactions: currentDb })
-                        .eq('id', selectedMessage.id)
-                        .then(({ error: rxnErr }) => {
-                          if (rxnErr) console.warn('⚠️ Reaction save failed:', rxnErr.message);
-                        });
-                      setShowMessageActions(false);
-                    }}
-                    activeOpacity={0.65}
-                    style={[
-                      { marginHorizontal: 4, borderRadius: 20, padding: 4 },
-                      isSelected && { backgroundColor: 'rgba(99,102,241,0.12)' },
-                    ]}
-                  >
-                    <Text style={{ fontSize: 26, opacity: isSelected ? 1 : 0.85 }}>{emoji}</Text>
-                  </TouchableOpacity>
-                  );
-                })}
-              </View>
+                    })}
+                  </View>
 
-              {/* Action list */}
-              <View
-                style={{
-                  backgroundColor: 'rgba(255,255,255,0.97)',
-                  borderRadius: 16,
-                  overflow: 'hidden',
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.12,
-                  shadowRadius: 14,
-                  elevation: 8,
-                }}
-              >
-                {/* Reply */}
-                <TouchableOpacity
-                  onPress={handleReplyFromActions}
-                  activeOpacity={0.7}
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    paddingHorizontal: 20,
-                    paddingVertical: 15,
-                    borderBottomWidth: 0.5,
-                    borderBottomColor: SEP,
-                  }}
-                >
-                  <Ionicons name="arrow-undo-outline" size={22} color="#374151" />
-                  <Text style={{ marginLeft: 14, fontSize: 16, color: '#111827', fontWeight: '500' }}>Reply</Text>
-                </TouchableOpacity>
-
-                {/* Edit — own non-image, non-invite messages only */}
-                {isOwnMsg && !isImg && selectedMessage.message_type !== 'mongoose_invite' && (
-                  <TouchableOpacity
-                    onPress={handleEditMessage}
-                    activeOpacity={0.7}
+                  {/* Action list */}
+                  <View
                     style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      paddingHorizontal: 20,
-                      paddingVertical: 15,
-                      borderBottomWidth: 0.5,
-                      borderBottomColor: SEP,
+                      backgroundColor: "rgba(255,255,255,0.97)",
+                      borderRadius: 16,
+                      overflow: "hidden",
+                      shadowColor: "#000",
+                      shadowOffset: { width: 0, height: 4 },
+                      shadowOpacity: 0.12,
+                      shadowRadius: 14,
+                      elevation: 8,
                     }}
                   >
-                    <Ionicons name="create-outline" size={22} color="#374151" />
-                    <Text style={{ marginLeft: 14, fontSize: 16, color: '#111827', fontWeight: '500' }}>Edit</Text>
-                  </TouchableOpacity>
-                )}
+                    {/* Reply */}
+                    <TouchableOpacity
+                      onPress={handleReplyFromActions}
+                      activeOpacity={0.7}
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        paddingHorizontal: 20,
+                        paddingVertical: 15,
+                        borderBottomWidth: 0.5,
+                        borderBottomColor: SEP,
+                      }}
+                    >
+                      <Ionicons
+                        name="arrow-undo-outline"
+                        size={22}
+                        color="#374151"
+                      />
+                      <Text
+                        style={{
+                          marginLeft: 14,
+                          fontSize: 16,
+                          color: "#111827",
+                          fontWeight: "500",
+                        }}
+                      >
+                        Reply
+                      </Text>
+                    </TouchableOpacity>
 
-                {/* Delete — own messages only */}
-                {isOwnMsg && (
-                  <TouchableOpacity
-                    onPress={handleDeleteMessage}
-                    activeOpacity={0.7}
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      paddingHorizontal: 20,
-                      paddingVertical: 15,
-                    }}
-                  >
-                    <Ionicons name="trash-outline" size={22} color="#ef4444" />
-                    <Text style={{ marginLeft: 14, fontSize: 16, color: '#ef4444', fontWeight: '500' }}>Delete</Text>
-                  </TouchableOpacity>
-                )}
+                    {/* Edit — own non-image, non-invite messages only */}
+                    {isOwnMsg &&
+                      !isImg &&
+                      selectedMessage.message_type !== "mongoose_invite" && (
+                        <TouchableOpacity
+                          onPress={handleEditMessage}
+                          activeOpacity={0.7}
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            paddingHorizontal: 20,
+                            paddingVertical: 15,
+                            borderBottomWidth: 0.5,
+                            borderBottomColor: SEP,
+                          }}
+                        >
+                          <Ionicons
+                            name="create-outline"
+                            size={22}
+                            color="#374151"
+                          />
+                          <Text
+                            style={{
+                              marginLeft: 14,
+                              fontSize: 16,
+                              color: "#111827",
+                              fontWeight: "500",
+                            }}
+                          >
+                            Edit
+                          </Text>
+                        </TouchableOpacity>
+                      )}
 
-                {/* Cancel — for received messages (no delete row to close with) */}
-                {!isOwnMsg && (
-                  <TouchableOpacity
-                    onPress={() => setShowMessageActions(false)}
-                    activeOpacity={0.7}
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      paddingHorizontal: 20,
-                      paddingVertical: 15,
-                    }}
-                  >
-                    <Ionicons name="close-circle-outline" size={22} color="#6b7280" />
-                    <Text style={{ marginLeft: 14, fontSize: 16, color: '#6b7280', fontWeight: '500' }}>Cancel</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </Reanimated.View>
-          );
-        })()}
-        </Reanimated.View>{/* end backdrop wrapper */}
+                    {/* Delete — own messages only */}
+                    {isOwnMsg && (
+                      <TouchableOpacity
+                        onPress={handleDeleteMessage}
+                        activeOpacity={0.7}
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          paddingHorizontal: 20,
+                          paddingVertical: 15,
+                        }}
+                      >
+                        <Ionicons
+                          name="trash-outline"
+                          size={22}
+                          color="#ef4444"
+                        />
+                        <Text
+                          style={{
+                            marginLeft: 14,
+                            fontSize: 16,
+                            color: "#ef4444",
+                            fontWeight: "500",
+                          }}
+                        >
+                          Delete
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+
+                    {/* Cancel — for received messages (no delete row to close with) */}
+                    {!isOwnMsg && (
+                      <TouchableOpacity
+                        onPress={() => setShowMessageActions(false)}
+                        activeOpacity={0.7}
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          paddingHorizontal: 20,
+                          paddingVertical: 15,
+                        }}
+                      >
+                        <Ionicons
+                          name="close-circle-outline"
+                          size={22}
+                          color="#6b7280"
+                        />
+                        <Text
+                          style={{
+                            marginLeft: 14,
+                            fontSize: 16,
+                            color: "#6b7280",
+                            fontWeight: "500",
+                          }}
+                        >
+                          Cancel
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </Reanimated.View>
+              );
+            })()}
+        </Reanimated.View>
+        {/* end backdrop wrapper */}
       </Modal>
 
       {/* ── Location Picker Modal ────────────────────────────── */}
@@ -3399,12 +3632,12 @@ export default function ChatScreen() {
       <Modal
         visible={showImagePreview}
         animationType="fade"
-        onRequestClose={() => setShowImagePreview(false)}>
-
+        onRequestClose={() => setShowImagePreview(false)}
+      >
         <View className="flex-1 bg-black">
           {/* Header */}
           <View
-            className="bg-black px-4 py-4 border-b border-gray-800"
+            className="bg- px-4 py-4 border-b border-gray-800"
             style={{ paddingTop: Platform.OS === "ios" ? 50 : 20 }}
           >
             <View className="flex-row items-center justify-between">

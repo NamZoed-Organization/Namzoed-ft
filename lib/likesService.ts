@@ -58,7 +58,6 @@ export const likePost = async (postId: string, userId: string): Promise<boolean>
     if (error) {
       // If error is due to duplicate, it's already liked - treat as success
       if (error.code === '23505') {
-        console.log('Post already liked');
         return true;
       }
       console.error('Error liking post:', error);

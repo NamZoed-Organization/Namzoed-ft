@@ -6,7 +6,6 @@ import { BlurView } from "expo-blur";
 import { MapPin, RefreshCw, Settings, X } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  Animated,
   Image,
   Linking,
   Modal,
@@ -33,21 +32,16 @@ export default function DetectDzongkhag() {
   const { currentUser } = useUser();
   const [dotCount, setDotCount] = useState(0);
   const [showOverlay, setShowOverlay] = useState(false);
-  const [isLocationLabelExpanded, setIsLocationLabelExpanded] = useState(false);
   const [currentLocation, setCurrentLocation] = useState<{latitude: number, longitude: number} | null>(null);
   const mapRef = useRef<MapView>(null);
   const isMountedRef = useRef(true);
   const dzongkhagChangeTimerRef = useRef<any>(null);
-  const locationLabelAnim = useRef(new Animated.Value(0)).current;
-  const hideLocationLabelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
   const { ms, vs, wp, hp } = useResponsive();
   const triggerPaddingY = clamp(vs(8), 6, 12);
   const triggerIconSize = clamp(ms(20), 18, 24);
   const labelGap = clamp(ms(6), 4, 8);
   const labelMaxWidth = clamp(wp(28), 96, 150);
-  const labelFontSize = clamp(ms(14), 12, 16);
+  const labelFontSize = clamp(ms(11), 9, 12);
   const overlayTopMargin = clamp(vs(70), 52, 90);
   const overlayPaddingX = clamp(wp(6), 16, 28);
   const floatingButtonPadding = clamp(ms(14), 12, 18);
@@ -143,86 +137,34 @@ export default function DetectDzongkhag() {
       if (dzongkhagChangeTimerRef.current) {
         clearTimeout(dzongkhagChangeTimerRef.current);
       }
-      if (hideLocationLabelTimerRef.current) {
-        clearTimeout(hideLocationLabelTimerRef.current);
-      }
     };
   }, []);
-
-  const animateLocationLabel = (show: boolean) => {
-    Animated.timing(locationLabelAnim, {
-      toValue: show ? 1 : 0,
-      duration: 220,
-      useNativeDriver: false,
-    }).start();
-  };
-
-  const handleHeaderLocationPress = () => {
-    if (isLocationLabelExpanded) {
-      if (hideLocationLabelTimerRef.current) {
-        clearTimeout(hideLocationLabelTimerRef.current);
-        hideLocationLabelTimerRef.current = null;
-      }
-      animateLocationLabel(false);
-      setIsLocationLabelExpanded(false);
-      setShowOverlay(true);
-      return;
-    }
-
-    animateLocationLabel(true);
-    setIsLocationLabelExpanded(true);
-    if (hideLocationLabelTimerRef.current) {
-      clearTimeout(hideLocationLabelTimerRef.current);
-    }
-    hideLocationLabelTimerRef.current = setTimeout(() => {
-      animateLocationLabel(false);
-      if (isMountedRef.current) {
-        setIsLocationLabelExpanded(false);
-      }
-      hideLocationLabelTimerRef.current = null;
-    }, 2200);
-  };
 
   return (
     <>
       {/* HEADER BUTTON: Shows stored name immediately, no "Auto-detect" */}
       <TouchableOpacity
-        onPress={handleHeaderLocationPress}
-        onLongPress={() => setShowOverlay(true)}
+        onPress={() => setShowOverlay(true)}
         activeOpacity={0.7}
         className="flex-row items-center justify-end"
         style={{ paddingVertical: triggerPaddingY }}
       >
-        <View className="flex-row items-center">
+        <View className="flex-row items-center" style={{ columnGap: labelGap }}>
           <MapPin
             size={triggerIconSize}
             color={accessDenied ? "#ef4444" : "#4b5563"}
           />
-          <Animated.View
-            style={{
-              marginLeft: locationLabelAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: [0, labelGap],
-              }),
-              maxWidth: locationLabelAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: [0, labelMaxWidth],
-              }),
-              opacity: locationLabelAnim,
-            }}
+          <Text
+            numberOfLines={1}
+            className={`text-sm font-medium ${
+              accessDenied ? "text-red-500" : "text-gray-600"
+            }`}
+            style={{ fontSize: labelFontSize, maxWidth: labelMaxWidth }}
           >
-            <Text
-              numberOfLines={1}
-              className={`text-sm font-medium ${
-                accessDenied ? "text-red-500" : "text-gray-600"
-              }`}
-              style={{ fontSize: labelFontSize }}
-            >
-              {loading
-                ? `Detecting${".".repeat(dotCount)}`
-                : dzongkhag ?? "Location off"}
-            </Text>
-          </Animated.View>
+            {loading
+              ? `Detecting${".".repeat(dotCount)}`
+              : dzongkhag ?? "Location off"}
+          </Text>
         </View>
       </TouchableOpacity>
 
@@ -321,7 +263,6 @@ export default function DetectDzongkhag() {
 
                           dzongkhagChangeTimerRef.current = setTimeout(() => {
                             // After 15 seconds of stable change, trigger database update
-                            console.log(`Dzongkhag changed: ${dzongkhag} → ${currentDzongkhag}`);
                             refresh(); // This will update database with new location + dzongkhag
                           }, 15000);
                         } else {

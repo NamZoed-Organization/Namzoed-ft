@@ -27,7 +27,10 @@ export default function UsersTabsLayout() {
             style={{
               backgroundColor: "#fff",
               borderTopWidth: 0,
+              borderTopColor: "transparent",
               elevation: 0,
+              shadowOpacity: 0,
+              shadowColor: "transparent",
               position: "absolute",
               bottom: 0,
               left: 0,
@@ -37,16 +40,31 @@ export default function UsersTabsLayout() {
             }}
           >
             {/* Pass bottom:0 insets so BottomTabBar adds zero padding of its own */}
-            <BottomTabBar {...props} insets={{ ...props.insets, bottom: 0 }} />
+            <BottomTabBar
+              {...props}
+              insets={{ ...props.insets, bottom: 0 }}
+              style={{
+                borderTopWidth: 0,
+                borderTopColor: "transparent",
+                elevation: 0,
+                shadowOpacity: 0,
+                backgroundColor: "#fff",
+              }}
+            />
           </View>
         )}
         screenOptions={{
           headerShown: false,
           tabBarShowLabel: false,
+          tabBarIndicatorStyle: { height: 0 },
+          tabBarBackground: () => null,
           tabBarStyle: {
             backgroundColor: "#fff",
             borderTopWidth: 0,
+            borderTopColor: "transparent",
             elevation: 0,
+            shadowOpacity: 0,
+            shadowColor: "transparent",
           },
         }}
       >

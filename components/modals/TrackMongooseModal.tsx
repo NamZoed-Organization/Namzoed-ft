@@ -28,7 +28,6 @@ async function fetchOSRMRoute(from: LatLng, to: LatLng): Promise<LatLng[]> {
       );
     }
   } catch (e) {
-    console.warn('OSRM route unavailable, using straight line:', e);
   }
   return [from, to];
 }
