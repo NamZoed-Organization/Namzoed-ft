@@ -1,19 +1,20 @@
+import { Ionicons } from "@expo/vector-icons";
 import {
-  LivestreamPlayer,
-  StreamCall,
-  useCall,
-  useCallStateHooks,
+    LivestreamPlayer,
+    StreamCall,
+    useCall,
+    useCallStateHooks,
 } from "@stream-io/video-react-native-sdk";
 import { Camera } from "expo-camera";
 import React, { useCallback, useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  Text,
-  View,
+    ActivityIndicator,
+    Alert,
+    Linking,
+    Pressable,
+    Text,
+    View,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 
 type Props = {
   callId: string;
@@ -36,15 +37,32 @@ function HostLivestreamUI({ callId }: { callId: string }) {
   const [busy, setBusy] = useState(false);
 
   const ensureCameraPermission = useCallback(async () => {
-    const { status } = await Camera.requestCameraPermissionsAsync();
-    if (status !== "granted") {
+    const { status, canAskAgain } = await Camera.requestCameraPermissionsAsync();
+    if (status === "granted") return true;
+
+    // If permanently denied, skip the OS prompt and go straight to a settings alert
+    if (!canAskAgain) {
       Alert.alert(
-        "Camera Permission Needed",
-        "Please enable camera access to start a live stream."
+        "Camera Access Blocked",
+        "Camera access has been denied. Go to Settings to enable it for this app.",
+        [
+          { text: "Not Now", style: "cancel" },
+          { text: "Open Settings", onPress: () => Linking.openSettings() },
+        ]
       );
       return false;
     }
-    return true;
+
+    // OS denied even after we just asked — offer settings route
+    Alert.alert(
+      "Camera Permission Needed",
+      "Camera access is required to go live. Enable it in Settings.",
+      [
+        { text: "Not Now", style: "cancel" },
+        { text: "Open Settings", onPress: () => Linking.openSettings() },
+      ]
+    );
+    return false;
   }, []);
 
   useEffect(() => {

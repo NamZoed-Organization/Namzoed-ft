@@ -223,9 +223,6 @@ export default function CategoriesScreen() {
               onPress={handleCreatePress}
               activeOpacity={0.85}
               style={{
-                width: 54,
-                height: 54,
-                borderRadius: 18,
                 justifyContent: "center",
                 alignItems: "center",
                 overflow: "hidden",
@@ -235,6 +232,7 @@ export default function CategoriesScreen() {
                 shadowRadius: 8,
                 elevation: 6,
               }}
+              className="w-10 h-10 rounded-lg"
             >
               <LinearGradient
                 colors={["#094569", "#0a5a8a", "#0b6ba8"]}

@@ -39,6 +39,7 @@ import {
   View,
 } from "react-native";
 import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const IMAGE_HEIGHT = SCREEN_HEIGHT * 0.45;
@@ -112,6 +113,7 @@ export default function ProductDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { currentUser } = useUser();
+  const insets = useSafeAreaInsets();
 
   const [product, setProduct] = useState<ProductWithUser | null>(null);
   const [loading, setLoading] = useState(true);
@@ -721,16 +723,16 @@ export default function ProductDetail() {
 
       {/* Floating Bottom Action Bar - Only show for other users' products */}
       {!isOwnProduct && (
-        <Animated.View
-          entering={FadeInUp.duration(400).delay(300)}
-          className="absolute bottom-0 left-0 right-0"
-        >
+        <View className="absolute bottom-0 left-0 right-0">
           <BlurView
             intensity={80}
             tint="light"
             className="border-t border-gray-100"
           >
-            <View className="px-6 py-4 pb-8 flex-row gap-4">
+            <View
+              className="px-6 py-4 flex-row gap-4"
+              style={{ paddingBottom: Math.max(insets.bottom, 12) }}
+            >
               {/* Message Seller Button */}
               <TouchableOpacity
                 onPress={handleMessageSeller}
@@ -768,7 +770,7 @@ export default function ProductDetail() {
               </TouchableOpacity>
             </View>
           </BlurView>
-        </Animated.View>
+        </View>
       )}
 
       {/* Report Modal */}
@@ -779,7 +781,7 @@ export default function ProductDetail() {
           productId={product.id}
           productName={product.name}
           productOwnerId={product.user_id as string}
-          currentUserId={currentUser.id}
+          currentUserId={currentUser.id || ""}
           onReportSuccess={() => {
             setShowReportModal(false);
             showSuccessPopup("Report submitted successfully");

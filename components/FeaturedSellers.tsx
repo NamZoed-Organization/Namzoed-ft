@@ -1,6 +1,7 @@
 import { useUser } from '@/contexts/UserContext';
 import { followUser, getFollowingIds, unfollowUser } from '@/lib/followService';
 import { FeaturedSellerProfile, fetchFeaturedSellers, fetchRandomSellers } from '@/lib/profileService';
+import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import { Clock, MapPin, Package, Search, User as UserIcon, X } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
@@ -234,6 +235,7 @@ const FeaturedSellers = () => {
       const result = await followUser(currentUser.id, user.id);
 
       if (result.success) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         // Add to newly followed IDs for UI update
         setNewlyFollowedIds(prev => [...prev, user.id]);
         // Update following IDs (will trigger reload on filter/search change)
@@ -259,6 +261,7 @@ const FeaturedSellers = () => {
       const result = await unfollowUser(currentUser.id, user.id);
 
       if (result.success) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         // Mark as unfollowed (soft delete - keeps visible until reload)
         setUnfollowedIds(prev => [...prev, user.id]);
         // Remove from newly followed list if was just followed
@@ -306,7 +309,7 @@ const FeaturedSellers = () => {
 
       {/* Search Bar with Filter Button */}
       <View className="mb-4 flex-row gap-2 relative" style={{ zIndex: 1000 }}>
-        <View className="flex-1 bg-white rounded-xl border border-gray-200 px-3 py-2.5 flex-row items-center">
+        <View className="flex-1 gap-2 bg-white rounded-xl border border-gray-200 px-3 flex-row items-center">
           <Search size={18} className="text-gray-400 mr-2" />
           <TextInput
             className="flex-1 text-sm font-regular text-gray-900"

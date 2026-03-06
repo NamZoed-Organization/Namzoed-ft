@@ -153,12 +153,14 @@ export default function MarketplaceScreen() {
       // Filter by active tab type
       if (item.type !== activeTab) return false;
 
-      // Search query filter
+      // query filter
       if (searchQuery) {
-        const descriptionText =
-          typeof item.description === "string"
-            ? item.description
-            : item.description?.text || "";
+        let descriptionText = "";
+        if (typeof item.description === "string") {
+          descriptionText = item.description;
+        } else if (item.description) {
+          descriptionText = (item.description as any).text || (item.description as any).description || "";
+        }
 
         if (
           !item.title?.toLowerCase().includes(searchQuery.toLowerCase()) &&
@@ -416,7 +418,7 @@ export default function MarketplaceScreen() {
               <SearchBar value={searchQuery} onChangeText={setSearchQuery} />
             </View>
             <TouchableOpacity
-              className="w-11 h-11 bg-primary rounded-lg items-center justify-center"
+              className="w-10 h-10 bg-primary rounded-lg items-center justify-center"
               onPress={() => setShowPostOverlay(true)}
             >
               <Plus size={24} color="white" />

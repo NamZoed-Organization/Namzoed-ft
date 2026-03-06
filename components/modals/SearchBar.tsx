@@ -22,7 +22,7 @@ import {
 export default function SearchBar({
   value,
   onChangeText,
-  placeholder = "Search any products...",
+  placeholder = "Search",
 }: {
   value: string;
   onChangeText: (text: string) => void;
@@ -527,6 +527,7 @@ export default function SearchBar({
           pointerEvents="none"
           editable={false}
           className="flex-1 font-regular text-sm text-gray-800"
+          style={{ paddingVertical: 0 }}
           placeholder={placeholder}
           placeholderTextColor="#888"
           value={value}
@@ -793,6 +794,8 @@ export default function SearchBar({
           username={selectedPost.userName}
           likes={selectedPost.likes}
           comments={selectedPost.comments}
+          postId={selectedPost.id}
+          postUserId={selectedPost.user_id}
         />
       )}
     </>

@@ -1,20 +1,24 @@
 import { AlertCircle, Radio, X } from "lucide-react-native";
 import React, { useState } from "react";
 import {
-  ActivityIndicator,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 interface LiveWrapperProps {
   onClose: () => void;
+  onMinimize?: () => void;
+  initialStreamId?: string;
+  /** When true, skips the stream list and shows the CreateLivestreamModal immediately */
+  showCreateModalOnMount?: boolean;
 }
 
 // Try to import LiveScreen with error handling
-let LiveScreen: React.ComponentType<{ onClose: () => void }> | null = null;
+let LiveScreen: React.ComponentType<{ onClose: () => void; onMinimize?: () => void; initialStreamId?: string; showCreateModalOnMount?: boolean }> | null = null;
 let importError: Error | null = null;
 
 try {
@@ -29,12 +33,12 @@ try {
  * Safe wrapper for LiveScreen component that handles WebRTC module errors gracefully
  * This prevents the entire app from crashing if the Live streaming feature is unavailable
  */
-export default function LiveWrapper({ onClose }: LiveWrapperProps) {
+export default function LiveWrapper({ onClose, onMinimize, initialStreamId, showCreateModalOnMount }: LiveWrapperProps) {
   const [isRetrying, setIsRetrying] = useState(false);
 
   // If Live component loaded successfully, render it
   if (LiveScreen) {
-    return <LiveScreen onClose={onClose} />;
+    return <LiveScreen onClose={onClose} onMinimize={onMinimize} initialStreamId={initialStreamId} showCreateModalOnMount={showCreateModalOnMount} />;
   }
 
   // Handle retry attempt

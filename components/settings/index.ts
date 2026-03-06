@@ -5,10 +5,13 @@ export { default as ChangePassword } from './ChangePassword';
 export { default as CommunityGuidelines } from './CommunityGuidelines';
 export { default as ContactUs } from './ContactUs';
 export { default as DataStorage } from './DataStorage';
+export { default as DeleteAccount } from './DeleteAccount';
 export { default as HelpCenter } from './HelpCenter';
 export { default as LanguageRegion } from './LanguageRegion';
 export { default as Notifications } from './Notifications';
 export { default as PrivacyPolicy } from './PrivacyPolicy';
+export { default as SavedPosts } from './SavedPosts';
 export { default as SellerPolicy } from './SellerPolicy';
 export { default as SendFeedback } from './SendFeedback';
 export { default as TermsOfService } from './TermsOfService';
+

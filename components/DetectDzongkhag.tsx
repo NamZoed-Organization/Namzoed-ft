@@ -40,7 +40,6 @@ export default function DetectDzongkhag() {
   const triggerPaddingY = clamp(vs(8), 6, 12);
   const triggerIconSize = clamp(ms(20), 18, 24);
   const labelGap = clamp(ms(6), 4, 8);
-  const labelMaxWidth = clamp(wp(28), 96, 150);
   const labelFontSize = clamp(ms(11), 9, 12);
   const overlayTopMargin = clamp(vs(70), 52, 90);
   const overlayPaddingX = clamp(wp(6), 16, 28);
@@ -140,31 +139,37 @@ export default function DetectDzongkhag() {
     };
   }, []);
 
+  const handleLocationPress = () => {
+    setShowOverlay(true);
+  };
+
   return (
     <>
-      {/* HEADER BUTTON: Shows stored name immediately, no "Auto-detect" */}
+      {/* HEADER BUTTON: icon-only by default; first tap shows name, second tap opens modal */}
       <TouchableOpacity
-        onPress={() => setShowOverlay(true)}
+        onPress={handleLocationPress}
         activeOpacity={0.7}
         className="flex-row items-center justify-end"
         style={{ paddingVertical: triggerPaddingY }}
       >
-        <View className="flex-row items-center" style={{ columnGap: labelGap }}>
+        <View className="flex-row items-center">
           <MapPin
             size={triggerIconSize}
             color={accessDenied ? "#ef4444" : "#4b5563"}
           />
-          <Text
-            numberOfLines={1}
-            className={`text-sm font-medium ${
-              accessDenied ? "text-red-500" : "text-gray-600"
-            }`}
-            style={{ fontSize: labelFontSize, maxWidth: labelMaxWidth }}
-          >
-            {loading
-              ? `Detecting${".".repeat(dotCount)}`
-              : dzongkhag ?? "Location off"}
-          </Text>
+          <View style={{ marginLeft: labelGap }}>
+            <Text
+              numberOfLines={1}
+              className={`text-sm font-medium ${
+                accessDenied ? "text-red-500" : "text-gray-600"
+              }`}
+              style={{ fontSize: labelFontSize }}
+            >
+              {loading
+                ? `Detecting${"." .repeat(dotCount)}`
+                : dzongkhag ?? "Location off"}
+            </Text>
+          </View>
         </View>
       </TouchableOpacity>
 

@@ -2,6 +2,23 @@ import { useUser } from "@/contexts/UserContext";
 import { fetchUserPosts, Post } from "@/lib/postsService";
 import { useEffect, useState } from "react";
 
+export interface PostThumbnail {
+  postId: string;
+  thumbnailUrl: string;
+  mediaCount: number;
+  isVideo: boolean;
+  post: Post;
+}
+
+const isVideoUrl = (url: string): boolean => {
+  const videoExtensions = [".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"];
+  const lowerUrl = url.toLowerCase();
+  return (
+    videoExtensions.some((ext) => lowerUrl.includes(ext)) ||
+    lowerUrl.includes("post-videos")
+  );
+};
+
 export const useUserPosts = (
   refreshKey: number,
   showErrorPopup: (message: string) => void,
@@ -13,6 +30,7 @@ export const useUserPosts = (
   const [imagePostMap, setImagePostMap] = useState<Map<string, Post>>(
     new Map(),
   );
+  const [postThumbnails, setPostThumbnails] = useState<PostThumbnail[]>([]);
 
   useEffect(() => {
     const loadPosts = async () => {
@@ -27,9 +45,20 @@ export const useUserPosts = (
 
         const allImages: string[] = [];
         const postMap = new Map<string, Post>();
+        const thumbnails: PostThumbnail[] = [];
 
         posts.forEach((post) => {
           if (post.images && post.images.length > 0) {
+            // Build grouped thumbnails — one per post
+            thumbnails.push({
+              postId: post.id,
+              thumbnailUrl: post.images[0],
+              mediaCount: post.images.length,
+              isVideo: isVideoUrl(post.images[0]),
+              post,
+            });
+
+            // Keep flat list for backward compat
             post.images.forEach((imageUrl: string) => {
               allImages.push(imageUrl);
               postMap.set(imageUrl, post);
@@ -39,6 +68,7 @@ export const useUserPosts = (
 
         setUserImages(allImages);
         setImagePostMap(postMap);
+        setPostThumbnails(thumbnails);
       } catch (error) {
         console.error("Error loading user posts:", error);
         showErrorPopup("Failed to load your posts");
@@ -56,5 +86,6 @@ export const useUserPosts = (
     loadingPosts,
     userImages,
     imagePostMap,
+    postThumbnails,
   };
 };

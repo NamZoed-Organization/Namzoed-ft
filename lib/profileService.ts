@@ -119,6 +119,21 @@ export interface FeaturedSellerProfile extends Profile {
   product_count?: number;
 }
 
+// Returns the set of user IDs that have at least one product, marketplace item, or service
+const fetchCommerceUserIds = async (): Promise<Set<string>> => {
+  const [productsRes, marketplaceRes, servicesRes] = await Promise.all([
+    supabase.from('products').select('user_id'),
+    supabase.from('marketplace').select('user_id'),
+    supabase.from('service_providers').select('user_id'),
+  ]);
+
+  const ids = new Set<string>();
+  for (const row of productsRes.data || []) if (row.user_id) ids.add(row.user_id);
+  for (const row of marketplaceRes.data || []) if (row.user_id) ids.add(row.user_id);
+  for (const row of servicesRes.data || []) if (row.user_id) ids.add(row.user_id);
+  return ids;
+};
+
 // Fetch featured sellers with location-based sorting and pagination
 export const fetchFeaturedSellers = async (
   limit: number = 10,
@@ -128,7 +143,11 @@ export const fetchFeaturedSellers = async (
   currentUserDzongkhag?: string
 ): Promise<FeaturedSellerProfile[]> => {
   try {
-    // First, get all users
+    // Get IDs of users who actually sell something
+    const commerceIds = await fetchCommerceUserIds();
+    if (commerceIds.size === 0) return [];
+
+    // First, get users who have commerce items
     let query = supabase
       .from('profiles')
       .select(`
@@ -140,7 +159,8 @@ export const fetchFeaturedSellers = async (
         dzongkhag,
         follower_count,
         following_count
-      `);
+      `)
+      .in('id', [...commerceIds]);
 
     // Exclude already-followed users and current user
     if (excludeUserIds.length > 0) {
@@ -238,6 +258,10 @@ export const fetchRandomSellers = async (
   limit: number
 ): Promise<FeaturedSellerProfile[]> => {
   try {
+    const commerceIds = await fetchCommerceUserIds();
+    const sellerIds = [...commerceIds].filter(id => !excludeIds.includes(id));
+    if (sellerIds.length === 0) return [];
+
     const { data, error } = await supabase
       .from('profiles')
       .select(`
@@ -250,7 +274,7 @@ export const fetchRandomSellers = async (
         follower_count,
         following_count
       `)
-      .not('id', 'in', `(${excludeIds.join(',')})`)
+      .in('id', sellerIds)
       .order('follower_count', { ascending: false })
       .limit(limit);
 

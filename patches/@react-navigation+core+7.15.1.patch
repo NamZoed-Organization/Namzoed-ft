@@ -1,0 +1,19 @@
+diff --git a/node_modules/@react-navigation/core/lib/module/useNavigationBuilder.js b/node_modules/@react-navigation/core/lib/module/useNavigationBuilder.js
+index d00bea3..1500e1d 100644
+--- a/node_modules/@react-navigation/core/lib/module/useNavigationBuilder.js
++++ b/node_modules/@react-navigation/core/lib/module/useNavigationBuilder.js
+@@ -275,6 +275,14 @@ export function useNavigationBuilder(createRouter, options) {
+       const paramsForState = isNestedParamsConsumed ? undefined : route?.params;
+       const stateFromParams = paramsForState ? getStateFromParams(paramsForState) : undefined;
+       const stateBeforeInitialization = stateFromParams ?? currentState;
++      // PATCH: guard against undefined stateBeforeInitialization (react-navigation bug in core 7.15.x)
++      if (stateBeforeInitialization == null) {
++        return [undefined, router.getInitialState({
++          routeNames,
++          routeParamList: initialRouteParamList,
++          routeGetIdList
++        }), false, paramsForState];
++      }
+       const hydratedState = router.getRehydratedState(stateBeforeInitialization, {
+         routeNames,
+         routeParamList: initialRouteParamList,

@@ -1,7 +1,7 @@
 // app/(users)/chat/[id].tsx
 import MongooseInitiatorModal from "@/components/MongooseInitiatorModal";
 import MongooseInviteCard, {
-  type MongooseInviteData,
+    type MongooseInviteData,
 } from "@/components/MongooseInviteCard";
 import MongooseResponderModal from "@/components/MongooseResponderModal";
 import AudioMessagePlayer from "@/components/chat/AudioMessagePlayer";
@@ -14,11 +14,12 @@ import { useUnreadMessages } from "@/contexts/UnreadMessagesContext";
 import { useUser } from "@/contexts/UserContext";
 import users from "@/data/UserData";
 import {
-  EarlyAccessBadgeType,
-  getEarlyAccessBadge,
+    EarlyAccessBadgeType,
+    getEarlyAccessBadge,
 } from "@/lib/earlyAccessService";
 import { supabase } from "@/lib/supabase";
 import { sendChatPushNotification } from "@/services/chatPushService";
+import { playReceiveSound, playSendSound, preloadChatSounds, triggerReceiveHaptic, triggerSendHaptic, unloadChatSounds } from "@/utils/chatSounds";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
@@ -28,41 +29,43 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { Bike } from "lucide-react-native";
 
 import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
 } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  Easing,
-  Image,
-  Keyboard,
-  Linking,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  useWindowDimensions,
-  View,
+    ActivityIndicator,
+    Alert,
+    Animated,
+    Easing,
+    Image,
+    Keyboard,
+    Linking,
+    Modal,
+    Platform,
+    Pressable,
+    ScrollView,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    useWindowDimensions,
+    View,
 } from "react-native";
 
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
 import Reanimated, {
-  Extrapolation,
-  interpolate,
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-  withTiming,
+    Extrapolation,
+    interpolate,
+    runOnJS,
+    useAnimatedKeyboard,
+    useAnimatedStyle,
+    useSharedValue,
+    withSpring,
+    withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -355,8 +358,10 @@ const triggerSwipeHaptic = () =>
  * user can swipe right to reply. Uses Reanimated (UI-thread) + RNGH v2
  * GestureDetector so it:
  *   - runs off the JS thread → no lag
- *   - uses activeOffsetX to only claim right swipes → no iOS back-swipe clash
- *   - uses failOffsetY so vertical scrolls are not blocked
+ *   - uses activeOffsetX([20,∞]) to only claim deliberate right swipes
+ *     → less competition with iOS back-swipe and diagonal scrolls
+ *   - uses failOffsetY([-5,5]) so ANY vertical movement immediately yields
+ *     to the ScrollView — no accidental swipe-to-reply while scrolling
  */
 const SwipeableRow = React.memo(function SwipeableRow({
   children,
@@ -371,12 +376,14 @@ const SwipeableRow = React.memo(function SwipeableRow({
   const hasFired = useSharedValue(false);
 
   const pan = Gesture.Pan()
-    // Only claim gesture after 10px rightward movement — avoids iOS edge swipe
-    .activeOffsetX([10, Infinity])
-    // Fail if user moves left first — let iOS back gesture win
-    .failOffsetX(-10)
-    // Fail on vertical drag so the scroll view still scrolls freely
-    .failOffsetY([-20, 20])
+    // Only claim gesture after 20px rightward movement.
+    // 20px gives scroll a head-start and keeps clear of the iOS edge-back swipe.
+    .activeOffsetX([20, Infinity])
+    // Fail immediately if user moves left — let iOS back gesture win
+    .failOffsetX(-8)
+    // Fail as soon as there's ±5px vertical movement → scroll gets priority.
+    // Previously ±20px which was too lenient and let swipe compete with scroll.
+    .failOffsetY([-5, 5])
     .onUpdate((e) => {
       "worklet";
       const clamped = Math.max(0, Math.min(SWIPE_REPLY_MAX, e.translationX));
@@ -614,6 +621,7 @@ export default function ChatScreen() {
   const modalCardScale = useSharedValue(0.88);
   const modalCardOpacity = useSharedValue(0);
   const [isEditMode, setIsEditMode] = useState(false);
+  const [isVoiceRecording, setIsVoiceRecording] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [replyingToMessage, setReplyingToMessage] = useState<any | null>(null);
   const [pendingProductContext, setPendingProductContext] =
@@ -625,6 +633,7 @@ export default function ChatScreen() {
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const [nowTs, setNowTs] = useState(Date.now());
   const scrollViewRef = useRef<ScrollView>(null);
+  const chatInputRef = useRef<TextInput>(null);
   const channelRef = useRef<any>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typingSendTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
@@ -633,9 +642,12 @@ export default function ChatScreen() {
   const isLocalTypingRef = useRef(false);
   const messagesPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const bikeAnimationX = useRef(new Animated.Value(0)).current;
-  const keyboardOffset = useRef(new Animated.Value(0)).current;
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  // Reanimated keyboard — tracks keyboard height on the native UI thread (zero JS jank)
+  const keyboard = useAnimatedKeyboard();
+  const keyboardAwareStyle = useAnimatedStyle(() => ({
+    paddingBottom: keyboard.height.value,
+  }));
   const [inputBarHeight, setInputBarHeight] = useState(88);
   const [composerInputHeight, setComposerInputHeight] = useState(
     CHAT_INPUT_LINE_HEIGHT,
@@ -719,6 +731,12 @@ export default function ChatScreen() {
       return () => setActiveChatPartnerId(null);
     }, [chatPartnerId, isMongooseChat, setActiveChatPartnerId]),
   );
+
+  // Preload notification sound assets on chat screen mount
+  useEffect(() => {
+    void preloadChatSounds();
+    return () => { void unloadChatSounds(); };
+  }, []);
 
   // Combine original messages with local messages
   const allMessages = useMemo(() => {
@@ -1079,7 +1097,18 @@ export default function ChatScreen() {
         if (isSubscribed) setCurrentUserUUID(userUUID);
 
         const fetchLatestMessages = async () => {
-          const { data: messagesData, error: messagesError } = await supabase
+          // Check if the user previously deleted this conversation.
+          // If so, only show messages created after the deletion.
+          let deletedAt: string | null = null;
+          try {
+            const tsRaw = await AsyncStorage.getItem(`hidden_conversations_ts_${userUUID}`);
+            if (tsRaw) {
+              const tsMap: Record<string, string> = JSON.parse(tsRaw);
+              if (tsMap[chatPartnerId]) deletedAt = tsMap[chatPartnerId];
+            }
+          } catch { /* ignore parse errors */ }
+
+          let query = supabase
             .from("messages")
             .select("*")
             .or(
@@ -1087,6 +1116,12 @@ export default function ChatScreen() {
             )
             .order("created_at", { ascending: true })
             .limit(200);
+
+          if (deletedAt) {
+            query = query.gt("created_at", deletedAt);
+          }
+
+          const { data: messagesData, error: messagesError } = await query;
 
           if (messagesError) {
             console.error("❌ Error fetching messages:", messagesError);
@@ -1193,6 +1228,10 @@ export default function ChatScreen() {
                     message?.id,
                     message?.is_read ? "seen" : "delivered",
                   );
+                } else {
+                  // Incoming message — play sound + haptic
+                  void playReceiveSound();
+                  void triggerReceiveHaptic();
                 }
 
                 // Remove matching optimistic message
@@ -1378,51 +1417,29 @@ export default function ChatScreen() {
     markConversationAsRead,
   ]);
 
-  // Handle keyboard show/hide to move input up and down
+  // Track keyboard visibility for scroll-to-end triggers.
+  // The smooth animation is handled by keyboardAwareStyle (paddingBottom) via
+  // useAnimatedKeyboard on the native UI thread.
   useEffect(() => {
-    const keyboardWillShow = Keyboard.addListener(
+    const show = Keyboard.addListener(
       Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
-      (e) => {
+      () => {
         setIsKeyboardVisible(true);
-        setKeyboardHeight(e.endCoordinates.height);
-        // On Android, endCoordinates.height is the key pane only — it does NOT include
-        // the suggestions/toolbar row (emoji, clipboard, Samsung Pass, etc.) that floats
-        // just above the keys.  Add an extra 50dp to push the input clear of that bar.
-        const offset =
-          Platform.OS === "android"
-            ? -(e.endCoordinates.height + 50)
-            : -e.endCoordinates.height;
-        Animated.timing(keyboardOffset, {
-          toValue: offset,
-          duration: Platform.OS === "ios" ? e.duration : 250,
-          useNativeDriver: false,
-        }).start();
+        setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 80);
       },
     );
-
-    const keyboardWillHide = Keyboard.addListener(
+    const hide = Keyboard.addListener(
       Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
-      (e) => {
+      () => {
         setIsKeyboardVisible(false);
-        setKeyboardHeight(0);
-        Animated.timing(keyboardOffset, {
-          toValue: 0,
-          duration: Platform.OS === "ios" ? e.duration : 250,
-          useNativeDriver: false,
-        }).start(() => {
-          // Keep the latest message pinned after keyboard closes.
-          setTimeout(() => {
-            scrollViewRef.current?.scrollToEnd({ animated: true });
-          }, 40);
-        });
+        setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 40);
       },
     );
-
     return () => {
-      keyboardWillShow.remove();
-      keyboardWillHide.remove();
+      show.remove();
+      hide.remove();
     };
-  }, [keyboardOffset]);
+  }, []);
 
   // Keep latest bubble visible when keyboard is opened.
   useEffect(() => {
@@ -1431,7 +1448,7 @@ export default function ChatScreen() {
       scrollViewRef.current?.scrollToEnd({ animated: true });
     }, 120);
     return () => clearTimeout(timer);
-  }, [isKeyboardVisible, keyboardHeight]);
+  }, [isKeyboardVisible]);
 
   // Keep the latest bubble visible if composer height changes while typing.
   useEffect(() => {
@@ -1443,25 +1460,15 @@ export default function ChatScreen() {
   }, [inputBarHeight, messageText, isKeyboardVisible]);
 
   const chatBottomPadding = useMemo(() => {
-    const minInputHeight = CHAT_INPUT_LINE_HEIGHT;
-    const maxInputHeight = CHAT_INPUT_MAX_HEIGHT;
-    const clampedInputHeight = Math.max(
-      minInputHeight,
-      Math.min(composerInputHeight, maxInputHeight),
-    );
-    const growthRange = maxInputHeight - minInputHeight;
-    const growthRatio =
-      growthRange > 0 ? (clampedInputHeight - minInputHeight) / growthRange : 0;
+    // ScrollView and input bar are flex siblings inside the Reanimated container,
+    // so they never overlap. paddingBottom just adds a small breathing gap at the
+    // end of scroll content — it does NOT need to equal the input bar height.
     if (isKeyboardVisible) {
-      // Requested behavior: at least 40% screen-height bottom padding on keyboard-open,
-      // then increase further as input grows toward 5 rows.
-      const baseKeyboardPadding = Math.round(screenHeight * 0.4);
-      const growthPadding = Math.round(screenHeight * 0.1 * growthRatio);
-      return baseKeyboardPadding + growthPadding;
+      return 8;
     }
-    // Keyboard-closed: keep a compact but visible gap above the composer.
+    // Keyboard-closed: compact clearance above the composer.
     return Math.max(14, Math.round(inputBarHeight * 0.2));
-  }, [isKeyboardVisible, inputBarHeight, screenHeight, composerInputHeight]);
+  }, [isKeyboardVisible, inputBarHeight]);
 
   // Extra settle pass for keyboard-close + layout update.
   useEffect(() => {
@@ -1567,6 +1574,9 @@ export default function ChatScreen() {
     if (!baseMessageContent || !effectiveCurrentUserUUID || !chatPartnerId) {
       return;
     }
+    // Natively clear the input first to flush any pending autocorrect,
+    // preventing the corrected word from reappearing after send.
+    chatInputRef.current?.clear();
     const replyMeta = replyingToMessage
       ? buildReplyMetaForMessage(replyingToMessage)
       : null;
@@ -1603,6 +1613,8 @@ export default function ChatScreen() {
         },
       });
     }
+    void triggerSendHaptic();
+    void playSendSound();
     await sendMessageToServer({
       messageContent,
       optimisticId,
@@ -1662,6 +1674,7 @@ export default function ChatScreen() {
       // Create a message request if the receiver doesn't follow the sender back
       // (i.e. not a mutual follow). Uses INSERT ... ON CONFLICT DO NOTHING so it
       // only fires once and never overwrites an already-accepted request.
+      // Commerce context (product/marketplace inquiry) always goes to main inbox.
       void (async () => {
         const { data: reverseFollow } = await supabase
           .from("follows")
@@ -1671,14 +1684,38 @@ export default function ChatScreen() {
           .maybeSingle();
 
         if (!reverseFollow) {
-          await supabase.from("message_requests").upsert(
-            {
-              sender_id: effectiveCurrentUserUUID,
-              receiver_id: chatPartnerId,
-              status: "pending",
-            },
-            { onConflict: "sender_id,receiver_id", ignoreDuplicates: true },
-          );
+          const msgContext = pendingProductContext ? "commerce" : "personal";
+          if (msgContext === "commerce") {
+            // Try to insert; if row already exists just upgrade its context column
+            // (never touch status so we don't trample an 'accepted' row)
+            const { error: insertErr } = await supabase
+              .from("message_requests")
+              .insert({
+                sender_id: effectiveCurrentUserUUID,
+                receiver_id: chatPartnerId,
+                status: "pending",
+                context: "commerce",
+              });
+            if (insertErr) {
+              // Row already exists — upgrade context to 'commerce' without touching status
+              await supabase
+                .from("message_requests")
+                .update({ context: "commerce" })
+                .eq("sender_id", effectiveCurrentUserUUID)
+                .eq("receiver_id", chatPartnerId)
+                .neq("context", "commerce");
+            }
+          } else {
+            await supabase.from("message_requests").upsert(
+              {
+                sender_id: effectiveCurrentUserUUID,
+                receiver_id: chatPartnerId,
+                status: "pending",
+                context: "personal",
+              },
+              { onConflict: "sender_id,receiver_id", ignoreDuplicates: true },
+            );
+          }
         }
       })();
 
@@ -1946,6 +1983,7 @@ export default function ChatScreen() {
   };
 
   const handleAudioUploadSuccess = (finalMsg: any, optimisticId: string) => {
+    void triggerSendHaptic();
     // Fallback: add manually if realtime doesn't pick it up
     setTimeout(() => {
       setMessages((prev) => {
@@ -2568,7 +2606,7 @@ export default function ChatScreen() {
               openMessageActions(message, e.nativeEvent.pageY, isCurrentUser)
             }
             delayLongPress={400}
-            className={`max-w-[72%] px-4 py-4 ${
+            className={`max-w-[72%] px-3 py-3 ${
               isCurrentUser
                 ? senderBadgeType
                   ? "mr-2"
@@ -2652,7 +2690,7 @@ export default function ChatScreen() {
                   {embeddedReplyMeta.senderName}
                 </Text>
                 <Text
-                  className={`text-[12px] ${
+                  className={`text-[11px] ${
                     isCurrentUser || senderBadgeType
                       ? "text-blue-100"
                       : "text-gray-600"
@@ -2664,7 +2702,7 @@ export default function ChatScreen() {
               </View>
             ) : null}
             <Text
-              className={`${isCurrentUser || senderBadgeType ? "text-white" : "text-gray-800"} text-[14px]`}
+              className={`${isCurrentUser || senderBadgeType ? "text-white" : "text-gray-800"} text-[15px]`}
               style={{ lineHeight: 20 }}
             >
               {visibleTextContent}
@@ -2749,10 +2787,10 @@ export default function ChatScreen() {
   return (
     <View className="flex-1 bg-white">
       {/* Status Bar Space */}
-      <View className="h-12 bg-white" />
+      <View className="h-12 bg-white" style={{ zIndex: 10 }} />
 
       {/* Fixed Header */}
-      <View className="flex-row items-center p-4 border-b border-gray-200 bg-white">
+      <View className="flex-row items-center p-4 border-b border-gray-200 bg-white" style={{ zIndex: 10 }}>
         <TouchableOpacity onPress={handleBackNavigation} className="mr-3">
           <Ionicons name="chevron-back-outline" size={24} color="#007AFF" />
         </TouchableOpacity>
@@ -2836,12 +2874,22 @@ export default function ChatScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* Keyboard-aware body — slides up with the keyboard on the native UI thread */}
+      <Reanimated.View style={[{ flex: 1 }, keyboardAwareStyle]}>
       {/* Scrollable Messages Area */}
       <ScrollView
         ref={scrollViewRef}
         className="flex-1 px-4 py-2"
         showsVerticalScrollIndicator={false}
+        // "always": taps anywhere never dismiss the keyboard — no accidental
+        // keyboard-close when touching a bubble or empty space between messages.
+        keyboardShouldPersistTaps="always"
+        // "on-drag": keyboard dismisses as soon as the user intentionally drags
+        // to scroll — mirrors WhatsApp / iMessage behaviour.
+        keyboardDismissMode="on-drag"
         contentContainerStyle={{
+          flexGrow: 1,
+          justifyContent: allMessages.length > 0 ? "flex-end" : "center",
           paddingBottom: chatBottomPadding,
         }}
       >
@@ -2889,16 +2937,9 @@ export default function ChatScreen() {
         {isPartnerTyping && <TypingIndicator />}
       </ScrollView>
 
-      {/* Fixed Input Bar - Above Bottom Navigation */}
-      <Animated.View
+      {/* Fixed Input Bar */}
+      <View
         className="mb-0"
-        style={{
-          transform: [
-            {
-              translateY: keyboardOffset,
-            },
-          ],
-        }}
       >
         <View
           className={`flex-row items-center px-4 pt-2`}
@@ -2982,163 +3023,191 @@ export default function ChatScreen() {
             ) : null}
 
             <View className="flex-row items-center px-2 py-2">
-              <Animated.View
-                className="relative h-9 mr-1 overflow-hidden justify-center"
-                style={{
-                  width: composerActionsProgress.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [36, 122],
-                  }),
-                }}
-              >
+              {/* Action tray (image + location) — hidden while recording */}
+              {!isVoiceRecording && (
                 <Animated.View
-                  pointerEvents={areComposerActionsCollapsed ? "none" : "auto"}
-                  className="absolute left-0 right-0 flex-row items-center"
+                  className="relative h-9 mr-1 overflow-hidden justify-center"
                   style={{
-                    opacity: composerActionsProgress,
-                    transform: [
-                      {
-                        translateX: composerActionsProgress.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [-14, 0],
-                        }),
-                      },
-                    ],
+                    width: composerActionsProgress.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [36, 116],
+                    }),
                   }}
                 >
-                  <ChatImagePicker
-                    currentUserUUID={effectiveCurrentUserUUID || ""}
-                    chatPartnerId={chatPartnerId as string}
-                    onOptimisticImage={handleOptimisticImage}
-                    onUploadSuccess={handleImageUploadSuccess}
-                    onUploadError={handleImageUploadError}
-                  />
-                  <ChatAudioRecorder
-                    currentUserUUID={effectiveCurrentUserUUID || ""}
-                    chatPartnerId={chatPartnerId as string}
-                    onOptimisticAudio={handleOptimisticAudio}
-                    onUploadSuccess={handleAudioUploadSuccess}
-                    onUploadError={handleAudioUploadError}
-                  />
-                  <TouchableOpacity
-                    onPress={handleShareLocation}
-                    disabled={isSharingLocation}
-                    className="mr-1 w-9 h-9 items-center justify-center"
+                  <Animated.View
+                    pointerEvents={areComposerActionsCollapsed ? "none" : "auto"}
+                    className="absolute left-0 right-0 flex-row items-center"
+                    style={{
+                      opacity: composerActionsProgress,
+                      transform: [
+                        {
+                          translateX: composerActionsProgress.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [-14, 0],
+                          }),
+                        },
+                      ],
+                    }}
                   >
-                    {isSharingLocation ? (
-                      <Text className="text-xs text-gray-500">...</Text>
-                    ) : (
+                    <ChatImagePicker
+                      currentUserUUID={effectiveCurrentUserUUID || ""}
+                      chatPartnerId={chatPartnerId as string}
+                      onOptimisticImage={handleOptimisticImage}
+                      onUploadSuccess={handleImageUploadSuccess}
+                      onUploadError={handleImageUploadError}
+                    />
+                    <ChatImagePicker
+                      mode="camera"
+                      currentUserUUID={effectiveCurrentUserUUID || ""}
+                      chatPartnerId={chatPartnerId as string}
+                      onOptimisticImage={handleOptimisticImage}
+                      onUploadSuccess={handleImageUploadSuccess}
+                      onUploadError={handleImageUploadError}
+                    />
+                    <TouchableOpacity
+                      onPress={handleShareLocation}
+                      disabled={isSharingLocation}
+                      className="w-9 h-9 items-center justify-center"
+                    >
+                      {isSharingLocation ? (
+                        <Text className="text-xs text-gray-500">...</Text>
+                      ) : (
+                        <Ionicons
+                          name="location-outline"
+                          size={20}
+                          color="#6b7280"
+                        />
+                      )}
+                    </TouchableOpacity>
+                  </Animated.View>
+
+                  <Animated.View
+                    pointerEvents={areComposerActionsCollapsed ? "auto" : "none"}
+                    className="absolute left-0 right-0 items-center"
+                    style={{
+                      opacity: composerActionsProgress.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [1, 0],
+                      }),
+                      transform: [
+                        {
+                          translateX: composerActionsProgress.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [0, 10],
+                          }),
+                        },
+                      ],
+                    }}
+                  >
+                    <TouchableOpacity
+                      onPress={() => setComposerActionsCollapsed(false)}
+                      className="w-9 h-9 items-center justify-center"
+                    >
                       <Ionicons
-                        name="location-outline"
+                        name="chevron-forward"
                         size={20}
                         color="#6b7280"
                       />
-                    )}
-                  </TouchableOpacity>
+                    </TouchableOpacity>
+                  </Animated.View>
                 </Animated.View>
-
-                <Animated.View
-                  pointerEvents={areComposerActionsCollapsed ? "auto" : "none"}
-                  className="absolute left-0 right-0 items-center"
-                  style={{
-                    opacity: composerActionsProgress.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [1, 0],
-                    }),
-                    transform: [
-                      {
-                        translateX: composerActionsProgress.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [0, 10],
-                        }),
-                      },
-                    ],
-                  }}
-                >
-                  <TouchableOpacity
-                    onPress={() => setComposerActionsCollapsed(false)}
-                    className="w-9 h-9 items-center justify-center"
-                  >
-                    <Ionicons
-                      name="chevron-forward"
-                      size={20}
-                      color="#6b7280"
-                    />
-                  </TouchableOpacity>
-                </Animated.View>
-              </Animated.View>
-              <View className="flex-1 self-center min-h-[36px] justify-center">
-                <TextInput
-                  className="w-full px-3 text-[16px]"
-                  style={{
-                    paddingTop: 0,
-                    paddingBottom: 0,
-                    marginVertical: 0,
-                    lineHeight: CHAT_INPUT_LINE_HEIGHT,
-                    minHeight: CHAT_INPUT_LINE_HEIGHT,
-                    maxHeight: CHAT_INPUT_MAX_HEIGHT,
-                    ...(Platform.OS === "android"
-                      ? { includeFontPadding: false }
-                      : {}),
-                  }}
-                  placeholder="Type a message..."
-                  value={messageText}
-                  onChangeText={handleTextChange}
-                  onFocus={() => setComposerActionsCollapsed(true)}
-                  multiline
-                  maxLength={500}
-                  textAlignVertical="center"
-                  onContentSizeChange={(e) => {
-                    const nextHeight = Math.round(
-                      e.nativeEvent.contentSize.height ||
-                        CHAT_INPUT_LINE_HEIGHT,
-                    );
-                    const clamped = Math.max(
-                      CHAT_INPUT_LINE_HEIGHT,
-                      Math.min(nextHeight, CHAT_INPUT_MAX_HEIGHT),
-                    );
-                    if (Math.abs(clamped - composerInputHeight) > 1) {
-                      setComposerInputHeight(clamped);
-                    }
-                  }}
-                />
-              </View>
-              {isEditMode && (
-                <TouchableOpacity
-                  onPress={() => {
-                    setIsEditMode(false);
-                    setEditingMessageId(null);
-                    setMessageText("");
-                  }}
-                  className="mr-2 w-9 h-9 items-center justify-center"
-                >
-                  <Ionicons name="close" size={18} color="#6b7280" />
-                </TouchableOpacity>
               )}
-              {messageText.trim() ? (
-                <TouchableOpacity
-                  onPress={() => {
-                    if (isEditMode) {
-                      handleUpdateMessage();
-                    } else {
-                      handleSendMessage();
-                    }
-                  }}
-                  className={`w-9 h-9 rounded-full items-center justify-center ${
-                    isEditMode ? "bg-green-600" : "bg-primary"
-                  }`}
-                >
-                  <Ionicons
-                    name={isEditMode ? "checkmark" : "send"}
-                    size={18}
-                    color="white"
-                  />
-                </TouchableOpacity>
-              ) : null}
+
+              {/* Voice recorder — always mounted so recording state is preserved.
+                  hidden={collapsed} collapses it to 0×0 when typing (tray is closed),
+                  becomes full-width flex:1 bar while recording. */}
+              <ChatAudioRecorder
+                currentUserUUID={effectiveCurrentUserUUID || ""}
+                chatPartnerId={chatPartnerId as string}
+                onOptimisticAudio={handleOptimisticAudio}
+                onUploadSuccess={handleAudioUploadSuccess}
+                onUploadError={handleAudioUploadError}
+                onRecordingStateChange={setIsVoiceRecording}
+                hidden={areComposerActionsCollapsed && !isVoiceRecording}
+                style={isVoiceRecording ? { flex: 1 } : undefined}
+              />
+
+              {/* Text input + send/edit buttons — hidden while recording */}
+              {!isVoiceRecording && (
+                <>
+                  <View className="flex-1 self-center min-h-[36px] justify-center">
+                    <TextInput
+                      ref={chatInputRef}
+                      className="w-full px-3 text-[16px]"
+                      style={{
+                        paddingTop: 0,
+                        paddingBottom: 0,
+                        marginVertical: 0,
+                        lineHeight: CHAT_INPUT_LINE_HEIGHT,
+                        minHeight: CHAT_INPUT_LINE_HEIGHT,
+                        maxHeight: CHAT_INPUT_MAX_HEIGHT,
+                        ...(Platform.OS === "android"
+                          ? { includeFontPadding: false }
+                          : {}),
+                      }}
+                      placeholder="Type a message..."
+                      value={messageText}
+                      onChangeText={handleTextChange}
+                      onFocus={() => setComposerActionsCollapsed(true)}
+                      multiline
+                      maxLength={500}
+                      textAlignVertical="center"
+                      onContentSizeChange={(e) => {
+                        const nextHeight = Math.round(
+                          e.nativeEvent.contentSize.height ||
+                            CHAT_INPUT_LINE_HEIGHT,
+                        );
+                        const clamped = Math.max(
+                          CHAT_INPUT_LINE_HEIGHT,
+                          Math.min(nextHeight, CHAT_INPUT_MAX_HEIGHT),
+                        );
+                        if (Math.abs(clamped - composerInputHeight) > 1) {
+                          setComposerInputHeight(clamped);
+                        }
+                      }}
+                    />
+                  </View>
+
+                  {isEditMode && (
+                    <TouchableOpacity
+                      onPress={() => {
+                        setIsEditMode(false);
+                        setEditingMessageId(null);
+                        setMessageText("");
+                      }}
+                      className="mr-2 w-9 h-9 items-center justify-center"
+                    >
+                      <Ionicons name="close" size={18} color="#6b7280" />
+                    </TouchableOpacity>
+                  )}
+
+                  {messageText.trim() ? (
+                    <TouchableOpacity
+                      onPress={() => {
+                        if (isEditMode) {
+                          handleUpdateMessage();
+                        } else {
+                          handleSendMessage();
+                        }
+                      }}
+                      className={`w-9 h-9 rounded-full items-center justify-center ${
+                        isEditMode ? "bg-green-600" : "bg-primary"
+                      }`}
+                    >
+                      <Ionicons
+                        name={isEditMode ? "checkmark" : "send"}
+                        size={18}
+                        color="white"
+                      />
+                    </TouchableOpacity>
+                  ) : null}
+                </>
+              )}
             </View>
           </View>
         </View>
-      </Animated.View>
+      </View>
+      </Reanimated.View>
 
       {/* Full-Screen Map Modal */}
       <Modal

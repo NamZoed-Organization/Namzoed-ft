@@ -11,5 +11,10 @@ config.transformer = {
   },
 };
 
+// Fix: event-target-shim uses ./index subpath which is not in its package exports.
+// Disabling the experimental package exports resolver avoids the warning and
+// any potential runtime failures it can cause with Supabase's realtime client.
+config.resolver.unstable_enablePackageExports = false;
+
 // Apply NativeWind
 module.exports = withNativeWind(config, { input: './global.css' });

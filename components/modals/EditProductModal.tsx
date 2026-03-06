@@ -3,9 +3,9 @@ import ImagePickerSheet from "@/components/ui/ImagePickerSheet";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { categories } from "@/data/categories";
 import {
-  Product,
-  updateProduct,
-  uploadProductImages,
+    Product,
+    updateProduct,
+    uploadProductImages,
 } from "@/lib/productsService";
 import { Picker } from "@react-native-picker/picker";
 import { BlurView } from "expo-blur";
@@ -13,23 +13,22 @@ import * as ImagePicker from "expo-image-picker";
 import { Check, DollarSign, Upload, X } from "lucide-react-native";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  ScrollView,
-  Switch,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Image,
+    KeyboardAvoidingView,
+    Modal,
+    ScrollView,
+    Switch,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from "react-native";
 import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
+    useAnimatedStyle,
+    useSharedValue,
+    withTiming,
 } from "react-native-reanimated";
 
 interface EditProductModalProps {
@@ -338,7 +337,7 @@ export default function EditProductModal({
     >
       <Animated.View style={[{ flex: 1 }, animatedStyle]}>
         <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          behavior="padding"
           className="flex-1 justify-end"
         >
           <View className="flex-1 bg-black/50 justify-end">

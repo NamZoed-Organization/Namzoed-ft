@@ -1,4 +1,5 @@
 // lib/productsService.ts
+import * as ImageManipulator from 'expo-image-manipulator';
 import { supabase } from './supabase';
 
 export interface Product {
@@ -208,9 +209,16 @@ export const updateProduct = async (productId: string, updates: Partial<Product>
 // Upload product image
 export const uploadProductImage = async (imageUri: string, userId: string): Promise<string> => {
   try {
+    // Compress and resize before loading into JS memory to prevent app freeze
+    const compressed = await ImageManipulator.manipulateAsync(
+      imageUri,
+      [{ resize: { width: 1080 } }],
+      { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG },
+    );
+
     const fileName = `${userId}/${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
 
-    const response = await fetch(imageUri);
+    const response = await fetch(compressed.uri);
     const arrayBuffer = await response.arrayBuffer();
     const fileData = new Uint8Array(arrayBuffer);
 

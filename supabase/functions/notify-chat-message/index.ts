@@ -148,14 +148,24 @@ serve(async (req) => {
 
   const { data: senderProfile } = await admin
     .from("profiles")
-    .select("name")
+    .select("name, phone, avatar_url")
     .eq("id", senderId)
     .maybeSingle();
 
-  const senderName = String(senderProfile?.name || "New message");
+  // Resolve display name: name → phone (+975) → fallback
+  let senderName = "New message";
+  if (senderProfile?.name) {
+    senderName = senderProfile.name;
+  } else if (senderProfile?.phone) {
+    const clean = String(senderProfile.phone).replace("+975", "").replace(/\D/g, "");
+    senderName = clean.length >= 6 ? `+975 ${clean}` : senderProfile.phone;
+  }
+
+  const senderAvatarUrl: string | null = senderProfile?.avatar_url ?? null;
+
   const textPreview = buildPreview(messageType, preview);
 
-  const baseNotification = {
+  const baseNotification: Record<string, unknown> = {
     app_id: ONESIGNAL_APP_ID,
     headings: {
       en: senderName,
@@ -171,6 +181,11 @@ serve(async (req) => {
       message_type: messageType,
       route: `/chat/${senderId}`,
     },
+    // Sender avatar shown as large icon (Android) and thumbnail (iOS)
+    ...(senderAvatarUrl ? {
+      large_icon: senderAvatarUrl,
+      ios_attachments: { sender_avatar: senderAvatarUrl },
+    } : {}),
   };
 
   const sendOneSignalNotification = async (body: Record<string, unknown>) => {

@@ -56,7 +56,6 @@ export default function UsersTabsLayout() {
         screenOptions={{
           headerShown: false,
           tabBarShowLabel: false,
-          tabBarIndicatorStyle: { height: 0 },
           tabBarBackground: () => null,
           tabBarStyle: {
             backgroundColor: "#fff",

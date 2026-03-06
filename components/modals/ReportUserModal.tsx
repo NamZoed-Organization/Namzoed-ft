@@ -1,21 +1,20 @@
+import { reportUser } from '@/lib/reportService';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { AlertCircle, X } from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  ScrollView,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    KeyboardAvoidingView,
+    Modal,
+    ScrollView,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import Animated, { SlideInDown, SlideOutDown } from 'react-native-reanimated';
-import { reportUser } from '@/lib/reportService';
 
 interface ReportUserModalProps {
   visible: boolean;
@@ -128,7 +127,7 @@ export default function ReportUserModal({
           exiting={SlideOutDown}
         >
           <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            behavior="padding"
           >
             <BlurView intensity={90} tint="light" className="rounded-t-3xl overflow-hidden">
               {/* Header */}

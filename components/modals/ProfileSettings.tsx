@@ -1,23 +1,23 @@
 // Path: components/ProfileSettings.tsx
 import {
-  AboutApp,
-  AppVersion,
-  AppearanceManager,
-  ChangePassword,
-  CommunityGuidelines,
-  ContactUs,
-  DataStorage,
-  HelpCenter,
-  LanguageRegion,
-  Notifications,
-  PrivacyPolicy,
-  SellerPolicy,
-  SendFeedback,
-  TermsOfService
+    AboutApp,
+    AppVersion,
+    AppearanceManager,
+    ChangePassword,
+    CommunityGuidelines,
+    DataStorage,
+    DeleteAccount,
+    HelpCenter,
+    LanguageRegion,
+    Notifications,
+    PrivacyPolicy,
+    SavedPosts,
+    SellerPolicy,
+    TermsOfService
 } from '@/components/settings';
-import { ArrowLeft, Bell, FileText, Globe, HardDrive, HelpCircle, Info, Key, LogOut, MessageSquare, Phone, ScrollText, Shield, Smartphone, Sparkles, Users } from 'lucide-react-native';
+import { ArrowLeft, Bookmark, Key, LogOut, MessageSquare, Phone, ScrollText, Shield, Smartphone, Sparkles, Trash2 } from 'lucide-react-native';
 import React, { useRef, useState } from "react";
-import { Animated, Dimensions, PanResponder, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { Animated, Dimensions, Linking, PanResponder, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 interface ProfileSettingsProps {
@@ -103,6 +103,7 @@ export default function ProfileSettings({ onClose, currentUser, onLogout, panHan
   const renderModalContent = () => {
     switch (activeModal) {
       case 'appearance': return <AppearanceManager onClose={closeActiveModal} userId={currentUser?.id} />;
+      case 'savedPosts': return <SavedPosts onClose={closeActiveModal} userId={currentUser?.id} />;
       case 'changePassword': return <ChangePassword onClose={closeActiveModal} />;
       case 'privacyPolicy': return <PrivacyPolicy onClose={closeActiveModal} />;
       case 'sellerPolicy': return <SellerPolicy onClose={closeActiveModal} />;
@@ -112,8 +113,7 @@ export default function ProfileSettings({ onClose, currentUser, onLogout, panHan
       case 'dataStorage': return <DataStorage onClose={closeActiveModal} />;
       case 'languageRegion': return <LanguageRegion onClose={closeActiveModal} />;
       case 'helpCenter': return <HelpCenter onClose={closeActiveModal} />;
-      case 'contactUs': return <ContactUs onClose={closeActiveModal} />;
-      case 'sendFeedback': return <SendFeedback onClose={closeActiveModal} />;
+      case 'deleteAccount': return <DeleteAccount onClose={closeActiveModal} onAccountDeleted={onLogout} />;
       case 'appVersion': return <AppVersion onClose={closeActiveModal} />;
       case 'aboutApp': return <AboutApp onClose={closeActiveModal} />;
       default: return null;
@@ -182,6 +182,20 @@ export default function ProfileSettings({ onClose, currentUser, onLogout, panHan
                   </Text>
                   <View className="bg-gray-50 rounded-xl overflow-hidden">
                     <TouchableOpacity
+                      className="flex-row items-center justify-between px-4 py-4 border-b border-gray-200"
+                      onPress={() => handleNavigation('savedPosts')}
+                      activeOpacity={0.7}
+                    >
+                      <View className="flex-row items-center">
+                        <Bookmark size={20} color="#094569" style={{ marginRight: 12 }} />
+                        <View>
+                          <Text className="text-base font-medium text-gray-900">Saved Posts</Text>
+                          <Text className="text-xs text-gray-400 mt-0.5">View your bookmarked posts</Text>
+                        </View>
+                      </View>
+                      <Text className="text-gray-400 font-bold text-lg">→</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
                       className="flex-row items-center justify-between px-4 py-4"
                       onPress={() => handleNavigation('appearance')}
                       activeOpacity={0.7}
@@ -215,14 +229,7 @@ export default function ProfileSettings({ onClose, currentUser, onLogout, panHan
                       </View>
                       <Text className="text-gray-400 font-bold text-lg">→</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity
-                      className="flex-row items-center px-4 py-4 gap-2"
-                      onPress={onLogout}
-                      activeOpacity={0.7}
-                    >
-                      <LogOut size={20} className="text-red-500 mr-3" />
-                      <Text className="text-base font-medium text-red-500">Logout</Text>
-                    </TouchableOpacity>
+                 
                   </View>
                 </View>
 
@@ -237,13 +244,6 @@ export default function ProfileSettings({ onClose, currentUser, onLogout, panHan
                       </View>
                       <Text className="text-gray-400 font-bold text-lg">→</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity className="flex-row items-center justify-between px-4 py-4 border-b border-gray-200" onPress={() => handleNavigation("sellerPolicy")}>
-                      <View className="flex-row items-center gap-2">
-                        <FileText size={20} className="text-gray-700 mr-3" />
-                        <Text className="text-base font-medium text-gray-900">Seller Policy</Text>
-                      </View>
-                      <Text className="text-gray-400 font-bold text-lg">→</Text>
-                    </TouchableOpacity>
                     <TouchableOpacity className="flex-row items-center justify-between px-4 py-4 border-b border-gray-200" onPress={() => handleNavigation("termsOfService")}>
                       <View className="flex-row items-center gap-2">
                         <ScrollText size={20} className="text-gray-700 mr-3" />
@@ -251,41 +251,7 @@ export default function ProfileSettings({ onClose, currentUser, onLogout, panHan
                       </View>
                       <Text className="text-gray-400 font-bold text-lg">→</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity className="flex-row items-center justify-between px-4 py-4" onPress={() => handleNavigation("communityGuidelines")}>
-                      <View className="flex-row items-center gap-2">
-                        <Users size={20} className="text-gray-700 mr-3" />
-                        <Text className="text-base font-medium text-gray-900">Community Guidelines</Text>
-                      </View>
-                      <Text className="text-gray-400 font-bold text-lg">→</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-
-                {/* Account Section */}
-                <View className="mb-6">
-                  <Text className="text-sm font-msemibold text-gray-500 px-2 py-2 uppercase tracking-wide">Account</Text>
-                  <View className="bg-gray-50 rounded-xl overflow-hidden">
-                    <TouchableOpacity className="flex-row items-center justify-between px-4 py-4 border-b border-gray-200" onPress={() => handleNavigation("notifications")}>
-                      <View className="flex-row items-center gap-2">
-                        <Bell size={20} className="text-gray-700 mr-3" />
-                        <Text className="text-base font-medium text-gray-900">Notifications</Text>
-                      </View>
-                      <Text className="text-gray-400 font-bold text-lg">→</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity className="flex-row items-center justify-between px-4 py-4 border-b border-gray-200" onPress={() => handleNavigation("dataStorage")}>
-                      <View className="flex-row items-center gap-2">
-                        <HardDrive size={20} className="text-gray-700 mr-3" />
-                        <Text className="text-base font-medium text-gray-900">Data & Storage</Text>
-                      </View>
-                      <Text className="text-gray-400 font-bold text-lg">→</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity className="flex-row items-center justify-between px-4 py-4" onPress={() => handleNavigation("languageRegion")}>
-                      <View className="flex-row items-center gap-2">
-                        <Globe size={20} className="text-gray-700 mr-3" />
-                        <Text className="text-base font-medium text-gray-900">Language & Region</Text>
-                      </View>
-                      <Text className="text-gray-400 font-bold text-lg">→</Text>
-                    </TouchableOpacity>
+  
                   </View>
                 </View>
 
@@ -293,21 +259,14 @@ export default function ProfileSettings({ onClose, currentUser, onLogout, panHan
                 <View className="mb-6">
                   <Text className="text-sm font-msemibold text-gray-500 px-2 py-2 uppercase tracking-wide">Support</Text>
                   <View className="bg-gray-50 rounded-xl overflow-hidden">
-                    <TouchableOpacity className="flex-row items-center justify-between px-4 py-4 border-b border-gray-200" onPress={() => handleNavigation("helpCenter")}>
-                      <View className="flex-row items-center gap-2">
-                        <HelpCircle size={20} className="text-gray-700 mr-3" />
-                        <Text className="text-base font-medium text-gray-900">Help Center</Text>
-                      </View>
-                      <Text className="text-gray-400 font-bold text-lg">→</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity className="flex-row items-center justify-between px-4 py-4 border-b border-gray-200" onPress={() => handleNavigation("contactUs")}>
+                    <TouchableOpacity className="flex-row items-center justify-between px-4 py-4 border-b border-gray-200" onPress={() => Linking.openURL('https://namzoed.com/support')}>
                       <View className="flex-row items-center gap-2">
                         <Phone size={20} className="text-gray-700 mr-3" />
                         <Text className="text-base font-medium text-gray-900">Contact Us</Text>
                       </View>
                       <Text className="text-gray-400 font-bold text-lg">→</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity className="flex-row items-center justify-between px-4 py-4" onPress={() => handleNavigation("sendFeedback")}>
+                    <TouchableOpacity className="flex-row items-center justify-between px-4 py-4" onPress={() => Linking.openURL('https://namzoed.com/community')}>
                       <View className="flex-row items-center gap-2">
                         <MessageSquare size={20} className="text-gray-700 mr-3" />
                         <Text className="text-base font-medium text-gray-900">Send Feedback</Text>
@@ -328,10 +287,31 @@ export default function ProfileSettings({ onClose, currentUser, onLogout, panHan
                       </View>
                       <Text className="text-sm text-gray-500">v1.0.0</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity className="flex-row items-center justify-between px-4 py-4" onPress={() => handleNavigation("aboutApp")}>
+                  </View>
+                </View>
+                {/* Account Section */}
+                <View className="mb-6">
+                  <Text className="text-sm font-msemibold text-gray-500 px-2 py-2 uppercase tracking-wide">Account</Text>
+                  <View className="bg-gray-50 rounded-xl overflow-hidden">
+                    <TouchableOpacity
+                      className="flex-row items-center justify-between px-4 py-4 border-b border-gray-200"
+                      onPress={onLogout}
+                      activeOpacity={0.7}
+                    >
                       <View className="flex-row items-center gap-2">
-                        <Info size={20} className="text-gray-700 mr-3" />
-                        <Text className="text-base font-medium text-gray-900">About App</Text>
+                        <LogOut size={20} color="#6b7280" />
+                        <Text className="text-base font-medium text-gray-900">Logout</Text>
+                      </View>
+                      <Text className="text-gray-400 font-bold text-lg">→</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      className="flex-row items-center justify-between px-4 py-4"
+                      onPress={() => handleNavigation('deleteAccount')}
+                      activeOpacity={0.7}
+                    >
+                      <View className="flex-row items-center gap-2">
+                        <Trash2 size={20} color="#ef4444" />
+                        <Text className="text-base font-medium text-red-500">Delete Account</Text>
                       </View>
                       <Text className="text-gray-400 font-bold text-lg">→</Text>
                     </TouchableOpacity>
@@ -340,6 +320,7 @@ export default function ProfileSettings({ onClose, currentUser, onLogout, panHan
               </ScrollView>
               </Animated.View>
             </View>
+            
 
             {/* 2. NESTED MODAL (SLIDES OVER CONTENT, UNDER BAR) */}
             {/* Key Fix: This is now absolute positioned INSIDE the 'Content Container',

@@ -8,7 +8,9 @@ import userData17123456 from "@/data/17123456";
 import users from "@/data/UserData";
 import { supabase } from "@/lib/supabase";
 import { Ionicons } from "@expo/vector-icons";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Haptics from "expo-haptics";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import React, {
   useCallback,
   useEffect,
@@ -18,21 +20,33 @@ import React, {
 } from "react";
 import {
   Alert,
+  Dimensions,
   FlatList,
   Image,
-
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
-import * as Haptics from "expo-haptics";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Reanimated, {
+  Extrapolation,
+  interpolate,
   interpolateColor,
+  runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
+
+const SCREEN_WIDTH = Dimensions.get("window").width;
+// Width of each action button (Mute + Delete)
+const ACTION_BTN_W = 80;
+const ACTIONS_TOTAL = ACTION_BTN_W * 2; // 160px — fully revealed area
+// Drag past this threshold → snap to full-width delete
+const FULL_SWIPE_THRESHOLD = SCREEN_WIDTH * 0.6;
+const DELETE_COLOR = "#FF3B30";
+const MUTE_COLOR = "#8E8E93";
 
 // Types
 interface IMessage {
@@ -69,51 +83,232 @@ const getUserData = (phoneNumber: string): IUserData | null => {
 };
 
 /**
- * PressableRow — tap to navigate, long press to delete.
+ * SwipeableConversationRow — iMessage-style left-swipe to reveal
+ * Mute + Delete actions. Dragging all the way (≥ 60% screen width)
+ * auto-triggers delete. Uses RNGH v2 GestureDetector so gesture
+ * runs on the UI thread — no JS-thread lag.
  */
-const PressableRow = React.memo(function PressableRow({
-  children,
-  onDelete,
-  onPress,
-}: {
-  children: React.ReactNode;
-  onDelete: () => void;
-  onPress: () => void;
-}) {
-  const heldProgress = useSharedValue(0);
+const SwipeableConversationRow = React.memo(
+  function SwipeableConversationRow({
+    children,
+    onDelete,
+    onMute,
+    onPress,
+    isMuted,
+  }: {
+    children: React.ReactNode;
+    onDelete: () => void;
+    onMute: () => void;
+    onPress: () => void;
+    isMuted?: boolean;
+  }) {
+    const translateX = useSharedValue(0);
+    // Starting offset for the current gesture (so open → drag works correctly)
+    const gestureStartX = useSharedValue(0);
+    const isFullSwiped = useSharedValue(false);
+    // Timing config — no bounce
+    const SNAP = { duration: 240 };
 
-  const heldBgStyle = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(
-      heldProgress.value,
-      [0, 1],
-      ['#ffffff', '#dbeafe'],
-    ),
-  }));
+    function triggerHaptic() {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+    function doDelete() {
+      onDelete();
+    }
 
-  return (
-    <Reanimated.View style={[heldBgStyle, { width: '100%' }]}>
-      <TouchableOpacity
-        onPress={onPress}
-        onLongPress={() => {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          heldProgress.value = withTiming(1, { duration: 150 });
-          onDelete();
-        }}
-        onPressOut={() => {
-          heldProgress.value = withTiming(0, { duration: 300 });
-        }}
-        delayLongPress={500}
-        activeOpacity={0.7}
-      >
-        {children}
-      </TouchableOpacity>
-    </Reanimated.View>
-  );
-});
+    const pan = Gesture.Pan()
+      .activeOffsetX([-10, 10])
+      .failOffsetY([-8, 8])
+      .onBegin(() => {
+        "worklet";
+        gestureStartX.value = translateX.value;
+      })
+      .onUpdate((e) => {
+        "worklet";
+        const next = gestureStartX.value + e.translationX;
+        translateX.value = Math.min(0, Math.max(-FULL_SWIPE_THRESHOLD, next));
+
+        if (translateX.value <= -FULL_SWIPE_THRESHOLD && !isFullSwiped.value) {
+          isFullSwiped.value = true;
+          runOnJS(triggerHaptic)();
+        } else if (translateX.value > -FULL_SWIPE_THRESHOLD * 0.8) {
+          isFullSwiped.value = false;
+        }
+      })
+      .onEnd(() => {
+        "worklet";
+        const pos = translateX.value;
+
+        if (pos <= -FULL_SWIPE_THRESHOLD || isFullSwiped.value) {
+          isFullSwiped.value = false;
+          translateX.value = withTiming(0, SNAP);
+          runOnJS(doDelete)();
+          return;
+        }
+
+        // Snap open / shut — no bounce, plain ease-out
+        if (pos < -ACTIONS_TOTAL / 2) {
+          translateX.value = withTiming(-ACTIONS_TOTAL, SNAP);
+        } else {
+          translateX.value = withTiming(0, SNAP);
+        }
+      });
+
+    // Row slides left
+    const rowStyle = useAnimatedStyle(() => ({
+      transform: [{ translateX: translateX.value }],
+    }));
+
+    // Progress 0→1 as drag goes from ACTIONS_TOTAL to FULL_SWIPE_THRESHOLD
+    // (the "full-swipe expansion" zone)
+
+    // Mute: fades out and collapses as drag enters the expansion zone
+    const muteStyle = useAnimatedStyle(() => {
+      const drag = Math.abs(translateX.value);
+      const p = interpolate(
+        drag,
+        [ACTIONS_TOTAL, FULL_SWIPE_THRESHOLD * 0.7],
+        [1, 0],
+        Extrapolation.CLAMP,
+      );
+      return {
+        width: interpolate(
+          drag,
+          [ACTIONS_TOTAL, FULL_SWIPE_THRESHOLD * 0.7],
+          [ACTION_BTN_W, 0],
+          Extrapolation.CLAMP,
+        ),
+        opacity: p,
+        overflow: "hidden" as const,
+      };
+    });
+
+    // Delete: expands from ACTION_BTN_W to fill all revealed space
+    const deleteStyle = useAnimatedStyle(() => {
+      const drag = Math.abs(translateX.value);
+      return {
+        width: interpolate(
+          drag,
+          [ACTIONS_TOTAL, FULL_SWIPE_THRESHOLD],
+          [ACTION_BTN_W, FULL_SWIPE_THRESHOLD],
+          Extrapolation.CLAMP,
+        ),
+        backgroundColor: interpolateColor(
+          drag,
+          [0, ACTIONS_TOTAL, FULL_SWIPE_THRESHOLD],
+          ["#f2f2f7", DELETE_COLOR, DELETE_COLOR],
+        ),
+      };
+    });
+
+    // Close the row — no bounce
+    function closeRow() {
+      translateX.value = withTiming(0, SNAP);
+    }
+
+    return (
+      <GestureDetector gesture={pan}>
+        <View style={{ overflow: "hidden" }}>
+          {/* ── Action buttons (behind the row) ── */}
+          <View
+            style={{
+              position: "absolute",
+              right: 0,
+              top: 0,
+              bottom: 0,
+              width: FULL_SWIPE_THRESHOLD,
+              flexDirection: "row",
+              alignItems: "stretch",
+              justifyContent: "flex-end",
+              backgroundColor: "#f2f2f7",
+            }}
+          >
+            {/* Mute / Unmute — shrinks and fades as delete expands */}
+            <Reanimated.View style={muteStyle}>
+              <TouchableOpacity
+                onPress={() => {
+                  closeRow();
+                  onMute();
+                }}
+                style={{
+                  flex: 1,
+                  minWidth: ACTION_BTN_W,
+                  backgroundColor: MUTE_COLOR,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Ionicons
+                  name={isMuted ? "notifications" : "notifications-off"}
+                  size={22}
+                  color="white"
+                />
+                <Reanimated.Text
+                  style={{ color: "white", fontSize: 12, marginTop: 4 }}
+                >
+                  {isMuted ? "Unmute" : "Mute"}
+                </Reanimated.Text>
+              </TouchableOpacity>
+            </Reanimated.View>
+
+            {/* Delete — expands to fill revealed area on full swipe */}
+            <Reanimated.View style={deleteStyle}>
+              <TouchableOpacity
+                onPress={() => {
+                  closeRow();
+                  onDelete();
+                }}
+                style={{
+                  flex: 1,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Ionicons name="trash" size={22} color="white" />
+                <Reanimated.Text
+                  style={{ color: "white", fontSize: 12, marginTop: 4 }}
+                >
+                  Delete
+                </Reanimated.Text>
+              </TouchableOpacity>
+            </Reanimated.View>
+          </View>
+
+          {/* ── Main row content (slides left) ── */}
+          <Reanimated.View
+            style={[rowStyle, { backgroundColor: "white", width: "100%" }]}
+          >
+            <TouchableOpacity
+              onPress={() => {
+                if (translateX.value < -10) {
+                  closeRow();
+                } else {
+                  onPress();
+                }
+              }}
+              activeOpacity={0.7}
+            >
+              {children}
+            </TouchableOpacity>
+          </Reanimated.View>
+        </View>
+      </GestureDetector>
+    );
+  },
+);
 
 export default function MessageScreen() {
   const { currentUser } = useUser();
-  const { refreshUnreadCount, currentUserUUID } = useUnreadMessages();
+  const { refreshUnreadCount, currentUserUUID, setIsOnMessagesScreen } = useUnreadMessages();
+
+  // Tell the unread-messages context we're on the conversations screen
+  // so it suppresses in-app chat banners while we're here.
+  useFocusEffect(
+    useCallback(() => {
+      setIsOnMessagesScreen(true);
+      return () => setIsOnMessagesScreen(false);
+    }, [setIsOnMessagesScreen]),
+  );
   const router = useRouter();
   const { tab } = useLocalSearchParams();
   const [activeTab, setActiveTab] = useState(0);
@@ -133,6 +328,22 @@ export default function MessageScreen() {
   const [showTrackingModal, setShowTrackingModal] = useState(false);
   const [selectedBookingForTracking, setSelectedBookingForTracking] =
     useState<any>(null);
+  // hiddenConversations: Set of partnerIds the current user has hidden (soft-deleted).
+  // Stored in AsyncStorage so it persists across sessions.
+  // Messages remain in the DB so the other person is unaffected.
+  const [hiddenConversations, setHiddenConversations] = useState<Set<string>>(
+    new Set(),
+  );
+  // Ref mirror so real-time callbacks (stale closures) can read the latest value.
+  const hiddenConversationsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    hiddenConversationsRef.current = hiddenConversations;
+  }, [hiddenConversations]);
+
+  // mutedConversations: Set of partnerIds whose notifications are silenced.
+  const [mutedConversations, setMutedConversations] = useState<Set<string>>(
+    new Set(),
+  );
   const conversationsPollRef = useRef<ReturnType<typeof setInterval> | null>(
     null,
   );
@@ -143,6 +354,95 @@ export default function MessageScreen() {
     if (currentUser?.id) ids.add(String(currentUser.id));
     return Array.from(ids);
   }, [currentUserUUID, currentUser?.id]);
+
+  // Conversations visible to the current user (hidden ones filtered out).
+  // Re-computes whenever either the raw list or the hidden set changes.
+  const visibleConversations = useMemo(
+    () =>
+      conversations.filter((c) => !hiddenConversations.has(String(c.partnerId))),
+    [conversations, hiddenConversations],
+  );
+
+  // ── AsyncStorage keys (per-user so multi-account works) ──────────────────
+  const hiddenKey = useMemo(
+    () =>
+      currentUserUUID || currentUser?.id
+        ? `hidden_conversations_${currentUserUUID ?? currentUser?.id}`
+        : null,
+    [currentUserUUID, currentUser?.id],
+  );
+  const mutedKey = useMemo(
+    () =>
+      currentUserUUID || currentUser?.id
+        ? `muted_conversations_${currentUserUUID ?? currentUser?.id}`
+        : null,
+    [currentUserUUID, currentUser?.id],
+  );
+
+  // Load hidden/muted sets from AsyncStorage once the user key is known
+  useEffect(() => {
+    if (!hiddenKey) return;
+    AsyncStorage.getItem(hiddenKey).then((val) => {
+      if (val) {
+        setHiddenConversations(new Set(JSON.parse(val) as string[]));
+      }
+    });
+  }, [hiddenKey]);
+
+  useEffect(() => {
+    if (!mutedKey) return;
+    AsyncStorage.getItem(mutedKey).then((val) => {
+      if (val) {
+        setMutedConversations(new Set(JSON.parse(val) as string[]));
+      }
+    });
+  }, [mutedKey]);
+
+  /** Hide a conversation for the current user only (soft-delete). */
+  const hideConversation = useCallback(
+    async (partnerId: string) => {
+      const next = new Set(hiddenConversations);
+      next.add(partnerId);
+      setHiddenConversations(next);
+      if (hiddenKey) {
+        await AsyncStorage.setItem(hiddenKey, JSON.stringify(Array.from(next)));
+      }
+      // Record the deletion timestamp so the chat screen can hide
+      // all messages that existed before this point.
+      const uid = currentUserUUID || currentUser?.id;
+      if (uid) {
+        const tsKey = `hidden_conversations_ts_${uid}`;
+        const raw = await AsyncStorage.getItem(tsKey);
+        const tsMap: Record<string, string> = raw ? JSON.parse(raw) : {};
+        tsMap[partnerId] = new Date().toISOString();
+        await AsyncStorage.setItem(tsKey, JSON.stringify(tsMap));
+      }
+      // Also immediately remove from local conversation list
+      setConversations((prev) => prev.filter((c) => c.partnerId !== partnerId));
+      setRequestConversations((prev) =>
+        prev.filter((c) => c.partnerId !== partnerId),
+      );
+    },
+    [hiddenConversations, hiddenKey, currentUserUUID, currentUser?.id],
+  );
+
+  /** Toggle mute for a conversation. */
+  const toggleMuteConversation = useCallback(
+    async (partnerId: string) => {
+      const next = new Set(mutedConversations);
+      if (next.has(partnerId)) {
+        next.delete(partnerId);
+      } else {
+        next.add(partnerId);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+      setMutedConversations(next);
+      if (mutedKey) {
+        await AsyncStorage.setItem(mutedKey, JSON.stringify(Array.from(next)));
+      }
+    },
+    [mutedConversations, mutedKey],
+  );
 
   const formatConversationPreview = (message: any, isMine: boolean) => {
     if (!message) return "No messages yet";
@@ -398,7 +698,7 @@ export default function MessageScreen() {
         if (partnerIds.length > 0) {
         const { data: profileData, error: profileError } = await supabase
           .from("profiles")
-          .select("id, name, phone, avatar_url")
+          .select("id, name, phone, avatar_url, email")
           .in("id", partnerIds);
 
           profiles = profileData || [];
@@ -426,11 +726,14 @@ export default function MessageScreen() {
         // 3. Fetch message_requests where I am the receiver
         const { data: incomingRequests } = await supabase
           .from("message_requests")
-          .select("sender_id, status")
+          .select("sender_id, status, context")
           .eq("receiver_id", resolvedUUID);
-        // Map sender_id → status
-        const requestStatusMap = new Map<string, string>(
-          (incomingRequests ?? []).map((r: any) => [String(r.sender_id), r.status]),
+        // Map sender_id → { status, context }
+        const requestMap = new Map<string, { status: string; context: string }>(
+          (incomingRequests ?? []).map((r: any) => [
+            String(r.sender_id),
+            { status: String(r.status), context: String(r.context ?? "personal") },
+          ]),
         );
 
         const allConversations = partnerIds
@@ -458,13 +761,22 @@ export default function MessageScreen() {
         for (const convo of allConversations) {
           const pid = String(convo.partnerId);
           const isMutual = myFollowingSet.has(pid) && myFollowersSet.has(pid);
-          const requestStatus = requestStatusMap.get(pid); // only set when partner sent me a request
+          const requestEntry = requestMap.get(pid); // only set when partner sent me a request
+          const requestStatus = requestEntry?.status;
+          const requestContext = requestEntry?.context ?? "personal";
+          // Mongoose delivery users always land in the main inbox — they are
+          // service accounts, not social contacts, so the follow gate doesn't apply.
+          const isMongoosePartner = String(convo.partnerProfile?.email ?? "").startsWith("mongoose@gmail.com");
 
-          if (isMutual || requestStatus === "accepted") {
-            // Mutual follow or accepted request → main inbox
+          if (isMutual || requestStatus === "accepted" || isMongoosePartner) {
+            // Mutual follow, accepted request, or mongoose service user → main inbox
+            mainConvos.push(convo);
+          } else if (requestStatus === "pending" && requestContext === "commerce") {
+            // Commerce inquiry (product/marketplace) → always in main inbox,
+            // no follow required — this is a legitimate buyer→seller interaction
             mainConvos.push(convo);
           } else if (requestStatus === "pending") {
-            // Partner sent me a message request → requests tray
+            // Personal message request → requests tray
             reqConvos.push(convo);
           } else {
             // No request row yet — check who sent the last message.
@@ -680,6 +992,26 @@ export default function MessageScreen() {
               receiverId === String(userUUID);
 
             if (!isRelevant) return;
+
+            // If a new message arrives from a hidden partner, un-hide them
+            // (mirrors iMessage behaviour: receiving a new message resurfaces the chat).
+            if (payload.eventType === "INSERT" && next) {
+              const partnerId = candidateUserIds.includes(senderId)
+                ? receiverId
+                : senderId;
+              if (
+                partnerId &&
+                hiddenConversationsRef.current.has(partnerId)
+              ) {
+                const next2 = new Set(hiddenConversationsRef.current);
+                next2.delete(partnerId);
+                setHiddenConversations(next2);
+                // Persist removal to AsyncStorage
+                const key = `hidden_conversations_${userUUID}`;
+                AsyncStorage.setItem(key, JSON.stringify(Array.from(next2)));
+              }
+            }
+
             fetchConversations(false);
           },
         )
@@ -860,57 +1192,22 @@ export default function MessageScreen() {
     );
   };
 
-  const handleDeleteConversation = async (
+  const handleDeleteConversation = (
     partnerId: string,
     partnerName: string,
   ) => {
     Alert.alert(
-      "Delete Conversation",
-      `Are you sure you want to delete all messages with ${partnerName}? This action cannot be undone.`,
+      "Delete Chat?",
+      `This will remove the conversation with ${partnerName} from your inbox. ${partnerName} will still be able to see it.`,
       [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
+        { text: "Cancel", style: "cancel" },
         {
           text: "Delete",
           style: "destructive",
-          onPress: async () => {
-            try {
-              // Get current user's UUID
-              const resolvedUUID = await resolveCurrentUserUUID();
-              if (!resolvedUUID) {
-                return;
-              }
-
-              // Delete all messages between current user and partner
-              const { error } = await supabase
-                .from("messages")
-                .delete()
-                .or(
-                  `and(sender_id.eq.${resolvedUUID},receiver_id.eq.${partnerId}),and(sender_id.eq.${partnerId},receiver_id.eq.${resolvedUUID})`,
-                );
-
-              if (error) {
-                console.error("Error deleting conversation:", error);
-                Alert.alert(
-                  "Error",
-                  "Failed to delete conversation. Please try again.",
-                );
-              } else {
-                // Remove from local state immediately
-                setConversations((prev) =>
-                  prev.filter((c) => c.partnerId !== partnerId),
-                );
-                Alert.alert(
-                  "Success",
-                  `Conversation with ${partnerName} has been deleted.`,
-                );
-              }
-            } catch (e) {
-              console.error("Error deleting conversation:", e);
-              Alert.alert("Error", "An unexpected error occurred.");
-            }
+          onPress: () => {
+            // Soft-delete: hide only for the current user.
+            // Messages remain in the DB so the other person is unaffected.
+            hideConversation(partnerId);
           },
         },
       ],
@@ -932,25 +1229,16 @@ export default function MessageScreen() {
     const senderId = String(lastMessage?.sender_id || "");
     const isLastMessageMine = candidateUserIds.includes(senderId);
     const hasUnreadIncoming = !isLastMessageMine && conversation.unreadCount > 0;
-    const conversationId = String(conversation.partnerId);
+    const isMuted = mutedConversations.has(String(conversation.partnerId));
 
     return (
-      <PressableRow
+      <SwipeableConversationRow
         onPress={() => router.push(`/(users)/chat/${conversation.partnerId}`)}
         onDelete={() =>
-          Alert.alert(
-            "Delete Chat?",
-            `Do you want to delete your chat with ${userName}?`,
-            [
-              { text: "Cancel", style: "cancel" },
-              {
-                text: "Delete",
-                style: "destructive",
-                onPress: () => handleDeleteConversation(conversation.partnerId, userName),
-              },
-            ],
-          )
+          handleDeleteConversation(conversation.partnerId, userName)
         }
+        onMute={() => toggleMuteConversation(String(conversation.partnerId))}
+        isMuted={isMuted}
       >
         <View className="flex-row items-center py-4 px-4">
           {avatarUri ? (
@@ -968,11 +1256,20 @@ export default function MessageScreen() {
           )}
           <View className="flex-1 flex-row items-center border-b border-gray-200 pb-4 -mb-4">
             <View className="flex-1">
-              <Text
-                className={`text-gray-800 ${hasUnreadIncoming ? "font-bold" : "font-semibold"}`}
-              >
-                {userName}
-              </Text>
+              <View className="flex-row items-center gap-1">
+                <Text
+                  className={`text-gray-800 ${hasUnreadIncoming ? "font-bold" : "font-semibold"}`}
+                >
+                  {userName}
+                </Text>
+                {isMuted && (
+                  <Ionicons
+                    name="notifications-off"
+                    size={12}
+                    color="#8E8E93"
+                  />
+                )}
+              </View>
               <Text
                 className={`text-sm mt-1 ${hasUnreadIncoming ? "text-gray-800 font-semibold" : "text-gray-500"}`}
                 numberOfLines={1}
@@ -994,7 +1291,7 @@ export default function MessageScreen() {
             )}
           </View>
         </View>
-      </PressableRow>
+      </SwipeableConversationRow>
     );
   };
 
@@ -1357,36 +1654,38 @@ export default function MessageScreen() {
 
       {/* Tab 0: Messages */}
       {activeTab === 0 && !showMessageRequests && (
-        <FlatList
-          style={{ flex: 1 }}
-          data={searchQuery.trim() ? searchResults : conversations}
-          renderItem={
-            searchQuery.trim() ? renderSearchResultItem : renderConversationItem
-          }
-          keyExtractor={(item) =>
-            item.id || item.partnerId || item.phone || item.phone_number
-          }
-          ListHeaderComponent={() => (
-            <>
-              {/* Search Bar */}
-              <View className="p-4 bg-white border-b border-gray-200">
-                <View className="flex-row items-center bg-gray-100 rounded-lg px-3 py-2">
-                  <Ionicons name="search" size={20} color="#666" />
-                  <TextInput
-                    className="flex-1 ml-2 text-base"
-                    placeholder="Search conversations or find new users..."
-                    value={searchQuery}
-                    onChangeText={setSearchQuery}
-                  />
-                  {isSearching && (
-                    <View className="ml-2">
-                      <Text className="text-xs text-gray-500">Searching...</Text>
-                    </View>
-                  )}
+        <>
+          {/* Search Bar — lives outside FlatList so the keyboard never dismisses on re-render */}
+          <View className="px-4 py-3 bg-white border-b border-gray-200">
+            <View className="flex-row items-center bg-gray-100 rounded-lg px-3">
+              <Ionicons name="search" size={20} color="#666" />
+              <TextInput
+                style={{ flex: 1, marginLeft: 8, fontSize: 16, paddingVertical: 10, lineHeight: undefined }}
+                placeholder="Search conversations or find new users..."
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+              />
+              {isSearching && (
+                <View className="ml-2">
+                  <Text className="text-xs text-gray-500">Searching...</Text>
                 </View>
-              </View>
+              )}
+            </View>
+          </View>
 
-              {/* Message Requests banner */}
+          <FlatList
+            style={{ flex: 1 }}
+            keyboardShouldPersistTaps="handled"
+            data={searchQuery.trim() ? searchResults : visibleConversations}
+            renderItem={
+              searchQuery.trim() ? renderSearchResultItem : renderConversationItem
+            }
+            keyExtractor={(item) =>
+              item.id || item.partnerId || item.phone || item.phone_number
+            }
+            ListHeaderComponent={() => (
+              <>
+                {/* Message Requests banner */}
               {!searchQuery.trim() && requestConversations.length > 0 && (
                 <TouchableOpacity
                   onPress={() => setShowMessageRequests(true)}
@@ -1517,6 +1816,7 @@ export default function MessageScreen() {
           }}
           showsVerticalScrollIndicator={false}
         />
+        </>
       )}
 
       {/* Message Requests view */}

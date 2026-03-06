@@ -17,27 +17,25 @@ import { useUserPosts } from "@/hooks/profile/useUserPosts";
 import { useUserProducts } from "@/hooks/profile/useUserProducts";
 import { useEarlyAccessBadge } from "@/hooks/useEarlyAccessBadge";
 // Profile components
-import ProfileHeader from "@/components/profile/ProfileHeader";
-import ProfileTabContent from "@/components/profile/ProfileTabContent";
-import ProfileTabs from "@/components/profile/ProfileTabs";
+import EarlyAccessBadge from "@/components/EarlyAccessBadge";
 import ServiceProviderSection from "@/components/profile/ServiceProviderSection";
 import BottomNavBar from "@/components/ui/BottomNavBar";
 import PopupMessage from "@/components/ui/PopupMessage";
 import {
-    deleteAvatar,
-    updateUserProfile,
-    uploadAvatar,
+  deleteAvatar,
+  updateUserProfile,
+  uploadAvatar,
 } from "@/lib/profileService";
 import {
-    deleteLicenseImage,
-    deleteProviderAvatar,
-    deleteProviderService,
-    ProviderServiceWithDetails,
-    toggleServiceStatus,
-    updateServiceProviderLicense,
-    updateServiceProviderProfile,
-    uploadLicenseImage,
-    uploadProviderAvatar,
+  deleteLicenseImage,
+  deleteProviderAvatar,
+  deleteProviderService,
+  ProviderServiceWithDetails,
+  toggleServiceStatus,
+  updateServiceProviderLicense,
+  updateServiceProviderProfile,
+  uploadLicenseImage,
+  uploadProviderAvatar,
 } from "@/lib/servicesService";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
@@ -45,47 +43,55 @@ import { ImpactFeedbackStyle, NotificationFeedbackType } from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import {
-    Bell,
-    Camera,
-    Eye,
-    ImageIcon,
-    Package,
-    Settings,
-    Trash2,
-    Upload,
-    User,
-    UserPlus,
+  Camera,
+  Copy,
+  Eye,
+  GalleryHorizontal,
+  Grid,
+  ImageIcon,
+  Package,
+  Play,
+  Settings,
+  ShoppingBag,
+  Trash2,
+  Upload,
+  User,
+  UserPlus,
+  Wrench
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useState } from "react";
 import {
-    Alert,
-    Dimensions,
-    InteractionManager,
-    Modal,
-    Platform,
-    RefreshControl,
-    ScrollView,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  Image,
+  InteractionManager,
+  Modal,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 // --- Reanimated & Gesture Handler ---
+import { useVideoPlayer, VideoView } from "expo-video";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
-    FadeIn,
-    FadeInDown,
-    FadeOut,
-    FadeOutDown,
-    runOnJS,
-    SlideInDown,
-    SlideOutDown,
-    useAnimatedStyle,
-    useSharedValue,
-    withSpring,
-    withTiming,
+  FadeIn,
+  FadeInDown,
+  FadeOut,
+  FadeOutDown,
+  runOnJS,
+  SlideInDown,
+  SlideOutDown,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
 } from "react-native-reanimated";
 
 // Helper to check if URL is a video
@@ -97,6 +103,22 @@ const isVideoUrl = (url: string): boolean => {
     lowerUrl.includes("post-videos")
   );
 };
+
+// Video thumbnail component – renders the first frame via expo-video
+function VideoThumb({ uri }: { uri: string }) {
+  const player = useVideoPlayer(uri, (p) => {
+    p.muted = true;
+    p.loop = false;
+  });
+  return (
+    <VideoView
+      player={player}
+      style={{ width: "100%", height: "100%" }}
+      nativeControls={false}
+      contentFit="cover"
+    />
+  );
+}
 
 export default function ProfileScreen() {
   const { currentUser, setCurrentUser, logout } = useUser();
@@ -122,7 +144,6 @@ export default function ProfileScreen() {
   const [showProviderAvatarMenu, setShowProviderAvatarMenu] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsInitialModal, setSettingsInitialModal] = useState<string | undefined>(undefined);
-  const [showNotifications, setShowNotifications] = useState(false);
   const [showFollowRequests, setShowFollowRequests] = useState(false);
   const [showPendingRequests, setShowPendingRequests] = useState(false);
   const [followRequestsTab, setFollowRequestsTab] = useState<
@@ -218,7 +239,7 @@ export default function ProfileScreen() {
   } = useServiceProvider(refreshKey);
 
   // User posts hook
-  const { userPosts, setUserPosts, loadingPosts, userImages, imagePostMap } =
+  const { userPosts, setUserPosts, loadingPosts, userImages, imagePostMap, postThumbnails } =
     useUserPosts(refreshKey, showErrorPopup);
 
   // User products hook
@@ -340,11 +361,6 @@ export default function ProfileScreen() {
   const handleSettings = () => setShowSettings(true);
   const handleFollowRequests = () => setShowPendingRequests(true);
   const handleManageListings = () => setShowManageListings(true);
-  const handleNotifications = () => {
-    setShowNotifications(true);
-    // You can implement a notifications modal similar to settings
-    showSuccessPopup("Notifications feature coming soon!");
-  };
 
   // Handle main tab change with scroll
   const handleMainTabChange = (tab: "main" | "work") => {
@@ -1008,10 +1024,10 @@ export default function ProfileScreen() {
       <View
         style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 100 }}
       >
-        <View className="h-12 bg-white" />
+        <View className="h-12 bg-transparent" />
 
         {/* Header */}
-        <View className="flex-row items-center justify-between px-4 py-3 bg-white border-b border-gray-100">
+        <View className="flex-row items-center justify-between px-4 py-3 bg-transparent border-b border-gray-100">
           {/* Left Icons */}
           <View className="flex-row items-center gap-2">
             {/* Follow Requests Icon */}
@@ -1019,7 +1035,7 @@ export default function ProfileScreen() {
               onPress={handleFollowRequests}
               className="w-10 h-10 items-center justify-center"
             >
-              <UserPlus size={24} className="text-primary" />
+              <UserPlus size={24} strokeWidth={1.5} className="text-primary" />
             </TouchableOpacity>
 
             {/* Manage Listings Icon */}
@@ -1027,29 +1043,23 @@ export default function ProfileScreen() {
               onPress={handleManageListings}
               className="w-10 h-10 items-center justify-center"
             >
-              <Package size={24} className="text-primary" />
+              <Package size={24} strokeWidth={1.5} className="text-primary" />
             </TouchableOpacity>
           </View>
 
-          {/* Notification and Settings Icons on Right */}
+          {/* Settings Icon on Right */}
           <View className="flex-row items-center">
-            <TouchableOpacity
-              onPress={handleNotifications}
-              className="w-10 h-10 items-center justify-center mr-2"
-            >
-              <Bell size={24} className="text-gray-700" />
-            </TouchableOpacity>
             <TouchableOpacity
               onPress={handleSettings}
               className="w-10 h-10 items-center justify-center"
             >
-              <Settings size={24} className="text-gray-700" />
+              <Settings size={24} strokeWidth={1.5} className="text-gray-700" />
             </TouchableOpacity>
           </View>
         </View>
 
         {/* Main/Work Tabs - Floating Bubbles */}
-        <View className="bg-white px-4 py-2">
+        <View className="bg-transparent px-4 py-2">
           <View className="flex-row gap-2 justify-center">
             <TouchableOpacity
               className={`px-8 py-1.5 items-center rounded-full ${mainTab === "main" ? "bg-primary" : "bg-gray-100"}`}
@@ -1105,47 +1115,347 @@ export default function ProfileScreen() {
                 />
               }
             >
-              {/* Profile Header */}
-              <ProfileHeader
-                profileImage={profileImage}
-                userName={currentUser.name}
-                userEmail={currentUser.email}
-                followerCount={followerCount}
-                followingCount={followingCount}
-                badgeType={badgeType}
-                onAvatarPress={() =>
-                  profileImage && setShowProfileImageViewer(true)
-                }
-                onBadgePress={badgeType ? () => {
-                  setSettingsInitialModal('appearance');
-                  setShowSettings(true);
-                } : undefined}
-                onAvatarMenuPress={() => setShowMainAvatarMenu(true)}
-                onEditProfile={handleEditProfile}
-                onFollowingPress={() => {
-                  setFollowRequestsTab("following");
-                  setShowFollowRequests(true);
-                }}
-                onFollowersPress={() => {
-                  setFollowRequestsTab("followers");
-                  setShowFollowRequests(true);
-                }}
-              />
+              {/* Profile Info Section — Instagram style */}
+              <View className="px-4 pt-5 pb-4">
+                {/* Row: Avatar + Stats */}
+                <View className="flex-row items-center mb-3">
+                  {/* Avatar */}
+                  <View className="relative">
+                    <TouchableOpacity
+                      onPress={() =>
+                        profileImage
+                          ? setShowProfileImageViewer(true)
+                          : setShowMainAvatarMenu(true)
+                      }
+                      onLongPress={() => setShowMainAvatarMenu(true)}
+                      activeOpacity={0.85}
+                      className="w-[86px] h-[86px] rounded-full bg-gray-200 overflow-hidden border-2 border-gray-100"
+                    >
+                      {profileImage ? (
+                        <Image
+                          source={{ uri: profileImage }}
+                          className="w-full h-full"
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <View className="w-full h-full items-center justify-center bg-gray-100">
+                          <User size={34} strokeWidth={1.5} color="#9ca3af" />
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => setShowMainAvatarMenu(true)}
+                      className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-primary border-2 border-white items-center justify-center"
+                    >
+                      <Camera size={12} strokeWidth={1.5} color="white" />
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Stats row */}
+                  <View className="flex-1 flex-row items-center justify-around ml-4">
+                    <View className="items-center">
+                      <Text className="text-lg font-mbold text-gray-900">
+                        {userPosts.length}
+                      </Text>
+                      <Text className="text-xs font-regular text-gray-500">
+                        Posts
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      className="items-center"
+                      onPress={() => {
+                        setFollowRequestsTab("followers");
+                        setShowFollowRequests(true);
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <Text className="text-lg font-mbold text-gray-900">
+                        {followerCount}
+                      </Text>
+                      <Text className="text-xs font-regular text-gray-500">
+                        Followers
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      className="items-center"
+                      onPress={() => {
+                        setFollowRequestsTab("following");
+                        setShowFollowRequests(true);
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <Text className="text-lg font-mbold text-gray-900">
+                        {followingCount}
+                      </Text>
+                      <Text className="text-xs font-regular text-gray-500">
+                        Following
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Name & Badge */}
+                <View className="flex-row items-center gap-4 mb-0.5 flex-wrap">
+                  <Text className="text-base font-mbold text-gray-900">
+                    {currentUser.name}
+                  </Text>
+                  {badgeType && (
+                    <TouchableOpacity
+                      onPress={() => {
+                        setSettingsInitialModal("appearance");
+                        setShowSettings(true);
+                      }}
+                    >
+                      <EarlyAccessBadge badgeType={badgeType} size="sm" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+                {currentUser.email && (
+                  <Text className="text-sm font-regular text-gray-500 mb-3">
+                    {currentUser.email}
+                  </Text>
+                )}
+
+                {/* Action Buttons */}
+                <View className="flex-row gap-2 mt-2">
+                  <TouchableOpacity
+                    onPress={() => setShowSettings(true)}
+                    className="flex-1 py-[9px] rounded-lg flex-row items-center justify-center bg-gray-100 border border-gray-300"
+                  >
+                    <Text className="text-sm font-semibold text-gray-800">
+                      Edit Profile
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={handleManageListings}
+                    className="flex-1 py-[9px] rounded-lg flex-row items-center justify-center bg-gray-100 border border-gray-300"
+                  >
+                    <Text className="text-sm font-semibold text-gray-800">
+                      Manage
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
 
               {/* Tab Navigation */}
-              <ProfileTabs activeTab={activeTab} onTabChange={setActiveTab} />
+              <View className="bg-transparent border-b border-gray-100 mt-2">
+                <View className="flex-row">
+                  <TouchableOpacity
+                    className={`flex-1 py-4 items-center border-b-2 ${
+                      activeTab === "images"
+                        ? "border-primary"
+                        : "border-transparent"
+                    }`}
+                    onPress={() => setActiveTab("images")}
+                  >
+                    <GalleryHorizontal
+                      size={24}
+                      strokeWidth={1.5}
+                      className={`mb-1 ${
+                        activeTab === "images"
+                          ? "text-primary"
+                          : "text-gray-400"
+                      }`}
+                    />
+                    <Text
+                      className={`font-msemibold text-xs ${
+                        activeTab === "images"
+                          ? "text-primary"
+                          : "text-gray-500"
+                      }`}
+                    >
+                      Media
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    className={`flex-1 py-4 items-center border-b-2 ${
+                      activeTab === "products"
+                        ? "border-primary"
+                        : "border-transparent"
+                    }`}
+                    onPress={() => setActiveTab("products")}
+                  >
+                    <ShoppingBag
+                      size={24}
+                      strokeWidth={1.5}
+                      className={`mb-1 ${
+                        activeTab === "products"
+                          ? "text-primary"
+                          : "text-gray-400"
+                      }`}
+                    />
+                    <Text
+                      className={`font-msemibold text-xs ${
+                        activeTab === "products"
+                          ? "text-primary"
+                          : "text-gray-500"
+                      }`}
+                    >
+                      Products
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    className={`flex-1 py-4 items-center border-b-2 ${
+                      activeTab === "services"
+                        ? "border-primary"
+                        : "border-transparent"
+                    }`}
+                    onPress={() => setActiveTab("services")}
+                  >
+                    <Wrench
+                      size={24}
+                      strokeWidth={1.5}
+                      className={`mb-1 ${
+                        activeTab === "services"
+                          ? "text-primary"
+                          : "text-gray-400"
+                      }`}
+                    />
+                    <Text
+                      className={`font-msemibold text-xs ${
+                        activeTab === "services"
+                          ? "text-primary"
+                          : "text-gray-500"
+                      }`}
+                    >
+                      Services
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
 
               {/* Tab Content */}
-              <View className="px-4 py-4">
-                <ProfileTabContent
-                  activeTab={activeTab}
-                  loadingPosts={loadingPosts}
-                  userImages={userImages}
-                  onImageClick={handleMediaClick}
-                  isVideoUrl={isVideoUrl}
-                  loadingProducts={loadingProducts}
-                  userProducts={userProducts}
-                />
+              <View className="min-h-[300px]">
+                {activeTab === "images" && (
+                  <View className="flex-row flex-wrap">
+                    {loadingPosts ? (
+                      <ActivityIndicator
+                        size="large"
+                        color="#059669"
+                        className="py-12 w-full"
+                      />
+                    ) : postThumbnails.length > 0 ? (
+                      postThumbnails.map((thumb) => {
+                        return (
+                          <View
+                            key={thumb.postId}
+                            className="w-[33.33%] aspect-[9/12] p-[1px]"
+                          >
+                            <TouchableOpacity
+                              className="flex-1 bg-gray-100 relative"
+                              onPress={() => {
+                                setSelectedPost(thumb.post);
+                                setSelectedMediaIndex(0);
+                                setShowImageViewer(true);
+                              }}
+                            >
+                              {thumb.isVideo ? (
+                                <VideoThumb uri={thumb.thumbnailUrl} />
+                              ) : (
+                                <Image
+                                  source={{ uri: thumb.thumbnailUrl }}
+                                  className="w-full h-full"
+                                  resizeMode="cover"
+                                />
+                              )}
+                              {/* Stacked icon for multi-image posts */}
+                              {thumb.mediaCount > 1 && (
+                                <View className="absolute top-1.5 right-1.5">
+                                  <Copy size={14} color="#fff" strokeWidth={2} />
+                                </View>
+                              )}
+                              {/* Video indicator */}
+                              {thumb.isVideo && thumb.mediaCount <= 1 && (
+                                <View className="absolute top-1.5 right-1.5">
+                                  <Play size={14} color="#fff" strokeWidth={1.5} />
+                                </View>
+                              )}
+                            </TouchableOpacity>
+                          </View>
+                        );
+                      })
+                    ) : (
+                      <View className="w-full py-12 items-center">
+                        <Grid size={40} strokeWidth={1.5} className="text-gray-300 mb-2" />
+                        <Text className="text-gray-400 font-medium">
+                          No medias shared yet
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+
+                {activeTab === "products" && (
+                  <View className="flex-row flex-wrap">
+                    {loadingProducts ? (
+                      <ActivityIndicator
+                        size="large"
+                        color="#059669"
+                        className="py-12 w-full"
+                      />
+                    ) : userProducts.length > 0 ? (
+                      userProducts.map((product) => (
+                        <View key={product.id} className="w-[50%] p-2">
+                          <TouchableOpacity
+                            onPress={() =>
+                              router.push(
+                                `/(users)/product/${product.id}` as any,
+                              )
+                            }
+                            className="bg-white rounded-xl overflow-hidden border border-gray-100"
+                          >
+                            {product.images && product.images.length > 0 ? (
+                              <Image
+                                source={{ uri: product.images[0] }}
+                                className="w-full h-40"
+                                resizeMode="cover"
+                              />
+                            ) : (
+                              <View className="w-full h-40 bg-gray-100 items-center justify-center">
+                                <ShoppingBag size={32} strokeWidth={1.5} className="text-gray-300" />
+                              </View>
+                            )}
+                            <View className="p-3">
+                              <Text
+                                className="text-sm font-msemibold text-gray-900"
+                                numberOfLines={2}
+                              >
+                                {product.name}
+                              </Text>
+                              <Text
+                                className="text-xs font-regular text-gray-500 mt-1"
+                                numberOfLines={1}
+                              >
+                                {product.category}
+                              </Text>
+                              <Text className="text-base font-mbold text-primary mt-2">
+                                Nu. {product.price.toLocaleString()}
+                              </Text>
+                            </View>
+                          </TouchableOpacity>
+                        </View>
+                      ))
+                    ) : (
+                      <View className="w-full py-12 items-center">
+                        <ShoppingBag size={40} strokeWidth={1.5} className="text-gray-300 mb-2" />
+                        <Text className="text-gray-400 font-mmedium">
+                          No products listed
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+
+                {activeTab === "services" && (
+                  <View className="items-center justify-center py-12">
+                    <Wrench size={40} strokeWidth={1.5} className="text-gray-300 mb-2" />
+                    <Text className="text-gray-400 font-mmedium">
+                      Manage services in the Work tab
+                    </Text>
+                  </View>
+                )}
               </View>
             </ScrollView>
           </View>
@@ -1774,6 +2084,8 @@ export default function ProfileScreen() {
           username={currentUser?.name || "User"}
           likes={selectedPost.likes}
           comments={selectedPost.comments}
+          postId={selectedPost.id}
+          postUserId={selectedPost.user_id}
         />
       )}
 

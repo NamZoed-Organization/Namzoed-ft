@@ -1,13 +1,13 @@
 import { bannerData } from "@/data/bannerData";
 import { useRef, useState } from "react";
 import {
-  Animated,
-  Dimensions,
-  Image,
-  Linking,
-  Pressable,
-  Text,
-  View,
+    Animated,
+    Dimensions,
+    Image,
+    Linking,
+    Pressable,
+    Text,
+    View,
 } from "react-native";
 
 const { width } = Dimensions.get("window");
@@ -16,6 +16,8 @@ const CARD_WIDTH = width * 0.9;
 export default function Banner() {
   const scrollX = useRef(new Animated.Value(0)).current;
   const [activeIndex, setActiveIndex] = useState(0);
+
+  if (bannerData.length === 0) return null;
 
   const handleScroll = Animated.event(
     [{ nativeEvent: { contentOffset: { x: scrollX } } }],
@@ -48,7 +50,7 @@ export default function Banner() {
               {item.body}
             </Text>
             <Pressable
-              onPress={() => Linking.openURL("https://google.com")}
+              onPress={() => Linking.openURL(item.link || "https://namzoed.com")}
               className="self-start px-5 py-2 rounded-full bg-white"
             >
               <Text className="text-sm font-medium text-black">

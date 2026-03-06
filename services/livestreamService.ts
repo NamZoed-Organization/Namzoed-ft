@@ -1,4 +1,6 @@
+import { getFollowerIdsOf } from "@/lib/followService";
 import { supabase } from "@/lib/supabase";
+import { notifyUserWentLive } from "@/services/notificationService";
 
 export type LivestreamType = "business" | "entertainment";
 
@@ -36,7 +38,7 @@ export interface CoHostRequest {
   user_id: string;
   username: string;
   profile_image?: string | null;
-  status: "pending" | "accepted" | "rejected";
+  status: "pending" | "accepted" | "rejected" | "invited";
   created_at: string;
 }
 
@@ -261,7 +263,21 @@ export async function createLivestreamRecord(
     throw error ?? new Error("Unable to create livestream record");
   }
 
-  return data as Livestream;
+  const livestream = data as Livestream;
+
+  // Fire-and-forget: notify all followers that this user went live
+  (async () => {
+    try {
+      const followerIds = await getFollowerIdsOf(payload.user_id);
+      if (followerIds.length > 0) {
+        await notifyUserWentLive(payload.user_id, livestream.id, followerIds);
+      }
+    } catch (e) {
+      console.warn("[livestreamService] notifyUserWentLive failed:", e);
+    }
+  })();
+
+  return livestream;
 }
 
 export async function endLivestreamRecord(
@@ -508,10 +524,11 @@ export function subscribeToCoHostRequests(
 
 export function subscribeToViewerCount(
   livestreamId: string,
-  onCountChange: (count: number) => void
+  onCountChange: (count: number) => void,
+  channelPrefix = "viewer-count"
 ): () => void {
   const channel = supabase
-    .channel(`viewer-count-${livestreamId}`)
+    .channel(`${channelPrefix}-${livestreamId}`)
     .on(
       "postgres_changes",
       {

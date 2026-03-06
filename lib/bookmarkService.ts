@@ -116,6 +116,8 @@ export const getUserBookmarks = async (userId: string) => {
         id,
         created_at,
         post_id,
+        product_id,
+        marketplace_id,
         posts (
           id,
           user_id,
@@ -124,7 +126,30 @@ export const getUserBookmarks = async (userId: string) => {
           created_at,
           likes,
           comments,
-          shares
+          shares,
+          tagged_products,
+          tagged_accounts,
+          profiles:user_id (
+            name,
+            avatar_url
+          )
+        ),
+        products (
+          id,
+          user_id,
+          name,
+          price,
+          images,
+          is_discount_active,
+          discount_percent
+        ),
+        marketplace (
+          id,
+          user_id,
+          title,
+          price,
+          images,
+          type
         )
       `)
       .eq('user_id', userId)

@@ -1,27 +1,51 @@
+import CommentsModal from "@/components/modals/CommentsModal";
 import DeleteConfirmationModal from "@/components/modals/DeleteConfirmationModal";
-import ImageViewer from "@/components/modals/ImageViewer";
+import LikesListModal from "@/components/modals/LikesListModal";
 import PostActionSheet from "@/components/modals/PostActionSheet";
 import ReportPostModal from "@/components/modals/ReportPostModal";
+import TaggedItemsModal from "@/components/modals/TaggedItemsModal";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { useUser } from "@/contexts/UserContext";
+import { useLivestreams } from "@/hooks/useLivestreams";
+import {
+  hasUserBookmarkedPost,
+  togglePostBookmark,
+} from "@/lib/bookmarkService";
+import { getPostCommentCount } from "@/lib/commentsService";
+import {
+  getFollowedLikers,
+  getPostLikeCount,
+  hasUserLikedPost,
+  togglePostLike,
+} from "@/lib/likesService";
 import { deletePost } from "@/lib/postsService";
-import { hasUserLikedPost, togglePostLike, getPostLikeCount } from "@/lib/likesService";
-import { hasUserBookmarkedPost, togglePostBookmark } from "@/lib/bookmarkService";
+import { playSound } from "@/lib/soundUtils";
 import { PostData } from "@/types/post";
 import { feedEvents } from "@/utils/feedEvents";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
+import { useVideoPlayer, VideoView } from "expo-video";
 import {
   Bookmark,
+  Copy,
   Heart,
   MessageCircle,
   MoreHorizontal,
-  Play,
+  Tag,
+  Volume2,
+  VolumeX,
 } from "lucide-react-native";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
+  Dimensions,
+  Easing,
+  FlatList,
+  GestureResponderEvent,
   Image,
   Modal,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -34,26 +58,30 @@ export { default as PostSkeleton } from "@/components/ui/PostSkeleton";
 interface FeedPostProps {
   post: PostData;
   isVisible?: boolean;
-  onVideoTap?: (videoUri: string) => void;
 }
 
 const formatDate = (date: Date): string => {
   const now = new Date();
-  const diffInHours = Math.floor(
-    (now.getTime() - date.getTime()) / (1000 * 60 * 60),
-  );
+  const diffMs = now.getTime() - date.getTime();
+  const diffSec = Math.floor(diffMs / 1000);
+  const diffMin = Math.floor(diffSec / 60);
+  const diffHr = Math.floor(diffMin / 60);
+  const diffDays = Math.floor(diffHr / 24);
 
-  if (diffInHours < 1) {
-    return "Just now";
-  } else if (diffInHours < 24) {
-    return `${diffInHours}h`;
-  } else {
-    return date.toLocaleDateString("en-GB", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
+  if (diffSec < 60) return diffSec <= 0 ? "now" : `${diffSec}s`;
+  if (diffMin < 60) return `${diffMin}m`;
+  if (diffHr < 24) return `${diffHr}h`;
+  if (diffDays < 7) return `${diffDays}d`;
+
+  const sameYear = now.getFullYear() === date.getFullYear();
+  if (sameYear) {
+    return date.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
   }
+  return date.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 };
 
 const isVideoUrl = (url: string): boolean => {
@@ -65,207 +93,560 @@ const isVideoUrl = (url: string): boolean => {
   );
 };
 
-const ImageSkeleton = ({
-  width,
-  height,
-}: {
-  width: string;
-  height: string;
-}) => {
-  const shimmerOpacity = React.useRef(new Animated.Value(0.3)).current;
-  const animationRef = React.useRef<Animated.CompositeAnimation | null>(null);
+const SCREEN_WIDTH = Dimensions.get("window").width;
+const MEDIA_ASPECT = 4 / 5;
+const MEDIA_HEIGHT = SCREEN_WIDTH * MEDIA_ASPECT;
 
-  React.useEffect(() => {
-    animationRef.current = Animated.loop(
-      Animated.sequence([
-        Animated.timing(shimmerOpacity, {
-          toValue: 0.7,
-          duration: 800,
-          useNativeDriver: true,
-        }),
-        Animated.timing(shimmerOpacity, {
-          toValue: 0.3,
-          duration: 800,
-          useNativeDriver: true,
-        }),
-      ]),
+interface MediaCarouselProps {
+  images: string[];
+  onDoubleTapAt?: (x: number, y: number) => void;
+  isVisible?: boolean;
+  hasTaggedItems: boolean;
+  onTagPress: () => void;
+}
+
+function VideoLoadingShimmer() {
+  const shimmer = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.timing(shimmer, {
+        toValue: 1,
+        duration: 1100,
+        easing: Easing.inOut(Easing.ease),
+        useNativeDriver: true,
+      })
     );
-    animationRef.current.start();
+    anim.start();
+    return () => anim.stop();
+  }, []);
+
+  const translateX = shimmer.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-SCREEN_WIDTH, SCREEN_WIDTH],
+  });
+
+  return (
+    <View
+      pointerEvents="none"
+      style={{
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: 2,
+        backgroundColor: 'rgba(255,255,255,0.15)',
+        overflow: 'hidden',
+      }}
+    >
+      <Animated.View
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: SCREEN_WIDTH * 0.45,
+          height: 2,
+          borderRadius: 1,
+          backgroundColor: 'rgba(255,255,255,0.75)',
+          transform: [{ translateX }],
+        }}
+      />
+    </View>
+  );
+}
+
+interface InlineVideoPlayerProps {
+  uri: string;
+  isVisible: boolean;
+  onDoubleTapAt?: (x: number, y: number) => void;
+}
+
+function InlineVideoPlayer({ uri, isVisible, onDoubleTapAt }: InlineVideoPlayerProps) {
+  const [isHolding, setIsHolding] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const holdTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastTapRef = useRef(0);
+  const lastTapPosRef = useRef({ x: 0, y: 0 });
+  const muteIconOpacity = useRef(new Animated.Value(1)).current;
+  const muteIconTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const timerOpacity = useRef(new Animated.Value(0)).current;
+  const timerVisible = useRef(false);
+  const timerFadeTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [timerLabel, setTimerLabel] = useState("");
+
+  const player = useVideoPlayer(uri, (p) => {
+    p.loop = true;
+    p.muted = true;
+  });
+
+  // Sync muted state to player
+  useEffect(() => {
+    if (!player) return;
+    player.muted = isMuted;
+  }, [isMuted, player]);
+
+  // Flash mute icon briefly on toggle
+  const showMuteIcon = () => {
+    if (muteIconTimeout.current) clearTimeout(muteIconTimeout.current);
+    muteIconOpacity.setValue(1);
+    muteIconTimeout.current = setTimeout(() => {
+      Animated.timing(muteIconOpacity, {
+        toValue: 0,
+        duration: 600,
+        useNativeDriver: true,
+      }).start();
+    }, 1200);
+  };
+
+  // Show mute icon on mount (video starts muted)
+  useEffect(() => {
+    showMuteIcon();
+    return () => {
+      if (muteIconTimeout.current) clearTimeout(muteIconTimeout.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!player) return;
+    if (isVisible && !isHolding) {
+      player.play();
+    } else {
+      player.pause();
+    }
+  }, [isVisible, isHolding, player]);
+
+  useEffect(() => {
+    if (!player) return;
+    const interval = setInterval(() => {
+      setCurrentTime(player.currentTime ?? 0);
+      setDuration(player.duration ?? 0);
+      setIsLoading(player.status === 'idle' || player.status === 'loading');
+    }, 250);
+    return () => clearInterval(interval);
+  }, [player]);
+
+  // Show timer for 3s on each visibility entry, then fade out
+  useEffect(() => {
+    if (!isVisible) {
+      // Reset so it shows again next time
+      timerOpacity.stopAnimation();
+      timerOpacity.setValue(0);
+      timerVisible.current = false;
+      if (timerFadeTimeout.current) {
+        clearTimeout(timerFadeTimeout.current);
+        timerFadeTimeout.current = null;
+      }
+      return;
+    }
+
+    // Capture current remaining when becoming visible
+    const secs = duration > 0
+      ? Math.max(0, Math.ceil(duration - (player.currentTime ?? 0)))
+      : null;
+    const label = secs !== null
+      ? `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`
+      : "";
+    setTimerLabel(label);
+
+    timerVisible.current = true;
+    timerOpacity.setValue(1);
+
+    timerFadeTimeout.current = setTimeout(() => {
+      Animated.timing(timerOpacity, {
+        toValue: 0,
+        duration: 500,
+        useNativeDriver: true,
+      }).start(() => {
+        timerVisible.current = false;
+      });
+    }, 3000);
 
     return () => {
-      if (animationRef.current) {
-        animationRef.current.stop();
-        animationRef.current = null;
+      if (timerFadeTimeout.current) {
+        clearTimeout(timerFadeTimeout.current);
+        timerFadeTimeout.current = null;
       }
     };
-  }, []); // Remove shimmerOpacity from deps to prevent recreation
+  }, [isVisible]);
+
+  const handlePressIn = (event: GestureResponderEvent) => {
+    lastTapPosRef.current = {
+      x: event.nativeEvent.locationX,
+      y: event.nativeEvent.locationY,
+    };
+    holdTimeoutRef.current = setTimeout(() => {
+      setIsHolding(true);
+    }, 150);
+  };
+
+  const handlePressOut = () => {
+    if (holdTimeoutRef.current) {
+      clearTimeout(holdTimeoutRef.current);
+      holdTimeoutRef.current = null;
+    }
+    if (!isHolding) {
+      const now = Date.now();
+      if (now - lastTapRef.current < 300) {
+        // Double tap
+        onDoubleTapAt?.(lastTapPosRef.current.x, lastTapPosRef.current.y);
+      } else {
+        // Single tap: toggle mute
+        setIsMuted((prev) => {
+          showMuteIcon();
+          return !prev;
+        });
+      }
+      lastTapRef.current = now;
+    }
+    setIsHolding(false);
+  };
+
+  return (
+    <View style={{ width: SCREEN_WIDTH, height: MEDIA_HEIGHT }}>
+      <TouchableWithoutFeedback onPressIn={handlePressIn} onPressOut={handlePressOut}>
+        <View style={{ flex: 1 }}>
+          <VideoView
+            player={player}
+            style={{ width: SCREEN_WIDTH, height: MEDIA_HEIGHT }}
+            contentFit="cover"
+            nativeControls={false}
+            fullscreenOptions={{ enable: false }}
+          />
+          {isLoading && <VideoLoadingShimmer />}
+          <Animated.Text
+            style={{
+              position: "absolute",
+              top: 10,
+              right: 12,
+              color: "#fff",
+              fontSize: 13,
+              fontWeight: "600",
+              opacity: timerOpacity,
+            }}
+            pointerEvents="none"
+          >
+            {timerLabel}
+          </Animated.Text>
+          {/* Mute/unmute icon */}
+          <Animated.View
+            style={{
+              position: "absolute",
+              bottom: 12,
+              right: 12,
+              backgroundColor: "rgba(0,0,0,0.4)",
+              borderRadius: 20,
+              padding: 6,
+              opacity: muteIconOpacity,
+            }}
+            pointerEvents="none"
+          >
+            {isMuted
+              ? <VolumeX size={16} color="#fff" />
+              : <Volume2 size={16} color="#fff" />}
+          </Animated.View>
+        </View>
+      </TouchableWithoutFeedback>
+    </View>
+  );
+}
+
+const MediaCarousel = React.memo(
+  ({ images, onDoubleTapAt, isVisible = true, hasTaggedItems, onTagPress }: MediaCarouselProps) => {
+    const [activeIndex, setActiveIndex] = useState(0);
+    const multipleMedia = images.length > 1;
+    const lastTapRef = useRef(0);
+
+    const handleImageTap = useCallback((event: GestureResponderEvent) => {
+      const now = Date.now();
+      if (now - lastTapRef.current < 300) {
+        onDoubleTapAt?.(event.nativeEvent.locationX, event.nativeEvent.locationY);
+      }
+      lastTapRef.current = now;
+    }, [onDoubleTapAt]);
+
+    const handleScroll = useCallback(
+      (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+        const x = e.nativeEvent.contentOffset.x;
+        const idx = Math.round(x / SCREEN_WIDTH);
+        setActiveIndex(idx);
+      },
+      []
+    );
+
+    const renderItem = useCallback(
+      ({ item, index }: { item: string; index: number }) => {
+        const isVideo = isVideoUrl(item);
+
+        if (isVideo) {
+          return (
+            <InlineVideoPlayer
+              uri={item}
+              isVisible={isVisible && activeIndex === index}
+              onDoubleTapAt={onDoubleTapAt}
+            />
+          );
+        }
+
+        return (
+          <TouchableOpacity
+            onPress={handleImageTap}
+            activeOpacity={1}
+            style={{ width: SCREEN_WIDTH, height: MEDIA_HEIGHT }}
+          >
+            <Image
+              source={{ uri: item }}
+              style={{ width: "100%", height: "100%", backgroundColor: "#F3F4F6" }}
+              resizeMode="cover"
+            />
+          </TouchableOpacity>
+        );
+      },
+      [handleImageTap, isVisible, activeIndex, onDoubleTapAt]
+    );
+
+    if (images.length === 0) return null;
+
+    return (
+      <View>
+        {multipleMedia ? (
+          <FlatList
+            data={images}
+            keyExtractor={(_, i) => i.toString()}
+            renderItem={renderItem}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onScroll={handleScroll}
+            scrollEventThrottle={16}
+            style={{ height: MEDIA_HEIGHT }}
+          />
+        ) : (
+          renderItem({ item: images[0], index: 0 })
+        )}
+
+        {multipleMedia && (
+          <View style={styles.stackIcon}>
+            <Copy size={14} color="#fff" />
+          </View>
+        )}
+
+        {hasTaggedItems && (
+          <TouchableOpacity
+            onPress={onTagPress}
+            style={styles.tagButton}
+            activeOpacity={0.8}
+          >
+            <Tag size={12} color="#fff" />
+          </TouchableOpacity>
+        )}
+
+        {multipleMedia && (
+          <View style={styles.dotsContainer}>
+            {images.map((_, i) => (
+              <View
+                key={i}
+                style={[
+                  styles.dot,
+                  i === activeIndex ? styles.dotActive : styles.dotInactive,
+                ]}
+              />
+            ))}
+          </View>
+        )}
+      </View>
+    );
+  }
+);
+
+const HEADER_HEIGHT = 56;
+const HEART_BTN_X = 26;
+const HEART_BTN_Y = HEADER_HEIGHT + MEDIA_HEIGHT + 22;
+const FLY_SIZE = 72;
+const FLY_DURATION = 700;
+
+interface FlyingHeartProps {
+  startX: number;
+  startY: number;
+  onDone: () => void;
+}
+
+function FlyingHeart({ startX, startY, onDone }: FlyingHeartProps) {
+  const progress = useRef(new Animated.Value(0)).current;
+  const scale = useRef(new Animated.Value(0)).current;
+  const opacity = useRef(new Animated.Value(1)).current;
+  const rotate = useRef(new Animated.Value(0)).current;
+
+  // Physics: solve for initial y-velocity so the parabola lands exactly at endY
+  const T = FLY_DURATION / 1000;
+  const g = 2600; // gravity px/s² — higher = sharper downward arc
+  const endX = HEART_BTN_X;
+  const endY = HEART_BTN_Y;
+  const vx = (endX - startX) / T;
+  const vy = (endY - startY - 0.5 * g * T * T) / T; // negative = initially upward
+
+  // Sample the parabola at STEPS+1 evenly-spaced points for interpolation
+  const STEPS = 28;
+  const inputRange = Array.from({ length: STEPS + 1 }, (_, i) => i / STEPS);
+  const xOutputRange = inputRange.map(p => {
+    const t = p * T;
+    return startX + vx * t - FLY_SIZE / 2;
+  });
+  const yOutputRange = inputRange.map(p => {
+    const t = p * T;
+    return startY + vy * t + 0.5 * g * t * t - FLY_SIZE / 2;
+  });
+
+  const translateX = progress.interpolate({ inputRange, outputRange: xOutputRange });
+  const translateY = progress.interpolate({ inputRange, outputRange: yOutputRange });
+  const rotation = rotate.interpolate({
+    inputRange: [-1, 0, 1],
+    outputRange: ['-22deg', '0deg', '22deg'],
+  });
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(progress, {
+        toValue: 1,
+        duration: FLY_DURATION,
+        useNativeDriver: true,
+        easing: Easing.linear,
+      }),
+      Animated.sequence([
+        Animated.spring(scale, { toValue: 1.15, useNativeDriver: true, damping: 4, stiffness: 320 }),
+        Animated.timing(scale, { toValue: 0.18, duration: 430, useNativeDriver: true }),
+      ]),
+      Animated.sequence([
+        Animated.delay(470),
+        Animated.timing(opacity, { toValue: 0, duration: 200, useNativeDriver: true }),
+      ]),
+      Animated.sequence([
+        Animated.timing(rotate, { toValue: 1, duration: 120, useNativeDriver: true }),
+        Animated.timing(rotate, { toValue: -0.6, duration: 120, useNativeDriver: true }),
+        Animated.timing(rotate, { toValue: 0.3, duration: 100, useNativeDriver: true }),
+        Animated.timing(rotate, { toValue: 0, duration: 100, useNativeDriver: true }),
+      ]),
+    ]).start(() => onDone());
+  }, []);
 
   return (
     <Animated.View
-      className="bg-gray-300 absolute inset-0 rounded-lg"
-      style={{ opacity: shimmerOpacity }}
-    />
+      pointerEvents="none"
+      style={{
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        width: FLY_SIZE,
+        height: FLY_SIZE,
+        alignItems: 'center',
+        justifyContent: 'center',
+        opacity,
+        transform: [{ translateX }, { translateY }, { scale }, { rotate: rotation }],
+      }}
+    >
+      <Heart size={FLY_SIZE} color="#e91e63" fill="#e91e63" />
+    </Animated.View>
   );
-};
+}
 
-const PostImage = ({ imageUri, onPress, className, style }: any) => {
-  const [imageLoading, setImageLoading] = useState(true);
+interface MiniAvatarRowProps {
+  users: Array<{ id: string; name: string; avatar_url?: string | null }>;
+  totalLikes: number;
+  onPress: () => void;
+}
+
+const MiniAvatarRow = ({ users, totalLikes, onPress }: MiniAvatarRowProps) => {
+  if (users.length === 0 || totalLikes === 0) return null;
+
+  const remaining = totalLikes - users.length;
+
   return (
     <TouchableOpacity
       onPress={onPress}
-      activeOpacity={0.9}
-      className={className}
-      style={style}
+      style={{ flexDirection: "row", alignItems: "center", marginTop: 6 }}
+      activeOpacity={0.7}
     >
-      <View className="relative">
-        {imageLoading && <ImageSkeleton width="100%" height="100%" />}
-        <Image
-          source={{ uri: imageUri }}
-          className="w-full h-full"
-          resizeMode="cover"
-          onLoad={() => setImageLoading(false)}
-          onError={() => setImageLoading(false)}
-        />
-      </View>
-    </TouchableOpacity>
-  );
-};
-
-interface PostVideoProps {
-  videoUri: string;
-  className?: string;
-  style?: any;
-  onVideoTap: (videoUri: string) => void;
-}
-
-const PostVideo = ({ videoUri, className, style, onVideoTap }: PostVideoProps) => {
-  return (
-    <TouchableOpacity
-      onPress={() => onVideoTap(videoUri)}
-      activeOpacity={0.85}
-      className={className}
-      style={[videoPreviewStyles.container, style]}
-    >
-      <View style={videoPreviewStyles.videoWrapper}>
-        {/* Static video thumbnail placeholder */}
-        <Image
-          source={{ uri: videoUri }}
-          style={videoPreviewStyles.videoPlayer}
-          resizeMode="cover"
-        />
-
-        <View style={videoPreviewStyles.overlay}>
-          <View style={videoPreviewStyles.playButton}>
-            <Play size={52} color="#000" fill="#000" strokeWidth={0} />
+      <View style={{ flexDirection: "row", marginRight: 8 }}>
+        {users.slice(0, 3).map((u, i) => (
+          <View
+            key={u.id}
+            style={{
+              width: 22,
+              height: 22,
+              borderRadius: 11,
+              borderWidth: 2,
+              borderColor: "#fff",
+              marginLeft: i > 0 ? -8 : 0,
+              zIndex: 3 - i,
+              overflow: "hidden",
+              backgroundColor: "#094569",
+            }}
+          >
+            {u.avatar_url ? (
+              <Image source={{ uri: u.avatar_url }} style={{ width: "100%", height: "100%" }} />
+            ) : (
+              <View
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Text style={{ color: "#fff", fontSize: 8, fontWeight: "bold" }}>
+                  {u.name.charAt(0).toUpperCase()}
+                </Text>
+              </View>
+            )}
           </View>
-        </View>
-
-        {/* Video badge indicator */}
-        <View style={videoPreviewStyles.videoBadge}>
-          <Text style={videoPreviewStyles.videoBadgeText}>VIDEO</Text>
-        </View>
+        ))}
       </View>
+      <Text style={{ fontSize: 12, color: "#374151" }}>
+        {"Liked by "}
+        <Text style={{ fontWeight: "600" }}>{users[0].name}</Text>
+        {remaining > 0 && (
+          <>
+            {" and "}
+            <Text style={{ fontWeight: "600" }}>
+              {remaining.toLocaleString()} {remaining === 1 ? "other" : "others"}
+            </Text>
+          </>
+        )}
+      </Text>
     </TouchableOpacity>
   );
 };
 
-// Helper to handle layout logic for images
-const renderImages = (
-  images: string[],
-  onImagePress: (index: number) => void,
-  postId: string,
-  onVideoTap?: (videoUri: string) => void,
-  postContent?: string,
-  username?: string,
-  likes?: number,
-  comments?: number,
-  isVisible?: boolean,
-) => {
-  if (images.length === 0) return null;
-
-  const renderMediaItem = (
-    mediaUri: string,
-    index: number,
-    className: string,
-    style?: any,
-  ) => {
-    const isVideo = isVideoUrl(mediaUri);
-
-    if (isVideo) {
-      return (
-        <PostVideo
-          key={index}
-          videoUri={mediaUri}
-          className={className}
-          style={style}
-          onVideoTap={onVideoTap || (() => {})}
-        />
-      );
-    }
-
-    return (
-      <PostImage
-        key={index}
-        imageUri={mediaUri}
-        onPress={() => onImagePress(index)}
-        className={className}
-        style={style}
-      />
-    );
-  };
-
-  if (images.length === 1) {
-    return (
-      <View className="mt-3 rounded-lg overflow-hidden">
-        {renderMediaItem(images[0], 0, "w-full h-64")}
-      </View>
-    );
-  }
-  if (images.length === 2) {
-    return (
-      <View className="mt-3 flex-row gap-1 rounded-lg overflow-hidden">
-        {renderMediaItem(images[0], 0, "flex-1 h-48")}
-        {renderMediaItem(images[1], 1, "flex-1 h-48")}
-      </View>
-    );
-  }
-
-  const remainingCount = images.length - 3;
-  return (
-    <View className="mt-3 gap-1 rounded-lg overflow-hidden">
-      {renderMediaItem(images[0], 0, "w-full h-48")}
-      <View className="flex-row gap-1">
-        {renderMediaItem(images[1], 1, "flex-1 h-32")}
-        <View className="flex-1 relative">
-          {renderMediaItem(images[2], 2, "w-full h-32")}
-          {remainingCount > 0 && (
-            <View className="absolute inset-0 bg-black/60 items-center justify-center z-10">
-              <Text className="text-white font-bold text-xl">
-                +{remainingCount}
-              </Text>
-            </View>
-          )}
-        </View>
-      </View>
-    </View>
-  );
-};
-
-export default function FeedPost({ post, isVisible = true, onVideoTap }: FeedPostProps) {
+export default function FeedPost({ post, isVisible = true }: FeedPostProps) {
   const [isLiked, setIsLiked] = useState(false);
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [likesCount, setLikesCount] = useState(post.likes);
-  const [showImageViewer, setShowImageViewer] = useState(false);
-  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [commentsCount, setCommentsCount] = useState(post.comments);
+  const [followedLikers, setFollowedLikers] = useState<
+    Array<{ id: string; name: string; avatar_url?: string | null }>
+  >([]);
   const [showReportModal, setShowReportModal] = useState(false);
   const [showActionSheet, setShowActionSheet] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [showError, setShowError] = useState(false);
   const [popupMessage, setPopupMessage] = useState("");
+  const [showTaggedItems, setShowTaggedItems] = useState(false);
+  const [showComments, setShowComments] = useState(false);
+  const [showLikesList, setShowLikesList] = useState(false);
+  const [flyingHearts, setFlyingHearts] = useState<Array<{ id: number; x: number; y: number }>>([]);
+  const flyHeartId = useRef(0);
+
+  const hasTaggedProducts = (post.tagged_products?.length ?? 0) > 0;
+  const hasTaggedAccounts = (post.tagged_accounts?.length ?? 0) > 0;
+  const hasTaggedItems = hasTaggedProducts || hasTaggedAccounts;
   const { currentUser } = useUser();
   const router = useRouter();
 
   const isOwnPost = currentUser?.id === post.userId;
+  const { getLivestreamForUser } = useLivestreams();
+  const isAuthorLive = !!getLivestreamForUser(post.userId);
 
   const showErrorPopup = (message: string) => {
     setPopupMessage(message);
@@ -273,34 +654,27 @@ export default function FeedPost({ post, isVisible = true, onVideoTap }: FeedPos
     setTimeout(() => setShowError(false), 2500);
   };
 
-  // Check if post is bookmarked and liked on mount and when ImageViewer closes
   useEffect(() => {
-    // Skip when ImageViewer is open
-    if (showImageViewer) return;
-
-    const checkBookmarkStatus = async () => {
+    const load = async () => {
       if (!currentUser?.id) return;
 
-      // Check if user has bookmarked the post
-      const bookmarked = await hasUserBookmarkedPost(post.id, currentUser.id);
+      const [bookmarked, liked, likeCount, commentCount] = await Promise.all([
+        hasUserBookmarkedPost(post.id, currentUser.id),
+        hasUserLikedPost(post.id, currentUser.id),
+        getPostLikeCount(post.id),
+        getPostCommentCount(post.id),
+      ]);
       setIsBookmarked(bookmarked);
-    };
-
-    const checkLikeStatus = async () => {
-      if (!currentUser?.id) return;
-
-      // Check if user has liked the post
-      const liked = await hasUserLikedPost(post.id, currentUser.id);
       setIsLiked(liked);
+      setLikesCount(likeCount);
+      setCommentsCount(commentCount);
 
-      // Get actual like count from database
-      const count = await getPostLikeCount(post.id);
-      setLikesCount(count);
+      const fLikers = await getFollowedLikers(post.id, currentUser.id, 3);
+      setFollowedLikers(fLikers);
     };
 
-    checkBookmarkStatus();
-    checkLikeStatus();
-  }, [showImageViewer, currentUser?.id, post.id]);
+    load();
+  }, [currentUser?.id, post.id]);
 
   const handleLike = async () => {
     if (!currentUser?.id) {
@@ -308,69 +682,80 @@ export default function FeedPost({ post, isVisible = true, onVideoTap }: FeedPos
       return;
     }
 
-    // Optimistic update
     const previousLiked = isLiked;
     const previousCount = likesCount;
-
+    if (!isLiked) void playSound('like');
     setIsLiked(!isLiked);
     setLikesCount(isLiked ? likesCount - 1 : likesCount + 1);
 
     try {
-      // Toggle like in database
       const result = await togglePostLike(post.id, currentUser.id, isLiked);
-
       if (!result.success) {
-        // Rollback on failure
         setIsLiked(previousLiked);
         setLikesCount(previousCount);
         showErrorPopup("Failed to update like. Please try again.");
       } else {
-        // Update with actual values from database
         setIsLiked(result.isLiked);
         setLikesCount(result.likeCount);
       }
-    } catch (error) {
-      console.error("Error toggling like:", error);
-      // Rollback on error
+    } catch {
       setIsLiked(previousLiked);
       setLikesCount(previousCount);
       showErrorPopup("Failed to update like. Please try again.");
     }
   };
 
+  const handleDoubleTapLike = async () => {
+    if (!currentUser?.id || isLiked) return;
+    void playSound('like');
+    setIsLiked(true);
+    setLikesCount(prev => prev + 1);
+    try {
+      const result = await togglePostLike(post.id, currentUser.id, false);
+      if (!result.success) {
+        setIsLiked(false);
+        setLikesCount(prev => prev - 1);
+      } else {
+        setIsLiked(result.isLiked);
+        setLikesCount(result.likeCount);
+      }
+    } catch {
+      setIsLiked(false);
+      setLikesCount(prev => prev - 1);
+    }
+  };
+
+  const handleDoubleTapAt = (x: number, y: number) => {
+    handleDoubleTapLike();
+    const id = ++flyHeartId.current;
+    setFlyingHearts(prev => [...prev, { id, x, y: y + HEADER_HEIGHT }]);
+  };
+
+  const removeFlyingHeart = (id: number) => {
+    setFlyingHearts(prev => prev.filter(h => h.id !== id));
+  };
+
   const handleBookmark = async () => {
     if (!currentUser?.id) {
-      showErrorPopup("Please sign in to bookmark posts");
+      showErrorPopup("Please sign in to save posts");
       return;
     }
 
-    // Optimistic update
     const previousBookmarked = isBookmarked;
     setIsBookmarked(!isBookmarked);
 
     try {
-      // Toggle bookmark in database
       const result = await togglePostBookmark(post.id, currentUser.id, isBookmarked);
-
       if (!result.success) {
-        // Rollback on failure
         setIsBookmarked(previousBookmarked);
-        showErrorPopup("Failed to update bookmark. Please try again.");
+        showErrorPopup("Failed to save post. Please try again.");
       } else {
-        // Update with actual value from database
         setIsBookmarked(result.isBookmarked);
       }
-    } catch (error) {
-      console.error("Error toggling bookmark:", error);
-      // Rollback on error
+    } catch {
       setIsBookmarked(previousBookmarked);
-      showErrorPopup("Failed to update bookmark. Please try again.");
+      showErrorPopup("Failed to save post. Please try again.");
     }
-  };
-
-  const handleImagePress = (index: number) => {
-    setSelectedImageIndex(index);
-    setShowImageViewer(true);
   };
 
   const handleDeletePress = () => {
@@ -382,9 +767,9 @@ export default function FeedPost({ post, isVisible = true, onVideoTap }: FeedPos
     try {
       await deletePost(post.id);
       setShowDeleteConfirmation(false);
-      feedEvents.emit('postDeleted', post.id);
+      feedEvents.emit("postDeleted", post.id);
     } catch (error) {
-      console.error('Error deleting post:', error);
+      console.error("Error deleting post:", error);
       setShowDeleteConfirmation(false);
     }
   };
@@ -394,122 +779,165 @@ export default function FeedPost({ post, isVisible = true, onVideoTap }: FeedPos
     setShowReportModal(true);
   };
 
-  const handleMessage = () => {
-    if (!currentUser?.id) {
-      showErrorPopup("Please sign in to send messages");
-      return;
-    }
-
+  const navigateToProfile = () => {
     if (isOwnPost) {
-      showErrorPopup("You cannot send a message to your own post");
-      return;
+      router.push("/(users)/profile" as any);
+    } else {
+      router.push(`/(users)/profile/${post.userId}` as any);
     }
-
-    // Navigate to chat with the post author
-    router.push(`/(users)/chat/${post.userId}` as any);
   };
 
   return (
-    <View className="bg-white border-b border-gray-200">
-      <View className="flex-row items-center justify-between p-4">
-        <View className="flex-row items-center flex-1">
-          <View className="w-10 h-10 rounded-full bg-gray-300 items-center justify-center mr-3 overflow-hidden">
-            {post.profilePic ? (
-              <Image
-                source={{ uri: post.profilePic }}
-                className="w-full h-full"
-              />
-            ) : (
-              <Text className="text-gray-600 font-semibold">
-                {post.username?.charAt(0) || "U"}
-              </Text>
-            )}
+    <View style={{ backgroundColor: "#fff" }}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          onPress={navigateToProfile}
+          style={{ flexDirection: "row", alignItems: "center", flex: 1 }}
+          activeOpacity={0.7}
+        >
+          {isAuthorLive ? (
+            <LinearGradient
+              colors={["#FF0080", "#FF3B30", "#FF8C00"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.liveRing}
+            >
+              <View style={styles.liveAvatarInner}>
+                {post.profilePic ? (
+                  <Image source={{ uri: post.profilePic }} style={styles.avatarImg} />
+                ) : (
+                  <Text style={styles.avatarFallback}>
+                    {post.username?.charAt(0) || "U"}
+                  </Text>
+                )}
+              </View>
+              <View style={styles.liveBadge}>
+                <Text style={styles.liveBadgeText}>LIVE</Text>
+              </View>
+            </LinearGradient>
+          ) : (
+            <View style={styles.avatar}>
+              {post.profilePic ? (
+                <Image source={{ uri: post.profilePic }} style={styles.avatarImg} />
+              ) : (
+                <Text style={styles.avatarFallback}>
+                  {post.username?.charAt(0) || "U"}
+                </Text>
+              )}
+            </View>
+          )}
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={styles.username}>{post.username || "Unknown"}</Text>
+            <Text style={styles.timestamp}>{formatDate(post.date)}</Text>
           </View>
-          <View className="flex-1">
-            <Text className="font-semibold text-gray-900 text-base">
-              {post.username || "Unknown"}
-            </Text>
-            <Text className="text-gray-500 text-sm">
-              {formatDate(post.date)}
-            </Text>
-          </View>
-        </View>
+        </TouchableOpacity>
         <TouchableOpacity onPress={() => setShowActionSheet(true)}>
           <MoreHorizontal size={20} color="#666" />
         </TouchableOpacity>
       </View>
 
-      <View className="px-4">
-        <Text className="text-gray-900 text-base leading-6">
-          {post.content}
-        </Text>
-      </View>
+      {/* Media */}
+      {post.images.length > 0 && (
+        <MediaCarousel
+          images={post.images}
+          onDoubleTapAt={handleDoubleTapAt}
+          isVisible={isVisible}
+          hasTaggedItems={hasTaggedItems}
+          onTagPress={() => setShowTaggedItems(true)}
+        />
+      )}
 
-      <View className="px-4">
-        {renderImages(
-          post.images,
-          handleImagePress,
-          post.id,
-          onVideoTap,
-          post.content,
-          post.username,
-          likesCount,
-          post.comments,
-          isVisible,
-        )}
-      </View>
-
-      <View className="border-t border-gray-200 px-4 py-4">
-        <View className="flex-row items-center justify-between">
-          <View className="flex-row items-center">
-            <TouchableOpacity
-              onPress={handleLike}
-              className="flex-row items-center mr-6"
-            >
-              <Heart
-                size={20}
-                color={isLiked ? "#e91e63" : "#666"}
-                fill={isLiked ? "#e91e63" : "none"}
-              />
-              <Text className="ml-1 font-medium text-gray-600">
-                {likesCount}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={handleBookmark}
-              className="flex-row items-center"
-            >
-              <Bookmark
-                size={20}
-                color={isBookmarked ? "#1976d2" : "#666"}
-                fill={isBookmarked ? "#1976d2" : "none"}
-              />
-            </TouchableOpacity>
-          </View>
+      {/* Action Bar */}
+      <View style={styles.actionBar}>
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <TouchableOpacity onPress={handleLike} style={styles.actionBtn}>
+            <Heart
+              size={24}
+              color={isLiked ? "#e91e63" : "#262626"}
+              fill={isLiked ? "#e91e63" : "none"}
+            />
+          </TouchableOpacity>
           <TouchableOpacity
-            className="flex-row items-center"
-            onPress={handleMessage}
+            onPress={() => setShowComments(true)}
+            style={styles.actionBtn}
           >
-            <MessageCircle size={20} color="#666" />
-            <Text className="ml-2 text-gray-600 font-medium">Message</Text>
+            <MessageCircle size={24} color="#262626" />
           </TouchableOpacity>
         </View>
+        <TouchableOpacity onPress={handleBookmark}>
+          <Bookmark
+            size={24}
+            color="#262626"
+            fill={isBookmarked ? "#262626" : "none"}
+          />
+        </TouchableOpacity>
       </View>
 
-      <ImageViewer
-        visible={showImageViewer}
-        images={post.images}
-        initialIndex={selectedImageIndex}
-        onClose={() => setShowImageViewer(false)}
-        postContent={post.content}
-        username={post.username}
-        likes={likesCount}
-        comments={post.comments}
-        postId={post.id}
-        postUserId={post.userId}
+      {/* Likes */}
+      <View style={styles.likesSection}>
+        {followedLikers.length > 0 ? (
+          <MiniAvatarRow
+            users={followedLikers}
+            totalLikes={likesCount}
+            onPress={() => setShowLikesList(true)}
+          />
+        ) : likesCount > 0 ? (
+          <TouchableOpacity onPress={() => setShowLikesList(true)}>
+            <Text style={styles.likeCount}>
+              {likesCount.toLocaleString()} {likesCount === 1 ? "like" : "likes"}
+            </Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
+
+      {/* Caption */}
+      {post.content ? (
+        <View style={styles.captionSection}>
+          <Text style={styles.captionText}>
+            <Text style={styles.captionUsername}>{post.username || "Unknown"}</Text>
+            {"  "}
+            {post.content}
+          </Text>
+        </View>
+      ) : null}
+
+      {/* View Comments */}
+      {commentsCount > 0 && (
+        <TouchableOpacity
+          onPress={() => setShowComments(true)}
+          style={styles.viewComments}
+        >
+          <Text style={styles.viewCommentsText}>
+            View all {commentsCount} {commentsCount === 1 ? "comment" : "comments"}
+          </Text>
+        </TouchableOpacity>
+      )}
+
+      <View style={styles.separator} />
+
+      {/* Modals */}
+      <TaggedItemsModal
+        visible={showTaggedItems}
+        onClose={() => setShowTaggedItems(false)}
+        products={post.tagged_products}
+        accounts={post.tagged_accounts}
       />
 
-      {/* Post Action Sheet */}
+      <CommentsModal
+        visible={showComments}
+        onClose={() => setShowComments(false)}
+        postId={post.id}
+        postOwnerId={post.userId}
+        onCommentCountChange={(count) => setCommentsCount(count)}
+      />
+
+      <LikesListModal
+        visible={showLikesList}
+        onClose={() => setShowLikesList(false)}
+        postId={post.id}
+      />
+
       <PostActionSheet
         visible={showActionSheet}
         onClose={() => setShowActionSheet(false)}
@@ -518,7 +946,6 @@ export default function FeedPost({ post, isVisible = true, onVideoTap }: FeedPos
         onReport={handleReportPress}
       />
 
-      {/* Delete Confirmation Modal */}
       <DeleteConfirmationModal
         visible={showDeleteConfirmation}
         onClose={() => setShowDeleteConfirmation(false)}
@@ -526,7 +953,6 @@ export default function FeedPost({ post, isVisible = true, onVideoTap }: FeedPos
         postContent={post.content}
       />
 
-      {/* Report Modal */}
       {currentUser?.id && post.userId && (
         <ReportPostModal
           visible={showReportModal}
@@ -538,13 +964,10 @@ export default function FeedPost({ post, isVisible = true, onVideoTap }: FeedPos
           }
           postOwnerId={post.userId}
           currentUserId={currentUser.id}
-          onReportSuccess={() => {
-            setShowReportModal(false);
-          }}
+          onReportSuccess={() => setShowReportModal(false)}
         />
       )}
 
-      {/* Error Popup - Rendered at screen level */}
       <Modal
         visible={showError}
         transparent={true}
@@ -557,58 +980,167 @@ export default function FeedPost({ post, isVisible = true, onVideoTap }: FeedPos
           </View>
         </TouchableWithoutFeedback>
       </Modal>
+      {flyingHearts.map(h => (
+        <FlyingHeart key={h.id} startX={h.x} startY={h.y} onDone={() => removeFlyingHeart(h.id)} />
+      ))}
     </View>
   );
 }
 
-const videoPreviewStyles = StyleSheet.create({
-  container: {
-    position: "relative",
-    width: "100%",
-    height: 300,
-    backgroundColor: "#000",
-    borderRadius: 8,
-    overflow: "hidden",
+const styles = StyleSheet.create({
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
-  videoWrapper: {
-    width: "100%",
-    height: "100%",
-    position: "relative",
-  },
-  videoPlayer: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    width: "100%",
-    height: "100%",
-  },
-  overlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+  avatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#D1D5DB",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.1)",
+    overflow: "hidden",
   },
-  playButton: {
-    backgroundColor: "rgba(255,255,255,0.8)",
-    borderRadius: 50,
-    padding: 15,
+  avatarImg: {
+    width: "100%",
+    height: "100%",
   },
-  videoBadge: {
+  avatarFallback: {
+    color: "#6B7280",
+    fontWeight: "600",
+    fontSize: 15,
+  },
+  liveRing: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  liveAvatarInner: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#D1D5DB",
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+    borderWidth: 2,
+    borderColor: "white",
+  },
+  liveBadge: {
     position: "absolute",
-    top: 8,
-    left: 8,
-    backgroundColor: "rgba(0,0,0,0.7)",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    bottom: -4,
+    alignSelf: "center",
+    backgroundColor: "#FF3B30",
     borderRadius: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderWidth: 1,
+    borderColor: "white",
   },
-  videoBadgeText: {
-    color: "#fff",
-    fontSize: 10,
-    fontWeight: "bold",
+  liveBadgeText: {
+    color: "white",
+    fontSize: 7,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+  },
+  username: {
+    fontWeight: "600",
+    color: "#262626",
+    fontSize: 14,
+  },
+  timestamp: {
+    color: "#9CA3AF",
+    fontSize: 12,
+    marginTop: 1,
+  },
+  stackIcon: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    borderRadius: 6,
+    padding: 6,
+  },
+  tagButton: {
+    position: "absolute",
+    bottom: 12,
+    left: 12,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    borderRadius: 20,
+    width: 30,
+    height: 30,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dotsContainer: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    position: "absolute",
+    bottom: 12,
+    left: 0,
+    right: 0,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginHorizontal: 3,
+  },
+  dotActive: {
+    backgroundColor: "#094569",
+  },
+  dotInactive: {
+    backgroundColor: "rgba(255,255,255,0.5)",
+  },
+  actionBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 4,
+  },
+  actionBtn: {
+    marginRight: 16,
+  },
+  likesSection: {
+    paddingHorizontal: 14,
+    minHeight: 4,
+  },
+  likeCount: {
+    fontWeight: "700",
+    fontSize: 13,
+    color: "#262626",
+  },
+  captionSection: {
+    paddingHorizontal: 14,
+    paddingTop: 4,
+  },
+  captionText: {
+    fontSize: 13,
+    color: "#262626",
+    lineHeight: 20,
+  },
+  captionUsername: {
+    fontWeight: "700",
+  },
+  viewComments: {
+    paddingHorizontal: 14,
+    paddingTop: 4,
+  },
+  viewCommentsText: {
+    fontSize: 13,
+    color: "#9CA3AF",
+  },
+  separator: {
+    height: 1,
+    backgroundColor: "#F3F4F6",
+    marginTop: 12,
   },
 });

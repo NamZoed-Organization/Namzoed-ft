@@ -1,3 +1,4 @@
+import { notifyPostLiked } from '@/services/notificationService';
 import { supabase } from './supabase';
 
 // Check if a user has liked a post
@@ -63,6 +64,22 @@ export const likePost = async (postId: string, userId: string): Promise<boolean>
       console.error('Error liking post:', error);
       return false;
     }
+
+    // Fire-and-forget: look up post owner and send notification
+    (async () => {
+      try {
+        const { data: post } = await supabase
+          .from('posts')
+          .select('user_id')
+          .eq('id', postId)
+          .maybeSingle();
+        if (post?.user_id && post.user_id !== userId) {
+          await notifyPostLiked(post.user_id, userId, postId);
+        }
+      } catch (e) {
+        console.warn('[likesService] notifyPostLiked failed:', e);
+      }
+    })();
 
     return true;
   } catch (error) {
@@ -141,11 +158,13 @@ export const getPostLikes = async (postId: string) => {
       .from('post_likes')
       .select(`
         id,
+        user_id,
         created_at,
         profiles:user_id (
           id,
           name,
-          email
+          email,
+          avatar_url
         )
       `)
       .eq('post_id', postId)
@@ -159,6 +178,54 @@ export const getPostLikes = async (postId: string) => {
     return data || [];
   } catch (error) {
     console.error('Error in getPostLikes:', error);
+    return [];
+  }
+};
+
+// Get users who liked a post that the current user follows (for mini avatars)
+export const getFollowedLikers = async (
+  postId: string,
+  currentUserId: string,
+  limit: number = 3
+): Promise<Array<{ id: string; name: string; avatar_url?: string | null }>> => {
+  if (!postId || !currentUserId) return [];
+  try {
+    // Get IDs of people the current user follows
+    const { data: followingData } = await supabase
+      .from('follows')
+      .select('following_id')
+      .eq('follower_id', currentUserId);
+
+    const followingIds = (followingData || []).map((f: any) => f.following_id);
+    if (followingIds.length === 0) return [];
+
+    // Get likers who are in the following list
+    const { data, error } = await supabase
+      .from('post_likes')
+      .select(`
+        user_id,
+        profiles:user_id (
+          id,
+          name,
+          avatar_url
+        )
+      `)
+      .eq('post_id', postId)
+      .in('user_id', followingIds)
+      .limit(limit);
+
+    if (error) {
+      console.error('Error getting followed likers:', error);
+      return [];
+    }
+
+    return (data || []).map((d: any) => ({
+      id: d.profiles?.id || d.user_id,
+      name: d.profiles?.name || 'User',
+      avatar_url: d.profiles?.avatar_url || null,
+    }));
+  } catch (error) {
+    console.error('Error in getFollowedLikers:', error);
     return [];
   }
 };

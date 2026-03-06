@@ -19,7 +19,7 @@ export default function BottomNavBar() {
 
   const paddingBottom =
     Platform.OS === "android"
-      ? Math.max(insets.bottom, 12)
+      ? Math.max(insets.bottom - 10, 4)
       : Math.max(insets.bottom, 4) - 10;
 
   const tabs = [

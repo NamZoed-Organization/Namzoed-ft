@@ -1,5 +1,6 @@
 import EarlyAccessBadge from "@/components/EarlyAccessBadge";
 import FollowRequestsOverlay from "@/components/modals/FollowRequestsOverlay";
+import ImageViewer from "@/components/modals/ImageViewer";
 import ProfileImageViewer from "@/components/modals/ProfileImageViewer";
 import ReportUserModal from "@/components/modals/ReportUserModal";
 import { useUser } from "@/contexts/UserContext";
@@ -16,13 +17,15 @@ import {
 } from "@/lib/servicesService";
 import * as Haptics from "expo-haptics";
 import { Redirect, Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { useVideoPlayer, VideoView } from "expo-video";
 import {
   AlertCircle,
   Ban,
   CheckCircle2,
   ChevronLeft,
+  Copy,
+  GalleryHorizontal,
   Grid,
-  Image as ImageLucide,
   MessageCircle,
   Play,
   ShoppingBag,
@@ -58,6 +61,22 @@ const isVideoUrl = (url: string): boolean => {
   );
 };
 
+// Video thumbnail component – renders the first frame via expo-video
+function VideoThumb({ uri }: { uri: string }) {
+  const player = useVideoPlayer(uri, (p) => {
+    p.muted = true;
+    p.loop = false;
+  });
+  return (
+    <VideoView
+      player={player}
+      style={{ width: "100%", height: "100%" }}
+      nativeControls={false}
+      contentFit="cover"
+    />
+  );
+}
+
 export default function PublicProfileScreen() {
   const { id, tab } = useLocalSearchParams(); // Get user ID from route: /user/123
   const { currentUser } = useUser();
@@ -75,6 +94,14 @@ export default function PublicProfileScreen() {
   const [userPosts, setUserPosts] = useState<Post[]>([]);
   const [userImages, setUserImages] = useState<string[]>([]);
   const [userProducts, setUserProducts] = useState<Product[]>([]);
+
+  // Post thumbnails (grouped by post)
+  const [postThumbnails, setPostThumbnails] = useState<
+    Array<{ postId: string; thumbnailUrl: string; mediaCount: number; isVideo: boolean; post: Post }>
+  >([]);
+  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
+  const [showImageViewer, setShowImageViewer] = useState(false);
 
   // Service provider state
   const [serviceProvider, setServiceProvider] = useState<any>(null);
@@ -129,14 +156,23 @@ export default function PublicProfileScreen() {
         const posts = await fetchUserPosts(id);
         setUserPosts(posts);
 
-        // 3. Process Images
+        // 3. Process Images — build grouped thumbnails
         const allImages: string[] = [];
+        const thumbs: typeof postThumbnails = [];
         posts.forEach((post) => {
           if (post.images && post.images.length > 0) {
+            thumbs.push({
+              postId: post.id,
+              thumbnailUrl: post.images[0],
+              mediaCount: post.images.length,
+              isVideo: isVideoUrl(post.images[0]),
+              post,
+            });
             post.images.forEach((img: string) => allImages.push(img));
           }
         });
         setUserImages(allImages);
+        setPostThumbnails(thumbs);
 
         // 4. Fetch Products
         const products = await fetchUserProducts(id);
@@ -205,14 +241,23 @@ export default function PublicProfileScreen() {
         const posts = await fetchUserPosts(id);
         setUserPosts(posts);
 
-        // 3. Process Images
+        // 3. Process Images — build grouped thumbnails
         const allImages: string[] = [];
+        const thumbs: typeof postThumbnails = [];
         posts.forEach((post) => {
           if (post.images && post.images.length > 0) {
+            thumbs.push({
+              postId: post.id,
+              thumbnailUrl: post.images[0],
+              mediaCount: post.images.length,
+              isVideo: isVideoUrl(post.images[0]),
+              post,
+            });
             post.images.forEach((img: string) => allImages.push(img));
           }
         });
         setUserImages(allImages);
+        setPostThumbnails(thumbs);
 
         // 4. Fetch Products
         const products = await fetchUserProducts(id);
@@ -289,6 +334,8 @@ export default function PublicProfileScreen() {
                 const result = await unfollowUser(currentUser.id, id);
                 if (result.success) {
                   setIsFollowingUser(false);
+                  setUserProfile((prev: any) => prev ? { ...prev, follower_count: Math.max(0, (prev.follower_count || 0) - 1) } : prev);
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                 } else {
                   Alert.alert("Error", result.error || "Failed to unfollow");
                 }
@@ -308,6 +355,8 @@ export default function PublicProfileScreen() {
         const result = await followUser(currentUser.id, id);
         if (result.success) {
           setIsFollowingUser(true);
+          setUserProfile((prev: any) => prev ? { ...prev, follower_count: (prev.follower_count || 0) + 1 } : prev);
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         } else {
           Alert.alert("Error", result.error || "Failed to follow user");
         }
@@ -424,10 +473,10 @@ export default function PublicProfileScreen() {
       {/* Fixed Header */}
       <View
         style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 100 }}
-        className="bg-white"
+        className="bg-transparent"
       >
         {/* Custom Header */}
-        <View className="flex-row items-center justify-between px-4 pt-12 pb-3 bg-white">
+        <View className="flex-row items-center justify-between px-4 pt-16 pb-3 bg-transparent">
           <TouchableOpacity
             onPress={() => router.back()}
             className="w-10 h-10 items-center justify-center -ml-2"
@@ -435,23 +484,7 @@ export default function PublicProfileScreen() {
             <ChevronLeft size={24} className="text-gray-800" />
           </TouchableOpacity>
 
-          {/* <Text className="text-lg font-mbold text-gray-900" numberOfLines={1}>
-            {userProfile.username || userProfile.name || "Profile"}
-          </Text> */}
-
-          <TouchableOpacity
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              setShowBlockMenu(true);
-            }}
-            className="w-10 h-10 items-center justify-center"
-          >
-            <AlertCircle size={24} color="#EF4444" />
-          </TouchableOpacity>
-        </View>
-
-        {/* Main/Work Tabs - Floating Bubbles */}
-        <View className="bg-white px-4 py-2">
+        <View className="bg-transparent px-4 py-2">
           <View className="flex-row gap-2 justify-center">
             <TouchableOpacity
               className={`px-8 py-1.5 items-center rounded-full ${mainTab === "main" ? "bg-primary" : "bg-gray-100"}`}
@@ -475,10 +508,23 @@ export default function PublicProfileScreen() {
             </TouchableOpacity>
           </View>
         </View>
+
+
+          <TouchableOpacity
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setShowBlockMenu(true);
+            }}
+            className="w-10 h-10 items-center justify-center"
+          >
+            <AlertCircle size={24} color="#EF4444" />
+          </TouchableOpacity>
+        </View>
+
       </View>
 
       {/* Content with Top Padding for Fixed Header */}
-      <View style={{ paddingTop: 120 }} className="flex-1">
+      <View style={{ paddingTop: 80 }} className="flex-1">
         {/* Horizontal Scrollable Content */}
         <ScrollView
           ref={horizontalScrollRef}
@@ -638,7 +684,7 @@ export default function PublicProfileScreen() {
               </View>
 
               {/* Tab Navigation */}
-              <View className="bg-white border-b border-gray-100 mt-2">
+              <View className="bg-transparent border-b border-gray-100 mt-2">
                 <View className="flex-row">
                   <TouchableOpacity
                     className={`flex-1 py-4 items-center border-b-2 ${
@@ -648,8 +694,9 @@ export default function PublicProfileScreen() {
                     }`}
                     onPress={() => setActiveTab("images")}
                   >
-                    <ImageLucide
+                    <GalleryHorizontal
                       size={24}
+                      strokeWidth={1.5}
                       className={`mb-1 ${
                         activeTab === "images"
                           ? "text-primary"
@@ -663,7 +710,7 @@ export default function PublicProfileScreen() {
                           : "text-gray-500"
                       }`}
                     >
-                      Images
+                      Media
                     </Text>
                   </TouchableOpacity>
 
@@ -677,6 +724,7 @@ export default function PublicProfileScreen() {
                   >
                     <ShoppingBag
                       size={24}
+                      strokeWidth={1.5}
                       className={`mb-1 ${
                         activeTab === "products"
                           ? "text-primary"
@@ -704,6 +752,7 @@ export default function PublicProfileScreen() {
                   >
                     <Wrench
                       size={24}
+                      strokeWidth={1.5}
                       className={`mb-1 ${
                         activeTab === "services"
                           ? "text-primary"
@@ -727,23 +776,40 @@ export default function PublicProfileScreen() {
               <View className="min-h-[300px]">
                 {activeTab === "images" && (
                   <View className="flex-row flex-wrap">
-                    {userImages.length > 0 ? (
-                      userImages.map((imageUrl, index) => {
-                        const isVideo = isVideoUrl(imageUrl);
+                    {postThumbnails.length > 0 ? (
+                      postThumbnails.map((thumb) => {
                         return (
                           <View
-                            key={index}
+                            key={thumb.postId}
                             className="w-[33.33%] aspect-[9/12] p-[1px]"
                           >
-                            <TouchableOpacity className="flex-1 bg-gray-100 relative">
-                              <Image
-                                source={{ uri: imageUrl }}
-                                className="w-full h-full"
-                                resizeMode="cover"
-                              />
-                              {isVideo && (
-                                <View className="absolute inset-0 items-center justify-center bg-black/30">
-                                  <Play size={20} color="#FFF" fill="#FFF" />
+                            <TouchableOpacity
+                              className="flex-1 bg-gray-100 relative"
+                              onPress={() => {
+                                setSelectedPost(thumb.post);
+                                setSelectedMediaIndex(0);
+                                setShowImageViewer(true);
+                              }}
+                            >
+                              {thumb.isVideo ? (
+                                <VideoThumb uri={thumb.thumbnailUrl} />
+                              ) : (
+                                <Image
+                                  source={{ uri: thumb.thumbnailUrl }}
+                                  className="w-full h-full"
+                                  resizeMode="cover"
+                                />
+                              )}
+                              {/* Stacked icon for multi-image posts */}
+                              {thumb.mediaCount > 1 && (
+                                <View className="absolute top-1.5 right-1.5">
+                                  <Copy size={14} color="#fff" strokeWidth={2} />
+                                </View>
+                              )}
+                              {/* Video indicator */}
+                              {thumb.isVideo && thumb.mediaCount <= 1 && (
+                                <View className="absolute top-1.5 right-1.5">
+                                  <Play size={14} color="#fff" strokeWidth={1.5} />
                                 </View>
                               )}
                             </TouchableOpacity>
@@ -752,9 +818,9 @@ export default function PublicProfileScreen() {
                       })
                     ) : (
                       <View className="w-full py-12 items-center">
-                        <Grid size={40} className="text-gray-300 mb-2" />
-                        <Text className="text-gray-400 font-mmedium">
-                          No images shared yet
+                        <Grid size={40} strokeWidth={1.5} className="text-gray-300 mb-2" />
+                        <Text className="text-gray-400 font-medium">
+                          No medias shared yet
                         </Text>
                       </View>
                     )}
@@ -772,7 +838,7 @@ export default function PublicProfileScreen() {
                                 `/(users)/product/${product.id}` as any,
                               )
                             }
-                            className="bg-white rounded-xl overflow-hidden border border-gray-100"
+                            className="bg-transparent rounded-xl overflow-hidden border border-gray-100"
                           >
                             {product.images && product.images.length > 0 ? (
                               <Image
@@ -784,6 +850,7 @@ export default function PublicProfileScreen() {
                               <View className="w-full h-40 bg-gray-100 items-center justify-center">
                                 <ShoppingBag
                                   size={32}
+                                  strokeWidth={1.5}
                                   className="text-gray-300"
                                 />
                               </View>
@@ -810,7 +877,7 @@ export default function PublicProfileScreen() {
                       ))
                     ) : (
                       <View className="w-full py-12 items-center">
-                        <ShoppingBag size={40} className="text-gray-300 mb-2" />
+                        <ShoppingBag size={40} strokeWidth={1.5} className="text-gray-300 mb-2" />
                         <Text className="text-gray-400 font-mmedium">
                           No products listed
                         </Text>
@@ -821,7 +888,7 @@ export default function PublicProfileScreen() {
 
                 {activeTab === "services" && (
                   <View className="items-center justify-center py-12">
-                    <Wrench size={40} className="text-gray-300 mb-2" />
+                    <Wrench size={40} strokeWidth={1.5} className="text-gray-300 mb-2" />
                     <Text className="text-gray-400 font-mmedium">
                       No services offered
                     </Text>
@@ -1024,7 +1091,7 @@ export default function PublicProfileScreen() {
                   <View className="h-[1px] bg-gray-100 mx-4 mb-4" />
 
                   {/* Services Section */}
-                  <View className="bg-white border-b border-gray-100">
+                  <View className="bg-transparent border-b border-gray-100">
                     <View className="flex-row items-center justify-between px-4 py-3 border-b border-gray-100">
                       <Text className="text-base font-mbold text-gray-900">
                         Services Offered
@@ -1097,7 +1164,7 @@ export default function PublicProfileScreen() {
                       </View>
                     ) : (
                       <View className="items-center justify-center py-12">
-                        <Wrench size={40} className="text-gray-300 mb-2" />
+                        <Wrench size={40} strokeWidth={1.5} className="text-gray-300 mb-2" />
                         <Text className="text-gray-400 font-mmedium">
                           No services listed yet
                         </Text>
@@ -1226,6 +1293,21 @@ export default function PublicProfileScreen() {
           targetUserName={userProfile.name || userProfile.username || "user"}
           currentUserId={currentUser.id}
           onReportSuccess={handleReportSuccess}
+        />
+      )}
+
+      {showImageViewer && selectedPost && (
+        <ImageViewer
+          visible={showImageViewer}
+          images={selectedPost.images}
+          initialIndex={selectedMediaIndex}
+          onClose={() => setShowImageViewer(false)}
+          postContent={selectedPost.content}
+          username={userProfile?.name || userProfile?.username || "User"}
+          likes={selectedPost.likes}
+          comments={selectedPost.comments}
+          postId={selectedPost.id}
+          postUserId={selectedPost.user_id}
         />
       )}
 

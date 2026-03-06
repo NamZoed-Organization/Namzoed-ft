@@ -3,9 +3,9 @@ import ImagePickerSheet from "@/components/ui/ImagePickerSheet";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { serviceCategories } from "@/data/servicecategory";
 import {
-  ProviderServiceWithDetails,
-  updateProviderService,
-  uploadServiceImages,
+    ProviderServiceWithDetails,
+    updateProviderService,
+    uploadServiceImages,
 } from "@/lib/servicesService";
 import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
@@ -14,24 +14,23 @@ import * as ImagePicker from "expo-image-picker";
 import { Check, Trash2, Upload, X } from "lucide-react-native";
 import React, { useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  ScrollView,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Image,
+    KeyboardAvoidingView,
+    Modal,
+    ScrollView,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from "react-native";
 import Animated, {
-  FadeInDown,
-  FadeOutDown,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
+    FadeInDown,
+    FadeOutDown,
+    useAnimatedStyle,
+    useSharedValue,
+    withTiming,
 } from "react-native-reanimated";
 
 interface EditServicesModalProps {
@@ -278,7 +277,7 @@ export default function EditServicesModal({
     >
       <Animated.View style={[{ flex: 1 }, animatedStyle]}>
         <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          behavior="padding"
           className="flex-1 justify-end"
         >
           <View className="flex-1 bg-black/50 justify-end">

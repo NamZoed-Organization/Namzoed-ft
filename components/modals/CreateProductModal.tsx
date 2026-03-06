@@ -8,26 +8,25 @@ import * as ImagePicker from "expo-image-picker";
 import { Check, ChevronDown, Upload, X } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  Dimensions,
-  Image,
-  KeyboardAvoidingView,
-  Modal,
-  PanResponder,
-  Platform,
-  ScrollView,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Animated,
+    Dimensions,
+    Image,
+    KeyboardAvoidingView,
+    Modal,
+    PanResponder,
+    ScrollView,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from "react-native";
 import ReAnimated, {
-  FadeIn,
-  FadeOut,
-  SlideInDown,
-  SlideOutDown,
+    FadeIn,
+    FadeOut,
+    SlideInDown,
+    SlideOutDown,
 } from "react-native-reanimated";
 
 interface CreateProductModalProps {
@@ -138,7 +137,7 @@ export default function CreateProductModal({
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ["images"],
         allowsEditing: false,
-        quality: 1.0,
+        quality: 0.85,
       });
 
       if (!result.canceled && result.assets?.[0]) {
@@ -156,7 +155,7 @@ export default function CreateProductModal({
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
         allowsEditing: false,
-        quality: 1.0,
+        quality: 0.85,
       });
 
       if (!result.canceled && result.assets?.[0]) {
@@ -281,7 +280,7 @@ export default function CreateProductModal({
       onRequestClose={onClose}
     >
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior="padding"
         className="flex-1 justify-end"
       >
         {/* Backdrop - blur with fade in/out */}

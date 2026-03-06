@@ -4,6 +4,7 @@ import CustomFlashMessage from "@/components/CustomFlashMessage";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { NavigationLogger } from "@/components/NavigationLogger";
 import InAppChatBanner from "@/components/chat/InAppChatBanner";
+import InAppNotificationBanner from "@/components/notifications/InAppNotificationBanner";
 import OneSignalBootstrap from "@/components/notifications/OneSignalBootstrap";
 import { UnreadMessagesProvider } from "@/contexts/UnreadMessagesContext";
 import { useColorScheme } from "@/hooks/useColorScheme";
@@ -26,6 +27,7 @@ import "../global.css";
 import { AppearanceProvider } from "@/contexts/AppearanceContext";
 import { DzongkhagProvider } from "@/contexts/DzongkhagContext";
 import { LiveSessionProvider } from "@/contexts/LiveSessionProvider";
+import { NotificationsProvider } from "@/contexts/NotificationsContext";
 import { UserProvider } from "@/contexts/UserContext";
 import { VideoCacheProvider } from "@/contexts/VideoCacheContext";
 import { VideoPlaybackProvider } from "@/contexts/VideoPlaybackContext";
@@ -72,13 +74,12 @@ export default function RootLayout() {
           <UserProvider>
             <AppearanceProvider>
             <UnreadMessagesProvider>
+              <NotificationsProvider>
               <DzongkhagProvider>
                 <VideoPlaybackProvider>
                   <VideoCacheProvider>
                     <LiveSessionProvider>
                       <OneSignalBootstrap />
-                      {/* Global Navigation Logger */}
-                      <NavigationLogger />
                     <View className="flex-1 bg-background">
                         <Stack
                           screenOptions={{
@@ -91,6 +92,8 @@ export default function RootLayout() {
                           }}
                         />
                         <InAppChatBanner />
+                        <InAppNotificationBanner />
+                        <NavigationLogger />
                         <StatusBar style="dark" />
                         <FlashMessage
                           position="top"
@@ -103,6 +106,7 @@ export default function RootLayout() {
                   </VideoCacheProvider>
                 </VideoPlaybackProvider>
               </DzongkhagProvider>
+              </NotificationsProvider>
             </UnreadMessagesProvider>
             </AppearanceProvider>
           </UserProvider>

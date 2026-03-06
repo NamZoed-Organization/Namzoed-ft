@@ -1,40 +1,41 @@
 import MarketplaceImageViewer from "@/components/modals/MarketplaceImageViewer";
 import { useUser } from "@/contexts/UserContext";
 import {
-  fetchProviderServiceById,
-  ProviderServiceWithDetails,
+    fetchProviderServiceById,
+    ProviderServiceWithDetails,
 } from "@/lib/servicesService";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import {
-  Href,
-  router,
-  useLocalSearchParams,
-  useFocusEffect,
+    Href,
+    router,
+    useFocusEffect,
+    useLocalSearchParams,
 } from "expo-router";
 import {
-  ArrowLeft,
-  CheckCircle2,
-  Clock,
-  MessageCircle,
-  Tag,
-  User,
-  Verified,
-  Wrench,
+    ArrowLeft,
+    CheckCircle2,
+    Clock,
+    MessageCircle,
+    Tag,
+    User,
+    Verified,
+    Wrench,
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  BackHandler,
-  Dimensions,
-  Image,
-  Animated as RNAnimated,
-  ScrollView,
-  StatusBar,
-  Text,
-  TouchableOpacity,
-  View,
+    BackHandler,
+    Dimensions,
+    Image,
+    Animated as RNAnimated,
+    ScrollView,
+    StatusBar,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const IMAGE_HEIGHT = SCREEN_HEIGHT * 0.45;
@@ -107,6 +108,7 @@ function DetailSkeleton() {
 export default function ServiceDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { currentUser } = useUser();
+  const insets = useSafeAreaInsets();
   const [service, setService] = useState<ProviderServiceWithDetails | null>(
     null,
   );
@@ -472,16 +474,13 @@ export default function ServiceDetail() {
 
       {/* Floating Bottom Action Bar - Only for other providers */}
       {!isOwnService && (
-        <Animated.View
-          entering={FadeInUp.duration(400).delay(300)}
-          className="absolute bottom-0 left-0 right-0"
-        >
+        <View className="absolute bottom-0 left-0 right-0">
           <BlurView
             intensity={80}
             tint="light"
             className="border-t border-gray-100"
           >
-            <View className="px-6 py-4 pb-8 flex-row gap-4">
+            <View className="px-6 py-4 flex-row gap-4" style={{ paddingBottom: Math.max(insets.bottom, 12) }}>
               {/* Message Provider Button */}
               <TouchableOpacity
                 onPress={handleMessageProvider}
@@ -511,7 +510,7 @@ export default function ServiceDetail() {
               </TouchableOpacity>
             </View>
           </BlurView>
-        </Animated.View>
+        </View>
       )}
     </View>
   );

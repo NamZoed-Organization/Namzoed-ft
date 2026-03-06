@@ -1,3 +1,4 @@
+import { notifyNewFollower } from '@/services/notificationService';
 import { supabase } from './supabase';
 
 // Follow a user
@@ -19,6 +20,11 @@ export const followUser = async (
       console.error('Follow error:', insertError);
       throw insertError;
     }
+
+    // Fire-and-forget notification to the followed user
+    notifyNewFollower(followingId, followerId).catch((e) =>
+      console.warn('[followService] notifyNewFollower failed:', e)
+    );
 
     return { success: true };
   } catch (error: any) {
@@ -62,6 +68,23 @@ export const getFollowingIds = async (userId: string): Promise<string[]> => {
     return (data || []).map(row => row.following_id);
   } catch (error) {
     console.error('Error fetching following list:', error);
+    return [];
+  }
+};
+
+// Get list of user IDs that are following a given user
+export const getFollowerIdsOf = async (userId: string): Promise<string[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('follows')
+      .select('follower_id')
+      .eq('following_id', userId);
+
+    if (error) throw error;
+
+    return (data || []).map(row => row.follower_id);
+  } catch (error) {
+    console.error('Error fetching follower IDs:', error);
     return [];
   }
 };

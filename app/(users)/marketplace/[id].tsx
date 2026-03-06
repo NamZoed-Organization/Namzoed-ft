@@ -37,6 +37,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const { width: screenWidth } = Dimensions.get("window");
 
@@ -44,6 +45,7 @@ export default function MarketplaceDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { currentUser } = useUser();
+  const insets = useSafeAreaInsets();
   const [item, setItem] = useState<MarketplaceItemWithUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -420,7 +422,9 @@ export default function MarketplaceDetailScreen() {
                 <Text className="text-base text-gray-700 leading-6">
                   {typeof item.description === "string"
                     ? item.description
-                    : item.description?.text || ""}
+                    : item.description && typeof item.description === "object" && "text" in item.description
+                      ? (item.description as any).text
+                      : ""}
                 </Text>
               </View>
             )}
@@ -491,7 +495,7 @@ export default function MarketplaceDetailScreen() {
           </View>
 
           {/* Bottom Spacing */}
-          <View className="h-20" />
+          <View style={{ height: Math.max(insets.bottom + 24, 80) }} />
         </ScrollView>
       </View>
 

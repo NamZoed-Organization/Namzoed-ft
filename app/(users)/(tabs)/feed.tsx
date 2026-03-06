@@ -1,71 +1,68 @@
 import { PostSkeleton } from "@/components/FeedPost";
 import CreatePost from "@/components/modals/CreatePost";
-import FullscreenVideoPlayer from "@/components/FullscreenVideoPlayer";
 import { VideoErrorBoundary } from "@/components/VideoErrorBoundary";
-import { useLiveSession } from "@/contexts/LiveSessionProvider";
 import { useUser } from "@/contexts/UserContext";
 import { useFeedPagination } from "@/hooks/usePagination";
 import { useVirtualizedList } from "@/hooks/useVirtualizedList";
 import { fetchPosts, PostWithUser } from "@/lib/postsService";
 import { getReportedPostIds } from "@/lib/reportService";
 import { PostData } from "@/types/post";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
 } from "react";
 import {
-  ActivityIndicator,
-  FlatList,
-  Modal,
-  RefreshControl,
-  Text,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    FlatList,
+    Modal,
+    RefreshControl,
+    Text,
+    TouchableWithoutFeedback,
+    View
 } from "react-native";
 
 import FeedPost from "@/components/FeedPost";
+import LivesBar from "@/components/livestream/LivesBar";
 import { feedEvents } from "@/utils/feedEvents";
-import { Plus, Radio } from "lucide-react-native";
 
 export default function FeedScreen() {
   const { currentUser } = useUser();
-  const { setRestoreHandler, pendingRestore, consumePendingRestore } =
-    useLiveSession();
-  const router = useRouter();
+  const { streamId: deepLinkedStreamId } = useLocalSearchParams<{ streamId?: string }>();
   const [showCreatePost, setShowCreatePost] = useState(false);
+  const [showCreateMenu, setShowCreateMenu] = useState(false);
   const [showLive, setShowLive] = useState(false);
+  const [selectedStreamId, setSelectedStreamId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [newPosts, setNewPosts] = useState<PostData[]>([]);
   const [loadingNewPosts, setLoadingNewPosts] = useState(true);
   const [visiblePostId, setVisiblePostId] = useState<string | null>(null);
   const [reportedPostIds, setReportedPostIds] = useState<string[]>([]);
-  const [showVideoPlayer, setShowVideoPlayer] = useState(false);
-  const [shuffledVideos, setShuffledVideos] = useState<Array<{uri: string, id: string}>>([]);
 
-  // Dynamic import for LiveWrapper to avoid WebRTC errors on app load
-  const [LiveWrapper, setLiveWrapper] = useState<React.ComponentType<{
+  // Dynamic import for LiveScrollScreen
+  const [LiveScrollScreen, setLiveScrollScreen] = useState<React.ComponentType<{
+    initialStreamId?: string;
     onClose: () => void;
   }> | null>(null);
-  const [liveWrapperLoading, setLiveWrapperLoading] = useState(false);
+  const [liveScreenLoading, setLiveScreenLoading] = useState(false);
 
-  // Dynamically import LiveWrapper only when user opens Live modal
+  // Dynamically import LiveScrollScreen only when user opens live
   useEffect(() => {
-    if (showLive && !LiveWrapper && !liveWrapperLoading) {
-      setLiveWrapperLoading(true);
-      import("@/components/livestream/LiveWrapper")
+    if (showLive && !LiveScrollScreen && !liveScreenLoading) {
+      setLiveScreenLoading(true);
+      import("@/components/livestream/LiveScrollScreen")
         .then((module) => {
-          setLiveWrapper(() => module.default);
-          setLiveWrapperLoading(false);
+          setLiveScrollScreen(() => module.default);
+          setLiveScreenLoading(false);
         })
-        .catch((error) => {
-          setLiveWrapperLoading(false);
+        .catch(() => {
+          setLiveScreenLoading(false);
         });
     }
-  }, [showLive, LiveWrapper, liveWrapperLoading]);
+  }, [showLive, LiveScrollScreen, liveScreenLoading]);
 
   // Convert Supabase post to PostData format
   const convertToPostData = (post: PostWithUser): PostData => {
@@ -79,44 +76,16 @@ export default function FeedScreen() {
       id: post.id,
       userId: post.user_id,
       username: username,
-      profilePic: undefined, // We don't have profile pic in the database yet
+      profilePic: post.profiles?.avatar_url || undefined,
       content: post.content,
       images: post.images,
       date: new Date(post.created_at),
       likes: post.likes,
       comments: post.comments,
       shares: post.shares,
+      tagged_products: (post as any).tagged_products ?? undefined,
+      tagged_accounts: (post as any).tagged_accounts ?? undefined,
     };
-  };
-
-  // Helper to check if URL is a video
-  const isVideoUrl = (url: string): boolean => {
-    const videoExtensions = [".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"];
-    const lowerUrl = url.toLowerCase();
-    return videoExtensions.some(ext => lowerUrl.includes(ext)) || lowerUrl.includes("post-videos");
-  };
-
-  // Extract and shuffle all videos from feed posts
-  const extractAndShuffleVideos = (posts: PostData[]) => {
-    const allVideos: Array<{uri: string, id: string}> = [];
-
-    posts.forEach(post => {
-      const videoUris = post.images.filter(uri => isVideoUrl(uri));
-      videoUris.forEach(uri => {
-        allVideos.push({
-          uri: uri,
-          id: `${post.id}_${uri}` // Unique ID combining post ID and URI
-        });
-      });
-    });
-
-    // Fisher-Yates shuffle algorithm for random order
-    for (let i = allVideos.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [allVideos[i], allVideos[j]] = [allVideos[j], allVideos[i]];
-    }
-
-    return allVideos;
   };
 
   // Load new posts from Supabase
@@ -143,10 +112,6 @@ export default function FeedScreen() {
       );
 
       setNewPosts(sortedNewPosts);
-
-      // Extract and shuffle videos for the video player
-      const videos = extractAndShuffleVideos(sortedNewPosts);
-      setShuffledVideos(videos);
     } catch (error) {
       console.error("Error loading new posts:", error);
       setNewPosts([]); // Set empty array on error to prevent crashes
@@ -173,25 +138,13 @@ export default function FeedScreen() {
     loadReportedPosts();
   }, []);
 
-  // Register restore handler so mini overlay can reopen the live modal (ensures navigation to feed first)
+  // Deep-link from notifications: /(users)/(tabs)/feed?streamId=xxx
   useEffect(() => {
-    setRestoreHandler(() => () => {
-      router.push("/feed");
-      // slight delay to allow navigation stack to settle
-      setTimeout(() => setShowLive(true), 30);
-    });
-  }, [setRestoreHandler, router]);
-
-  // If a restore was requested without a handler (e.g., from another screen), open live and consume flag
-  useEffect(() => {
-    if (pendingRestore) {
-      router.push("/feed");
-      setTimeout(() => {
-        setShowLive(true);
-        consumePendingRestore();
-      }, 30);
+    if (deepLinkedStreamId) {
+      setSelectedStreamId(deepLinkedStreamId);
+      setShowLive(true);
     }
-  }, [pendingRestore, consumePendingRestore, router]);
+  }, [deepLinkedStreamId]);
 
   // Use only Supabase posts and filter out reported posts
   const allPosts = useMemo(() => {
@@ -280,20 +233,6 @@ export default function FeedScreen() {
     }
   }, []);
 
-  // Handle video tap - open player at tapped video, reorder to start from that video
-  const handleVideoTap = useCallback((videoUri: string) => {
-    const index = shuffledVideos.findIndex(v => v.uri === videoUri);
-    if (index !== -1) {
-      // Re-order array to start at tapped video, maintaining shuffle order
-      const reordered = [
-        ...shuffledVideos.slice(index),
-        ...shuffledVideos.slice(0, index)
-      ];
-      setShuffledVideos(reordered);
-      setShowVideoPlayer(true);
-    }
-  }, [shuffledVideos]);
-
   // Viewability config - item is considered visible when 50% is on screen
   const viewabilityConfig = useRef({
     itemVisiblePercentThreshold: 50,
@@ -316,7 +255,7 @@ export default function FeedScreen() {
 
     return (
       <VideoErrorBoundary>
-        <FeedPost post={item} isVisible={isVisible} onVideoTap={handleVideoTap} />
+        <FeedPost post={item} isVisible={isVisible} />
       </VideoErrorBoundary>
     );
   };
@@ -336,28 +275,18 @@ export default function FeedScreen() {
 
   const renderHeader = () => (
     <>
-      <View className="bg-white border-b border-gray-200 p-4">
-        {/* Action Buttons */}
-        <View className="flex-row">
-          <TouchableOpacity
-            className="flex-1 flex-row items-center justify-center py-3"
-            onPress={() => setShowCreatePost(true)}
-          >
-            <Plus size={20} color="#1877F2" strokeWidth={1.5} />
-            <Text className="ml-2 text-gray-700 font-medium">Create Post</Text>
-          </TouchableOpacity>
-
-          <View className="w-px bg-gray-200 mx-2" />
-
-          <TouchableOpacity
-            className="flex-1 flex-row items-center justify-center py-3"
-            onPress={() => setShowLive(true)}
-          >
-            <Radio size={20} color="#DC2626" strokeWidth={1.5} />
-            <Text className="ml-2 text-gray-700 font-medium">Live</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+  
+        <LivesBar
+          onJoin={(stream: { id: string }) => {
+            setSelectedStreamId(stream.id);
+            setShowLive(true);
+          }}
+          onGoLive={() => {
+          setSelectedStreamId(null);
+          setShowLive(true);
+        }}
+        onCreatePost={() => setShowCreatePost(true)}
+      />
 
       {/* Show skeleton while loading initial posts */}
       {loadingNewPosts && paginatedPosts.length === 0 && (
@@ -392,6 +321,13 @@ export default function FeedScreen() {
     <View className="flex-1 bg-gray-100">
       {/* Status Bar Space */}
       <View className="h-12 bg-white" />
+
+      {/* Dismiss Create menu backdrop */}
+      {showCreateMenu && (
+        <TouchableWithoutFeedback onPress={() => setShowCreateMenu(false)}>
+          <View className="absolute inset-0 z-40" />
+        </TouchableWithoutFeedback>
+      )}
 
       {/* Feed Content */}
       <FlatList
@@ -448,7 +384,7 @@ export default function FeedScreen() {
         </View>
       </Modal>
 
-      {/* Live Modal */}
+      {/* Live Modal — TikTok-style endless scroll */}
       <Modal
         visible={showLive}
         animationType="slide"
@@ -456,24 +392,19 @@ export default function FeedScreen() {
         statusBarTranslucent={true}
         onRequestClose={() => setShowLive(false)}
       >
-        {LiveWrapper ? (
-          <LiveWrapper onClose={() => setShowLive(false)} />
+        {LiveScrollScreen ? (
+          <LiveScrollScreen
+            initialStreamId={selectedStreamId ?? undefined}
+            onClose={() => setShowLive(false)}
+          />
         ) : (
-          <View className="flex-1 bg-background items-center justify-center">
-            <ActivityIndicator size="large" color="#DC2626" />
-            <Text className="mt-4 text-gray-600">Loading Live...</Text>
+          <View className="flex-1 bg-black items-center justify-center">
+            <ActivityIndicator size="large" color="white" />
+            <Text className="mt-4 text-white opacity-60">Loading…</Text>
           </View>
         )}
       </Modal>
 
-      {/* Fullscreen Video Player */}
-      {shuffledVideos.length > 0 && (
-        <FullscreenVideoPlayer
-          visible={showVideoPlayer}
-          videos={shuffledVideos}
-          onClose={() => setShowVideoPlayer(false)}
-        />
-      )}
     </View>
   );
 }

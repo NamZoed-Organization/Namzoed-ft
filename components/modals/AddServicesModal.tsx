@@ -8,21 +8,20 @@ import * as ImagePicker from "expo-image-picker";
 import { ChevronDown, ChevronUp, Upload, X } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Image,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  ScrollView,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Image,
+    KeyboardAvoidingView,
+    Modal,
+    ScrollView,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from "react-native";
 import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
+    useAnimatedStyle,
+    useSharedValue,
+    withTiming,
 } from "react-native-reanimated";
 
 interface AddServicesModalProps {
@@ -239,7 +238,7 @@ export default function AddServicesModal({
     >
       <Animated.View style={[{ flex: 1 }, animatedStyle]}>
         <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          behavior="padding"
           className="flex-1 justify-end"
         >
           <View className="flex-1 bg-black/50 justify-end">

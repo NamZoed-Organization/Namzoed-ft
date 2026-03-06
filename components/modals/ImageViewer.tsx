@@ -1,29 +1,30 @@
-import React, { useState, useEffect, useRef } from "react";
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  Modal,
-  Dimensions,
-  ScrollView,
-  Image,
-  ActivityIndicator,
-  TouchableWithoutFeedback,
-} from "react-native";
-import { X, Heart, MessageCircle, Bookmark, MoreHorizontal } from "lucide-react-native";
-import { VideoView, useVideoPlayer } from "expo-video";
-import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
-import Animated, { useSharedValue, useAnimatedStyle, withSpring } from "react-native-reanimated";
-import { useRouter } from "expo-router";
+import DeleteConfirmationModal from "@/components/modals/DeleteConfirmationModal";
+import PostActionSheet from "@/components/modals/PostActionSheet";
+import ReportPostModal from "@/components/modals/ReportPostModal";
+import PopupMessage from "@/components/ui/PopupMessage";
 import { useUser } from "@/contexts/UserContext";
-import { hasUserLikedPost, togglePostLike, getPostLikeCount } from "@/lib/likesService";
 import { hasUserBookmarkedPost, togglePostBookmark } from "@/lib/bookmarkService";
+import { getPostLikeCount, hasUserLikedPost, togglePostLike } from "@/lib/likesService";
 import { deletePost } from "@/lib/postsService";
 import { feedEvents } from "@/utils/feedEvents";
-import PopupMessage from "@/components/ui/PopupMessage";
-import PostActionSheet from "@/components/modals/PostActionSheet";
-import DeleteConfirmationModal from "@/components/modals/DeleteConfirmationModal";
-import ReportPostModal from "@/components/modals/ReportPostModal";
+import { useRouter } from "expo-router";
+import { VideoView, useVideoPlayer } from "expo-video";
+import { Bookmark, Heart, MessageCircle, MoreHorizontal, X } from "lucide-react-native";
+import React, { useEffect, useState } from "react";
+import {
+    ActivityIndicator,
+    Dimensions,
+    Image,
+    Modal,
+    ScrollView,
+    Text,
+    TouchableOpacity,
+    TouchableWithoutFeedback,
+    View,
+} from "react-native";
+import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 interface ImageViewerProps {
   visible: boolean;
@@ -192,6 +193,7 @@ export default function ImageViewer({
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const { currentUser } = useUser();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
 
   const isOwnPost = currentUser?.id === postUserId;
@@ -374,7 +376,10 @@ export default function ImageViewer({
           </ScrollView>
 
         {/* Bottom Section with Dots and Description */}
-        <View className="absolute bottom-0 left-0 right-0 z-10" style={{ paddingBottom: 20 }}>
+        <View
+          className="absolute bottom-0 left-0 right-0 z-10"
+          style={{ paddingBottom: Math.max(insets.bottom, 20) }}
+        >
           {/* Dots Indicator - 5px below image */}
           {images.length > 1 && (
             <View className="flex-row justify-center" style={{ marginBottom: 12 }}>
@@ -494,7 +499,7 @@ export default function ImageViewer({
               : ""
           }
           postOwnerId={postUserId}
-          currentUserId={currentUser.id}
+          currentUserId={currentUser?.id ?? ""}
           onReportSuccess={() => {
             setShowReportModal(false);
             onClose();

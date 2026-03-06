@@ -1,18 +1,27 @@
+import { X as XIcon } from "lucide-react-native";
 import React, {
-  createContext,
-  useContext,
-  useMemo,
-  useRef,
-  useState,
+    createContext,
+    useContext,
+    useMemo,
+    useRef,
+    useState,
 } from "react";
 import {
-  PanResponder,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  useWindowDimensions,
-  View,
+    ActivityIndicator,
+    Animated,
+    BackHandler,
+    Modal,
+    PanResponder,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    useWindowDimensions,
+    View,
 } from "react-native";
+
+// PiP card size — portrait 9:16
+const PIP_W = 108;
+const PIP_H = 192;
 
 // Define types without importing WebRTC modules at the top level
 interface Call {
@@ -29,7 +38,7 @@ interface LiveSessionInfo {
   call: Call | null;
   client: StreamVideoClient | null;
   streamMeta?: any;
-  role?: "host" | "viewer" | null;
+  role?: "host" | "viewer" | "cohost" | null;
 }
 
 interface LiveSessionContextValue {
@@ -61,6 +70,17 @@ try {
   webRTCAvailable = false;
 }
 
+// LiveWrapper is required lazily at render time (not at module level) to avoid a
+// circular import: LiveWrapper → Live.tsx → useLiveSession → LiveSessionProvider.
+// By the time any component renders, all modules are fully loaded, so require() is safe.
+function getLiveWrapperComponent(): React.ComponentType<{ onClose: () => void; onMinimize?: () => void }> | null {
+  try {
+    return require("@/components/livestream/LiveWrapper").default;
+  } catch {
+    return null;
+  }
+}
+
 const LiveSessionContext = createContext<LiveSessionContextValue | undefined>(
   undefined
 );
@@ -77,88 +97,77 @@ export const LiveSessionProvider = ({
     role: null,
   });
   const [minimized, setMinimized] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
+  const [showRestoredModal, setShowRestoredModal] = useState(false);
   const [restoreHandler, setRestoreHandler] = useState<(() => void) | null>(
     null
   );
   const [pendingRestore, setPendingRestore] = useState(false);
 
   const { width, height } = useWindowDimensions();
-  const defaultPos = useRef({
-    x: width - 200,
-    y: Math.max(40, height - 220),
-  });
-  const [position, setPosition] = useState(() => defaultPos.current);
 
-  const clampX = (x: number, boxWidth: number) =>
-    Math.max(8, Math.min(x, width - boxWidth - 8));
-  const clampY = (y: number, boxHeight: number) =>
-    Math.max(16, Math.min(y, height - boxHeight - 16));
+  const clampX = (x: number) => Math.max(8, Math.min(x, width - PIP_W - 8));
+  const clampY = (y: number) => Math.max(16, Math.min(y, height - PIP_H - 16));
 
-  const snapToCorner = (x: number, y: number, boxW: number, boxH: number) => {
-    const corners = [
-      { x: 8, y: 16 },
-      { x: width - boxW - 8, y: 16 },
-      { x: 8, y: height - boxH - 16 },
-      { x: width - boxW - 8, y: height - boxH - 16 },
-    ];
-    let best = corners[0];
-    let bestDist = Infinity;
-    for (const c of corners) {
-      const dx = c.x - x;
-      const dy = c.y - y;
-      const d = dx * dx + dy * dy;
-      if (d < bestDist) {
-        bestDist = d;
-        best = c;
-      }
-    }
-    return best;
-  };
+  // Always-current position reference — avoids stale closure issues inside panResponder
+  const positionRef = useRef({ x: width - PIP_W - 12, y: height - PIP_H - 100 });
+  // Animated value drives the actual rendered position (enables spring animation on release)
+  const animPos = useRef(new Animated.ValueXY(positionRef.current)).current;
+  // Captures overlay position at the start of each drag gesture
+  const dragStartRef = useRef({ x: 0, y: 0 });
 
   const panResponder = useMemo(() => {
-    const moveThreshold = 6;
     return PanResponder.create({
       onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_evt, gesture) => {
-        const dist = Math.abs(gesture.dx) + Math.abs(gesture.dy);
-        return dist > moveThreshold;
+      // Only claim the gesture after a deliberate 12 px movement
+      onMoveShouldSetPanResponder: (_evt, gesture) =>
+        Math.abs(gesture.dx) + Math.abs(gesture.dy) > 12,
+      onPanResponderGrant: () => {
+        // Snapshot current position so we can apply gesture.dx/dy as absolute offsets
+        dragStartRef.current = { ...positionRef.current };
       },
       onPanResponderMove: (_evt, gesture) => {
-        setPosition((prev) => {
-          const boxW = collapsed ? 64 : 180;
-          const boxH = collapsed ? 64 : 120;
-          const nextX = clampX(prev.x + gesture.dx, boxW);
-          const nextY = clampY(prev.y + gesture.dy, boxH);
-          return { x: nextX, y: nextY };
-        });
+        const nx = clampX(dragStartRef.current.x + gesture.dx);
+        const ny = clampY(dragStartRef.current.y + gesture.dy);
+        positionRef.current = { x: nx, y: ny };
+        animPos.setValue({ x: nx, y: ny });
       },
       onPanResponderRelease: (_evt, gesture) => {
-        setPosition((prev) => {
-          const boxW = collapsed ? 64 : 180;
-          const boxH = collapsed ? 64 : 120;
-          const nextX = clampX(prev.x + gesture.dx, boxW);
-          const nextY = clampY(prev.y + gesture.dy, boxH);
-          return snapToCorner(nextX, nextY, boxW, boxH);
-        });
+        const nx = clampX(dragStartRef.current.x + gesture.dx);
+        const ny = clampY(dragStartRef.current.y + gesture.dy);
+
+        // Edge-snap X: use velocity to bias the edge choice when near centre.
+        // vx > 0 means thrown right, vx < 0 means thrown left.
+        const projectedX = nx + gesture.vx * 180;
+        const targetX = projectedX > width / 2 ? width - PIP_W - 8 : 8;
+
+        // Fling Y: project forward with velocity so a hard throw travels further.
+        const targetY = clampY(ny + gesture.vy * 180);
+
+        positionRef.current = { x: targetX, y: targetY };
+        Animated.spring(animPos, {
+          toValue: { x: targetX, y: targetY },
+          useNativeDriver: false,
+          velocity: { x: gesture.vx, y: gesture.vy },
+          tension: 70,
+          friction: 9,
+        }).start();
       },
     });
-  }, [width, height, collapsed]);
+  }, [width, height]);
 
-  // Keep position in bounds on orientation change or collapse toggle
+  // Re-clamp position when screen dimensions change (e.g. device rotation)
   React.useEffect(() => {
-    const boxW = collapsed ? 64 : 180;
-    const boxH = collapsed ? 64 : 120;
-    setPosition((prev) => ({
-      x: clampX(prev.x, boxW),
-      y: clampY(prev.y, boxH),
-    }));
-  }, [width, height, collapsed]);
+    const newPos = {
+      x: clampX(positionRef.current.x),
+      y: clampY(positionRef.current.y),
+    };
+    positionRef.current = newPos;
+    animPos.setValue(newPos);
+  }, [width, height]);
 
   const setSession = (info: LiveSessionInfo) => {
     setSessionState(info);
     setMinimized(false);
-    setCollapsed(false);
   };
 
   const clearSession = async () => {
@@ -169,22 +178,15 @@ export const LiveSessionProvider = ({
     }
     setSessionState({ call: null, client: null, streamMeta: null, role: null });
     setMinimized(false);
-    setCollapsed(false);
+    setShowRestoredModal(false);
   };
 
+  // restore() now opens a root-level Modal directly — no restoreHandler/navigation needed.
+  // This is rendered by LiveSessionProvider which wraps the entire app, so the Modal
+  // always appears above all navigation screens.
   const restore = () => {
     setMinimized(false);
-    setCollapsed(false);
-    if (restoreHandler) {
-      try {
-        restoreHandler();
-        setPendingRestore(false);
-      } catch {
-        setPendingRestore(true);
-      }
-    } else {
-      setPendingRestore(true);
-    }
+    setShowRestoredModal(true);
   };
 
   const value = useMemo<LiveSessionContextValue>(
@@ -193,13 +195,16 @@ export const LiveSessionProvider = ({
       minimized,
       setSession,
       clearSession,
-      minimize: () => setMinimized(true),
+      minimize: () => {
+        setMinimized(true);
+        setShowRestoredModal(false);
+      },
       restore,
       setRestoreHandler,
       pendingRestore,
       consumePendingRestore: () => setPendingRestore(false),
     }),
-    [session, minimized, restoreHandler, pendingRestore]
+    [session, minimized, restoreHandler, pendingRestore, showRestoredModal]
   );
 
   // If a restore was requested before a handler was available, trigger it once the handler mounts
@@ -215,83 +220,93 @@ export const LiveSessionProvider = ({
   }, [pendingRestore, restoreHandler]);
 
   const showOverlay = minimized && session.call && session.client;
-  const mainParticipant =
-    session.call?.state.localParticipant ?? session.call?.state.participants[0];
-  const overlayWidth = collapsed ? 64 : 180;
-  const overlayHeight = collapsed ? 64 : 120;
 
-  // Render overlay based on WebRTC availability
+  // Hardware back button restores the full-screen stream when the overlay is visible
+  React.useEffect(() => {
+    if (!showOverlay) return;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      restore();
+      return true; // prevent default back navigation
+    });
+    return () => sub.remove();
+  }, [showOverlay]);
+
+  const mainParticipant = (() => {
+    const all = session.call?.state.participants ?? [];
+    const local = session.call?.state.localParticipant;
+
+    if (session.role === "viewer") {
+      // Viewers don't publish video — show the first remote participant (the host)
+      const remote = all.find((p: any) => p.userId !== local?.userId);
+      return remote ?? local ?? all[0] ?? null;
+    }
+
+    return local ?? all[0] ?? null;
+  })();
+
   const renderOverlay = () => {
     if (!showOverlay) return null;
 
     const overlayContent = (
-      <View
+      <Animated.View
         style={[
           styles.overlayContainer,
-          {
-            width: overlayWidth,
-            height: overlayHeight,
-            left: position.x,
-            top: position.y,
-          },
+          { width: PIP_W, height: PIP_H },
+          animPos.getLayout(),
         ]}
-        pointerEvents="box-none"
         {...panResponder.panHandlers}
       >
-        {collapsed ? (
+        <View style={styles.overlayCard}>
+          {/* Video feed fills the card */}
+          {webRTCAvailable && mainParticipant ? (
+            <ParticipantView
+              participant={mainParticipant}
+              style={StyleSheet.absoluteFill}
+            />
+          ) : (
+            <View style={[StyleSheet.absoluteFill, styles.overlayNoVideo]}>
+              <Text style={styles.overlayNoVideoText}>LIVE</Text>
+            </View>
+          )}
+
+          {/* Transparent full-card tap area → restore fullscreen */}
           <TouchableOpacity
-            style={styles.overlayCollapsed}
-            onPress={() => setCollapsed(false)}
-            activeOpacity={0.9}
-          >
-            <Text style={styles.overlayLabel}>Live</Text>
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.overlayCard}>
-            <TouchableOpacity
-              style={styles.overlayVideo}
-              onPress={restore}
-              activeOpacity={0.9}
-            >
-              {webRTCAvailable && mainParticipant ? (
-                <ParticipantView
-                  participant={mainParticipant}
-                  style={StyleSheet.absoluteFill}
-                />
-              ) : (
-                <View style={[StyleSheet.absoluteFill, { backgroundColor: '#1a1a1a', justifyContent: 'center', alignItems: 'center' }]}>
-                  <Text style={{ color: '#666', fontSize: 11 }}>
-                    {webRTCAvailable ? 'No video' : 'Expo Go'}
-                  </Text>
-                </View>
-              )}
-              <View style={styles.overlayLabelWrap}>
-                <Text style={styles.overlayLabel}>
-                  {session.streamMeta?.title || "Live"}
-                </Text>
+            style={StyleSheet.absoluteFill}
+            onPress={restore}
+            activeOpacity={0.15}
+          />
+
+          {/* Overlaid controls — rendered last so they sit above the tap area */}
+          <View style={[StyleSheet.absoluteFill]} pointerEvents="box-none">
+            {/* Top bar: LIVE badge + close */}
+            <View style={styles.overlayTopBar}>
+              <View style={styles.overlayLiveBadge}>
+                <View style={styles.overlayLiveDot} />
+                <Text style={styles.overlayLiveText}>LIVE</Text>
               </View>
-            </TouchableOpacity>
-            <View style={styles.overlayActions}>
-              <TouchableOpacity onPress={restore}>
-                <Text style={styles.overlayActionText}>Open</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => setCollapsed(true)}>
-                <Text style={styles.overlayActionText}>Hide</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={clearSession}>
-                <Text
-                  style={[styles.overlayActionText, { color: "#F87171" }]}
-                >
-                  Close
-                </Text>
+              <TouchableOpacity
+                style={styles.overlayCloseBtn}
+                onPress={clearSession}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              >
+                <XIcon size={13} color="#fff" strokeWidth={2.5} />
               </TouchableOpacity>
             </View>
+
+            {/* Spacer */}
+            <View style={{ flex: 1 }} pointerEvents="none" />
+
+            {/* Bottom: stream title */}
+            <View style={styles.overlayBottomBar} pointerEvents="none">
+              <Text style={styles.overlayTitle} numberOfLines={1}>
+                {session.streamMeta?.title || "Live"}
+              </Text>
+            </View>
           </View>
-        )}
-      </View>
+        </View>
+      </Animated.View>
     );
 
-    // Wrap in WebRTC components only if available
     if (webRTCAvailable && StreamVideo && StreamCall) {
       return (
         <StreamVideo client={session.client!}>
@@ -301,8 +316,6 @@ export const LiveSessionProvider = ({
         </StreamVideo>
       );
     }
-
-    // Return stub overlay for Expo Go
     return overlayContent;
   };
 
@@ -310,6 +323,31 @@ export const LiveSessionProvider = ({
     <LiveSessionContext.Provider value={value}>
       {children}
       {renderOverlay()}
+      {/* Restore modal — rendered at root level so it always appears above all navigation screens */}
+      <Modal
+        visible={showRestoredModal}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        statusBarTranslucent={true}
+        onRequestClose={() => { /* let Live.tsx handle its own close button */ }}
+      >
+        {(() => {
+          const LiveWrapperComp = getLiveWrapperComponent();
+          return LiveWrapperComp ? (
+            <LiveWrapperComp
+              onClose={clearSession}
+              onMinimize={() => {
+                setMinimized(true);
+                setShowRestoredModal(false);
+              }}
+            />
+          ) : (
+            <View style={{ flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' }}>
+              <ActivityIndicator color="#fff" size="large" />
+            </View>
+          );
+        })()}
+      </Modal>
     </LiveSessionContext.Provider>
   );
 };
@@ -324,57 +362,78 @@ export const useLiveSession = () => {
 const styles = StyleSheet.create({
   overlayContainer: {
     position: "absolute",
-    right: 12,
-    bottom: 90,
-    width: 180,
-    height: 120,
-    zIndex: 1000,
+    zIndex: 9999,
+    elevation: 10,
   },
   overlayCard: {
     flex: 1,
-    backgroundColor: "#000",
-    borderRadius: 12,
+    borderRadius: 14,
     overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.2)",
+    backgroundColor: "#111",
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.18)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.55,
+    shadowRadius: 10,
   },
-  overlayVideo: {
-    flex: 1,
-    justifyContent: "flex-end",
-    padding: 8,
-    backgroundColor: "#000",
-  },
-  overlayLabelWrap: {
-    backgroundColor: "rgba(0,0,0,0.45)",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    alignSelf: "flex-start",
-  },
-  overlayLabel: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  overlayCollapsed: {
-    flex: 1,
-    backgroundColor: "#000",
-    borderRadius: 999,
+  overlayNoVideo: {
+    backgroundColor: "#1c1c1e",
     justifyContent: "center",
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.35)",
   },
-  overlayActions: {
+  overlayNoVideoText: {
+    color: "rgba(255,255,255,0.3)",
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 1.5,
+  },
+  overlayTopBar: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    backgroundColor: "rgba(0,0,0,0.75)",
+    alignItems: "center",
+    paddingHorizontal: 7,
+    paddingTop: 7,
+    paddingBottom: 4,
   },
-  overlayActionText: {
+  overlayLiveBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.6)",
+    borderRadius: 6,
+    paddingHorizontal: 5,
+    paddingVertical: 3,
+    gap: 4,
+  },
+  overlayLiveDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: "#ef4444",
+  },
+  overlayLiveText: {
     color: "#fff",
-    fontWeight: "700",
-    fontSize: 12,
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 1,
+  },
+  overlayCloseBtn: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "rgba(0,0,0,0.65)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  overlayBottomBar: {
+    paddingHorizontal: 8,
+    paddingBottom: 8,
+    paddingTop: 16,
+    backgroundColor: "rgba(0,0,0,0.55)",
+  },
+  overlayTitle: {
+    color: "rgba(255,255,255,0.9)",
+    fontSize: 10,
+    fontWeight: "600",
   },
 });

@@ -1,20 +1,19 @@
+import { reportProduct } from '@/lib/reportService';
 import * as Haptics from 'expo-haptics';
 import { AlertCircle, X } from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  ScrollView,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    KeyboardAvoidingView,
+    Modal,
+    ScrollView,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import Animated, { SlideInDown, SlideOutDown } from 'react-native-reanimated';
-import { reportProduct } from '@/lib/reportService';
 
 interface ReportProductModalProps {
   visible: boolean;
@@ -122,7 +121,7 @@ export default function ReportProductModal({
           exiting={SlideOutDown}
         >
           <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            behavior="padding"
           >
             <View className="bg-white rounded-t-3xl overflow-hidden">
               {/* Header */}

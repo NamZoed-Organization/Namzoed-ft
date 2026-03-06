@@ -3,9 +3,9 @@ import ImagePickerSheet from "@/components/ui/ImagePickerSheet";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { dzongkhagCenters } from "@/data/dzongkhag";
 import {
-  MarketplaceItem,
-  updateMarketplaceItem,
-  uploadMarketplaceImages,
+    MarketplaceItem,
+    updateMarketplaceItem,
+    uploadMarketplaceImages,
 } from "@/lib/postMarketPlace";
 import { Picker } from "@react-native-picker/picker";
 import { BlurView } from "expo-blur";
@@ -13,21 +13,20 @@ import * as ImagePicker from "expo-image-picker";
 import { Upload, X } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Image,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  ScrollView,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Image,
+    KeyboardAvoidingView,
+    Modal,
+    ScrollView,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from "react-native";
 import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
+    useAnimatedStyle,
+    useSharedValue,
+    withTiming,
 } from "react-native-reanimated";
 
 interface EditMarketplaceModalProps {
@@ -305,7 +304,7 @@ export default function EditMarketplaceModal({
     >
       <Animated.View style={[{ flex: 1 }, animatedStyle]}>
         <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          behavior="padding"
           className="flex-1 justify-end"
         >
           <View className="flex-1 bg-black/50 justify-end">

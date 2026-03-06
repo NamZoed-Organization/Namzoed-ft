@@ -15,6 +15,8 @@ interface ChatImagePickerProps {
   onOptimisticImage: (optimisticMsg: any) => void;
   onUploadSuccess: (finalMsg: any, optimisticId: string) => void;
   onUploadError: (optimisticId: string) => void;
+  /** 'gallery' (default) opens the photo library; 'camera' opens the camera. */
+  mode?: 'gallery' | 'camera';
 }
 
 export default function ChatImagePicker({
@@ -22,7 +24,8 @@ export default function ChatImagePicker({
   chatPartnerId,
   onOptimisticImage,
   onUploadSuccess,
-  onUploadError
+  onUploadError,
+  mode = 'gallery',
 }: ChatImagePickerProps) {
   const [isUploading, setIsUploading] = useState(false);
 
@@ -30,21 +33,33 @@ export default function ChatImagePicker({
     if (isUploading) return;
 
     try {
-      // Request permissions
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      
-      if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Please grant access to your photo library to send images.');
-        return;
-      }
+      let result: ImagePicker.ImagePickerResult;
 
-      // Pick image
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        quality: 0.7,
-        aspect: [4, 3],
-      });
+      if (mode === 'camera') {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission Required', 'Please grant camera access to take photos.');
+          return;
+        }
+        result = await ImagePicker.launchCameraAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: false,
+          quality: 0.7,
+        });
+      } else {
+        // Request permissions
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission Required', 'Please grant access to your photo library to send images.');
+          return;
+        }
+        // Pick image
+        result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: false,
+          quality: 0.7,
+        });
+      }
 
       if (result.canceled) {
         return;
@@ -73,11 +88,11 @@ export default function ChatImagePicker({
       await uploadImageToSupabase(imageUri, optimisticId);
 
     } catch (error) {
-      console.error('❌ Image pick error:', error);
-      Alert.alert('Error', 'Failed to pick image. Please try again.');
-      setIsUploading(false);
-    }
-  };
+    console.error('❌ Image pick error:', error);
+    Alert.alert('Error', 'Failed to pick image. Please try again.');
+    setIsUploading(false);
+  }
+};
 
   const uploadImageToSupabase = async (imageUri: string, optimisticId: string) => {
     try {
@@ -166,7 +181,11 @@ export default function ChatImagePicker({
       {isUploading ? (
         <ActivityIndicator size="small" color="#6b7280" />
       ) : (
-        <Ionicons name="image-outline" size={21} color="#6b7280" />
+        <Ionicons
+          name={mode === 'camera' ? 'camera-outline' : 'image-outline'}
+          size={21}
+          color="#6b7280"
+        />
       )}
     </TouchableOpacity>
   );

@@ -1,7 +1,7 @@
 import type {
-  Call,
-  StreamVideoClient,
-  User,
+    Call,
+    StreamVideoClient,
+    User,
 } from "@stream-io/video-react-native-sdk";
 
 import { GETSTREAM_CONFIG } from "@/config/getstream";
@@ -14,6 +14,29 @@ type StreamIdentity = {
   name: string;
   image?: string | null;
   custom?: Record<string, unknown>;
+};
+
+/**
+ * Strip JSON-unsafe control characters (U+0000 – U+001F) from a string.
+ * These cause `SyntaxError: JSON Parse error` inside the Stream SDK.
+ */
+const stripControlChars = (value: string): string =>
+  value.replace(/[\u0000-\u001F]/g, "");
+
+const sanitizeString = (value: string | undefined | null): string | undefined => {
+  if (value == null) return undefined;
+  return stripControlChars(value);
+};
+
+const sanitizeRecord = (
+  obj: Record<string, unknown> | undefined
+): Record<string, unknown> | undefined => {
+  if (!obj) return undefined;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    out[k] = typeof v === "string" ? stripControlChars(v) : v;
+  }
+  return out;
 };
 
 let cachedSdk: StreamSdkModule | null = null;
@@ -43,10 +66,10 @@ class GetStreamService {
 
   private async fetchToken(identity: StreamIdentity): Promise<string> {
     const payload = {
-      user_id: identity.id,
-      name: identity.name,
-      username: identity.name,
-      image: identity.image ?? null,
+      user_id: stripControlChars(identity.id),
+      name: stripControlChars(identity.name),
+      username: stripControlChars(identity.name),
+      image: identity.image ? stripControlChars(identity.image) : null,
     };
 
     const response = await supabase.functions.invoke<{
@@ -64,8 +87,23 @@ class GetStreamService {
     }
 
     const token = response.data?.token;
-    if (!token) {
+    if (!token || typeof token !== "string") {
       throw new Error("Stream token response did not include a token.");
+    }
+
+    // Validate the token's payload is parseable (catches control-char corruption
+    // before the Stream SDK tries and throws a cryptic JSON parse error).
+    try {
+      const parts = token.split(".");
+      if (parts.length !== 3) throw new Error("not a valid JWT (expected 3 parts)");
+      const decoded = atob(parts[1].replace(/-/g, "+").replace(/_/g, "/"));
+      JSON.parse(decoded); // will throw if control chars present
+    } catch (parseErr) {
+      throw new Error(
+        `Stream token is malformed — the edge function returned a JWT whose payload cannot be parsed. ` +
+        `Ensure GETSTREAM_SECRET is set correctly in Supabase and redeploy the getstream-token function. ` +
+        `Details: ${parseErr}`
+      );
     }
 
     return token;
@@ -73,10 +111,10 @@ class GetStreamService {
 
   private buildUser(identity: StreamIdentity): User {
     return {
-      id: identity.id,
-      name: identity.name,
-      image: identity.image ?? undefined,
-      custom: identity.custom,
+      id: stripControlChars(identity.id),
+      name: stripControlChars(identity.name),
+      image: sanitizeString(identity.image ?? undefined),
+      custom: sanitizeRecord(identity.custom),
     } as User;
   }
 
@@ -94,13 +132,16 @@ class GetStreamService {
       } catch {
         // ignore cleanup errors
       }
+      this.client = null;
     }
 
+    // v1.x requires creating the client first, then calling connectUser() explicitly.
+    // Passing user + token to the constructor does NOT connect the user in v1.x.
     this.client = new StreamVideoClientClass({
       apiKey: GETSTREAM_CONFIG.apiKey,
-      user: this.buildUser(identity),
-      token,
     });
+
+    await this.client.connectUser(this.buildUser(identity), token);
 
     this.currentUser = identity;
     return this.client;

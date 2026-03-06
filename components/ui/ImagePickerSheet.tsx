@@ -1,17 +1,15 @@
 import { Camera, Image as ImageIcon, X } from 'lucide-react-native';
 import React from 'react';
 import {
-  Modal,
-  Text,
-  TouchableOpacity,
-  View,
-  Pressable
+    Pressable,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import Animated, {
-  FadeIn,
-  FadeOut,
-  SlideInDown,
-  SlideOutDown
+    FadeIn,
+    SlideInDown,
 } from 'react-native-reanimated';
 
 interface ImagePickerSheetProps {
@@ -31,100 +29,154 @@ export default function ImagePickerSheet({
 }: ImagePickerSheetProps) {
   if (!visible) return null;
 
+  // Close the sheet first, then launch the picker with no Modal to wait for.
+  // No setTimeout needed — the sheet is a plain View overlay, not a nested Modal,
+  // so there is no native modal dismissal race condition.
   const handleCameraPress = () => {
     onClose();
-    setTimeout(() => onCameraPress(), 100);
+    onCameraPress();
   };
 
   const handleGalleryPress = () => {
     onClose();
-    setTimeout(() => onGalleryPress(), 100);
+    onGalleryPress();
   };
 
+  // Rendered as an absolute overlay *inside* the parent's view tree instead of a
+  // nested Modal.  Stacked native Modals cause the gallery picker to fail/freeze
+  // on iOS because the inner Modal hasn't fully dismissed by the time the system
+  // image picker is presented.
   return (
-    <Modal
-      transparent
-      visible={visible}
-      animationType="none"
-      onRequestClose={onClose}
-    >
-      <View className="flex-1 justify-end">
-        {/* Backdrop */}
-        <Pressable onPress={onClose} className="absolute inset-0">
-          <Animated.View
-            entering={FadeIn.duration(200)}
-            exiting={FadeOut.duration(200)}
-            className="flex-1 bg-black/50"
-          />
-        </Pressable>
-
-        {/* Sheet Content */}
+    <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+      {/* Backdrop */}
+      <Pressable
+        onPress={onClose}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="auto"
+      >
         <Animated.View
-          entering={SlideInDown.duration(250)}
-          exiting={SlideOutDown.duration(200)}
-          className="bg-white rounded-t-3xl pb-8 pt-2"
-        >
-          {/* Handle Bar */}
-          <View className="items-center py-3">
-            <View className="w-10 h-1 bg-gray-300 rounded-full" />
-          </View>
+          entering={FadeIn.duration(200)}
+          style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)' }]}
+        />
+      </Pressable>
 
-          {/* Header */}
-          <View className="flex-row items-center justify-between px-6 pb-4 border-b border-gray-100">
-            <Text className="text-lg font-semibold text-gray-900">{title}</Text>
-            <TouchableOpacity
-              onPress={onClose}
-              className="p-2 bg-gray-100 rounded-full"
-            >
-              <X size={18} color="#6B7280" />
-            </TouchableOpacity>
-          </View>
+      {/* Sheet Content */}
+      <Animated.View
+        entering={SlideInDown.duration(250)}
+        style={styles.sheet}
+        pointerEvents="auto"
+      >
+        {/* Handle Bar */}
+        <View style={styles.handleRow}>
+          <View style={styles.handle} />
+        </View>
 
-          {/* Options */}
-          <View className="px-6 pt-4 gap-3">
-            {/* Take Photo Option */}
-            <TouchableOpacity
-              onPress={handleCameraPress}
-              activeOpacity={0.7}
-              className="flex-row items-center p-4 bg-gray-50 rounded-2xl border border-gray-100"
-            >
-              <View className="w-12 h-12 bg-primary/10 rounded-xl items-center justify-center mr-4">
-                <Camera size={24} color="#094569" />
-              </View>
-              <View className="flex-1">
-                <Text className="text-base font-medium text-gray-900">Take Photo</Text>
-                <Text className="text-sm text-gray-500">Use your camera</Text>
-              </View>
-            </TouchableOpacity>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>{title}</Text>
+          <TouchableOpacity
+            onPress={onClose}
+            style={styles.closeBtn}
+          >
+            <X size={18} color="#6B7280" />
+          </TouchableOpacity>
+        </View>
 
-            {/* Choose from Gallery Option */}
-            <TouchableOpacity
-              onPress={handleGalleryPress}
-              activeOpacity={0.7}
-              className="flex-row items-center p-4 bg-gray-50 rounded-2xl border border-gray-100"
-            >
-              <View className="w-12 h-12 bg-primary/10 rounded-xl items-center justify-center mr-4">
-                <ImageIcon size={24} color="#094569" />
-              </View>
-              <View className="flex-1">
-                <Text className="text-base font-medium text-gray-900">Choose from Gallery</Text>
-                <Text className="text-sm text-gray-500">Select from your photos</Text>
-              </View>
-            </TouchableOpacity>
-          </View>
+        {/* Options */}
+        <View style={styles.optionsContainer}>
+          {/* Take Photo */}
+          <TouchableOpacity
+            onPress={handleCameraPress}
+            activeOpacity={0.7}
+            style={styles.optionRow}
+          >
+            <View style={styles.optionIcon}>
+              <Camera size={24} color="#094569" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.optionTitle}>Take Photo</Text>
+              <Text style={styles.optionSubtitle}>Use your camera</Text>
+            </View>
+          </TouchableOpacity>
 
-          {/* Cancel Button */}
-          <View className="px-6 pt-4">
-            <TouchableOpacity
-              onPress={onClose}
-              activeOpacity={0.7}
-              className="py-4 bg-gray-100 rounded-2xl"
-            >
-              <Text className="text-center text-base font-medium text-gray-600">Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </Animated.View>
-      </View>
-    </Modal>
+          {/* Choose from Gallery */}
+          <TouchableOpacity
+            onPress={handleGalleryPress}
+            activeOpacity={0.7}
+            style={styles.optionRow}
+          >
+            <View style={styles.optionIcon}>
+              <ImageIcon size={24} color="#094569" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.optionTitle}>Choose from Gallery</Text>
+              <Text style={styles.optionSubtitle}>Select from your photos</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+
+        {/* Cancel */}
+        <View style={styles.cancelContainer}>
+          <TouchableOpacity
+            onPress={onClose}
+            activeOpacity={0.7}
+            style={styles.cancelBtn}
+          >
+            <Text style={styles.cancelText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </Animated.View>
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  sheet: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingBottom: 32,
+    paddingTop: 8,
+  },
+  handleRow: { alignItems: 'center', paddingVertical: 12 },
+  handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#D1D5DB' },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  headerTitle: { fontSize: 18, fontWeight: '600', color: '#111827' },
+  closeBtn: { padding: 8, backgroundColor: '#F3F4F6', borderRadius: 999 },
+  optionsContainer: { paddingHorizontal: 24, paddingTop: 16, gap: 12 },
+  optionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+  },
+  optionIcon: {
+    width: 48,
+    height: 48,
+    backgroundColor: 'rgba(9,69,105,0.08)',
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+  },
+  optionTitle: { fontSize: 16, fontWeight: '500', color: '#111827' },
+  optionSubtitle: { fontSize: 14, color: '#6B7280', marginTop: 2 },
+  cancelContainer: { paddingHorizontal: 24, paddingTop: 16 },
+  cancelBtn: { paddingVertical: 16, backgroundColor: '#F3F4F6', borderRadius: 16 },
+  cancelText: { textAlign: 'center', fontSize: 16, fontWeight: '500', color: '#4B5563' },
+});

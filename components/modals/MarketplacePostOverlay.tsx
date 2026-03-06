@@ -13,6 +13,7 @@ import {
   ArrowLeft,
   Briefcase,
   Camera,
+  Crop,
   Gift,
   Home,
   RefreshCw,
@@ -113,6 +114,7 @@ export default function MarketplacePostOverlay({
   // Image crop overlay
   const [showCropper, setShowCropper] = useState(false);
   const [pendingImageUri, setPendingImageUri] = useState<string | null>(null);
+  const [cropIndex, setCropIndex] = useState<number | null>(null);
 
   // Vertical slide for drag-to-close
   const panY = useRef(new Animated.Value(0)).current;
@@ -177,8 +179,7 @@ export default function MarketplacePostOverlay({
       });
 
       if (!result.canceled && result.assets?.[0]) {
-        setPendingImageUri(result.assets[0].uri);
-        setShowCropper(true);
+        setSelectedImages((prev) => [...prev, result.assets[0].uri]);
       }
     } catch (error) {
       console.error("Failed to open camera:", error);
@@ -202,13 +203,18 @@ export default function MarketplacePostOverlay({
       });
 
       if (!result.canceled && result.assets?.[0]) {
-        setPendingImageUri(result.assets[0].uri);
-        setShowCropper(true);
+        setSelectedImages((prev) => [...prev, result.assets[0].uri]);
       }
     } catch (error) {
       console.error("Failed to open gallery:", error);
       showErrorPopup("Failed to open gallery.");
     }
+  };
+
+  const handleEditImage = (index: number) => {
+    setCropIndex(index);
+    setPendingImageUri(selectedImages[index]);
+    setShowCropper(true);
   };
 
   const handleAddImage = () => {
@@ -220,7 +226,14 @@ export default function MarketplacePostOverlay({
   };
 
   const handleCropSave = (croppedUri: string) => {
-    setSelectedImages([...selectedImages, croppedUri]);
+    if (cropIndex !== null) {
+      setSelectedImages((prev) =>
+        prev.map((uri, i) => (i === cropIndex ? croppedUri : uri))
+      );
+      setCropIndex(null);
+    } else {
+      setSelectedImages((prev) => [...prev, croppedUri]);
+    }
     setShowCropper(false);
     setPendingImageUri(null);
   };
@@ -228,6 +241,7 @@ export default function MarketplacePostOverlay({
   const handleCropCancel = () => {
     setShowCropper(false);
     setPendingImageUri(null);
+    setCropIndex(null);
   };
 
   const handleRemoveImage = (index: number) => {
@@ -673,6 +687,13 @@ export default function MarketplacePostOverlay({
                             source={{ uri }}
                             className="w-full h-full rounded-lg"
                           />
+                          {/* Optional crop/edit button */}
+                          <TouchableOpacity
+                            onPress={() => handleEditImage(index)}
+                            className="absolute bottom-0 right-0 bg-black/60 rounded-tl-lg px-1.5 py-1"
+                          >
+                            <Crop size={12} color="white" />
+                          </TouchableOpacity>
                           <TouchableOpacity
                             onPress={() => handleRemoveImage(index)}
                             className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 rounded-full items-center justify-center"
@@ -745,7 +766,6 @@ export default function MarketplacePostOverlay({
             imageUri={pendingImageUri}
             onSave={handleCropSave}
             onCancel={handleCropCancel}
-            initialAspectRatio="1:1"
           />
         </Modal>
       )}

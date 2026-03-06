@@ -1,25 +1,27 @@
 import { supabase } from "@/lib/supabase";
+import { Ionicons } from "@expo/vector-icons";
 import MaskedView from "@react-native-masked-view/masked-view";
+import { useCallStateHooks } from "@stream-io/video-react-native-sdk";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { ShoppingBag } from "lucide-react-native";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  FlatList,
-  Image,
-  Keyboard,
-  KeyboardAvoidingView,
-  Platform,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  useWindowDimensions,
-  View,
+    FlatList,
+    Image,
+    Keyboard,
+    KeyboardAvoidingView,
+    Platform,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    useWindowDimensions,
+    View,
 } from "react-native";
 import Animated, {
-  FadeInRight,
-  LinearTransition,
+    FadeInRight,
+    LinearTransition,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -69,10 +71,12 @@ export const LiveChat = ({
   liveStreamId,
   hostId,
   isHostView = false,
+  onNavigate,
 }: {
   liveStreamId: string | null | undefined;
   hostId?: string | null;
   isHostView: boolean;
+  onNavigate?: () => void;
 }) => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -81,12 +85,31 @@ export const LiveChat = ({
   const [inputText, setInputText] = useState("");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [sharedProducts, setSharedProducts] = useState<any[]>([]);
-  const [viewerCount, setViewerCount] = useState<number>(0);
   const [showGuidelines, setShowGuidelines] = useState(true);
-  const joinedUsersRef = React.useRef<Set<string>>(new Set());
+  // Android: track keyboard height to push input above keyboard
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  // Track participants seen so far to detect new joins
+  const prevParticipantIdsRef = useRef<Set<string>>(new Set());
+  const isParticipantFirstRenderRef = useRef(true);
 
   const { height: windowHeight } = useWindowDimensions();
-  const maxPanelHeight = Math.round(windowHeight * 0.45);
+  const maxPanelHeight = Math.round(windowHeight * (isHostView ? 0.45 : 0.33));
+
+  // Android keyboard listener — KeyboardAvoidingView is unreliable in
+  // absolute-positioned overlays on Android so we manually track keyboard height.
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+    const showSub = Keyboard.addListener("keyboardDidShow", (e) => {
+      setKeyboardHeight(e.endCoordinates.height);
+    });
+    const hideSub = Keyboard.addListener("keyboardDidHide", () => {
+      setKeyboardHeight(0);
+    });
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -119,104 +142,64 @@ export const LiveChat = ({
     }
   }, [liveStreamId]);
 
-  // Real-time viewer count subscription
+  // Track user joins in real-time via Stream SDK participant list
+  const { useParticipants } = useCallStateHooks();
+  const participants = useParticipants();
+
   useEffect(() => {
-    if (!liveStreamId) return;
+    if (!participants || participants.length === 0) return;
 
-    // Initial fetch
-    const fetchViewerCount = async () => {
-      const { data, error } = await supabase
-        .from("live_streams")
-        .select("viewer_count")
-        .eq("id", liveStreamId)
-        .single();
+    const currentIds = new Set(participants.map((p) => p.userId));
 
-      if (data && !error) {
-        setViewerCount(data.viewer_count || 0);
-      }
-    };
-    fetchViewerCount();
+    // On the very first render, just record who is already there — no join toasts
+    if (isParticipantFirstRenderRef.current) {
+      isParticipantFirstRenderRef.current = false;
+      prevParticipantIdsRef.current = currentIds;
+      return;
+    }
 
-    // Subscribe to real-time updates
-    const channel = supabase
-      .channel(`viewer-count-${liveStreamId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "live_streams",
-          filter: `id=eq.${liveStreamId}`,
-        },
-        (payload) => {
-          if (payload.new && typeof payload.new.viewer_count === "number") {
-            setViewerCount(payload.new.viewer_count);
-          }
-        },
-      )
-      .subscribe();
+    // Find participants who weren't in the previous snapshot
+    const newJoiners = participants.filter(
+      (p) => !prevParticipantIdsRef.current.has(p.userId),
+    );
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [liveStreamId]);
+    // Update snapshot
+    prevParticipantIdsRef.current = currentIds;
 
-  // Track user joins via new comments (when someone sends their first message, show join notification)
-  // This approach doesn't require a separate stream_viewers table
-  useEffect(() => {
-    if (!liveStreamId) return;
+    for (const participant of newJoiners) {
+      const userId = participant.userId;
 
-    // Listen for new comments and show join message for first-time commenters
-    const channel = supabase
-      .channel(`stream-joins-${liveStreamId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "stream_comments",
-          filter: `live_stream_id=eq.${liveStreamId}`,
-        },
-        async (payload) => {
-          const userId = payload.new?.user_id;
-          if (!userId || joinedUsersRef.current.has(userId)) return;
+      // Don't show "host joined the live" — host is always the stream owner
+      if (hostId && userId === hostId) continue;
 
-          // Mark as seen to only show join once per user
-          joinedUsersRef.current.add(userId);
+      // Fetch profile then display join toast
+      (async () => {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("name, avatar_url")
+          .eq("id", userId)
+          .single();
 
-          // Fetch user profile for the join message
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("name, avatar_url")
-            .eq("id", userId)
-            .single();
+        const joinMessage: SystemMessage = {
+          id: `join-${userId}-${Date.now()}`,
+          type: "join",
+          text: "joined the live",
+          username: profile?.name || participant.name || "Someone",
+          avatar_url: profile?.avatar_url ?? participant.image,
+          created_at: new Date().toISOString(),
+        };
 
-          const joinMessage: SystemMessage = {
-            id: `join-${userId}-${Date.now()}`,
-            type: "join",
-            text: "joined the live",
-            username: profile?.name || "Someone",
-            avatar_url: profile?.avatar_url,
-            created_at: new Date().toISOString(),
-          };
+        setSystemMessages((prev) => [joinMessage, ...prev]);
 
-          setSystemMessages((prev) => [joinMessage, ...prev]);
-
-          // Remove join message after 5 seconds
-          setTimeout(() => {
-            setSystemMessages((prev) =>
-              prev.filter((m) => m.id !== joinMessage.id),
-            );
-          }, 5000);
-        },
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-      joinedUsersRef.current.clear();
-    };
-  }, [liveStreamId]);
+        // Auto-remove after 5 seconds
+        setTimeout(() => {
+          setSystemMessages((prev) =>
+            prev.filter((m) => m.id !== joinMessage.id),
+          );
+        }, 5000);
+      })();
+    }
+  }, [participants, hostId]);
 
   // host products are displayed in the host UI (Live.tsx); viewers only need shared products here
 
@@ -444,15 +427,69 @@ export const LiveChat = ({
     const commentItem = item as Comment & { itemType: "comment" };
     const isHost = !!hostId && String(hostId) === String(commentItem.user_id);
 
+    if (!isHostView) {
+      // Viewer: avatar + username on top + comment below, transparent background
+      return (
+        <Animated.View
+          entering={FadeInRight.springify().damping(20).stiffness(100)}
+          layout={LinearTransition.springify?.()}
+          style={[styles.animatedRow, styles.viewerCommentRow]}
+        >
+          <View style={styles.commentRow}>
+            <TouchableOpacity
+              onPress={() => {
+                onNavigate?.();
+                router.push(`/(users)/profile/${commentItem.user_id}` as any);
+              }}
+              activeOpacity={0.8}
+            >
+              <Image
+                source={{
+                  uri:
+                    commentItem.profiles?.avatar_url ||
+                    "https://www.gravatar.com/avatar/?d=mp",
+                }}
+                style={styles.avatar}
+              />
+            </TouchableOpacity>
+            <View style={styles.commentContent}>
+              <View style={styles.nameRow}>
+                <TouchableOpacity
+                  onPress={() => {
+                    onNavigate?.();
+                    router.push(
+                      `/(users)/profile/${commentItem.user_id}` as any,
+                    );
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text
+                    style={[styles.nameText, isHost && styles.hostName]}
+                    numberOfLines={1}
+                  >
+                    {commentItem.profiles?.name || "user"}
+                  </Text>
+                </TouchableOpacity>
+                {isHost && (
+                  <View style={styles.hostBadge}>
+                    <Text style={styles.hostBadgeText}>Host</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={styles.messageText}>{commentItem.text}</Text>
+            </View>
+          </View>
+        </Animated.View>
+      );
+    }
+
     return (
       <Animated.View
         entering={FadeInRight.springify().damping(20).stiffness(100)}
         layout={LinearTransition.springify?.()}
-        style={[styles.animatedRow, !isHostView && styles.viewerCommentRow]}
+        style={styles.animatedRow}
       >
-        <View
-          style={[styles.commentRow, !isHostView && styles.viewerCommentBubble]}
-        >
+        <View style={styles.commentRow}>
           <Image
             source={{
               uri:
@@ -482,41 +519,30 @@ export const LiveChat = ({
     );
   };
 
-  // Render viewer count badge
-  const renderViewerCount = () => (
-    <View style={styles.viewerCountContainer}>
-      <View style={styles.viewerCountBadge}>
-        <View style={styles.liveDot} />
-        <Text style={styles.viewerCountText}>
-          {viewerCount} {viewerCount === 1 ? "watching" : "watching"}
-        </Text>
-      </View>
-    </View>
-  );
-
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
       keyboardVerticalOffset={
-        isHostView
-          ? Platform.OS === "ios"
-            ? 0
-            : 20
-          : Platform.OS === "ios"
-            ? insets.bottom + 60
-            : 0
+        Platform.OS === "ios"
+          ? isHostView
+            ? insets.bottom
+            : insets.bottom + 60 // viewer: above bottom tab bar
+          : 0
       }
       style={{ flex: 1 }}
       pointerEvents="auto"
     >
+      {/* Android: push panel up by keyboard height */}
       <View
-        style={[styles.panelContainer, { height: maxPanelHeight }]}
+        style={[
+          styles.panelContainer,
+          { height: maxPanelHeight },
+          Platform.OS === "android" && keyboardHeight > 0
+            ? { bottom: keyboardHeight }
+            : null,
+        ]}
         pointerEvents="auto"
       >
-        {/* Mask to fade out top area */}
-        {/* Viewer count badge */}
-        {!isHostView && renderViewerCount()}
-
         <MaskedView
           style={{ flex: 1 }}
           maskElement={
@@ -535,6 +561,8 @@ export const LiveChat = ({
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: 8, paddingTop: 8 }}
             style={{ flex: 1 }}
+            scrollEnabled
+            nestedScrollEnabled
             onScrollBeginDrag={Keyboard.dismiss}
           />
         </MaskedView>
@@ -562,6 +590,7 @@ export const LiveChat = ({
                   onPress={() => {
                     const productId = item.product?.id || item.product_id;
                     if (productId) {
+                      onNavigate?.();
                       router.push(`/(users)/marketplace/${productId}` as any);
                     }
                   }}
@@ -602,25 +631,19 @@ export const LiveChat = ({
               onChangeText={setInputText}
               autoCorrect={false}
               multiline={false}
-              numberOfLines={4}
-              textAlignVertical="top"
+              returnKeyType="send"
+              onSubmitEditing={sendComment}
+              blurOnSubmit={false}
             />
-            <TouchableOpacity
-              onPress={sendComment}
-              disabled={!inputText.trim()}
-              style={styles.sendButton}
-            >
-              <Text
-                style={[
-                  styles.sendText,
-                  {
-                    color: inputText.trim() ? "#fff" : "rgba(255,255,255,0.2)",
-                  },
-                ]}
+            {inputText.trim().length > 0 && (
+              <TouchableOpacity
+                onPress={sendComment}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                style={styles.sendButton}
               >
-                Send
-              </Text>
-            </TouchableOpacity>
+                <Ionicons name="send" size={20} color="#fff" />
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </View>
@@ -641,11 +664,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   viewerCommentRow: {
-    maxWidth: "55%",
+    maxWidth: "65%",
   },
   viewerCommentBubble: {
-    backgroundColor: "rgba(0,0,0,0.5)",
-    borderRadius: 16,
+    backgroundColor: "transparent",
+  },
+  viewerCommentText: {
+    color: "#fff",
+    fontSize: 13,
+    lineHeight: 18,
+    flexWrap: "wrap",
+  },
+  hostBadgeInline: {
+    color: "#FFD700",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  messageSeparator: {
+    color: "transparent",
   },
   commentRow: {
     flexDirection: "row",
@@ -732,7 +768,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.45)",
     borderColor: "rgba(255,255,255,0.08)",
     borderWidth: 1,
-    borderRadius: 24,
+    borderRadius: 9999,
     paddingHorizontal: 12,
     paddingVertical: 8,
     minHeight: 44,
@@ -748,11 +784,7 @@ const styles = StyleSheet.create({
   sendButton: {
     justifyContent: "center",
     alignItems: "center",
-    paddingLeft: 12,
-  },
-  sendText: {
-    fontWeight: "700",
-    fontSize: 14,
+    paddingLeft: 8,
   },
   // Viewer products - vertical list on RIGHT side (opposite of chat)
   viewerProductsContainer: {
@@ -825,35 +857,6 @@ const styles = StyleSheet.create({
   },
   viewProductBadgeText: {
     display: "none",
-  },
-  // Viewer count styles
-  viewerCountContainer: {
-    position: "absolute",
-    top: -40,
-    left: 0,
-    right: 0,
-    alignItems: "flex-start",
-    zIndex: 100,
-  },
-  viewerCountBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.6)",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 16,
-  },
-  liveDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#EF4444",
-    marginRight: 6,
-  },
-  viewerCountText: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "600",
   },
   // Guideline styles
   guidelineRow: {

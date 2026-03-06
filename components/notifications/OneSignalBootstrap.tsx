@@ -23,22 +23,32 @@ export default function OneSignalBootstrap() {
     requestOneSignalPermissionIfNeeded().catch((error) => {
     });
 
-    // Temporary diagnostics for TestFlight/device push mapping.
-    const timer = setTimeout(() => {
-      logOneSignalDebugState("app_start").catch(() => undefined);
-    }, 1200);
+    // Diagnostics — only run in development builds.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    if (__DEV__) {
+      timer = setTimeout(() => {
+        logOneSignalDebugState("app_start").catch(() => undefined);
+      }, 1200);
+    }
 
-    return () => clearTimeout(timer);
+    return () => { if (timer) clearTimeout(timer); };
   }, []);
 
   useEffect(() => {
     if (!ensureOneSignalInitialized()) return;
 
-    // Suppress push notifications when the app is in the foreground.
-    // Real-time chat updates are shown directly in the UI, so a banner is redundant
-    // and confusing while the user is actively using the app.
+    // Suppress chat-message pushes in the foreground (real-time UI handles
+    // them).  Other notification types (follow, like, live, new post) are
+    // allowed through so the native banner appears.
     const handleForegroundNotification = (event: any) => {
-      event.preventDefault();
+      const additionalData = event?.notification?.additionalData as
+        | Record<string, unknown>
+        | undefined;
+      const type = String(additionalData?.type ?? "");
+      if (type === "chat_message") {
+        event.preventDefault(); // suppress chat banners
+      }
+      // All other types are shown natively
     };
 
     const unsubscribeForeground = addOneSignalForegroundNotificationHandler(
@@ -57,14 +67,49 @@ export default function OneSignalBootstrap() {
         | Record<string, unknown>
         | undefined;
       const type = String(additionalData?.type ?? "");
-      if (type !== "chat_message") return;
 
-      const chatPartnerId = String(
-        additionalData?.chat_partner_id ?? additionalData?.sender_id ?? "",
-      );
-
-      if (!chatPartnerId) return;
-      router.push(`/(users)/chat/${chatPartnerId}` as any);
+      switch (type) {
+        case "chat_message": {
+          const chatPartnerId = String(
+            additionalData?.chat_partner_id ??
+              additionalData?.sender_id ??
+              "",
+          );
+          if (chatPartnerId) {
+            router.push(`/(users)/chat/${chatPartnerId}` as any);
+          }
+          break;
+        }
+        case "new_follower": {
+          const actorId = String(additionalData?.actor_id ?? "");
+          if (actorId) {
+            router.push(`/(users)/profile/${actorId}` as any);
+          } else {
+            router.push("/(users)/notifications" as any);
+          }
+          break;
+        }
+        case "post_liked":
+        case "new_post": {
+          // Navigate to the actor's profile (or notifications if no actor)
+          const actorId = String(additionalData?.actor_id ?? "");
+          if (actorId) {
+            router.push(`/(users)/profile/${actorId}` as any);
+          } else {
+            router.push("/(users)/notifications" as any);
+          }
+          break;
+        }
+        case "user_went_live": {
+          // Navigate to feed where LivesBar will surface the active stream
+          router.push("/(users)/(tabs)/feed" as any);
+          break;
+        }
+        default:
+          // Unknown type — fall back to notifications screen
+          router.push("/(users)/notifications" as any);
+          break;
+      }
     };
 
     const unsubscribe = addOneSignalNotificationClickListener(
