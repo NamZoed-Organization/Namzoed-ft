@@ -1,5 +1,5 @@
-import { bannerData } from "@/data/bannerData";
-import { useRef, useState } from "react";
+import { useBanners } from "@/data/bannerData";
+import React, { useRef, useState } from "react";
 import {
     Animated,
     Dimensions,
@@ -16,8 +16,9 @@ const CARD_WIDTH = width * 0.9;
 export default function Banner() {
   const scrollX = useRef(new Animated.Value(0)).current;
   const [activeIndex, setActiveIndex] = useState(0);
+  const { banners, loading } = useBanners();
 
-  if (bannerData.length === 0) return null;
+  if (loading || banners.length === 0) return null;
 
   const handleScroll = Animated.event(
     [{ nativeEvent: { contentOffset: { x: scrollX } } }],
@@ -65,7 +66,7 @@ export default function Banner() {
           >
             <View className="relative h-[90%] aspect-square w-full">
               <Image
-                source={item.image}
+                source={{ uri: item.image_url }}
                 style={{
                   height: "100%",
                   width: "100%",
@@ -92,7 +93,7 @@ export default function Banner() {
     <View className="relative mt-3">
       <View className="bg-primary rounded-xl overflow-hidden h-56 justify-center">
         <Animated.FlatList
-          data={bannerData}
+          data={banners}
           keyExtractor={(item) => item.id}
           horizontal
           pagingEnabled
@@ -113,7 +114,7 @@ export default function Banner() {
       </View>
 
       <View className="mt-4 flex-row justify-center gap-2">
-        {bannerData.map((_, index) => (
+        {banners.map((_, index) => (
           <View
             key={index}
             className={`w-2 h-2 rounded-full ${
