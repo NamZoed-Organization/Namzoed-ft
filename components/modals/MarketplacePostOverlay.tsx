@@ -4,35 +4,35 @@ import { useDzongkhag } from "@/contexts/DzongkhagContext";
 import { useUser } from "@/contexts/UserContext";
 import { dzongkhagCenters } from "@/data/dzongkhag";
 import {
-  createMarketplaceItem,
-  uploadMarketplaceImages,
+    createMarketplaceItem,
+    uploadMarketplaceImages,
 } from "@/lib/postMarketPlace";
 import { Picker } from "@react-native-picker/picker";
 import * as ImagePicker from "expo-image-picker";
 import {
-  ArrowLeft,
-  Briefcase,
-  Camera,
-  Crop,
-  Gift,
-  Home,
-  RefreshCw,
-  ShoppingCart,
-  Trash2,
+    ArrowLeft,
+    Briefcase,
+    Camera,
+    Crop,
+    Gift,
+    Home,
+    RefreshCw,
+    ShoppingCart,
+    Trash2,
 } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Animated,
-  Dimensions,
-  Image,
-  Modal,
-  PanResponder,
-  ScrollView,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Animated,
+    Dimensions,
+    Image,
+    Modal,
+    PanResponder,
+    ScrollView,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import ImageCropperOverlay from "./ImageCropperOverlay";
 

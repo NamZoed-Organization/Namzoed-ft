@@ -3,12 +3,12 @@ import { useRouter } from 'expo-router';
 import { ShoppingBag, User, X } from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
-  Image,
-  Modal,
-  ScrollView,
-  Text,
-  TouchableOpacity,
-  View,
+    Image,
+    Modal,
+    ScrollView,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 
 interface TaggedItemsModalProps {

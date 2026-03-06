@@ -3,39 +3,39 @@ import ReportProductModal from "@/components/modals/ReportProductModal";
 import ImageWithFallback from "@/components/ui/ImageWithFallback";
 import { useUser } from "@/contexts/UserContext";
 import {
-  fetchMarketplaceItemById,
-  MarketplaceItemWithUser,
+    fetchMarketplaceItemById,
+    MarketplaceItemWithUser,
 } from "@/lib/postMarketPlace";
 import { supabase } from "@/lib/supabase";
 import {
-  Stack,
-  useFocusEffect,
-  useLocalSearchParams,
-  useRouter,
+    Stack,
+    useFocusEffect,
+    useLocalSearchParams,
+    useRouter,
 } from "expo-router";
 import {
-  ArrowLeft,
-  Bookmark,
-  Calendar,
-  ChevronLeft,
-  ChevronRight,
-  Flag,
-  MapPin,
-  MessageCircle,
-  User
+    ArrowLeft,
+    Bookmark,
+    Calendar,
+    ChevronLeft,
+    ChevronRight,
+    Flag,
+    MapPin,
+    MessageCircle,
+    User
 } from "lucide-react-native";
 import React, { useCallback, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  BackHandler,
-  Dimensions,
-  Linking,
-  RefreshControl,
-  ScrollView,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    BackHandler,
+    Dimensions,
+    Linking,
+    RefreshControl,
+    ScrollView,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 

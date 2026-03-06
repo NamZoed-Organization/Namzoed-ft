@@ -14,13 +14,13 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Plus, Radio } from "lucide-react-native";
 import React, { useRef, useState } from "react";
 import {
-  FlatList,
-  Image,
-  Modal,
-  Text,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
-  View,
+    FlatList,
+    Image,
+    Modal,
+    Text,
+    TouchableOpacity,
+    TouchableWithoutFeedback,
+    View,
 } from "react-native";
 
 interface LivesBarProps {

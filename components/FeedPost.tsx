@@ -8,15 +8,15 @@ import PopupMessage from "@/components/ui/PopupMessage";
 import { useUser } from "@/contexts/UserContext";
 import { useLivestreams } from "@/hooks/useLivestreams";
 import {
-  hasUserBookmarkedPost,
-  togglePostBookmark,
+    hasUserBookmarkedPost,
+    togglePostBookmark,
 } from "@/lib/bookmarkService";
 import { getPostCommentCount } from "@/lib/commentsService";
 import {
-  getFollowedLikers,
-  getPostLikeCount,
-  hasUserLikedPost,
-  togglePostLike,
+    getFollowedLikers,
+    getPostLikeCount,
+    hasUserLikedPost,
+    togglePostLike,
 } from "@/lib/likesService";
 import { deletePost } from "@/lib/postsService";
 import { playSound } from "@/lib/soundUtils";
@@ -26,31 +26,31 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
 import {
-  Bookmark,
-  Copy,
-  Heart,
-  MessageCircle,
-  MoreHorizontal,
-  Tag,
-  Volume2,
-  VolumeX,
+    Bookmark,
+    Copy,
+    Heart,
+    MessageCircle,
+    MoreHorizontal,
+    Tag,
+    Volume2,
+    VolumeX,
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Animated,
-  Dimensions,
-  Easing,
-  FlatList,
-  GestureResponderEvent,
-  Image,
-  Modal,
-  NativeScrollEvent,
-  NativeSyntheticEvent,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
-  View,
+    Animated,
+    Dimensions,
+    Easing,
+    FlatList,
+    GestureResponderEvent,
+    Image,
+    Modal,
+    NativeScrollEvent,
+    NativeSyntheticEvent,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    TouchableWithoutFeedback,
+    View,
 } from "react-native";
 
 export { default as PostSkeleton } from "@/components/ui/PostSkeleton";
