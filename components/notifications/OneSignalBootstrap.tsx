@@ -90,14 +90,10 @@ export default function OneSignalBootstrap() {
           break;
         }
         case "post_liked":
+        case "post_commented":
         case "new_post": {
-          // Navigate to the actor's profile (or notifications if no actor)
-          const actorId = String(additionalData?.actor_id ?? "");
-          if (actorId) {
-            router.push(`/(users)/profile/${actorId}` as any);
-          } else {
-            router.push("/(users)/notifications" as any);
-          }
+          // Navigate to the notifications screen to see full context
+          router.push("/(users)/notifications" as any);
           break;
         }
         case "user_went_live": {

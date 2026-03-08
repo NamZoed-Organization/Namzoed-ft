@@ -70,7 +70,7 @@ export default function MarketplaceDetailScreen() {
             .select("*")
             .eq("user_id", currentUser.id)
             .eq("marketplace_id", id)
-            .single();
+            .maybeSingle();
 
           setIsBookmarked(!!bookmarkData);
         }

@@ -1377,11 +1377,22 @@ export default function ProfileScreen() {
                         );
                       })
                     ) : (
-                      <View className="w-full py-12 items-center">
-                        <Grid size={40} strokeWidth={1.5} className="text-gray-300 mb-2" />
-                        <Text className="text-gray-400 font-medium">
-                          No medias shared yet
+                      <View className="w-full py-16 items-center px-6">
+                        <View className="w-14 h-14 rounded-full bg-blue-50 items-center justify-center mb-3">
+                          <Grid size={26} strokeWidth={1.5} color="#3B82F6" />
+                        </View>
+                        <Text className="text-sm font-semibold text-gray-700">
+                          Share your first moment
                         </Text>
+                        <Text className="text-xs text-gray-400 mt-1 text-center">
+                          Your posts and media will show up here
+                        </Text>
+                        <TouchableOpacity
+                          onPress={() => router.push("/(users)/(tabs)/feed" as any)}
+                          className="mt-4 bg-primary px-5 py-2.5 rounded-full"
+                        >
+                          <Text className="text-white text-sm font-semibold">Create a Post</Text>
+                        </TouchableOpacity>
                       </View>
                     )}
                   </View>
@@ -1438,21 +1449,37 @@ export default function ProfileScreen() {
                         </View>
                       ))
                     ) : (
-                      <View className="w-full py-12 items-center">
-                        <ShoppingBag size={40} strokeWidth={1.5} className="text-gray-300 mb-2" />
-                        <Text className="text-gray-400 font-mmedium">
-                          No products listed
+                      <View className="w-full py-16 items-center px-6">
+                        <View className="w-14 h-14 rounded-full bg-emerald-50 items-center justify-center mb-3">
+                          <ShoppingBag size={26} strokeWidth={1.5} color="#059669" />
+                        </View>
+                        <Text className="text-sm font-semibold text-gray-700">
+                          Start selling on Namzoed
                         </Text>
+                        <Text className="text-xs text-gray-400 mt-1 text-center">
+                          List your first product and reach buyers nearby
+                        </Text>
+                        <TouchableOpacity
+                          onPress={() => router.push("/(users)/(tabs)/categories" as any)}
+                          className="mt-4 bg-emerald-600 px-5 py-2.5 rounded-full"
+                        >
+                          <Text className="text-white text-sm font-semibold">List a Product</Text>
+                        </TouchableOpacity>
                       </View>
                     )}
                   </View>
                 )}
 
                 {activeTab === "services" && (
-                  <View className="items-center justify-center py-12">
-                    <Wrench size={40} strokeWidth={1.5} className="text-gray-300 mb-2" />
-                    <Text className="text-gray-400 font-mmedium">
-                      Manage services in the Work tab
+                  <View className="items-center justify-center py-16 px-6">
+                    <View className="w-14 h-14 rounded-full bg-amber-50 items-center justify-center mb-3">
+                      <Wrench size={26} strokeWidth={1.5} color="#D97706" />
+                    </View>
+                    <Text className="text-sm font-semibold text-gray-700">
+                      Offer your skills as services
+                    </Text>
+                    <Text className="text-xs text-gray-400 mt-1 text-center">
+                      Switch to the Work tab to manage your services
                     </Text>
                   </View>
                 )}

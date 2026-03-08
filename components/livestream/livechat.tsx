@@ -591,7 +591,7 @@ export const LiveChat = ({
                     const productId = item.product?.id || item.product_id;
                     if (productId) {
                       onNavigate?.();
-                      router.push(`/(users)/marketplace/${productId}` as any);
+                      router.push(`/(users)/product/${productId}` as any);
                     }
                   }}
                   activeOpacity={0.8}

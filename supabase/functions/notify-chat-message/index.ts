@@ -184,8 +184,14 @@ serve(async (req) => {
     // Sender avatar shown as large icon (Android) and thumbnail (iOS)
     ...(senderAvatarUrl ? {
       large_icon: senderAvatarUrl,
+      big_picture: senderAvatarUrl,
       ios_attachments: { sender_avatar: senderAvatarUrl },
     } : {}),
+    // Group chat notifications by sender
+    android_group: `chat_${senderId}`,
+    android_group_message: { en: "$[notif_count] new messages" },
+    thread_id: `chat_${senderId}`,
+    collapse_id: `chat_${senderId}`,
   };
 
   const sendOneSignalNotification = async (body: Record<string, unknown>) => {

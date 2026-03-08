@@ -17,6 +17,7 @@
  */
 
 import { supabase } from "@/lib/supabase";
+import { sendPushToUsers } from "@/services/pushNotificationService";
 import type {
     AppNotification,
     NotificationRow,
@@ -238,6 +239,16 @@ export async function notifyNewFollower(
     title: "New Follower",
     body: `${actor.name} started following you`,
   });
+
+  // Push notification (fire-and-forget)
+  sendPushToUsers({
+    recipientIds: [followedUserId],
+    heading: "New Follower",
+    content: `${actor.name} started following you`,
+    type: "new_follower",
+    data: { actor_id: followerUserId },
+    actorAvatarUrl: actor.avatar_url,
+  }).catch(() => {});
 }
 
 /**
@@ -312,6 +323,16 @@ export async function notifyPostLiked(
     title: "Post Liked",
     body: `${actor.name} liked your post`,
   });
+
+  // Push notification (fire-and-forget)
+  sendPushToUsers({
+    recipientIds: [postOwnerId],
+    heading: "Post Liked",
+    content: `${actor.name} liked your post`,
+    type: "post_liked",
+    data: { actor_id: likerUserId, reference_id: postId },
+    actorAvatarUrl: actor.avatar_url,
+  }).catch(() => {});
 }
 
 export async function notifyPostCommented(
@@ -343,6 +364,16 @@ export async function notifyPostCommented(
     title: isReply ? "New Reply" : "New Comment",
     body,
   });
+
+  // Push notification (fire-and-forget)
+  sendPushToUsers({
+    recipientIds: [postOwnerId],
+    heading: isReply ? "New Reply" : "New Comment",
+    content: body,
+    type: "post_commented",
+    data: { actor_id: commenterUserId, reference_id: postId },
+    actorAvatarUrl: actor.avatar_url,
+  }).catch(() => {});
 }
 
 export async function notifyUserWentLive(
@@ -367,6 +398,16 @@ export async function notifyUserWentLive(
   if (error) {
     console.error("[NotifService] notifyUserWentLive error:", error.message);
   }
+
+  // Push notification to all followers (fire-and-forget)
+  sendPushToUsers({
+    recipientIds: followerIds,
+    heading: "Live Now \uD83D\uDD34",
+    content: `${actor.name} is live now!`,
+    type: "user_went_live",
+    data: { actor_id: liveUserId, reference_id: livestreamId },
+    actorAvatarUrl: actor.avatar_url,
+  }).catch(() => {});
 }
 
 export async function notifyNewPost(
@@ -391,4 +432,14 @@ export async function notifyNewPost(
   if (error) {
     console.error("[NotifService] notifyNewPost error:", error.message);
   }
+
+  // Push notification to all followers (fire-and-forget)
+  sendPushToUsers({
+    recipientIds: followerIds,
+    heading: "New Post",
+    content: `${actor.name} shared a new post`,
+    type: "new_post",
+    data: { actor_id: posterId, reference_id: postId },
+    actorAvatarUrl: actor.avatar_url,
+  }).catch(() => {});
 }

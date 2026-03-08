@@ -108,7 +108,7 @@ export const fetchMarketplaceItemById = async (itemId: string) => {
       )
     `)
     .eq('id', itemId)
-    .single();
+    .maybeSingle();
 
   if (error) {
     console.error('Error fetching marketplace item:', error);

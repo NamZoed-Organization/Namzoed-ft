@@ -817,10 +817,15 @@ export default function PublicProfileScreen() {
                         );
                       })
                     ) : (
-                      <View className="w-full py-12 items-center">
-                        <Grid size={40} strokeWidth={1.5} className="text-gray-300 mb-2" />
-                        <Text className="text-gray-400 font-medium">
-                          No medias shared yet
+                      <View className="w-full py-16 items-center px-6">
+                        <View className="w-14 h-14 rounded-full bg-gray-50 items-center justify-center mb-3">
+                          <Grid size={26} strokeWidth={1.5} color="#9CA3AF" />
+                        </View>
+                        <Text className="text-sm font-semibold text-gray-500">
+                          No moments shared yet
+                        </Text>
+                        <Text className="text-xs text-gray-400 mt-1">
+                          Posts will appear here
                         </Text>
                       </View>
                     )}
@@ -876,10 +881,15 @@ export default function PublicProfileScreen() {
                         </View>
                       ))
                     ) : (
-                      <View className="w-full py-12 items-center">
-                        <ShoppingBag size={40} strokeWidth={1.5} className="text-gray-300 mb-2" />
-                        <Text className="text-gray-400 font-mmedium">
-                          No products listed
+                      <View className="w-full py-16 items-center px-6">
+                        <View className="w-14 h-14 rounded-full bg-gray-50 items-center justify-center mb-3">
+                          <ShoppingBag size={26} strokeWidth={1.5} color="#9CA3AF" />
+                        </View>
+                        <Text className="text-sm font-semibold text-gray-500">
+                          No products listed yet
+                        </Text>
+                        <Text className="text-xs text-gray-400 mt-1">
+                          Products will show up here once listed
                         </Text>
                       </View>
                     )}
@@ -887,10 +897,15 @@ export default function PublicProfileScreen() {
                 )}
 
                 {activeTab === "services" && (
-                  <View className="items-center justify-center py-12">
-                    <Wrench size={40} strokeWidth={1.5} className="text-gray-300 mb-2" />
-                    <Text className="text-gray-400 font-mmedium">
-                      No services offered
+                  <View className="items-center justify-center py-16 px-6">
+                    <View className="w-14 h-14 rounded-full bg-gray-50 items-center justify-center mb-3">
+                      <Wrench size={26} strokeWidth={1.5} color="#9CA3AF" />
+                    </View>
+                    <Text className="text-sm font-semibold text-gray-500">
+                      No services offered yet
+                    </Text>
+                    <Text className="text-xs text-gray-400 mt-1">
+                      Services will appear here when available
                     </Text>
                   </View>
                 )}
@@ -1163,10 +1178,15 @@ export default function PublicProfileScreen() {
                         ))}
                       </View>
                     ) : (
-                      <View className="items-center justify-center py-12">
-                        <Wrench size={40} strokeWidth={1.5} className="text-gray-300 mb-2" />
-                        <Text className="text-gray-400 font-mmedium">
+                      <View className="items-center justify-center py-16 px-6">
+                        <View className="w-14 h-14 rounded-full bg-gray-50 items-center justify-center mb-3">
+                          <Wrench size={26} strokeWidth={1.5} color="#9CA3AF" />
+                        </View>
+                        <Text className="text-sm font-semibold text-gray-500">
                           No services listed yet
+                        </Text>
+                        <Text className="text-xs text-gray-400 mt-1">
+                          Services will appear here when available
                         </Text>
                       </View>
                     )}

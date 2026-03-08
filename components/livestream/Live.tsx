@@ -2,91 +2,91 @@ import { Camera } from "expo-camera";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import {
-  Check,
-  ChevronDown,
-  ChevronUp,
-  Eye,
-  Minimize2,
-  Radio,
-  X,
+    Check,
+    ChevronDown,
+    ChevronUp,
+    Eye,
+    Minimize2,
+    Radio,
+    X,
 } from "lucide-react-native";
 import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
 } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Image,
-  ImageBackground,
-  Keyboard,
-  KeyboardAvoidingView,
-  Linking,
-  Modal,
-  Platform,
-  Pressable,
-  RefreshControl,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
-  View,
-  ViewStyle,
+    ActivityIndicator,
+    Alert,
+    FlatList,
+    Image,
+    ImageBackground,
+    Keyboard,
+    KeyboardAvoidingView,
+    Linking,
+    Modal,
+    Platform,
+    Pressable,
+    RefreshControl,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    TouchableWithoutFeedback,
+    View,
+    ViewStyle,
 } from "react-native";
 import {
-  SafeAreaView,
-  useSafeAreaInsets,
+    SafeAreaView,
+    useSafeAreaInsets,
 } from "react-native-safe-area-context";
 
 import { useLiveSession } from "@/contexts/LiveSessionProvider";
 import { useUser } from "@/contexts/UserContext";
 import { supabase } from "@/lib/supabase";
 import getStreamService, {
-  type StreamIdentity,
+    type StreamIdentity,
 } from "@/services/getStreamService";
 import {
-  addCoHostToLivestream,
-  adjustLivestreamViewerCount,
-  cancelCoHostRequest,
-  createCoHostRequest,
-  createLivestreamRecord,
-  endLivestreamRecord,
-  fetchActiveLivestreams,
-  fetchPendingCoHostRequests,
-  incrementLivestreamViewerCountAtomic,
-  subscribeToCoHostRequests,
-  subscribeToLivestreams,
-  subscribeToViewerCount,
-  updateCoHostRequestStatus,
-  type CoHostRequest,
-  type Livestream,
-  type LivestreamType,
+    addCoHostToLivestream,
+    adjustLivestreamViewerCount,
+    cancelCoHostRequest,
+    createCoHostRequest,
+    createLivestreamRecord,
+    endLivestreamRecord,
+    fetchActiveLivestreams,
+    fetchPendingCoHostRequests,
+    incrementLivestreamViewerCountAtomic,
+    subscribeToCoHostRequests,
+    subscribeToLivestreams,
+    subscribeToViewerCount,
+    updateCoHostRequestStatus,
+    type CoHostRequest,
+    type Livestream,
+    type LivestreamType,
 } from "@/services/livestreamService";
 import { Ionicons } from "@expo/vector-icons";
 import {
-  ParticipantView,
-  StreamCall,
-  StreamVideo,
-  useAutoEnterPiPEffect,
-  useCall,
-  useCallStateHooks,
-  useIsInPiPMode,
-  type Call,
-  type StreamVideoClient
+    ParticipantView,
+    StreamCall,
+    StreamVideo,
+    useAutoEnterPiPEffect,
+    useCall,
+    useCallStateHooks,
+    useIsInPiPMode,
+    type Call,
+    type StreamVideoClient
 } from "@stream-io/video-react-native-sdk";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
-  interpolate,
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
+    interpolate,
+    runOnJS,
+    useAnimatedStyle,
+    useSharedValue,
+    withSpring,
 } from "react-native-reanimated";
 import { LiveChat } from "./livechat";
 
@@ -1159,8 +1159,7 @@ const CreateLivestreamModal: React.FC<CreateLivestreamModalProps> = ({
 
   return (
     <Modal visible={visible} animationType="slide" transparent>
-      <SafeAreaView
-        edges={["bottom"]}
+      <View
         style={{
           flex: 1,
           justifyContent: "flex-end",
@@ -1169,7 +1168,10 @@ const CreateLivestreamModal: React.FC<CreateLivestreamModalProps> = ({
       >
         <View
           style={{
-            paddingBottom: Math.max(16, insets.bottom + 8),
+            paddingBottom:
+              Platform.OS === "android" && insets.bottom >= 40
+                ? insets.bottom
+                : 0,
           }}
         >
           <View className="rounded-t-3xl bg-white px-6 pb-8 pt-6">
@@ -1282,7 +1284,7 @@ const CreateLivestreamModal: React.FC<CreateLivestreamModalProps> = ({
             </TouchableOpacity>
           </View>
         </View>
-      </SafeAreaView>
+      </View>
     </Modal>
   );
 };

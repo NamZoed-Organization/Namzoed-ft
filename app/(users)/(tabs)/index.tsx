@@ -6,7 +6,7 @@ import ForYou from "@/components/ForYou";
 import SearchBar from "@/components/modals/SearchBar";
 import TopNavbar from "@/components/ui/TopNavbar";
 import { useLivestreams } from "@/hooks/useLivestreams";
-import { Briefcase, Coins, Eye, Heart, Radio, Ticket, Tv2, Users } from "lucide-react-native";
+import { Briefcase, Coins, Eye, Heart, Radio, Sparkles, Ticket, Tv2, Users, Video } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -70,10 +70,15 @@ function LiveTab({ onOpen }: { onOpen: (streamId: string) => void }) {
           <ActivityIndicator size="small" color="#094569" />
         </View>
       ) : filtered.length === 0 ? (
-        <View className="min-h-64 justify-center items-center gap-2">
-          <Radio size={36} color="#D1D5DB" />
-          <Text className="text-sm font-semibold text-gray-400">
+        <View className="min-h-64 justify-center items-center px-6">
+          <View className="w-16 h-16 rounded-full bg-red-50 items-center justify-center mb-4">
+            <Video size={28} color="#EF4444" />
+          </View>
+          <Text className="text-base font-semibold text-gray-700">
             No {filter === "all" ? "" : filter + " "}live streams right now
+          </Text>
+          <Text className="text-sm text-gray-400 mt-1 text-center">
+            Be the first to go live and connect with your audience!
           </Text>
         </View>
       ) : (

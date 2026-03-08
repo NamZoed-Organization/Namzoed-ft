@@ -103,6 +103,7 @@ export default function CommentsModal({
   const [text, setText]     = useState('');
   const [loading, setLoading] = useState(true);
   const [posting, setPosting] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   const inputRef = useRef<TextInput>(null);
 
   const SCREEN_H = Dimensions.get('window').height;
@@ -119,31 +120,38 @@ export default function CommentsModal({
   onCloseRef.current = onClose;
 
   // ── keyboard tracking ─────────────────────────────────────────────
-  // Driving the sheet's `bottom` via keyboardPad is the only reliable
-  // approach for absolutely-positioned bottom sheets on both iOS and
-  // Android (gesture + button navigation). KeyboardAvoidingView inside
-  // an absolute view calculates wrong offsets and breaks on Android.
+  // On iOS: animate the sheet's `bottom` via keyboardPad so the input
+  // sits above the keyboard. On Android with edgeToEdgeEnabled + adjustResize,
+  // the window already resizes when the keyboard opens so we only track
+  // keyboard visibility (to hide redundant bottom padding).
   useEffect(() => {
     if (!visible) {
       keyboardPad.setValue(0);
+      setKeyboardVisible(false);
       return;
     }
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
 
     const onShow = (e: { endCoordinates: { height: number }; duration: number }) => {
-      Animated.timing(keyboardPad, {
-        toValue: e.endCoordinates.height,
-        duration: Platform.OS === 'ios' ? e.duration : 200,
-        useNativeDriver: false,
-      }).start();
+      setKeyboardVisible(true);
+      if (Platform.OS === 'ios') {
+        Animated.timing(keyboardPad, {
+          toValue: e.endCoordinates.height,
+          duration: e.duration,
+          useNativeDriver: false,
+        }).start();
+      }
     };
     const onHide = (e: { duration: number }) => {
-      Animated.timing(keyboardPad, {
-        toValue: 0,
-        duration: Platform.OS === 'ios' ? e.duration : 200,
-        useNativeDriver: false,
-      }).start();
+      setKeyboardVisible(false);
+      if (Platform.OS === 'ios') {
+        Animated.timing(keyboardPad, {
+          toValue: 0,
+          duration: e.duration,
+          useNativeDriver: false,
+        }).start();
+      }
     };
 
     const subShow = Keyboard.addListener(showEvent, onShow);
@@ -602,7 +610,7 @@ export default function CommentsModal({
 
           {/* input bar – paddingBottom uses real safe-area inset so it works
               for iOS home indicator, Android gesture nav, and button nav */}
-          <View style={[styles.inputBar, { paddingBottom: insets.bottom > 0 ? insets.bottom : 12 }]}>
+          <View style={[styles.inputBar, { paddingBottom: keyboardVisible ? 12 : (insets.bottom > 0 ? insets.bottom : 12) }]}>
             <Avatar
               user={{
                 id: userId,
