@@ -11,40 +11,40 @@ import { fetchUserPosts, Post } from "@/lib/postsService";
 import { fetchUserProducts, Product } from "@/lib/productsService";
 import { fetchUserProfile } from "@/lib/profileService";
 import {
-  fetchServiceProviderProfile,
-  fetchUserProviderServices,
-  ProviderServiceWithDetails,
+    fetchServiceProviderProfile,
+    fetchUserProviderServices,
+    ProviderServiceWithDetails,
 } from "@/lib/servicesService";
 import * as Haptics from "expo-haptics";
 import { Redirect, Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
 import {
-  AlertCircle,
-  Ban,
-  CheckCircle2,
-  ChevronLeft,
-  Copy,
-  GalleryHorizontal,
-  Grid,
-  MessageCircle,
-  Play,
-  ShoppingBag,
-  User,
-  Wrench
+    AlertCircle,
+    Ban,
+    CheckCircle2,
+    ChevronLeft,
+    Copy,
+    GalleryHorizontal,
+    Grid,
+    MessageCircle,
+    Play,
+    ShoppingBag,
+    User,
+    Wrench
 } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Dimensions,
-  Image,
-  Modal,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Dimensions,
+    Image,
+    Modal,
+    Pressable,
+    RefreshControl,
+    ScrollView,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import Animated, { SlideInDown, SlideOutDown } from "react-native-reanimated";
 

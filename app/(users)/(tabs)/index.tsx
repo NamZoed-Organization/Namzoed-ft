@@ -6,18 +6,18 @@ import ForYou from "@/components/ForYou";
 import SearchBar from "@/components/modals/SearchBar";
 import TopNavbar from "@/components/ui/TopNavbar";
 import { useLivestreams } from "@/hooks/useLivestreams";
-import { Briefcase, Coins, Eye, Heart, Radio, Sparkles, Ticket, Tv2, Users, Video } from "lucide-react-native";
+import { Briefcase, Coins, Eye, Heart, Radio, Ticket, Tv2, Users, Video } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  FlatList,
-  Image,
-  ListRenderItem,
-  Modal,
-  RefreshControl,
-  Text,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    FlatList,
+    Image,
+    ListRenderItem,
+    Modal,
+    RefreshControl,
+    Text,
+    TouchableOpacity,
+    View
 } from "react-native";
 import Animated, { FadeInLeft, FadeInRight } from "react-native-reanimated";
 

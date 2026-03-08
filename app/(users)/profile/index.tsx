@@ -22,20 +22,20 @@ import ServiceProviderSection from "@/components/profile/ServiceProviderSection"
 import BottomNavBar from "@/components/ui/BottomNavBar";
 import PopupMessage from "@/components/ui/PopupMessage";
 import {
-  deleteAvatar,
-  updateUserProfile,
-  uploadAvatar,
+    deleteAvatar,
+    updateUserProfile,
+    uploadAvatar,
 } from "@/lib/profileService";
 import {
-  deleteLicenseImage,
-  deleteProviderAvatar,
-  deleteProviderService,
-  ProviderServiceWithDetails,
-  toggleServiceStatus,
-  updateServiceProviderLicense,
-  updateServiceProviderProfile,
-  uploadLicenseImage,
-  uploadProviderAvatar,
+    deleteLicenseImage,
+    deleteProviderAvatar,
+    deleteProviderService,
+    ProviderServiceWithDetails,
+    toggleServiceStatus,
+    updateServiceProviderLicense,
+    updateServiceProviderProfile,
+    uploadLicenseImage,
+    uploadProviderAvatar,
 } from "@/lib/servicesService";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
@@ -43,36 +43,36 @@ import { ImpactFeedbackStyle, NotificationFeedbackType } from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import {
-  Camera,
-  Copy,
-  Eye,
-  GalleryHorizontal,
-  Grid,
-  ImageIcon,
-  Package,
-  Play,
-  Settings,
-  ShoppingBag,
-  Trash2,
-  Upload,
-  User,
-  UserPlus,
-  Wrench
+    Camera,
+    Copy,
+    Eye,
+    GalleryHorizontal,
+    Grid,
+    ImageIcon,
+    Package,
+    Play,
+    Settings,
+    ShoppingBag,
+    Trash2,
+    Upload,
+    User,
+    UserPlus,
+    Wrench
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Dimensions,
-  Image,
-  InteractionManager,
-  Modal,
-  Platform,
-  RefreshControl,
-  ScrollView,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Dimensions,
+    Image,
+    InteractionManager,
+    Modal,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
@@ -81,17 +81,17 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 import { useVideoPlayer, VideoView } from "expo-video";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
-  FadeIn,
-  FadeInDown,
-  FadeOut,
-  FadeOutDown,
-  runOnJS,
-  SlideInDown,
-  SlideOutDown,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-  withTiming,
+    FadeIn,
+    FadeInDown,
+    FadeOut,
+    FadeOutDown,
+    runOnJS,
+    SlideInDown,
+    SlideOutDown,
+    useAnimatedStyle,
+    useSharedValue,
+    withSpring,
+    withTiming,
 } from "react-native-reanimated";
 
 // Helper to check if URL is a video
