@@ -119,11 +119,25 @@ export const identifyOneSignalUser = (externalId?: string | null): void => {
 
   withOneSignalGuard((sdk) => {
     if (!externalId) {
-      sdk.OneSignal.logout();
+      // Don't call logout() for guests — it clears the push subscription
+      // and can cause issues when the user later logs in. The anonymous
+      // device still keeps its push token registered with OneSignal.
+      console.log('[OneSignal] No external ID — skipping identify (guest mode)');
       return;
     }
 
+    console.log('[OneSignal] Logging in with external ID:', externalId.slice(0, 8) + '...');
     sdk.OneSignal.login(String(externalId));
+  }, undefined);
+};
+
+/** Call this only on explicit user logout — clears the external_id link. */
+export const logoutOneSignalUser = (): void => {
+  if (!ensureOneSignalInitialized()) return;
+
+  withOneSignalGuard((sdk) => {
+    console.log('[OneSignal] Logging out user');
+    sdk.OneSignal.logout();
   }, undefined);
 };
 
@@ -167,22 +181,33 @@ export const ensureOneSignalPushOptedIn = async (
 
   try {
     const hasPermission = await sdk.OneSignal.Notifications.getPermissionAsync();
-    if (!hasPermission) return false;
-
-    const isOptedIn =
-      await sdk.OneSignal.User.pushSubscription.getOptedInAsync();
-    if (isOptedIn) return true;
-
-    sdk.OneSignal.User.pushSubscription.optIn();
-
-    const isOptedInAfter =
-      await sdk.OneSignal.User.pushSubscription.getOptedInAsync();
-    if (!isOptedInAfter) {
+    if (!hasPermission) {
+      console.log(`[OneSignal][${context}] No notification permission — cannot opt in`);
       return false;
     }
 
-    return true;
+    const isOptedIn =
+      await sdk.OneSignal.User.pushSubscription.getOptedInAsync();
+    if (isOptedIn) {
+      const token = await sdk.OneSignal.User.pushSubscription.getTokenAsync();
+      console.log(`[OneSignal][${context}] Already opted in, token prefix:`, token ? String(token).slice(0, 16) : 'null');
+      return true;
+    }
+
+    console.log(`[OneSignal][${context}] Not opted in — calling optIn()`);
+    sdk.OneSignal.User.pushSubscription.optIn();
+
+    // Give OneSignal a moment to process the opt-in
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    const isOptedInAfter =
+      await sdk.OneSignal.User.pushSubscription.getOptedInAsync();
+    const tokenAfter = await sdk.OneSignal.User.pushSubscription.getTokenAsync();
+    console.log(`[OneSignal][${context}] After optIn() — opted in:`, isOptedInAfter, 'token prefix:', tokenAfter ? String(tokenAfter).slice(0, 16) : 'null');
+
+    return isOptedInAfter;
   } catch (error) {
+    console.warn(`[OneSignal][${context}] Error during opt-in:`, error);
     return false;
   }
 };

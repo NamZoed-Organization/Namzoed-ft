@@ -146,16 +146,23 @@ export default function OneSignalBootstrap() {
     // After identifying, ensure push subscription is fully opted-in.
     // On TestFlight/production builds, the APNs token changes from sandbox
     // to production — re-opting in forces OneSignal to register the new token.
+    //
+    // We use a longer delay (3s) to give OneSignal enough time to complete
+    // the login() handshake with their server before checking subscription state.
     const timer = setTimeout(async () => {
       try {
         // Re-request permission to ensure the production APNs token is sent
-        await requestOneSignalPermissionIfNeeded();
-        await ensureOneSignalPushOptedIn("after_identify_user");
+        const granted = await requestOneSignalPermissionIfNeeded();
+        console.log('[OneSignal] Permission after identify:', granted);
+
+        const optedIn = await ensureOneSignalPushOptedIn("after_identify_user");
+        console.log('[OneSignal] Push opted-in after identify:', optedIn);
+
         await logOneSignalDebugState("after_identify_user", externalId);
-      } catch {
-        // ignore
+      } catch (e) {
+        console.warn('[OneSignal] Post-identify setup error:', e);
       }
-    }, 2000);
+    }, 3000);
 
     return () => clearTimeout(timer);
   }, [authUserId, currentUser?.id]);
