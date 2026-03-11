@@ -15,7 +15,10 @@
       "distribution": "internal"
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_ONESIGNAL_APP_ID": "3bb1f0be-d6be-424c-a13b-22336051d4cc"
+      }
     }
   },
   "submit": {

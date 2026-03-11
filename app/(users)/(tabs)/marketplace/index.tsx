@@ -1,3 +1,4 @@
+import AuthPromptModal from "@/components/modals/AuthPromptModal";
 import Banner from "@/components/Banner";
 import MarketplacePostOverlay from "@/components/modals/MarketplacePostOverlay";
 import SearchBar from "@/components/modals/SearchBar";
@@ -42,6 +43,7 @@ export default function MarketplaceScreen() {
   const [activeTab, setActiveTab] = useState("job_vacancy");
   const [showFilters, setShowFilters] = useState(false);
   const [showPostOverlay, setShowPostOverlay] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [marketplaceItems, setMarketplaceItems] = useState<
@@ -419,7 +421,10 @@ export default function MarketplaceScreen() {
             </View>
             <TouchableOpacity
               className="w-10 h-10 bg-primary rounded-lg items-center justify-center"
-              onPress={() => setShowPostOverlay(true)}
+              onPress={() => {
+                if (!currentUser) { setShowAuthModal(true); return; }
+                setShowPostOverlay(true);
+              }}
             >
               <Plus size={24} color="white" />
             </TouchableOpacity>
@@ -519,6 +524,12 @@ export default function MarketplaceScreen() {
           </Animated.View>
         </Modal>
       )}
+
+      <AuthPromptModal
+        visible={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        message="Sign in to post on the marketplace"
+      />
     </View>
   );
 }

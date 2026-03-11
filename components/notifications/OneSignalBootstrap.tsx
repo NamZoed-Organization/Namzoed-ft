@@ -21,17 +21,15 @@ export default function OneSignalBootstrap() {
     if (!ensureOneSignalInitialized()) return;
 
     requestOneSignalPermissionIfNeeded().catch((error) => {
+      console.warn('[OneSignal] Permission request failed:', error);
     });
 
-    // Diagnostics — only run in development builds.
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    if (__DEV__) {
-      timer = setTimeout(() => {
-        logOneSignalDebugState("app_start").catch(() => undefined);
-      }, 1200);
-    }
+    // Diagnostics — run on all builds to help debug TestFlight push issues.
+    const timer = setTimeout(() => {
+      logOneSignalDebugState("app_start").catch(() => undefined);
+    }, 1200);
 
-    return () => { if (timer) clearTimeout(timer); };
+    return () => { clearTimeout(timer); };
   }, []);
 
   useEffect(() => {
@@ -145,14 +143,19 @@ export default function OneSignalBootstrap() {
 
     if (!externalId) return;
 
-    // Temporary diagnostics for external_id + subscription linkage.
-    const timer = setTimeout(() => {
-      ensureOneSignalPushOptedIn("after_identify_user")
-        .then(() =>
-          logOneSignalDebugState("after_identify_user", externalId),
-        )
-        .catch(() => undefined);
-    }, 1800);
+    // After identifying, ensure push subscription is fully opted-in.
+    // On TestFlight/production builds, the APNs token changes from sandbox
+    // to production — re-opting in forces OneSignal to register the new token.
+    const timer = setTimeout(async () => {
+      try {
+        // Re-request permission to ensure the production APNs token is sent
+        await requestOneSignalPermissionIfNeeded();
+        await ensureOneSignalPushOptedIn("after_identify_user");
+        await logOneSignalDebugState("after_identify_user", externalId);
+      } catch {
+        // ignore
+      }
+    }, 2000);
 
     return () => clearTimeout(timer);
   }, [authUserId, currentUser?.id]);

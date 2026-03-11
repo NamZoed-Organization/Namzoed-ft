@@ -582,6 +582,18 @@ export default function Login() {
                 Sign up
               </Link>
             </Text>
+
+            <TouchableOpacity
+              onPress={() => router.replace("/(users)/(tabs)")}
+              className="mt-3"
+            >
+              <Text
+                className="text-center text-gray-400 font-mmedium underline"
+                style={{ fontSize: helperTextSize }}
+              >
+                Browse as Guest
+              </Text>
+            </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
 

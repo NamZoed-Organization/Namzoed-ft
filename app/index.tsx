@@ -15,9 +15,7 @@ export default function Index() {
     );
   }
 
-  if (currentUser) {
-    return <Redirect href="/(users)/(tabs)" />;
-  } else {
-    return <Redirect href="/login" />;
-  }
+  // Always send users to the main tabs — guests can browse products
+  // without registering. Account-based features prompt for login.
+  return <Redirect href="/(users)/(tabs)" />;
 }

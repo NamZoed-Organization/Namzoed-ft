@@ -5,6 +5,10 @@ const ONESIGNAL_APP_ID =
   process.env.EXPO_PUBLIC_ONESIGNAL_APP_ID ||
   (Constants.expoConfig?.extra?.oneSignalAppId as string | undefined);
 
+if (!ONESIGNAL_APP_ID) {
+  console.error('[OneSignal] APP_ID not found in env or expoConfig.extra — push notifications will not work.');
+}
+
 let initialized = false;
 let warnedMissingAppId = false;
 let warnedMissingNativeModule = false;
@@ -105,6 +109,7 @@ export const ensureOneSignalInitialized = (): boolean => {
     );
     sdk.OneSignal.initialize(ONESIGNAL_APP_ID);
     initialized = true;
+    console.log('[OneSignal] Initialized with app ID:', ONESIGNAL_APP_ID?.slice(0, 8) + '...');
     return true;
   }, false);
 };

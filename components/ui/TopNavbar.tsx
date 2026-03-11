@@ -7,6 +7,7 @@ import { useUser } from "@/contexts/UserContext";
 import { clamp, useResponsive } from "@/utils/responsive";
 import { useRouter } from "expo-router";
 import { Bell, Send, UserCircle } from "lucide-react-native";
+import AuthPromptModal from "@/components/modals/AuthPromptModal";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Animated, Image, Platform, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -111,6 +112,8 @@ export default function TopNavbar() {
   const { unseenCount: notifUnseenCount } = useNotifications();
   const insets = useSafeAreaInsets();
   const [imageLoadError, setImageLoadError] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authMessage, setAuthMessage] = useState("");
   const { ms, vs, wp } = useResponsive();
   const topInset = Math.max(insets.top, 0);
   const contentHeight =
@@ -170,7 +173,10 @@ export default function TopNavbar() {
           <DetectDzongkhag />
 
           <TabBarButton
-            onPress={() => router.push("/messages")}
+            onPress={() => {
+              if (!currentUser) { setAuthMessage("Sign in to view your messages"); setShowAuthModal(true); return; }
+              router.push("/messages");
+            }}
             android_ripple={null}
           >
             <View style={{ overflow: "visible" }}>
@@ -180,7 +186,10 @@ export default function TopNavbar() {
           </TabBarButton>
 
           <TabBarButton
-            onPress={() => router.push("/notifications" as any)}
+            onPress={() => {
+              if (!currentUser) { setAuthMessage("Sign in to view your notifications"); setShowAuthModal(true); return; }
+              router.push("/notifications" as any);
+            }}
             android_ripple={null}
           >
             <View style={{ overflow: "visible" }}>
@@ -190,7 +199,10 @@ export default function TopNavbar() {
           </TabBarButton>
 
           <TabBarButton
-            onPress={() => router.push("/profile")}
+            onPress={() => {
+              if (!currentUser) { setAuthMessage("Sign in to access your profile"); setShowAuthModal(true); return; }
+              router.push("/profile");
+            }}
             android_ripple={null}
           >
             {currentUser?.avatar_url && !imageLoadError ? (
@@ -212,6 +224,12 @@ export default function TopNavbar() {
           </TabBarButton>
         </View>
       </View>
+
+      <AuthPromptModal
+        visible={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        message={authMessage}
+      />
     </View>
   );
 }

@@ -25,6 +25,7 @@ import {
     View
 } from "react-native";
 
+import AuthPromptModal from "@/components/modals/AuthPromptModal";
 import FeedPost from "@/components/FeedPost";
 import LivesBar from "@/components/livestream/LivesBar";
 import { feedEvents } from "@/utils/feedEvents";
@@ -299,6 +300,8 @@ export default function FeedScreen() {
     </>
   );
 
+  const [showAuthModal, setShowAuthModal] = useState(false);
+
   if (!currentUser) {
     return (
       <View className="flex-1 bg-gray-100">
@@ -309,9 +312,19 @@ export default function FeedScreen() {
           <Text className="text-xl font-semibold text-gray-700 mb-2">
             Welcome to Feed
           </Text>
-          <Text className="text-base text-gray-500 text-center">
-            Please log in to see your personalized feed
+          <Text className="text-base text-gray-500 text-center mb-4">
+            Sign in to see your personalized feed
           </Text>
+          <TouchableWithoutFeedback onPress={() => setShowAuthModal(true)}>
+            <View className="bg-primary px-8 py-3 rounded-full">
+              <Text className="text-white font-msemibold text-base">Sign In</Text>
+            </View>
+          </TouchableWithoutFeedback>
+          <AuthPromptModal
+            visible={showAuthModal}
+            onClose={() => setShowAuthModal(false)}
+            message="Sign in to see your personalized feed"
+          />
         </View>
       </View>
     );

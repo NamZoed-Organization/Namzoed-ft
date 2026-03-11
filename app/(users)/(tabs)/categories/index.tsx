@@ -21,6 +21,7 @@ import {
   View,
 } from "react-native";
 
+import AuthPromptModal from "@/components/modals/AuthPromptModal";
 import CreateProductModal from "@/components/modals/CreateProductModal";
 import SearchBar from "@/components/modals/SearchBar";
 import CategorySkeleton from "@/components/ui/CategorySkeleton";
@@ -178,9 +179,12 @@ export default function CategoriesScreen() {
     });
   };
 
+  const [showAuthModal, setShowAuthModal] = useState(false);
+
   const handleCreatePress = () => {
     if (!currentUserId) {
-      // Optional: Add logic to show login modal
+      setShowAuthModal(true);
+      return;
     }
     setModalVisible(true);
   };
@@ -569,6 +573,12 @@ export default function CategoriesScreen() {
         isVisible={isModalVisible}
         onClose={() => setModalVisible(false)}
         userId={currentUserId}
+      />
+
+      <AuthPromptModal
+        visible={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        message="Sign in to create a product listing"
       />
     </View>
   );

@@ -1,3 +1,4 @@
+import AuthPromptModal from "@/components/modals/AuthPromptModal";
 import AddServicesModal from "@/components/modals/AddServicesModal";
 import TopNavbar from "@/components/ui/TopNavbar";
 import { useUser } from "@/contexts/UserContext";
@@ -38,6 +39,7 @@ const { width: SCREEN_WIDTH } = Dimensions.get("window");
 export default function ServiceScreen() {
   const { currentUser } = useUser();
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
 
   const { numColumns, itemSize, gap } = useMemo(() => {
     const horizontalPadding = 32;
@@ -149,6 +151,18 @@ export default function ServiceScreen() {
                 </Text>
               </TouchableOpacity>
             )}
+            {!currentUser && (
+              <TouchableOpacity
+                onPress={() => setShowAuthModal(true)}
+                className="bg-primary px-4 py-2.5 rounded-full flex-row items-center shadow-sm"
+                activeOpacity={0.7}
+              >
+                <Plus size={18} color="white" />
+                <Text className="text-white font-msemibold text-sm ml-1">
+                  Add Service
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
           <Text className="text-sm font-regular text-gray-500">
             Professional help at your fingertips
@@ -182,6 +196,12 @@ export default function ServiceScreen() {
           }}
         />
       )}
+
+      <AuthPromptModal
+        visible={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        message="Sign in to add a service listing"
+      />
     </View>
   );
 }
