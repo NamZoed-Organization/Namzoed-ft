@@ -1,37 +1,37 @@
-import AuthPromptModal from "@/components/modals/AuthPromptModal";
 import AddServicesModal from "@/components/modals/AddServicesModal";
+import AuthPromptModal from "@/components/modals/AuthPromptModal";
 import TopNavbar from "@/components/ui/TopNavbar";
 import { useUser } from "@/contexts/UserContext";
 import { serviceCategories } from "@/data/servicecategory";
 import { Href, router } from "expo-router";
 import {
-  Briefcase,
-  Building,
-  Car,
-  Coffee,
-  Gamepad2,
-  GraduationCap,
-  Grid3x3,
-  Home,
-  Landmark,
-  Package,
-  Palette,
-  PawPrint,
-  Plane,
-  Plus,
-  ShoppingBasket,
-  Sparkles,
-  Tent,
-  Utensils,
-  Wrench,
+    Briefcase,
+    Building,
+    Car,
+    Coffee,
+    Gamepad2,
+    GraduationCap,
+    Grid3x3,
+    Home,
+    Landmark,
+    Package,
+    Palette,
+    PawPrint,
+    Plane,
+    Plus,
+    ShoppingBasket,
+    Sparkles,
+    Tent,
+    Utensils,
+    Wrench,
 } from "lucide-react-native";
 import React, { useMemo, useState } from "react";
 import {
-  Dimensions,
-  FlatList,
-  Text,
-  TouchableOpacity,
-  View,
+    Dimensions,
+    FlatList,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");

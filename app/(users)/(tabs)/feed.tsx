@@ -25,9 +25,9 @@ import {
     View
 } from "react-native";
 
-import AuthPromptModal from "@/components/modals/AuthPromptModal";
 import FeedPost from "@/components/FeedPost";
 import LivesBar from "@/components/livestream/LivesBar";
+import AuthPromptModal from "@/components/modals/AuthPromptModal";
 import { feedEvents } from "@/utils/feedEvents";
 
 export default function FeedScreen() {

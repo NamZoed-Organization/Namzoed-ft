@@ -1,5 +1,5 @@
-import AuthPromptModal from "@/components/modals/AuthPromptModal";
 import Banner from "@/components/Banner";
+import AuthPromptModal from "@/components/modals/AuthPromptModal";
 import MarketplacePostOverlay from "@/components/modals/MarketplacePostOverlay";
 import SearchBar from "@/components/modals/SearchBar";
 import ImageWithFallback from "@/components/ui/ImageWithFallback";
@@ -7,32 +7,32 @@ import TopNavbar from "@/components/ui/TopNavbar";
 import { useUser } from "@/contexts/UserContext";
 import { dzongkhagCenters } from "@/data/dzongkhag";
 import {
-  fetchMarketplaceItems,
-  MarketplaceItemWithUser,
+    fetchMarketplaceItems,
+    MarketplaceItemWithUser,
 } from "@/lib/postMarketPlace";
 import { Picker } from "@react-native-picker/picker";
 import { useRouter } from "expo-router";
 import {
-  Briefcase,
-  Filter,
-  Gift,
-  Home,
-  MapPin,
-  Plus,
-  RefreshCw,
-  ShoppingCart,
-  X,
+    Briefcase,
+    Filter,
+    Gift,
+    Home,
+    MapPin,
+    Plus,
+    RefreshCw,
+    ShoppingCart,
+    X,
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Modal,
-  RefreshControl,
-  ScrollView,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Modal,
+    RefreshControl,
+    ScrollView,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import Animated, { SlideInDown, SlideOutDown } from "react-native-reanimated";
 

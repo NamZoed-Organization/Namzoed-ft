@@ -1,5 +1,6 @@
 // components/ui/TopNavbar.tsx
 import DetectDzongkhag from "@/components/DetectDzongkhag";
+import AuthPromptModal from "@/components/modals/AuthPromptModal";
 import TabBarButton from "@/components/ui/TabBarButton";
 import { useNotifications } from "@/contexts/NotificationsContext";
 import { useUnreadMessages } from "@/contexts/UnreadMessagesContext";
@@ -7,7 +8,6 @@ import { useUser } from "@/contexts/UserContext";
 import { clamp, useResponsive } from "@/utils/responsive";
 import { useRouter } from "expo-router";
 import { Bell, Send, UserCircle } from "lucide-react-native";
-import AuthPromptModal from "@/components/modals/AuthPromptModal";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Animated, Image, Platform, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
