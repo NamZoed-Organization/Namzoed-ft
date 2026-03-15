@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, TextInput, Alert, ScrollView } from 'react-native';
 import { ArrowLeft, Eye, EyeOff } from 'lucide-react-native';
+import PopupMessage from '@/components/ui/PopupMessage';
 import { supabase } from '@/lib/supabase';
 
 interface ChangePasswordProps {
@@ -15,20 +16,26 @@ export default function ChangePassword({ onClose }: ChangePasswordProps) {
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [popup, setPopup] = useState<{visible: boolean, type: 'success'|'error'|'warning'|'white', title: string, message: string}>({visible: false, type: 'success', title: '', message: ''});
+
+  const showPopup = (type: 'success'|'error'|'warning'|'white', title: string, message: string) => {
+    setPopup({visible: true, type, title, message});
+    setTimeout(() => setPopup(p => ({...p, visible: false})), 2500);
+  };
 
   const handleChangePassword = async () => {
     if (!newPassword || !confirmPassword) {
-      Alert.alert('Error', 'Please fill in all fields');
+      showPopup('error', 'Missing Fields', 'Please fill in all fields');
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      Alert.alert('Error', 'New passwords do not match');
+      showPopup('error', 'Mismatch', 'New passwords do not match');
       return;
     }
 
     if (newPassword.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters');
+      showPopup('error', 'Weak Password', 'Password must be at least 6 characters');
       return;
     }
 
@@ -39,17 +46,16 @@ export default function ChangePassword({ onClose }: ChangePasswordProps) {
       });
 
       if (error) {
-        Alert.alert('Error', error.message);
+        showPopup('error', 'Change Failed', error.message);
       } else {
-        Alert.alert('Success', 'Password changed successfully', [
-          { text: 'OK', onPress: () => onClose?.() }
-        ]);
+        showPopup('success', 'Password Changed!', 'Password changed successfully');
         setCurrentPassword('');
         setNewPassword('');
         setConfirmPassword('');
+        onClose?.();
       }
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to change password');
+      showPopup('error', 'Error', error.message || 'Failed to change password');
     } finally {
       setLoading(false);
     }
@@ -57,7 +63,7 @@ export default function ChangePassword({ onClose }: ChangePasswordProps) {
 
   const handleTestPassword = async () => {
     if (!currentPassword) {
-      Alert.alert('Error', 'Please enter a test password');
+      showPopup('error', 'Missing Field', 'Please enter a test password');
       return;
     }
 
@@ -66,7 +72,7 @@ export default function ChangePassword({ onClose }: ChangePasswordProps) {
       const { data: { user } } = await supabase.auth.getUser();
 
       if (!user?.email) {
-        Alert.alert('Error', 'No user email found');
+        showPopup('error', 'No Email', 'No user email found');
         return;
       }
 
@@ -76,12 +82,12 @@ export default function ChangePassword({ onClose }: ChangePasswordProps) {
       });
 
       if (error) {
-        Alert.alert('Test Failed', `Password does NOT match database\n\nError: ${error.message}`);
+        showPopup('error', 'Test Failed', `Password does NOT match database\n\nError: ${error.message}`);
       } else {
-        Alert.alert('Test Success', `Password MATCHES database\n\nUser ID: ${data.user?.id}`);
+        showPopup('success', 'Test Passed!', `Password MATCHES database\n\nUser ID: ${data.user?.id}`);
       }
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Test failed');
+      showPopup('error', 'Test Error', error.message || 'Test failed');
     } finally {
       setLoading(false);
     }
@@ -195,6 +201,14 @@ export default function ChangePassword({ onClose }: ChangePasswordProps) {
           </Text>
         </View>
       </ScrollView>
+
+      {/* Popup */}
+      <PopupMessage
+        visible={popup.visible}
+        type={popup.type}
+        title={popup.title}
+        message={popup.message}
+      />
     </View>
   );
 }

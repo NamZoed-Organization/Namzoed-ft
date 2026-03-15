@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabase';
 import { AlertTriangle, ArrowLeft, Trash2 } from 'lucide-react-native';
 import React, { useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import PopupMessage from '@/components/ui/PopupMessage';
 
 interface DeleteAccountProps {
   onClose?: () => void;
@@ -11,6 +12,12 @@ interface DeleteAccountProps {
 export default function DeleteAccount({ onClose, onAccountDeleted }: DeleteAccountProps) {
   const [confirmText, setConfirmText] = useState('');
   const [loading, setLoading] = useState(false);
+  const [popup, setPopup] = useState<{visible: boolean, type: 'success'|'error'|'warning'|'white', title: string, message: string}>({visible: false, type: 'success', title: '', message: ''});
+
+  const showPopup = (type: 'success'|'error'|'warning'|'white', title: string, message: string) => {
+    setPopup({visible: true, type, title, message});
+    setTimeout(() => setPopup(p => ({...p, visible: false})), 2500);
+  };
 
   const isConfirmed = confirmText.trim().toLowerCase() === 'delete my account';
 
@@ -33,7 +40,7 @@ export default function DeleteAccount({ onClose, onAccountDeleted }: DeleteAccou
               const { error: rpcError } = await supabase.rpc('delete_user_account');
 
               if (rpcError) {
-                Alert.alert('Error', rpcError.message || 'Failed to delete account. Please contact support.');
+                showPopup('error', 'Deletion Failed', rpcError.message || 'Failed to delete account. Please contact support.');
                 return;
               }
 
@@ -42,7 +49,7 @@ export default function DeleteAccount({ onClose, onAccountDeleted }: DeleteAccou
 
               onAccountDeleted?.();
             } catch (error: any) {
-              Alert.alert('Error', error.message || 'Something went wrong. Please contact support at namzoed.com/support');
+              showPopup('error', 'Error', error.message || 'Something went wrong. Please contact support at namzoed.com/support');
             } finally {
               setLoading(false);
             }
@@ -141,6 +148,14 @@ export default function DeleteAccount({ onClose, onAccountDeleted }: DeleteAccou
           </Text>
         </View>
       </ScrollView>
+
+      {/* Popup */}
+      <PopupMessage
+        visible={popup.visible}
+        type={popup.type}
+        title={popup.title}
+        message={popup.message}
+      />
     </View>
   );
 }

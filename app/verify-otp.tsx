@@ -1,4 +1,5 @@
 import { Entypo } from "@expo/vector-icons";
+import PopupMessage from "@/components/ui/PopupMessage";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import { clamp, useResponsive } from "@/utils/responsive";
@@ -45,6 +46,12 @@ export default function VerifyOTP() {
   const [otp4, setOtp4] = useState("");
   const [loading, setLoading] = useState(false);
   const [timeLeft, setTimeLeft] = useState(600); // 10 minutes in seconds
+  const [popup, setPopup] = useState<{visible: boolean, type: 'success'|'error'|'warning'|'white', title: string, message: string}>({visible: false, type: 'success', title: '', message: ''});
+
+  const showPopup = (type: 'success'|'error'|'warning'|'white', title: string, message: string) => {
+    setPopup({visible: true, type, title, message});
+    setTimeout(() => setPopup(p => ({...p, visible: false})), 2500);
+  };
 
   const input1Ref = useRef<TextInput>(null);
   const input2Ref = useRef<TextInput>(null);
@@ -121,7 +128,7 @@ export default function VerifyOTP() {
     const enteredOtp = otp1 + otp2 + otp3 + otp4;
 
     if (enteredOtp.length !== 4) {
-      Alert.alert("Incomplete", "Please enter all 4 digits");
+      showPopup("error", "Incomplete", "Please enter all 4 digits");
       return;
     }
 
@@ -136,7 +143,7 @@ export default function VerifyOTP() {
           params: { identifier, type }
         });
       } else {
-        Alert.alert("Invalid OTP", "The OTP you entered is incorrect. Please try again.");
+        showPopup("error", "Invalid OTP", "The OTP you entered is incorrect. Please try again.");
         // Clear inputs
         setOtp1("");
         setOtp2("");
@@ -146,7 +153,7 @@ export default function VerifyOTP() {
       }
     } catch (error: any) {
       console.error("Verification error:", error);
-      Alert.alert("Error", "Something went wrong. Please try again.");
+      showPopup("error", "Error", "Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -350,6 +357,14 @@ export default function VerifyOTP() {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Popup */}
+      <PopupMessage
+        visible={popup.visible}
+        type={popup.type}
+        title={popup.title}
+        message={popup.message}
+      />
     </TouchableWithoutFeedback>
   );
 }

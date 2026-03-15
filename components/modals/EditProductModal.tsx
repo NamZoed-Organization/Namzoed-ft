@@ -52,16 +52,19 @@ export default function EditProductModal({
   const [showSuccess, setShowSuccess] = useState(false);
   const [showError, setShowError] = useState(false);
   const [popupMessage, setPopupMessage] = useState("");
+  const [popupTitle, setPopupTitle] = useState("");
 
   // Popup helpers
-  const showErrorPopup = (message: string) => {
+  const showErrorPopup = (message: string, title: string = "Error") => {
     setPopupMessage(message);
+    setPopupTitle(title);
     setShowError(true);
     setTimeout(() => setShowError(false), 2500);
   };
 
-  const showSuccessPopup = (message: string, callback?: () => void) => {
+  const showSuccessPopup = (message: string, title: string = "Success", callback?: () => void) => {
     setPopupMessage(message);
+    setPopupTitle(title);
     setShowSuccess(true);
     setTimeout(() => {
       setShowSuccess(false);
@@ -183,7 +186,7 @@ export default function EditProductModal({
       }
     } catch (error) {
       console.error("Failed to open camera:", error);
-      showErrorPopup("Failed to open camera.");
+      showErrorPopup("Failed to open camera.", "Camera Error");
     }
   };
 
@@ -211,7 +214,7 @@ export default function EditProductModal({
       }
     } catch (error) {
       console.error("Failed to open gallery:", error);
-      showErrorPopup("Failed to open gallery.");
+      showErrorPopup("Failed to open gallery.", "Gallery Error");
     }
   };
 
@@ -257,18 +260,18 @@ export default function EditProductModal({
   const handleUpdate = async () => {
     // Validation
     if (!name || !price || !selectedCategory) {
-      showErrorPopup("Please fill in the Name, Price, and Category.");
+      showErrorPopup("Please fill in the Name, Price, and Category.", "Missing Fields");
       return;
     }
 
     if (tags.length === 0) {
-      showErrorPopup("Please select at least one tag.");
+      showErrorPopup("Please select at least one tag.", "No Tags");
       return;
     }
 
     const totalImages = existingImages.length + newImages.length;
     if (totalImages === 0) {
-      showErrorPopup("Please add at least one image.");
+      showErrorPopup("Please add at least one image.", "No Images");
       return;
     }
 
@@ -315,12 +318,12 @@ export default function EditProductModal({
         discount_duration_hrs: discountDuration,
       });
 
-      showSuccessPopup("Product updated successfully!", () => {
+      showSuccessPopup("Product updated successfully!", "Updated!", () => {
         onSuccess();
       });
     } catch (error: any) {
       console.error("Update error:", error);
-      showErrorPopup(error.message || "Failed to update product");
+      showErrorPopup(error.message || "Failed to update product", "Update Failed");
     } finally {
       setLoading(false);
     }
@@ -796,9 +799,10 @@ export default function EditProductModal({
       <PopupMessage
         visible={showSuccess}
         type="success"
+        title={popupTitle}
         message={popupMessage}
       />
-      <PopupMessage visible={showError} type="error" message={popupMessage} />
+      <PopupMessage visible={showError} type="error" title={popupTitle} message={popupMessage} />
 
       {/* Image Picker Sheet */}
       <ImagePickerSheet

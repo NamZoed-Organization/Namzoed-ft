@@ -444,6 +444,7 @@ export const fetchServiceProviderProfile = async (userId: string): Promise<any |
     .select(`
       id,
       user_id,
+      name,
       identification,
       master_bio,
       profile_url,
@@ -505,6 +506,7 @@ export const uploadProviderAvatar = async (imageUri: string, userId: string): Pr
 export const updateServiceProviderProfile = async (
   userId: string,
   updates: {
+    name?: string;
     master_bio?: string;
     profile_url?: string;
     identification?: any;

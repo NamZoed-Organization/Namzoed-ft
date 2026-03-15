@@ -868,6 +868,8 @@ export default function ManageListingsOverlay({
             setShowImageViewer(false);
             setSelectedPost(null);
           }}
+          postId={selectedPost.id}
+          postUserId={selectedPost.user_id}
           postContent={selectedPost.content}
           username={selectedPost.userName}
           likes={selectedPost.likes}

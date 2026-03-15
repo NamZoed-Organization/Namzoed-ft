@@ -8,6 +8,7 @@ import { fetchPosts, PostWithUser } from "@/lib/postsService";
 import { getReportedPostIds } from "@/lib/reportService";
 import { PostData } from "@/types/post";
 import { useLocalSearchParams } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import React, {
     useCallback,
     useEffect,
@@ -31,10 +32,10 @@ import AuthPromptModal from "@/components/modals/AuthPromptModal";
 import { feedEvents } from "@/utils/feedEvents";
 
 export default function FeedScreen() {
+  const insets = useSafeAreaInsets();
   const { currentUser } = useUser();
   const { streamId: deepLinkedStreamId } = useLocalSearchParams<{ streamId?: string }>();
   const [showCreatePost, setShowCreatePost] = useState(false);
-  const [showCreateMenu, setShowCreateMenu] = useState(false);
   const [showLive, setShowLive] = useState(false);
   const [selectedStreamId, setSelectedStreamId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -274,31 +275,25 @@ export default function FeedScreen() {
     );
   };
 
-  const renderHeader = () => (
-    <>
-  
-        <LivesBar
-          onJoin={(stream: { id: string }) => {
-            setSelectedStreamId(stream.id);
-            setShowLive(true);
-          }}
-          onGoLive={() => {
-          setSelectedStreamId(null);
-          setShowLive(true);
-        }}
-        onCreatePost={() => setShowCreatePost(true)}
-      />
+  const handleJoinLive = useCallback((stream: { id: string }) => {
+    setSelectedStreamId(stream.id);
+    setShowLive(true);
+  }, []);
 
-      {/* Show skeleton while loading initial posts */}
-      {loadingNewPosts && paginatedPosts.length === 0 && (
-        <>
-          <PostSkeleton />
-          <PostSkeleton />
-          <PostSkeleton />
-        </>
-      )}
-    </>
-  );
+  const handleGoLive = useCallback(() => {
+    setSelectedStreamId(null);
+    setShowLive(true);
+  }, []);
+
+  const handleCreatePost = useCallback(() => setShowCreatePost(true), []);
+
+  const renderHeader = useCallback(() => (
+    <LivesBar
+      onJoin={handleJoinLive}
+      onGoLive={handleGoLive}
+      onCreatePost={handleCreatePost}
+    />
+  ), [handleJoinLive, handleGoLive, handleCreatePost]);
 
   const [showAuthModal, setShowAuthModal] = useState(false);
 
@@ -306,7 +301,7 @@ export default function FeedScreen() {
     return (
       <View className="flex-1 bg-gray-100">
         {/* Status Bar Space */}
-        <View className="h-12 bg-white" />
+        <View style={{ height: insets.top, backgroundColor: 'white' }} />
 
         <View className="flex-1 items-center justify-center px-4">
           <Text className="text-xl font-semibold text-gray-700 mb-2">
@@ -333,14 +328,7 @@ export default function FeedScreen() {
   return (
     <View className="flex-1 bg-gray-100">
       {/* Status Bar Space */}
-      <View className="h-12 bg-white" />
-
-      {/* Dismiss Create menu backdrop */}
-      {showCreateMenu && (
-        <TouchableWithoutFeedback onPress={() => setShowCreateMenu(false)}>
-          <View className="absolute inset-0 z-40" />
-        </TouchableWithoutFeedback>
-      )}
+      <View style={{ height: insets.top, backgroundColor: 'white' }} />
 
       {/* Feed Content */}
       <FlatList
@@ -349,25 +337,27 @@ export default function FeedScreen() {
         renderItem={renderPost}
         keyExtractor={(item) => item.id}
         ListHeaderComponent={renderHeader}
+        ListEmptyComponent={loadingNewPosts ? (
+          <>
+            <PostSkeleton />
+            <PostSkeleton />
+            <PostSkeleton />
+          </>
+        ) : null}
         ListFooterComponent={renderFooter}
         showsVerticalScrollIndicator={false}
         className="flex-1"
-        contentContainerStyle={{ paddingBottom: 80 }}
+        contentContainerStyle={{ paddingBottom: 72 + insets.bottom }}
         onLayout={onLayout}
         onScroll={onScroll}
         scrollEventThrottle={16}
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
         removeClippedSubviews={false}
-        maxToRenderPerBatch={15}
-        windowSize={21}
-        initialNumToRender={15}
+        maxToRenderPerBatch={3}
+        windowSize={5}
+        initialNumToRender={5}
         viewabilityConfigCallbackPairs={viewabilityConfigCallbackPairs}
-        getItemLayout={(data, index) => ({
-          length: 400,
-          offset: 400 * index,
-          index,
-        })}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

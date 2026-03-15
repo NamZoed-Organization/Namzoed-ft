@@ -33,10 +33,12 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 export default function ServiceScreen() {
+  const insets = useSafeAreaInsets();
   const { currentUser } = useUser();
   const [showAddModal, setShowAddModal] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -177,7 +179,7 @@ export default function ServiceScreen() {
           key={numColumns}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{
-            paddingBottom: 100,
+            paddingBottom: 72 + insets.bottom,
           }}
           columnWrapperStyle={{
             gap: gap,

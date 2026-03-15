@@ -17,25 +17,25 @@ const popupConfig = {
   success: {
     colors: ['#094569', '#0a5a8a', '#0b7dba'] as [string, string, string],
     icon: CheckCircle,
-    defaultTitle: 'Awesome!',
+    defaultTitle: 'Done',
     textColor: 'white',
   },
   error: {
     colors: ['#dc2626', '#b91c1c', '#991b1b'] as [string, string, string],
     icon: AlertCircle,
-    defaultTitle: 'Oops!',
+    defaultTitle: 'Something went wrong',
     textColor: 'white',
   },
   warning: {
     colors: ['#d97706', '#b45309', '#92400e'] as [string, string, string],
     icon: AlertTriangle,
-    defaultTitle: 'Warning',
+    defaultTitle: 'Heads up',
     textColor: 'white',
   },
   white: {
     colors: ['#ffffff', '#f9fafb', '#f3f4f6'] as [string, string, string],
     icon: CheckCircle,
-    defaultTitle: 'Done!',
+    defaultTitle: 'Done',
     textColor: '#094569',
   },
 };

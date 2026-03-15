@@ -1,4 +1,5 @@
 import FormInput from "@/components/ui/FormInput";
+import PopupMessage from "@/components/ui/PopupMessage";
 import { useUser } from "@/contexts/UserContext";
 import { supabase } from "@/lib/supabase";
 import { clamp, useResponsive } from "@/utils/responsive";
@@ -65,7 +66,13 @@ export default function Login() {
   const [phonePromptLoading, setPhonePromptLoading] = useState(false);
   const [pendingUserData, setPendingUserData] = useState<any | null>(null);
   const [pendingResolvedEmail, setPendingResolvedEmail] = useState("");
+  const [popup, setPopup] = useState<{visible: boolean, type: 'success'|'error'|'warning'|'white', title: string, message: string}>({visible: false, type: 'success', title: '', message: ''});
   const { setCurrentUser } = useUser();
+
+  const showPopup = (type: 'success'|'error'|'warning'|'white', title: string, message: string) => {
+    setPopup({visible: true, type, title, message});
+    setTimeout(() => setPopup(p => ({...p, visible: false})), 2500);
+  };
   const { ms, vs, wp } = useResponsive();
   const screenPaddingX = clamp(wp(10), 20, 44);
   const headerBottomSpacing = clamp(vs(32), 24, 40);
@@ -217,7 +224,7 @@ export default function Login() {
       await completeLogin(userData, resolvedEmail);
     } catch (error: any) {
       console.error("Finalize login error:", error);
-      Alert.alert("Error", "Failed to complete login");
+      showPopup("error", "Login Failed", "Failed to complete login");
     }
   };
 
@@ -260,7 +267,7 @@ export default function Login() {
         const { data: sessionData, error: exchangeError } =
           await supabase.auth.exchangeCodeForSession(decodeURIComponent(code));
         if (exchangeError) {
-          Alert.alert("Login Failed", exchangeError.message);
+          showPopup("error", "Login Failed", exchangeError.message);
           return;
         }
         if (sessionData?.user?.id) {
@@ -279,7 +286,7 @@ export default function Login() {
             refresh_token: decodeURIComponent(refreshToken),
           });
         if (setSessionError) {
-          Alert.alert("Login Failed", setSessionError.message);
+          showPopup("error", "Login Failed", setSessionError.message);
           return;
         }
         if (setSessionData?.user?.id) {
@@ -294,13 +301,10 @@ export default function Login() {
         return;
       }
 
-      Alert.alert(
-        "Login Failed",
-        "OAuth completed but no app session was created. Please try again.",
-      );
+      showPopup("error", "Login Failed", "OAuth completed but no app session was created. Please try again.");
     } catch (error: any) {
       console.error("OAuth error:", error);
-      Alert.alert("Login Failed", error?.message || "OAuth sign-in failed");
+      showPopup("error", "Login Failed", error?.message || "OAuth sign-in failed");
     } finally {
       setOauthLoading(null);
     }
@@ -308,7 +312,7 @@ export default function Login() {
 
   const handleLogin = async () => {
     if (!identifier.trim() || !password) {
-      Alert.alert("Error", "Please fill in all fields");
+      showPopup("error", "Missing Fields", "Please fill in all fields");
       return;
     }
 
@@ -337,10 +341,7 @@ export default function Login() {
           .single();
 
         if (profileError || !profile) {
-          Alert.alert(
-            "Error",
-            "Bhutan phone number not found. Please check your number or sign up.",
-          );
+          showPopup("error", "Phone Not Found", "Bhutan phone number not found. Please check your number or sign up.");
           return;
         }
 
@@ -363,7 +364,7 @@ export default function Login() {
         message: error.message,
         stack: error.stack,
       });
-      Alert.alert("Error", error.message);
+      showPopup("error", "Login Error", error.message);
     } finally {
       setLoading(false);
     }
@@ -637,10 +638,7 @@ export default function Login() {
                   const normalizedPhone =
                     normalizeBhutanPhone(phonePromptValue);
                   if (!isValidBhutanesePhone(phonePromptValue)) {
-                    Alert.alert(
-                      "Invalid Phone",
-                      "Please enter a valid Bhutan phone (17/77 + 8 digits), with or without +975.",
-                    );
+                    showPopup("error", "Invalid Phone", "Please enter a valid Bhutan phone (17/77 + 8 digits), with or without +975.");
                     return;
                   }
 
@@ -657,10 +655,7 @@ export default function Login() {
                       .eq("id", pendingUserData.id);
 
                     if (error) {
-                      Alert.alert(
-                        "Error",
-                        error.message || "Failed to save phone number",
-                      );
+                      showPopup("error", "Save Failed", error.message || "Failed to save phone number");
                       return;
                     }
 
@@ -740,6 +735,14 @@ export default function Login() {
             </View>
           </View>
         </Modal>
+
+      {/* Popup */}
+      <PopupMessage
+        visible={popup.visible}
+        type={popup.type}
+        title={popup.title}
+        message={popup.message}
+      />
       </View>
     </TouchableWithoutFeedback>
   );

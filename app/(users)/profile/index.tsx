@@ -9,6 +9,7 @@ import ProfileSettings from "@/components/modals/ProfileSettings";
 import { useUser } from "@/contexts/UserContext";
 import { Post } from "@/lib/postsService";
 // Added import for profile services
+import AddServicesModal from "@/components/modals/AddServicesModal";
 import EditServicesModal from "@/components/modals/EditServicesModal";
 // Custom hooks
 import { useProfileData } from "@/hooks/profile/useProfileData";
@@ -142,6 +143,7 @@ export default function ProfileScreen() {
     "camera" | "gallery" | null
   >(null);
   const [showProviderAvatarMenu, setShowProviderAvatarMenu] = useState(false);
+  const [showAddServiceModal, setShowAddServiceModal] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsInitialModal, setSettingsInitialModal] = useState<string | undefined>(undefined);
   const [showFollowRequests, setShowFollowRequests] = useState(false);
@@ -189,16 +191,19 @@ export default function ProfileScreen() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [showError, setShowError] = useState(false);
   const [popupMessage, setPopupMessage] = useState("");
+  const [popupTitle, setPopupTitle] = useState("");
 
   // Popup helpers
-  const showErrorPopup = (message: string) => {
+  const showErrorPopup = (message: string, title: string = "Error") => {
     setPopupMessage(message);
+    setPopupTitle(title);
     setShowError(true);
     setTimeout(() => setShowError(false), 2500);
   };
 
-  const showSuccessPopup = (message: string) => {
+  const showSuccessPopup = (message: string, title: string = "Success") => {
     setPopupMessage(message);
+    setPopupTitle(title);
     setShowSuccess(true);
     setTimeout(() => setShowSuccess(false), 2000);
   };
@@ -400,15 +405,16 @@ export default function ProfileScreen() {
 
     try {
       await updateServiceProviderProfile(currentUser.id, {
+        name: providerFormData.businessName,
         master_bio: providerFormData.bio,
       });
 
       setIsEditingProvider(false);
       setRefreshKey((prev) => prev + 1);
-      showSuccessPopup("Service provider profile updated successfully");
+      showSuccessPopup("Service provider profile updated successfully", "Profile Updated!");
     } catch (error) {
       console.error("Failed to update service provider profile:", error);
-      showErrorPopup("Failed to update profile. Please try again.");
+      showErrorPopup("Failed to update profile. Please try again.", "Update Failed");
     }
   };
 
@@ -418,7 +424,7 @@ export default function ProfileScreen() {
       // Cancel editing - reload original data
       if (serviceProvider) {
         setProviderFormData({
-          businessName: "",
+          businessName: serviceProvider.name || "",
           email: serviceProvider.profiles?.email || "",
           phone: serviceProvider.profiles?.phone || "",
           bio: serviceProvider.master_bio || "",
@@ -450,10 +456,10 @@ export default function ProfileScreen() {
       await AsyncStorage.setItem("currentUser", JSON.stringify(updatedUser));
       setCurrentUser(updatedUser);
 
-      showSuccessPopup("Profile has been changed successfully");
+      showSuccessPopup("Profile has been changed successfully", "Profile Saved!");
     } catch (error) {
       console.error("Failed to save profile image:", error);
-      showErrorPopup("Failed to save profile image. Please try again.");
+      showErrorPopup("Failed to save profile image. Please try again.", "Save Failed");
       // Optional: Revert profileImage state here if needed
     }
   };
@@ -476,7 +482,7 @@ export default function ProfileScreen() {
   const ensureCameraPermission = async (message = "Camera access is needed.") => {
     const cameraPermission = await ImagePicker.requestCameraPermissionsAsync();
     if (!cameraPermission.granted) {
-      showErrorPopup(message);
+      showErrorPopup(message, "Permission Denied");
       return false;
     }
     return true;
@@ -514,7 +520,7 @@ export default function ProfileScreen() {
         const galleryPermission =
           await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!galleryPermission.granted) {
-          showErrorPopup("Gallery access is needed.");
+          showErrorPopup("Gallery access is needed.", "Permission Denied");
           return;
         }
         result = await ImagePicker.launchImageLibraryAsync({
@@ -538,7 +544,7 @@ export default function ProfileScreen() {
       }
     } catch (error) {
       console.error("Error picking image:", error);
-      showErrorPopup("Failed to select image.");
+      showErrorPopup("Failed to select image.", "Selection Failed");
     }
   };
 
@@ -561,7 +567,7 @@ export default function ProfileScreen() {
         const galleryPermission =
           await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!galleryPermission.granted) {
-          showErrorPopup("Gallery access is needed.");
+          showErrorPopup("Gallery access is needed.", "Permission Denied");
           return;
         }
         result = await ImagePicker.launchImageLibraryAsync({
@@ -589,10 +595,10 @@ export default function ProfileScreen() {
             profile_url: publicUrl,
           });
 
-          showSuccessPopup("Service provider avatar updated successfully");
+          showSuccessPopup("Service provider avatar updated successfully", "Avatar Updated!");
         } catch (uploadError) {
           console.error("Failed to upload provider avatar:", uploadError);
-          showErrorPopup("Failed to upload avatar. Please try again.");
+          showErrorPopup("Failed to upload avatar. Please try again.", "Upload Failed");
           // Revert to previous image on error
           if (serviceProvider?.profile_url) {
             setProviderImageUri(serviceProvider.profile_url);
@@ -603,7 +609,7 @@ export default function ProfileScreen() {
       }
     } catch (error) {
       console.error("Error picking provider image:", error);
-      showErrorPopup("Failed to select image.");
+      showErrorPopup("Failed to select image.", "Selection Failed");
     }
   };
 
@@ -677,10 +683,12 @@ export default function ProfileScreen() {
               Haptics.notificationAsync(NotificationFeedbackType.Success);
               showSuccessPopup(
                 `Service ${newStatus ? "activated" : "deactivated"} successfully`,
+                newStatus ? "Activated!" : "Deactivated!"
               );
             } catch (error: any) {
               showErrorPopup(
                 error.message || "Failed to update service status",
+                "Update Failed"
               );
             }
           },
@@ -737,9 +745,9 @@ export default function ProfileScreen() {
               setSelectedServiceIds([]);
 
               Haptics.notificationAsync(NotificationFeedbackType.Success);
-              showSuccessPopup("Services deleted successfully");
+              showSuccessPopup("Services deleted successfully", "Removed!");
             } catch (error: any) {
-              showErrorPopup(error.message || "Failed to delete services");
+              showErrorPopup(error.message || "Failed to delete services", "Deletion Failed");
             }
           },
         },
@@ -761,7 +769,7 @@ export default function ProfileScreen() {
       const galleryPermission =
         await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!galleryPermission.granted) {
-        showErrorPopup("Gallery access is needed to upload license.");
+        showErrorPopup("Gallery access is needed to upload license.", "Permission Denied");
         return;
       }
 
@@ -816,7 +824,7 @@ export default function ProfileScreen() {
       }
     } catch (error) {
       console.error("Error picking license image:", error);
-      showErrorPopup("Failed to select image.");
+      showErrorPopup("Failed to select image.", "Selection Failed");
     }
   };
 
@@ -840,10 +848,11 @@ export default function ProfileScreen() {
       Haptics.notificationAsync(NotificationFeedbackType.Success);
       showSuccessPopup(
         "License document uploaded successfully. Pending verification.",
+        "Uploaded!"
       );
     } catch (uploadError) {
       console.error("Failed to upload license:", uploadError);
-      showErrorPopup("Failed to upload license. Please try again.");
+      showErrorPopup("Failed to upload license. Please try again.", "Upload Failed");
     } finally {
       setUploadingLicense(false);
     }
@@ -895,11 +904,12 @@ export default function ProfileScreen() {
               setCurrentUser(updatedUser);
 
               Haptics.notificationAsync(NotificationFeedbackType.Success);
-              showSuccessPopup("Profile picture removed successfully");
+              showSuccessPopup("Profile picture removed successfully", "Removed!");
             } catch (error) {
               console.error("Failed to remove profile picture:", error);
               showErrorPopup(
                 "Failed to remove profile picture. Please try again.",
+                "Removal Failed"
               );
             }
           },
@@ -941,10 +951,10 @@ export default function ProfileScreen() {
               setProviderImageUri(null);
 
               Haptics.notificationAsync(NotificationFeedbackType.Success);
-              showSuccessPopup("Avatar removed successfully");
+              showSuccessPopup("Avatar removed successfully", "Removed!");
             } catch (error) {
               console.error("Failed to remove provider avatar:", error);
-              showErrorPopup("Failed to remove avatar. Please try again.");
+              showErrorPopup("Failed to remove avatar. Please try again.", "Removal Failed");
             }
           },
         },
@@ -990,10 +1000,10 @@ export default function ProfileScreen() {
               setVerificationStatus("not_verified");
 
               Haptics.notificationAsync(NotificationFeedbackType.Success);
-              showSuccessPopup("License removed successfully");
+              showSuccessPopup("License removed successfully", "Removed!");
             } catch (error) {
               console.error("Failed to remove license:", error);
-              showErrorPopup("Failed to remove license. Please try again.");
+              showErrorPopup("Failed to remove license. Please try again.", "Removal Failed");
             }
           },
         },
@@ -1151,8 +1161,9 @@ export default function ProfileScreen() {
                     </TouchableOpacity>
                   </View>
 
-                  {/* Stats row */}
-                  <View className="flex-1 flex-row items-center justify-around ml-4">
+                  {/* Stats row + Badge */}
+                  <View className="flex-1 ml-4">
+                  <View className="flex-row items-center justify-around">
                     <View className="items-center">
                       <Text className="text-lg font-mbold text-gray-900">
                         {userPosts.length}
@@ -1192,15 +1203,9 @@ export default function ProfileScreen() {
                       </Text>
                     </TouchableOpacity>
                   </View>
-                </View>
-
-                {/* Name & Badge */}
-                <View className="flex-row items-center gap-4 mb-0.5 flex-wrap">
-                  <Text className="text-base font-mbold text-gray-900">
-                    {currentUser.name}
-                  </Text>
                   {badgeType && (
                     <TouchableOpacity
+                      style={{ marginTop: 10 }}
                       onPress={() => {
                         setSettingsInitialModal("appearance");
                         setShowSettings(true);
@@ -1209,7 +1214,13 @@ export default function ProfileScreen() {
                       <EarlyAccessBadge badgeType={badgeType} size="sm" />
                     </TouchableOpacity>
                   )}
+                  </View>
                 </View>
+
+                {/* Name & Email */}
+                <Text className="text-base font-mbold text-gray-900 mb-0.5">
+                  {currentUser.name}
+                </Text>
                 {currentUser.email && (
                   <Text className="text-sm font-regular text-gray-500 mb-3">
                     {currentUser.email}
@@ -1219,7 +1230,7 @@ export default function ProfileScreen() {
                 {/* Action Buttons */}
                 <View className="flex-row gap-2 mt-2">
                   <TouchableOpacity
-                    onPress={() => setShowSettings(true)}
+                    onPress={() => { setSettingsInitialModal('editProfile'); setShowSettings(true); }}
                     className="flex-1 py-[9px] rounded-lg flex-row items-center justify-center bg-gray-100 border border-gray-300"
                   >
                     <Text className="text-sm font-semibold text-gray-800">
@@ -1515,8 +1526,10 @@ export default function ProfileScreen() {
                 loadingProviderServices={loadingProviderServices}
                 isServiceSelectionMode={isServiceSelectionMode}
                 selectedServiceIds={selectedServiceIds}
-                onToggleEditProvider={handleToggleEditProvider}
-                onSaveProviderProfile={handleSaveProviderProfile}
+                onEditWork={() => {
+                  setSettingsInitialModal('editWorkProfile');
+                  setShowSettings(true);
+                }}
                 onShowProviderAvatarMenu={() => {
                   Haptics.impactAsync(ImpactFeedbackStyle.Light);
                   setShowProviderAvatarMenu(true);
@@ -1525,7 +1538,6 @@ export default function ProfileScreen() {
                   Haptics.impactAsync(ImpactFeedbackStyle.Light);
                   handleEditProviderProfile();
                 }}
-                setProviderFormData={setProviderFormData}
                 onUploadLicense={handleUploadLicense}
                 onShowLicenseMenu={() => {
                   Haptics.impactAsync(ImpactFeedbackStyle.Light);
@@ -1538,6 +1550,7 @@ export default function ProfileScreen() {
                 onNavigateToService={(serviceId) =>
                   router.push(`/(users)/servicedetail/${serviceId}` as any)
                 }
+                onAddService={() => setShowAddServiceModal(true)}
               />
 
               {/* Floating Delete Bar for Service Selection */}
@@ -2128,6 +2141,17 @@ export default function ProfileScreen() {
         />
       )}
 
+      {/* Add Service Modal */}
+      <AddServicesModal
+        isVisible={showAddServiceModal}
+        onClose={() => setShowAddServiceModal(false)}
+        userId={currentUser?.id || ""}
+        onSuccess={() => {
+          setShowAddServiceModal(false);
+          setRefreshKey((prev) => prev + 1);
+        }}
+      />
+
       {/* Edit Service Modal */}
       {showEditServiceModal && serviceToEdit && (
         <EditServicesModal
@@ -2267,9 +2291,15 @@ export default function ProfileScreen() {
       <PopupMessage
         visible={showSuccess}
         type="success"
+        title={popupTitle}
         message={popupMessage}
       />
-      <PopupMessage visible={showError} type="error" message={popupMessage} />
+      <PopupMessage
+        visible={showError}
+        type="error"
+        title={popupTitle}
+        message={popupMessage}
+      />
 
       <BottomNavBar />
     </View>

@@ -1,13 +1,13 @@
 // components/ui/TabBarButton.tsx
 import React from "react";
-import { Pressable } from "react-native";
+import { TouchableOpacity } from "react-native-gesture-handler";
 
 // use any to avoid ref mismatch with React Navigation
 const TabBarButton = React.forwardRef<any, any>((props, ref) => {
   return (
-    <Pressable ref={ref} android_ripple={null} {...props}>
+    <TouchableOpacity ref={ref} activeOpacity={0.7} {...props}>
       {props.children}
-    </Pressable>
+    </TouchableOpacity>
   );
 });
 

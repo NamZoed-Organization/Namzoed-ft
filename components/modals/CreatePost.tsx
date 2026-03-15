@@ -13,6 +13,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import PopupMessage from "@/components/ui/PopupMessage";
 import {
   ArrowLeft,
@@ -20,6 +21,7 @@ import {
   Check,
   ChevronRight,
   ImageIcon,
+  Plus,
   Search,
   ShoppingBag,
   UserPlus,
@@ -35,6 +37,7 @@ import { supabase } from "@/lib/supabase";
 import type { TaggedProduct, TaggedAccount } from "@/types/post";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const CARD_WIDTH = SCREEN_WIDTH - 48; // leaves 24px on each side so next item peeks
 
 interface MediaItem {
   uri: string;
@@ -76,6 +79,8 @@ export default function CreatePost({ onClose }: CreatePostProps) {
   const [showError, setShowError] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [errorTitle, setErrorTitle] = useState("");
+  const [successTitle, setSuccessTitle] = useState("");
 
   // Active media preview index (for carousel indicator)
   const [activeMediaIndex, setActiveMediaIndex] = useState(0);
@@ -88,14 +93,16 @@ export default function CreatePost({ onClose }: CreatePostProps) {
   const avatarUrl =
     (currentUser as any)?.avatar_url || (currentUser as any)?.profileImg;
 
-  const showErrorPopup = (message: string) => {
+  const showErrorPopup = (message: string, title: string = "Error") => {
     setErrorMessage(message);
+    setErrorTitle(title);
     setShowError(true);
     setTimeout(() => setShowError(false), 2500);
   };
 
-  const showSuccessPopup = (message: string, callback?: () => void) => {
+  const showSuccessPopup = (message: string, title: string = "Success", callback?: () => void) => {
     setSuccessMessage(message);
+    setSuccessTitle(title);
     setShowSuccess(true);
     setTimeout(() => {
       setShowSuccess(false);
@@ -109,7 +116,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
       const permission =
         await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
-        showErrorPopup("Photo library access is needed to select media.");
+        showErrorPopup("Photo library access is needed to select media.", "Permission Denied");
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -136,7 +143,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
     try {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
       if (!permission.granted) {
-        showErrorPopup("Camera access is needed.");
+        showErrorPopup("Camera access is needed.", "Permission Denied");
         return;
       }
       const result = await ImagePicker.launchCameraAsync({
@@ -177,7 +184,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
       const products = await fetchUserProducts(userId);
       setUserProducts(products);
     } catch {
-      showErrorPopup("Failed to load your products.");
+      showErrorPopup("Failed to load your products.", "Load Failed");
     } finally {
       setLoadingProducts(false);
     }
@@ -190,7 +197,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
         return prev.filter((p) => p.id !== product.id);
       }
       if (prev.length >= 5) {
-        showErrorPopup("You can tag up to 5 products per post.");
+        showErrorPopup("You can tag up to 5 products per post.", "Limit Reached");
         return prev;
       }
       return [
@@ -265,7 +272,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
         return prev.filter((a) => a.id !== account.id);
       }
       if (prev.length >= 10) {
-        showErrorPopup("You can tag up to 10 accounts per post.");
+        showErrorPopup("You can tag up to 10 accounts per post.", "Limit Reached");
         return prev;
       }
       return [
@@ -286,15 +293,15 @@ export default function CreatePost({ onClose }: CreatePostProps) {
   // --- Share Post ---
   const handleSharePost = async () => {
     if (!currentUser) {
-      showErrorPopup("You must be logged in to create a post");
+      showErrorPopup("You must be logged in to create a post", "Login Required");
       return;
     }
     if (!userId) {
-      showErrorPopup("User information is incomplete. Please log in again.");
+      showErrorPopup("User information is incomplete. Please log in again.", "Invalid User");
       return;
     }
     if (!postText.trim() && postMedia.length === 0) {
-      showErrorPopup("Please add some text or media to your post");
+      showErrorPopup("Please add some text or media to your post", "Empty Post");
       return;
     }
 
@@ -315,7 +322,8 @@ export default function CreatePost({ onClose }: CreatePostProps) {
           uploadedMediaUrls.push(...urls);
         } catch (err: any) {
           showErrorPopup(
-            `Failed to upload images: ${err.message || err}`
+            `Failed to upload images: ${err.message || err}`,
+            "Upload Failed"
           );
           return;
         }
@@ -327,7 +335,8 @@ export default function CreatePost({ onClose }: CreatePostProps) {
           uploadedMediaUrls.push(...urls);
         } catch (err: any) {
           showErrorPopup(
-            `Failed to upload videos: ${err.message || err}`
+            `Failed to upload videos: ${err.message || err}`,
+            "Upload Failed"
           );
           return;
         }
@@ -343,7 +352,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
           tagged_accounts:
             taggedAccounts.length > 0 ? taggedAccounts : undefined,
         });
-        showSuccessPopup("Your post has been published!", () => {
+        showSuccessPopup("Your post has been published!", "Posted!", () => {
           setPostText("");
           setPostMedia([]);
           setTaggedProducts([]);
@@ -352,12 +361,14 @@ export default function CreatePost({ onClose }: CreatePostProps) {
         });
       } catch (err: any) {
         showErrorPopup(
-          `Failed to create post: ${err.message || err}`
+          `Failed to create post: ${err.message || err}`,
+          "Post Failed"
         );
       }
     } catch (err: any) {
       showErrorPopup(
-        `An unexpected error occurred: ${err.message || err}`
+        `An unexpected error occurred: ${err.message || err}`,
+        "Error"
       );
     } finally {
       setIsUploading(false);
@@ -435,261 +446,219 @@ export default function CreatePost({ onClose }: CreatePostProps) {
 
           {/* Caption */}
           <TextInput
-            className="px-4 text-base text-gray-800 min-h-[80px]"
+            style={{
+              paddingHorizontal: 16,
+              paddingTop: 14,
+              paddingBottom: 8,
+              fontSize: 15,
+              color: "#1f2937",
+              minHeight: 80,
+              textAlignVertical: "top",
+            }}
             placeholder="Write a caption..."
             placeholderTextColor="#9CA3AF"
             multiline
             value={postText}
             onChangeText={setPostText}
-            style={{ textAlignVertical: "top" }}
           />
 
-          {/* Media carousel */}
+          {/* ── 3-Column Action Row ── */}
+          <View style={{ flexDirection: "row", marginHorizontal: 16, marginTop: 16, gap: 10 }}>
+
+            {/* Media */}
+            <TouchableOpacity
+              onPress={() => setShowMediaSourceModal(true)}
+              activeOpacity={0.8}
+              style={{ flex: 1, borderWidth: 1.5, borderColor: postMedia.length > 0 ? "#bfdbfe" : "#e5e7eb", borderStyle: "dashed", borderRadius: 16, paddingVertical: 20, alignItems: "center", justifyContent: "center", backgroundColor: postMedia.length > 0 ? "#eff6ff" : "#f9fafb" }}
+            >
+              {postMedia.length > 0 && (
+                <View style={{ position: "absolute", top: 8, right: 8, minWidth: 20, height: 20, borderRadius: 10, backgroundColor: "#3b82f6", alignItems: "center", justifyContent: "center", paddingHorizontal: 4 }}>
+                  <Text style={{ fontSize: 10, fontWeight: "700", color: "white" }}>{postMedia.length}</Text>
+                </View>
+              )}
+              <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: postMedia.length > 0 ? "#dbeafe" : "#eff6ff", alignItems: "center", justifyContent: "center", marginBottom: 8 }}>
+                <ImageIcon size={22} color="#3b82f6" />
+              </View>
+              <Text style={{ fontSize: 12, fontWeight: "700", color: postMedia.length > 0 ? "#1d4ed8" : "#6b7280" }}>Media</Text>
+            </TouchableOpacity>
+
+            {/* Products */}
+            <TouchableOpacity
+              onPress={() => { loadUserProducts(); setShowProductPicker(true); }}
+              activeOpacity={0.8}
+              style={{ flex: 1, borderWidth: 1.5, borderColor: taggedProducts.length > 0 ? "#bfdbfe" : "#e5e7eb", borderStyle: "dashed", borderRadius: 16, paddingVertical: 20, alignItems: "center", justifyContent: "center", backgroundColor: taggedProducts.length > 0 ? "#f0f7ff" : "#f9fafb" }}
+            >
+              {taggedProducts.length > 0 && (
+                <View style={{ position: "absolute", top: 8, right: 8, minWidth: 20, height: 20, borderRadius: 10, backgroundColor: "#094569", alignItems: "center", justifyContent: "center", paddingHorizontal: 4 }}>
+                  <Text style={{ fontSize: 10, fontWeight: "700", color: "white" }}>{taggedProducts.length}</Text>
+                </View>
+              )}
+              <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: taggedProducts.length > 0 ? "#dbeafe" : "#eff6ff", alignItems: "center", justifyContent: "center", marginBottom: 8 }}>
+                <ShoppingBag size={22} color="#094569" />
+              </View>
+              <Text style={{ fontSize: 12, fontWeight: "700", color: taggedProducts.length > 0 ? "#094569" : "#6b7280" }}>Products</Text>
+            </TouchableOpacity>
+
+            {/* Tag People */}
+            <TouchableOpacity
+              onPress={() => setShowAccountPicker(true)}
+              activeOpacity={0.8}
+              style={{ flex: 1, borderWidth: 1.5, borderColor: taggedAccounts.length > 0 ? "#c7d2fe" : "#e5e7eb", borderStyle: "dashed", borderRadius: 16, paddingVertical: 20, alignItems: "center", justifyContent: "center", backgroundColor: taggedAccounts.length > 0 ? "#eef2ff" : "#f9fafb" }}
+            >
+              {taggedAccounts.length > 0 && (
+                <View style={{ position: "absolute", top: 8, right: 8, minWidth: 20, height: 20, borderRadius: 10, backgroundColor: "#6366f1", alignItems: "center", justifyContent: "center", paddingHorizontal: 4 }}>
+                  <Text style={{ fontSize: 10, fontWeight: "700", color: "white" }}>{taggedAccounts.length}</Text>
+                </View>
+              )}
+              <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: taggedAccounts.length > 0 ? "#e0e7ff" : "#eef2ff", alignItems: "center", justifyContent: "center", marginBottom: 8 }}>
+                <UserPlus size={22} color="#6366f1" />
+              </View>
+              <Text style={{ fontSize: 12, fontWeight: "700", color: taggedAccounts.length > 0 ? "#4f46e5" : "#6b7280" }}>People</Text>
+            </TouchableOpacity>
+
+          </View>
+
+          {/* Media filled — peeking carousel */}
           {postMedia.length > 0 && (
-            <View className="mt-2">
+            <View style={{ marginTop: 12 }}>
               <FlatList
-                data={postMedia}
+                data={[...postMedia, { id: "__add__", uri: "", type: "add" as any }]}
                 horizontal
-                pagingEnabled
                 showsHorizontalScrollIndicator={false}
+                snapToInterval={CARD_WIDTH + 10}
+                decelerationRate="fast"
+                snapToAlignment="start"
+                contentContainerStyle={{ paddingHorizontal: 16, gap: 10 }}
                 keyExtractor={(item) => item.id}
                 onMomentumScrollEnd={(e) => {
-                  const idx = Math.round(
-                    e.nativeEvent.contentOffset.x / SCREEN_WIDTH
-                  );
-                  setActiveMediaIndex(idx);
+                  const idx = Math.round(e.nativeEvent.contentOffset.x / (CARD_WIDTH + 10));
+                  setActiveMediaIndex(Math.min(idx, postMedia.length - 1));
                 }}
-                renderItem={({ item }) => (
-                  <View
-                    style={{
-                      width: SCREEN_WIDTH,
-                      height: SCREEN_WIDTH,
-                    }}
-                  >
-                    <Image
-                      source={{ uri: item.uri }}
-                      style={{ width: "100%", height: "100%" }}
-                      resizeMode="cover"
-                    />
-                    {item.type === "video" && (
-                      <View className="absolute inset-0 items-center justify-center">
-                        <View className="w-16 h-16 rounded-full bg-black/40 items-center justify-center">
-                          <Video size={28} color="white" />
+                renderItem={({ item, index }) => {
+                  if (item.id === "__add__" && postMedia.length < 10) {
+                    return (
+                      <TouchableOpacity
+                        onPress={() => setShowMediaSourceModal(true)}
+                        activeOpacity={0.8}
+                        style={{ width: CARD_WIDTH, height: CARD_WIDTH * 0.75, borderRadius: 18, borderWidth: 1.5, borderColor: "#e5e7eb", borderStyle: "dashed", backgroundColor: "#f9fafb", alignItems: "center", justifyContent: "center" }}
+                      >
+                        <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: "#eff6ff", alignItems: "center", justifyContent: "center", marginBottom: 8 }}>
+                          <Plus size={22} color="#3b82f6" />
                         </View>
-                      </View>
-                    )}
-                    {/* Remove button */}
-                    <TouchableOpacity
-                      onPress={() => removeMedia(item.id)}
-                      className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/50 items-center justify-center"
-                    >
-                      <X size={16} color="white" />
-                    </TouchableOpacity>
-                  </View>
-                )}
+                        <Text style={{ fontSize: 13, fontWeight: "600", color: "#6b7280" }}>Add more</Text>
+                      </TouchableOpacity>
+                    );
+                  }
+                  if (item.id === "__add__") return null;
+                  return (
+                    <View style={{ width: CARD_WIDTH, height: CARD_WIDTH * 0.75, borderRadius: 18, overflow: "hidden" }}>
+                      <Image source={{ uri: item.uri }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />
+                      <LinearGradient
+                        colors={["transparent", "rgba(0,0,0,0.55)"]}
+                        style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 56, justifyContent: "flex-end", paddingHorizontal: 12, paddingBottom: 10, flexDirection: "row", alignItems: "flex-end" }}
+                      >
+                        <View style={{ backgroundColor: "rgba(255,255,255,0.22)", borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: "rgba(255,255,255,0.3)" }}>
+                          <Text style={{ color: "white", fontSize: 12, fontWeight: "700" }}>{index + 1} / {postMedia.length}</Text>
+                        </View>
+                      </LinearGradient>
+                      {item.type === "video" && (
+                        <View style={{ position: "absolute", top: "50%", left: "50%", marginTop: -28, marginLeft: -28, width: 56, height: 56, borderRadius: 28, backgroundColor: "rgba(0,0,0,0.45)", alignItems: "center", justifyContent: "center" }}>
+                          <Video size={26} color="white" />
+                        </View>
+                      )}
+                      <TouchableOpacity
+                        onPress={() => removeMedia(item.id)}
+                        style={{ position: "absolute", top: 10, right: 10, width: 30, height: 30, borderRadius: 15, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(255,255,255,0.3)" }}
+                      >
+                        <X size={14} color="white" />
+                      </TouchableOpacity>
+                    </View>
+                  );
+                }}
               />
-              {/* Dots */}
               {postMedia.length > 1 && (
-                <View className="flex-row justify-center mt-2 gap-1">
+                <View style={{ flexDirection: "row", justifyContent: "center", marginTop: 10, gap: 5 }}>
                   {postMedia.map((_, i) => (
-                    <View
-                      key={i}
-                      className={`w-1.5 h-1.5 rounded-full ${
-                        i === activeMediaIndex
-                          ? "bg-primary"
-                          : "bg-gray-300"
-                      }`}
-                    />
+                    <View key={i} style={{ width: i === activeMediaIndex ? 18 : 6, height: 6, borderRadius: 3, backgroundColor: i === activeMediaIndex ? "#094569" : "#d1d5db" }} />
                   ))}
                 </View>
               )}
             </View>
           )}
 
-          {/* Tagged Products */}
+          {/* Products filled */}
           {taggedProducts.length > 0 && (
-            <View className="px-4 mt-4">
-              <View className="flex-row items-center mb-2">
-                <ShoppingBag size={14} color="#094569" />
-                <Text className="ml-1.5 text-sm font-semibold text-gray-700">
-                  Tagged Products
-                </Text>
-              </View>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-              >
-                <View className="flex-row gap-2">
-                  {taggedProducts.map((product) => (
-                    <View
-                      key={product.id}
-                      className="flex-row items-center bg-gray-50 border border-gray-200 rounded-xl px-3 py-2"
-                    >
-                      {product.image && (
-                        <Image
-                          source={{ uri: product.image }}
-                          className="w-8 h-8 rounded-lg bg-gray-200 mr-2"
-                          resizeMode="cover"
-                        />
-                      )}
-                      <View
-                        className="mr-2"
-                        style={{ maxWidth: 100 }}
-                      >
-                        <Text
-                          className="text-xs font-semibold text-gray-800"
-                          numberOfLines={1}
-                        >
-                          {product.name}
-                        </Text>
-                        <Text className="text-[10px] text-primary font-bold">
-                          Nu.{" "}
-                          {(
-                            product.current_price ?? product.price
-                          ).toLocaleString()}
-                        </Text>
+            <View style={{ marginHorizontal: 16, marginTop: 12 }}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
+                {taggedProducts.map((product) => (
+                  <View key={product.id} style={{ width: 116, borderRadius: 16, overflow: "hidden", backgroundColor: "#f8faff", borderWidth: 1, borderColor: "#dbeafe" }}>
+                    {product.image ? (
+                      <Image source={{ uri: product.image }} style={{ width: "100%", height: 76 }} resizeMode="cover" />
+                    ) : (
+                      <View style={{ width: "100%", height: 76, backgroundColor: "#eff6ff", alignItems: "center", justifyContent: "center" }}>
+                        <ShoppingBag size={24} color="#bfdbfe" />
                       </View>
-                      <TouchableOpacity
-                        onPress={() =>
-                          removeTaggedProduct(product.id)
-                        }
-                        className="ml-1"
-                      >
-                        <X size={14} color="#9CA3AF" />
-                      </TouchableOpacity>
+                    )}
+                    <View style={{ padding: 8 }}>
+                      <Text style={{ fontSize: 11, fontWeight: "600", color: "#1f2937" }} numberOfLines={1}>{product.name}</Text>
+                      <Text style={{ fontSize: 10, fontWeight: "700", color: "#094569", marginTop: 2 }}>Nu. {(product.current_price ?? product.price).toLocaleString()}</Text>
                     </View>
-                  ))}
-                </View>
+                    <TouchableOpacity onPress={() => removeTaggedProduct(product.id)} style={{ position: "absolute", top: 6, right: 6, width: 22, height: 22, borderRadius: 11, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center" }}>
+                      <X size={11} color="white" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+                {taggedProducts.length < 5 && (
+                  <TouchableOpacity
+                    onPress={() => { loadUserProducts(); setShowProductPicker(true); }}
+                    activeOpacity={0.8}
+                    style={{ width: 80, borderRadius: 16, borderWidth: 1.5, borderColor: "#dbeafe", borderStyle: "dashed", backgroundColor: "#f8faff", alignItems: "center", justifyContent: "center", height: 116 }}
+                  >
+                    <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: "#eff6ff", alignItems: "center", justifyContent: "center", marginBottom: 6 }}>
+                      <Plus size={16} color="#094569" />
+                    </View>
+                    <Text style={{ fontSize: 10, color: "#94a3b8", fontWeight: "600" }}>Add more</Text>
+                  </TouchableOpacity>
+                )}
               </ScrollView>
             </View>
           )}
 
-          {/* Tagged Accounts */}
+          {/* People filled */}
           {taggedAccounts.length > 0 && (
-            <View className="px-4 mt-3">
-              <View className="flex-row items-center mb-2">
-                <UserPlus size={14} color="#094569" />
-                <Text className="ml-1.5 text-sm font-semibold text-gray-700">
-                  Tagged People
-                </Text>
-              </View>
-              <View className="flex-row flex-wrap gap-2">
+            <View style={{ marginHorizontal: 16, marginTop: 12 }}>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
                 {taggedAccounts.map((account) => (
-                  <View
-                    key={account.id}
-                    className="flex-row items-center bg-gray-50 border border-gray-200 rounded-full px-3 py-1.5"
-                  >
+                  <View key={account.id} style={{ flexDirection: "row", alignItems: "center", backgroundColor: "#fafafe", borderWidth: 1, borderColor: "#e0e7ff", borderRadius: 24, paddingLeft: 4, paddingRight: 10, paddingVertical: 4 }}>
                     {account.avatar_url ? (
-                      <Image
-                        source={{ uri: account.avatar_url }}
-                        className="w-5 h-5 rounded-full bg-gray-200 mr-1.5"
-                      />
+                      <Image source={{ uri: account.avatar_url }} style={{ width: 28, height: 28, borderRadius: 14, marginRight: 7 }} />
                     ) : (
-                      <View className="w-5 h-5 rounded-full bg-primary/10 items-center justify-center mr-1.5">
-                        <Text className="text-[8px] font-bold text-primary">
-                          {account.name.charAt(0).toUpperCase()}
-                        </Text>
+                      <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: "#e0e7ff", alignItems: "center", justifyContent: "center", marginRight: 7 }}>
+                        <Text style={{ fontSize: 11, fontWeight: "700", color: "#6366f1" }}>{account.name.charAt(0).toUpperCase()}</Text>
                       </View>
                     )}
-                    <Text className="text-xs font-medium text-gray-700 mr-1">
-                      {account.name}
-                    </Text>
-                    <TouchableOpacity
-                      onPress={() =>
-                        removeTaggedAccount(account.id)
-                      }
-                    >
-                      <X size={12} color="#9CA3AF" />
+                    <Text style={{ fontSize: 13, fontWeight: "600", color: "#374151", maxWidth: 90 }} numberOfLines={1}>{account.name}</Text>
+                    <TouchableOpacity onPress={() => removeTaggedAccount(account.id)} style={{ marginLeft: 7, width: 18, height: 18, borderRadius: 9, backgroundColor: "#e0e7ff", alignItems: "center", justifyContent: "center" }}>
+                      <X size={10} color="#6366f1" />
                     </TouchableOpacity>
                   </View>
                 ))}
+                {taggedAccounts.length < 10 && (
+                  <TouchableOpacity
+                    onPress={() => setShowAccountPicker(true)}
+                    activeOpacity={0.8}
+                    style={{ flexDirection: "row", alignItems: "center", backgroundColor: "#eef2ff", borderRadius: 24, paddingHorizontal: 12, paddingVertical: 7, borderWidth: 1, borderColor: "#e0e7ff" }}
+                  >
+                    <Plus size={13} color="#6366f1" />
+                    <Text style={{ fontSize: 12, fontWeight: "600", color: "#6366f1", marginLeft: 5 }}>Add</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
           )}
 
-          <View className="h-6" />
+          <View style={{ height: 24 }} />
         </ScrollView>
-
-        {/* Bottom Action Bar */}
-        <View className="border-t border-gray-100 bg-white px-4 py-3 pb-8">
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-          >
-            <View className="flex-row items-center gap-2">
-              {/* Add Media */}
-              <TouchableOpacity
-                onPress={() => setShowMediaSourceModal(true)}
-                className="flex-row items-center px-4 py-2.5 bg-gray-50 rounded-xl border border-gray-200"
-                disabled={postMedia.length >= 10}
-              >
-                <ImageIcon
-                  size={18}
-                  color={
-                    postMedia.length >= 10
-                      ? "#D1D5DB"
-                      : "#059669"
-                  }
-                />
-                <Text
-                  className={`ml-2 text-sm font-medium ${
-                    postMedia.length >= 10
-                      ? "text-gray-300"
-                      : "text-gray-700"
-                  }`}
-                >
-                  Media
-                </Text>
-                {postMedia.length > 0 && (
-                  <View className="ml-1.5 bg-primary/10 rounded-full px-1.5 py-0.5">
-                    <Text className="text-[10px] font-bold text-primary">
-                      {postMedia.length}
-                    </Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-
-              {/* Tag Products */}
-              <TouchableOpacity
-                onPress={() => {
-                  loadUserProducts();
-                  setShowProductPicker(true);
-                }}
-                className="flex-row items-center px-4 py-2.5 bg-gray-50 rounded-xl border border-gray-200"
-              >
-                <ShoppingBag size={18} color="#094569" />
-                <Text className="ml-2 text-sm font-medium text-gray-700">
-                  Products
-                </Text>
-                {taggedProducts.length > 0 && (
-                  <View className="ml-1.5 bg-primary/10 rounded-full px-1.5 py-0.5">
-                    <Text className="text-[10px] font-bold text-primary">
-                      {taggedProducts.length}
-                    </Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-
-              {/* Tag People */}
-              <TouchableOpacity
-                onPress={() => setShowAccountPicker(true)}
-                className="flex-row items-center px-4 py-2.5 bg-gray-50 rounded-xl border border-gray-200"
-              >
-                <UserPlus size={18} color="#6366F1" />
-                <Text className="ml-2 text-sm font-medium text-gray-700">
-                  Tag People
-                </Text>
-                {taggedAccounts.length > 0 && (
-                  <View className="ml-1.5 bg-indigo-50 rounded-full px-1.5 py-0.5">
-                    <Text className="text-[10px] font-bold text-indigo-500">
-                      {taggedAccounts.length}
-                    </Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            </View>
-          </ScrollView>
-        </View>
       </KeyboardAvoidingView>
 
       {/* Media Source Modal */}
@@ -1041,11 +1010,13 @@ export default function CreatePost({ onClose }: CreatePostProps) {
       <PopupMessage
         visible={showSuccess}
         type="success"
+        title={successTitle}
         message={successMessage}
       />
       <PopupMessage
         visible={showError}
         type="error"
+        title={errorTitle}
         message={errorMessage}
       />
     </View>

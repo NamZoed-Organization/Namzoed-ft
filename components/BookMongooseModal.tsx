@@ -1,5 +1,6 @@
 import { useUser } from "@/contexts/UserContext";
 import { supabase } from "@/lib/supabase";
+import PopupMessage from "@/components/ui/PopupMessage";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -46,6 +47,12 @@ export default function BookMongooseModal({
     longitude: number;
     address?: string;
   } | null>(null);
+  const [popup, setPopup] = useState<{visible: boolean, type: 'success'|'error'|'warning'|'white', title: string, message: string}>({visible: false, type: 'success', title: '', message: ''});
+
+  const showPopup = (type: 'success'|'error'|'warning'|'white', title: string, message: string) => {
+    setPopup({visible: true, type, title, message});
+    setTimeout(() => setPopup(p => ({...p, visible: false})), 2500);
+  };
 
   useEffect(() => {
     if (visible) {
@@ -82,7 +89,7 @@ export default function BookMongooseModal({
     }
 
     if (!currentUser) {
-      Alert.alert("Error", "You must be logged in to book.");
+      showPopup("error", "Login Required", "You must be logged in to book.");
       return;
     }
 
@@ -97,10 +104,7 @@ export default function BookMongooseModal({
 
       if (authError || !authUser) {
         console.error("Authentication error:", authError);
-        Alert.alert(
-          "Error",
-          "Unable to verify your authentication. Please log in again.",
-        );
+        showPopup("error", "Auth Error", "Unable to verify your authentication. Please log in again.");
         setSubmitting(false);
         return;
       }
@@ -146,26 +150,17 @@ export default function BookMongooseModal({
           error.code === "PGRST205" ||
           error.message.includes("could not find")
         ) {
-          Alert.alert(
-            "Setup Required",
-            "The booking system is not fully configured yet. Please contact the administrator to run the database migration.",
-          );
+          showPopup("error", "Setup Required", "The booking system is not fully configured yet. Please contact the administrator to run the database migration.");
         } else {
-          Alert.alert(
-            "Error",
-            "Failed to submit booking request. Please try again.",
-          );
+          showPopup("error", "Submission Failed", "Failed to submit booking request. Please try again.");
         }
       } else {
-        Alert.alert(
-          "Booking Submitted!",
-          "Your booking request has been sent to Mongoose. You will be notified once it's reviewed.",
-          [{ text: "OK", onPress: handleClose }],
-        );
+        showPopup("success", "Request Sent!", "Your booking request has been sent to Mongoose. You will be notified once it's reviewed.");
+        handleClose();
       }
     } catch (error) {
       console.error("Booking submission error:", error);
-      Alert.alert("Error", "An unexpected error occurred.");
+      showPopup("error", "Error", "An unexpected error occurred.");
     } finally {
       setSubmitting(false);
     }
@@ -481,6 +476,14 @@ export default function BookMongooseModal({
         }}
         initialPickupLocation={pickupLocation}
         initialDeliveryLocation={deliveryLocation}
+      />
+
+      {/* Popup */}
+      <PopupMessage
+        visible={popup.visible}
+        type={popup.type}
+        title={popup.title}
+        message={popup.message}
       />
     </Modal>
   );

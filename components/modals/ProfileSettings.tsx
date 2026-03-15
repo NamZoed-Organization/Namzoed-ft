@@ -7,6 +7,8 @@ import {
     CommunityGuidelines,
     DataStorage,
     DeleteAccount,
+    EditProfile,
+    EditWorkProfile,
     HelpCenter,
     LanguageRegion,
     Notifications,
@@ -102,6 +104,8 @@ export default function ProfileSettings({ onClose, currentUser, onLogout, panHan
 
   const renderModalContent = () => {
     switch (activeModal) {
+      case 'editProfile': return <EditProfile onClose={closeActiveModal} />;
+      case 'editWorkProfile': return <EditWorkProfile onClose={closeActiveModal} onSaved={onClose} />;
       case 'appearance': return <AppearanceManager onClose={closeActiveModal} userId={currentUser?.id} />;
       case 'savedPosts': return <SavedPosts onClose={closeActiveModal} userId={currentUser?.id} />;
       case 'changePassword': return <ChangePassword onClose={closeActiveModal} />;

@@ -31,7 +31,9 @@ import {
     Heart,
     MessageCircle,
     MoreHorizontal,
+    ShoppingBag,
     Tag,
+    UserRound,
     Volume2,
     VolumeX,
 } from "lucide-react-native";
@@ -901,6 +903,71 @@ export default function FeedPost({ post, isVisible = true }: FeedPostProps) {
           </Text>
         </View>
       ) : null}
+
+      {/* Tagged strip — shown when post has no media (tag icon already appears on media carousel) */}
+      {hasTaggedItems && post.images.length === 0 && (
+        <TouchableOpacity
+          onPress={() => setShowTaggedItems(true)}
+          activeOpacity={0.8}
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: 6,
+            marginHorizontal: 12,
+            marginTop: 8,
+            marginBottom: 2,
+          }}
+        >
+          {(post.tagged_products ?? []).slice(0, 3).map((p: any) => (
+            <View
+              key={p.id}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                backgroundColor: "#eff6ff",
+                borderRadius: 20,
+                paddingHorizontal: 10,
+                paddingVertical: 5,
+                borderWidth: 1,
+                borderColor: "#bfdbfe",
+              }}
+            >
+              <ShoppingBag size={12} color="#094569" />
+              <Text style={{ fontSize: 12, fontWeight: "600", color: "#094569", marginLeft: 5 }} numberOfLines={1}>
+                {p.name}
+              </Text>
+            </View>
+          ))}
+          {(post.tagged_accounts ?? []).slice(0, 3).map((a: any) => (
+            <View
+              key={a.id}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                backgroundColor: "#eef2ff",
+                borderRadius: 20,
+                paddingHorizontal: 10,
+                paddingVertical: 5,
+                borderWidth: 1,
+                borderColor: "#e0e7ff",
+              }}
+            >
+              <UserRound size={12} color="#6366f1" />
+              <Text style={{ fontSize: 12, fontWeight: "600", color: "#6366f1", marginLeft: 5 }} numberOfLines={1}>
+                {a.name}
+              </Text>
+            </View>
+          ))}
+          {(post.tagged_products ?? []).length + (post.tagged_accounts ?? []).length > 6 && (
+            <View style={{ backgroundColor: "#f3f4f6", borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5 }}>
+              <Text style={{ fontSize: 12, color: "#6b7280", fontWeight: "600" }}>
+                +{(post.tagged_products ?? []).length + (post.tagged_accounts ?? []).length - 6} more
+              </Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      )}
 
       {/* View Comments */}
       {commentsCount > 0 && (

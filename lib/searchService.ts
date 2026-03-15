@@ -1,5 +1,13 @@
 import { supabase } from './supabase';
 
+// Supabase returns joined relations typed as arrays but at runtime they're single objects.
+// This helper safely unwraps either form.
+function single<T>(val: T | T[] | null | undefined): T | null {
+  if (val === null || val === undefined) return null;
+  if (Array.isArray(val)) return val[0] ?? null;
+  return val;
+}
+
 // Unified search result interface
 export interface SearchResult {
   type: 'user' | 'service' | 'product' | 'post' | 'marketplace';
@@ -159,12 +167,12 @@ const searchServices = async (query: string): Promise<SearchResult[]> => {
         type: 'service' as const,
         id: service.id,
         title: service.name,
-        subtitle: service.service_categories?.name || 'Service',
+        subtitle: single(service.service_categories)?.name || 'Service',
         imageUrl: service.images?.[0] || undefined,
         metadata: {
           description: service.description,
-          categorySlug: service.service_categories?.slug,
-          providerName: service.service_providers?.name || service.service_providers?.profiles?.name
+          categorySlug: single(service.service_categories)?.slug,
+          providerName: single(service.service_providers)?.name || single(single(service.service_providers)?.profiles)?.name
         }
       }));
     }
@@ -232,12 +240,12 @@ const searchServices = async (query: string): Promise<SearchResult[]> => {
       type: 'service' as const,
       id: service.id,
       title: service.name,
-      subtitle: service.service_categories?.name || 'Service',
+      subtitle: single(service.service_categories)?.name || 'Service',
       imageUrl: service.images?.[0] || undefined,
       metadata: {
         description: service.description,
-        categorySlug: service.service_categories?.slug,
-        providerName: service.service_providers?.name || service.service_providers?.profiles?.name
+        categorySlug: single(service.service_categories)?.slug,
+        providerName: single(service.service_providers)?.name || single(single(service.service_providers)?.profiles)?.name
       }
     }));
   } catch (error) {
@@ -289,7 +297,7 @@ const searchProducts = async (query: string): Promise<SearchResult[]> => {
           current_price: product.current_price,
           is_discount_active: product.is_currently_active,
           discount_percent: product.discount_percent,
-          sellerName: product.profiles?.name
+          sellerName: single(product.profiles)?.name
         }
       }));
     }
@@ -363,7 +371,7 @@ const searchProducts = async (query: string): Promise<SearchResult[]> => {
         current_price: product.current_price,
         is_discount_active: product.is_currently_active,
         discount_percent: product.discount_percent,
-        sellerName: product.profiles?.name
+        sellerName: single(product.profiles)?.name
       }
     }));
   } catch (error) {
@@ -404,18 +412,18 @@ const searchPosts = async (query: string): Promise<SearchResult[]> => {
       return shuffled.map(post => ({
         type: 'post' as const,
         id: post.id,
-        title: post.profiles?.name || 'Unknown User',
+        title: single(post.profiles)?.name || 'Unknown User',
         subtitle: post.content.substring(0, 60) + (post.content.length > 60 ? '...' : ''),
-        imageUrl: post.images?.[0] || post.profiles?.avatar_url || undefined,
+        imageUrl: post.images?.[0] || single(post.profiles)?.avatar_url || undefined,
         metadata: {
           userId: post.user_id,
           content: post.content,
-          userName: post.profiles?.name,
+          userName: single(post.profiles)?.name,
           images: post.images,
           likes: post.likes,
           comments: post.comments,
           shares: post.shares,
-          avatarUrl: post.profiles?.avatar_url
+          avatarUrl: single(post.profiles)?.avatar_url
         }
       }));
     }
@@ -522,18 +530,18 @@ const searchPosts = async (query: string): Promise<SearchResult[]> => {
     return uniquePosts.map(post => ({
       type: 'post' as const,
       id: post.id,
-      title: post.profiles?.name || 'Unknown User',
+      title: single(post.profiles)?.name || 'Unknown User',
       subtitle: post.content.substring(0, 60) + (post.content.length > 60 ? '...' : ''),
-      imageUrl: post.images?.[0] || post.profiles?.avatar_url || undefined,
+      imageUrl: post.images?.[0] || single(post.profiles)?.avatar_url || undefined,
       metadata: {
         userId: post.user_id,
         content: post.content,
-        userName: post.profiles?.name,
+        userName: single(post.profiles)?.name,
         images: post.images,
         likes: post.likes,
         comments: post.comments,
         shares: post.shares,
-        avatarUrl: post.profiles?.avatar_url
+        avatarUrl: single(post.profiles)?.avatar_url
       }
     }));
   } catch (error) {
@@ -585,7 +593,7 @@ const searchMarketplace = async (query: string): Promise<SearchResult[]> => {
           price: item.price,
           dzongkhag: item.dzongkhag,
           tags: item.tags,
-          sellerName: item.profiles?.name
+          sellerName: single(item.profiles)?.name
         }
       }));
     }
@@ -683,7 +691,7 @@ const searchMarketplace = async (query: string): Promise<SearchResult[]> => {
         price: item.price,
         dzongkhag: item.dzongkhag,
         tags: item.tags,
-        sellerName: item.profiles?.name
+        sellerName: single(item.profiles)?.name
       }
     }));
   } catch (error) {

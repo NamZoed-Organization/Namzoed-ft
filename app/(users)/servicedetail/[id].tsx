@@ -34,7 +34,6 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
-import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
@@ -322,8 +321,7 @@ export default function ServiceDetail() {
         </View>
 
         {/* Content Card */}
-        <Animated.View
-          entering={FadeInUp.duration(400).delay(100)}
+        <View
           className="bg-white -mt-8 rounded-t-[32px] min-h-screen"
           style={{
             shadowColor: "#000",
@@ -340,8 +338,7 @@ export default function ServiceDetail() {
 
           <View className="px-6 pt-4 pb-32">
             {/* Category Badge */}
-            <Animated.View
-              entering={FadeInDown.duration(300).delay(200)}
+            <View
               className="flex-row flex-wrap gap-2 mb-4"
             >
               <View className="bg-primary/10 px-4 py-1.5 rounded-full flex-row items-center gap-1.5">
@@ -350,19 +347,17 @@ export default function ServiceDetail() {
                   {categoryName}
                 </Text>
               </View>
-            </Animated.View>
+            </View>
 
             {/* Service Name */}
-            <Animated.Text
-              entering={FadeInDown.duration(300).delay(250)}
+            <Text
               className="text-2xl font-bold text-gray-900 mb-6 leading-tight"
             >
               {service.name}
-            </Animated.Text>
+            </Text>
 
             {/* Provider Card */}
-            <Animated.View
-              entering={FadeInDown.duration(300).delay(350)}
+            <View
               className="bg-gray-50 p-5 rounded-3xl mb-6"
             >
               <TouchableOpacity
@@ -427,10 +422,10 @@ export default function ServiceDetail() {
                   </Text>
                 </TouchableOpacity>
               )}
-            </Animated.View>
+            </View>
 
             {/* Description Section */}
-            <Animated.View entering={FadeInDown.duration(300).delay(400)}>
+            <View>
               <Text className="text-lg font-bold text-gray-900 mb-3">
                 About this service
               </Text>
@@ -438,11 +433,10 @@ export default function ServiceDetail() {
                 {service.description ||
                   "No description provided for this service."}
               </Text>
-            </Animated.View>
+            </View>
 
             {/* Details Grid */}
-            <Animated.View
-              entering={FadeInDown.duration(300).delay(450)}
+            <View
               className="flex-row flex-wrap gap-3 mb-6"
             >
               <View className="bg-gray-50 px-4 py-3 rounded-2xl flex-row items-center gap-2">
@@ -457,9 +451,9 @@ export default function ServiceDetail() {
                   })}
                 </Text>
               </View>
-            </Animated.View>
+            </View>
           </View>
-        </Animated.View>
+        </View>
       </ScrollView>
 
       {/* Image Viewer Modal */}

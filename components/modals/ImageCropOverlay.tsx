@@ -1,6 +1,7 @@
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Check, X } from 'lucide-react-native';
 import React, { useEffect, useState } from "react";
+import PopupMessage from '@/components/ui/PopupMessage';
 import {
   ActivityIndicator,
   Alert,
@@ -30,6 +31,12 @@ export default function ImageCropOverlay({ imageUri, onSave, onCancel }: ImageCr
   const [displayedImageSize, setDisplayedImageSize] = useState({ width: 0, height: 0 });
   const [isSaving, setIsSaving] = useState(false);
   const [ready, setReady] = useState(false);
+  const [popup, setPopup] = useState<{visible: boolean, type: 'success'|'error'|'warning'|'white', title: string, message: string}>({visible: false, type: 'success', title: '', message: ''});
+
+  const showPopup = (type: 'success'|'error'|'warning'|'white', title: string, message: string) => {
+    setPopup({visible: true, type, title, message});
+    setTimeout(() => setPopup(p => ({...p, visible: false})), 2500);
+  };
 
   const screenWidth = Dimensions.get('window').width;
   // Reduce crop size slightly to ensure it fits well on all screens
@@ -71,7 +78,7 @@ export default function ImageCropOverlay({ imageUri, onSave, onCancel }: ImageCr
       setReady(true);
     }, (error) => {
         console.error("Failed to get image size", error);
-        Alert.alert("Error", "Could not load image.");
+        showPopup("error", "Load Failed", "Could not load image.");
         onCancel();
     });
   }, [imageUri]);
@@ -188,7 +195,7 @@ export default function ImageCropOverlay({ imageUri, onSave, onCancel }: ImageCr
       onSave(cropped.uri);
     } catch (error) {
       console.error('Error cropping image:', error);
-      Alert.alert('Error', 'Failed to save image.');
+      showPopup('error', 'Save Failed', 'Failed to save image.');
     } finally {
       setIsSaving(false);
     }
@@ -281,6 +288,14 @@ export default function ImageCropOverlay({ imageUri, onSave, onCancel }: ImageCr
           </View>
         </GestureDetector>
       </View>
+
+      {/* Popup */}
+      <PopupMessage
+        visible={popup.visible}
+        type={popup.type}
+        title={popup.title}
+        message={popup.message}
+      />
     </GestureHandlerRootView>
   );
 }

@@ -39,7 +39,7 @@ export const useServiceProvider = (refreshKey: number) => {
         // Populate form data and avatar
         if (providerData) {
           setProviderFormData({
-            businessName: "",
+            businessName: providerData.name || "",
             email: providerData.profiles?.email || "",
             phone: providerData.profiles?.phone || "",
             bio: providerData.master_bio || "",

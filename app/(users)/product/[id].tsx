@@ -38,7 +38,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
@@ -134,15 +133,18 @@ export default function ProductDetail() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [showError, setShowError] = useState(false);
   const [popupMessage, setPopupMessage] = useState("");
+  const [popupTitle, setPopupTitle] = useState("");
 
-  const showSuccessPopup = (message: string) => {
+  const showSuccessPopup = (message: string, title: string = "Success") => {
     setPopupMessage(message);
+    setPopupTitle(title);
     setShowSuccess(true);
     setTimeout(() => setShowSuccess(false), 2000);
   };
 
-  const showErrorPopup = (message: string) => {
+  const showErrorPopup = (message: string, title: string = "Error") => {
     setPopupMessage(message);
+    setPopupTitle(title);
     setShowError(true);
     setTimeout(() => setShowError(false), 2500);
   };
@@ -214,7 +216,7 @@ export default function ProductDetail() {
 
   const toggleBookmark = async () => {
     if (!currentUser) {
-      showErrorPopup("Please sign in to save items");
+      showErrorPopup("Please sign in to save items", "Sign In Required");
       return;
     }
     if (!product) return;
@@ -230,19 +232,19 @@ export default function ProductDetail() {
           .eq("user_id", currentUser.id)
           .eq("product_id", product.id);
         if (error) throw error;
-        showSuccessPopup("Removed from saves");
+        showSuccessPopup("Removed from saves", "Removed!");
       } else {
         const { error } = await supabase.from("user_bookmarks").insert({
           user_id: currentUser.id,
           product_id: product.id,
         });
         if (error) throw error;
-        showSuccessPopup("Saved to collection");
+        showSuccessPopup("Saved to collection", "Saved!");
       }
     } catch (err) {
       console.error("Bookmark error:", err);
       setIsBookmarked(previousState);
-      showErrorPopup("Failed to update bookmark");
+      showErrorPopup("Failed to update bookmark", "Update Failed");
     }
   };
 
@@ -278,7 +280,7 @@ export default function ProductDetail() {
 
   const handleReportProduct = () => {
     if (!currentUser) {
-      showErrorPopup("Please sign in to report products");
+      showErrorPopup("Please sign in to report products", "Sign In Required");
       return;
     }
     setShowReportModal(true);
@@ -451,8 +453,7 @@ export default function ProductDetail() {
         </View>
 
         {/* Content Card */}
-        <Animated.View
-          entering={FadeInUp.duration(400).delay(100)}
+        <View
           className="bg-white -mt-8 rounded-t-[32px] min-h-screen"
           style={{
             shadowColor: "#000",
@@ -469,8 +470,7 @@ export default function ProductDetail() {
 
           <View className="px-6 pt-4 pb-32">
             {/* Category & Tags */}
-            <Animated.View
-              entering={FadeInDown.duration(300).delay(200)}
+            <View
               className="flex-row flex-wrap gap-2 mb-4"
             >
               <View className="bg-primary/10 px-4 py-1.5 rounded-full flex-row items-center gap-1.5">
@@ -484,19 +484,17 @@ export default function ProductDetail() {
                   <Text className="text-xs text-gray-600">{tag}</Text>
                 </View>
               ))}
-            </Animated.View>
+            </View>
 
             {/* Product Title */}
-            <Animated.Text
-              entering={FadeInDown.duration(300).delay(250)}
+            <Text
               className="text-2xl font-bold text-gray-900 mb-4 leading-tight"
             >
               {product.name}
-            </Animated.Text>
+            </Text>
 
             {/* Price Section - Closing Sale for Food, Regular Discount for others */}
-            <Animated.View
-              entering={FadeInDown.duration(300).delay(300)}
+            <View
               className="mb-6"
             >
               {product.is_currently_active ? (
@@ -597,12 +595,11 @@ export default function ProductDetail() {
                   <Text className="text-sm text-gray-400">fixed price</Text>
                 </View>
               )}
-            </Animated.View>
+            </View>
 
             {/* Seller Card */}
             {product.profiles?.name && (
-              <Animated.View
-                entering={FadeInDown.duration(300).delay(350)}
+              <View
                 className="bg-gray-50 p-5 rounded-3xl mb-6"
               >
                 <TouchableOpacity
@@ -669,11 +666,11 @@ export default function ProductDetail() {
                     <Text className="text-white font-semibold ml-2">Message Seller</Text>
                   </TouchableOpacity>
                 )}
-              </Animated.View>
+              </View>
             )}
 
             {/* Description Section */}
-            <Animated.View entering={FadeInDown.duration(300).delay(400)}>
+            <View>
               <Text className="text-lg font-bold text-gray-900 mb-3">
                 About this product
               </Text>
@@ -681,11 +678,10 @@ export default function ProductDetail() {
                 {product.description ||
                   "No description provided for this product."}
               </Text>
-            </Animated.View>
+            </View>
 
             {/* Details Grid */}
-            <Animated.View
-              entering={FadeInDown.duration(300).delay(450)}
+            <View
               className="flex-row flex-wrap gap-3 mb-6"
             >
               <View className="bg-gray-50 px-4 py-3 rounded-2xl flex-row items-center gap-2">
@@ -702,10 +698,10 @@ export default function ProductDetail() {
                 <ShoppingBag size={16} color="#6B7280" />
                 <Text className="text-sm text-gray-600">In stock</Text>
               </View>
-            </Animated.View>
+            </View>
 
             {/* Report Link */}
-            <Animated.View entering={FadeInDown.duration(300).delay(500)}>
+            <View>
               <TouchableOpacity
                 onPress={handleReportProduct}
                 className="flex-row items-center justify-center gap-2 py-3"
@@ -716,9 +712,9 @@ export default function ProductDetail() {
                   Report this listing
                 </Text>
               </TouchableOpacity>
-            </Animated.View>
+            </View>
           </View>
-        </Animated.View>
+        </View>
       </ScrollView>
 
       {/* Floating Bottom Action Bar - Only show for other users' products */}
@@ -784,7 +780,7 @@ export default function ProductDetail() {
           currentUserId={currentUser.id || ""}
           onReportSuccess={() => {
             setShowReportModal(false);
-            showSuccessPopup("Report submitted successfully");
+            showSuccessPopup("Report submitted successfully", "Reported!");
           }}
         />
       )}
@@ -803,9 +799,15 @@ export default function ProductDetail() {
       <PopupMessage
         visible={showSuccess}
         type="success"
+        title={popupTitle}
         message={popupMessage}
       />
-      <PopupMessage visible={showError} type="error" message={popupMessage} />
+      <PopupMessage
+        visible={showError}
+        type="error"
+        title={popupTitle}
+        message={popupMessage}
+      />
     </View>
   );
 }

@@ -1,5 +1,6 @@
 import MarketplaceImageViewer from "@/components/modals/MarketplaceImageViewer";
 import ReportProductModal from "@/components/modals/ReportProductModal";
+import PopupMessage from "@/components/ui/PopupMessage";
 import ImageWithFallback from "@/components/ui/ImageWithFallback";
 import { useUser } from "@/contexts/UserContext";
 import {
@@ -54,6 +55,14 @@ export default function MarketplaceDetailScreen() {
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Popup states
+  const [popup, setPopup] = useState<{visible: boolean, type: 'success'|'error'|'warning'|'white', title: string, message: string}>({visible: false, type: 'success', title: '', message: ''});
+
+  const showPopup = (type: 'success'|'error'|'warning'|'white', title: string, message: string) => {
+    setPopup({visible: true, type, title, message});
+    setTimeout(() => setPopup(p => ({...p, visible: false})), 2500);
+  };
+
   const loadItem = useCallback(
     async (isRefreshing = false) => {
       if (!id) return;
@@ -76,7 +85,7 @@ export default function MarketplaceDetailScreen() {
         }
       } catch (error) {
         console.error("Error loading item:", error);
-        Alert.alert("Error", "Failed to load item details");
+        showPopup("error", "Error", "Failed to load item details");
       } finally {
         setIsLoading(false);
         setRefreshing(false);
@@ -124,13 +133,13 @@ export default function MarketplaceDetailScreen() {
     if (item?.profiles?.phone) {
       Linking.openURL(`tel:${item.profiles.phone}`);
     } else {
-      Alert.alert("No Phone", "Phone number not available");
+      showPopup("error", "Phone Unavailable", "Phone number not available");
     }
   };
 
   const handleMessage = () => {
     if (currentUser?.id === item?.user_id) {
-      Alert.alert("Your Listing", "This is your own product");
+      showPopup("warning", "Your Listing", "This is your own product");
       return;
     }
 
@@ -151,7 +160,7 @@ export default function MarketplaceDetailScreen() {
 
   const handleReportItem = () => {
     if (!currentUser) {
-      Alert.alert("Sign in required", "Please sign in to report items.");
+      showPopup("error", "Sign In Required", "Please sign in to report items");
       return;
     }
     setShowReportModal(true);
@@ -159,7 +168,7 @@ export default function MarketplaceDetailScreen() {
 
   const toggleBookmark = async () => {
     if (!currentUser) {
-      Alert.alert("Sign in required", "Please sign in to bookmark items.");
+      showPopup("error", "Sign In Required", "Please sign in to bookmark items");
       return;
     }
     if (!item) return;
@@ -188,7 +197,7 @@ export default function MarketplaceDetailScreen() {
     } catch (err) {
       console.error("Bookmark error:", err);
       setIsBookmarked(previousState); // Revert
-      Alert.alert("Error", "Failed to update bookmark");
+      showPopup("error", "Update Failed", "Failed to update bookmark");
     }
   };
 
@@ -523,6 +532,14 @@ export default function MarketplaceDetailScreen() {
           }}
         />
       )}
+
+      {/* Popup */}
+      <PopupMessage
+        visible={popup.visible}
+        type={popup.type}
+        title={popup.title}
+        message={popup.message}
+      />
     </>
   );
 }

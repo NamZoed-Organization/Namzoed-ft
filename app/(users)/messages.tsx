@@ -11,6 +11,7 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import React, {
   useCallback,
   useEffect,
@@ -298,6 +299,7 @@ const SwipeableConversationRow = React.memo(
 );
 
 export default function MessageScreen() {
+  const insets = useSafeAreaInsets();
   const { currentUser } = useUser();
   const { refreshUnreadCount, currentUserUUID, setIsOnMessagesScreen } = useUnreadMessages();
 
@@ -1675,6 +1677,7 @@ export default function MessageScreen() {
 
           <FlatList
             style={{ flex: 1 }}
+            contentContainerStyle={{ paddingBottom: insets.bottom }}
             keyboardShouldPersistTaps="handled"
             data={searchQuery.trim() ? searchResults : visibleConversations}
             renderItem={
@@ -1823,6 +1826,7 @@ export default function MessageScreen() {
       {activeTab === 0 && showMessageRequests && (
         <FlatList
           style={{ flex: 1 }}
+          contentContainerStyle={{ paddingBottom: insets.bottom }}
           data={requestConversations}
           keyExtractor={(item) => item.partnerId}
           renderItem={({ item: convo }) => {
@@ -1982,6 +1986,7 @@ export default function MessageScreen() {
       {activeTab === 1 && (
         <FlatList
           style={{ flex: 1 }}
+          contentContainerStyle={{ paddingBottom: insets.bottom }}
           data={mongooseUsers}
           renderItem={renderMongooseUserItem}
           keyExtractor={(item) => item.id}

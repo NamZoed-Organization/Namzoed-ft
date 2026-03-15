@@ -1,70 +1,133 @@
 // Path: app/(users)/index.tsx
 
 import Banner from "@/components/Banner";
+import ClosingSaleBanner from "@/components/ClosingSaleBanner";
 import FeaturedSellers from "@/components/FeaturedSellers";
-import ForYou from "@/components/ForYou";
+import { CARD_ESTIMATED_SIZE, CARD_LIST_HEIGHT, ForYouSection } from "@/components/ForYou";
+import HomeCard from "@/components/HomeCard";
 import SearchBar from "@/components/modals/SearchBar";
 import TopNavbar from "@/components/ui/TopNavbar";
+import { useForYouData, SortOrder } from "@/hooks/useForYouData";
 import { useLivestreams } from "@/hooks/useLivestreams";
-import { Briefcase, Coins, Eye, Heart, Radio, Ticket, Tv2, Users, Video } from "lucide-react-native";
-import React, { useEffect, useRef, useState } from "react";
+import { MarketplaceItem } from "@/lib/postMarketPlace";
+import { Product } from "@/lib/productsService";
+import { ProviderServiceWithDetails } from "@/lib/servicesService";
+import { useRouter } from "expo-router";
 import {
-    ActivityIndicator,
-    FlatList,
-    Image,
-    ListRenderItem,
-    Modal,
-    RefreshControl,
-    Text,
-    TouchableOpacity,
-    View
+  ArrowUpDown,
+  Briefcase,
+  Coins,
+  Eye,
+  Heart,
+  Radio,
+  Ticket,
+  Tv2,
+  Users,
+  Video,
+} from "lucide-react-native";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  FlatList,
+  Image,
+  ListRenderItem,
+  Modal,
+  RefreshControl,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import Animated, { FadeInLeft, FadeInRight } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-type TabType = "foryou" | "featured" | "live" | "bidding" | "norbu";
-type HeaderDataItem = { key: string; component: "header" | "content" | "footer" };
-
+type TabType = "foryou" | "featured" | "live" | "lottery" | "norbu";
 type LiveFilter = "all" | "business" | "entertainment";
 
-function LiveTab({ onOpen }: { onOpen: (streamId: string) => void }) {
+type PageItem =
+  | { key: "header" }
+  | { key: "closing-sale" }
+  | { key: "flash-deals" }
+  | { key: "products" }
+  | { key: "services" }
+  | { key: "marketplace" }
+  | { key: "featured" }
+  | { key: "live" }
+  | { key: "coming-soon"; label: string }
+  | { key: "footer" };
+
+// ─── Memoised tab pills ───────────────────────────────────────────────────────
+const TabPills = React.memo(function TabPills({
+  activeTab,
+  onTabPress,
+}: {
+  activeTab: TabType;
+  onTabPress: (tab: TabType) => void;
+}) {
+  return (
+    <View className="flex-row items-center w-full mx-auto mt-2 gap-2">
+      {(
+        [
+          { key: "foryou",    Icon: Heart,  fill: true },
+          { key: "featured",  Icon: Users,  fill: false },
+          { key: "live",      Icon: Radio,  fill: false },
+          { key: "norbu",     Icon: Coins,  fill: false },
+          { key: "lottery",   Icon: Ticket, fill: false },
+        ] as { key: TabType; Icon: any; fill: boolean }[]
+      ).map(({ key, Icon, fill }) => (
+        <TouchableOpacity
+          key={key}
+          onPress={() => onTabPress(key)}
+          className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm ${
+            activeTab === key ? "bg-primary" : "bg-white"
+          }`}
+        >
+          <Icon
+            size={20}
+            color={activeTab === key ? "white" : "black"}
+            fill={fill && activeTab === key ? "white" : "none"}
+          />
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+});
+
+// ─── Live tab ─────────────────────────────────────────────────────────────────
+const LiveTab = React.memo(function LiveTab({
+  onOpen,
+}: {
+  onOpen: (streamId: string) => void;
+}) {
   const { livestreams, loading } = useLivestreams();
   const [filter, setFilter] = useState<LiveFilter>("all");
 
   const filtered =
-    filter === "all" ? livestreams : livestreams.filter((s) => s.stream_type === filter);
-
-  const filters: { key: LiveFilter; label: string; icon: React.ReactNode }[] = [
-    { key: "all",           label: "All",           icon: <Radio size={13} color={filter === "all" ? "white" : "#6B7280"} /> },
-    { key: "business",     label: "Business",     icon: <Briefcase size={13} color={filter === "business" ? "white" : "#6B7280"} /> },
-    { key: "entertainment",label: "Entertainment", icon: <Tv2 size={13} color={filter === "entertainment" ? "white" : "#6B7280"} /> },
-  ];
+    filter === "all"
+      ? livestreams
+      : livestreams.filter((s) => s.stream_type === filter);
 
   return (
-    <View className="mt-4">
-      {/* Filter pills */}
+    <View className="mt-4 px-4">
       <View className="flex-row gap-2 mb-4">
-        {filters.map((f) => (
+        {(["all", "business", "entertainment"] as LiveFilter[]).map((f) => (
           <TouchableOpacity
-            key={f.key}
-            onPress={() => setFilter(f.key)}
+            key={f}
+            onPress={() => setFilter(f)}
             activeOpacity={0.75}
             className={`flex-row items-center gap-1.5 px-3 py-1.5 rounded-full ${
-              filter === f.key ? "bg-primary" : "bg-white border border-gray-200"
+              filter === f ? "bg-primary" : "bg-white border border-gray-200"
             }`}
           >
-            {f.icon}
-            <Text
-              className={`text-xs font-semibold ${
-                filter === f.key ? "text-white" : "text-gray-500"
-              }`}
-            >
-              {f.label}
+            {f === "all" && <Radio size={13} color={filter === f ? "white" : "#6B7280"} />}
+            {f === "business" && <Briefcase size={13} color={filter === f ? "white" : "#6B7280"} />}
+            {f === "entertainment" && <Tv2 size={13} color={filter === f ? "white" : "#6B7280"} />}
+            <Text className={`text-xs font-semibold ${filter === f ? "text-white" : "text-gray-500"}`}>
+              {f.charAt(0).toUpperCase() + f.slice(1)}
             </Text>
           </TouchableOpacity>
         ))}
       </View>
 
-      {/* Content */}
       {loading ? (
         <View className="min-h-64 justify-center items-center">
           <ActivityIndicator size="small" color="#094569" />
@@ -74,11 +137,9 @@ function LiveTab({ onOpen }: { onOpen: (streamId: string) => void }) {
           <View className="w-16 h-16 rounded-full bg-red-50 items-center justify-center mb-4">
             <Video size={28} color="#EF4444" />
           </View>
-          <Text className="text-base font-semibold text-gray-700">
-            No {filter === "all" ? "" : filter + " "}live streams right now
-          </Text>
+          <Text className="text-base font-semibold text-gray-700">No live streams right now</Text>
           <Text className="text-sm text-gray-400 mt-1 text-center">
-            Be the first to go live and connect with your audience!
+            Be the first to go live!
           </Text>
         </View>
       ) : (
@@ -91,17 +152,10 @@ function LiveTab({ onOpen }: { onOpen: (streamId: string) => void }) {
               style={{ width: "47%" }}
               className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100"
             >
-              {/* Thumbnail / avatar area */}
               <View className="w-full bg-gray-100" style={{ height: 110 }}>
-                {stream.thumbnail ? (
+                {(stream.thumbnail || stream.profile_image) ? (
                   <Image
-                    source={{ uri: stream.thumbnail }}
-                    className="w-full h-full"
-                    resizeMode="cover"
-                  />
-                ) : stream.profile_image ? (
-                  <Image
-                    source={{ uri: stream.profile_image }}
+                    source={{ uri: stream.thumbnail || stream.profile_image }}
                     className="w-full h-full"
                     resizeMode="cover"
                   />
@@ -112,62 +166,24 @@ function LiveTab({ onOpen }: { onOpen: (streamId: string) => void }) {
                     </Text>
                   </View>
                 )}
-
-                {/* LIVE badge */}
-                <View
-                  className="absolute top-2 left-2 bg-red-500 rounded px-1.5 py-0.5"
-                  style={{ borderWidth: 1, borderColor: "white" }}
-                >
+                <View className="absolute top-2 left-2 bg-red-500 rounded px-1.5 py-0.5" style={{ borderWidth: 1, borderColor: "white" }}>
                   <Text className="text-white text-[9px] font-black">LIVE</Text>
                 </View>
-
-                {/* Type badge */}
-                {stream.stream_type && (
-                  <View className="absolute top-2 right-2 bg-black/50 rounded-full px-2 py-0.5 flex-row items-center gap-1">
-                    {stream.stream_type === "business" ? (
-                      <Briefcase size={9} color="white" />
-                    ) : (
-                      <Tv2 size={9} color="white" />
-                    )}
-                    <Text className="text-white text-[9px] font-semibold capitalize">
-                      {stream.stream_type}
-                    </Text>
-                  </View>
-                )}
-
-                {/* Viewer count */}
                 <View className="absolute bottom-2 right-2 bg-black/50 rounded-full px-2 py-0.5 flex-row items-center gap-1">
                   <Eye size={10} color="white" />
-                  <Text className="text-white text-[9px] font-semibold">
-                    {stream.viewer_count ?? 0}
-                  </Text>
+                  <Text className="text-white text-[9px] font-semibold">{stream.viewer_count ?? 0}</Text>
                 </View>
               </View>
-
-              {/* Info row */}
               <View className="px-2.5 py-2 flex-row items-center gap-2">
-                {stream.profile_image ? (
-                  <Image
-                    source={{ uri: stream.profile_image }}
-                    className="w-7 h-7 rounded-full"
-                    resizeMode="cover"
-                  />
-                ) : (
-                  <View className="w-7 h-7 rounded-full bg-primary items-center justify-center">
-                    <Text className="text-white font-bold text-xs">
-                      {(stream.username ?? "?").charAt(0).toUpperCase()}
-                    </Text>
-                  </View>
-                )}
+                <View className="w-7 h-7 rounded-full bg-primary items-center justify-center">
+                  <Text className="text-white font-bold text-xs">
+                    {(stream.username ?? "?").charAt(0).toUpperCase()}
+                  </Text>
+                </View>
                 <View className="flex-1">
                   <Text className="text-xs font-semibold text-gray-800" numberOfLines={1}>
                     {stream.username ?? "Unknown"}
                   </Text>
-                  {stream.title ? (
-                    <Text className="text-[10px] text-gray-500" numberOfLines={1}>
-                      {stream.title}
-                    </Text>
-                  ) : null}
                 </View>
               </View>
             </TouchableOpacity>
@@ -176,18 +192,18 @@ function LiveTab({ onOpen }: { onOpen: (streamId: string) => void }) {
       )}
     </View>
   );
-}
+});
 
+// ─── Main screen ──────────────────────────────────────────────────────────────
 export default function HomeScreen() {
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<TabType>("foryou");
   const [refreshing, setRefreshing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
-  const animationDirection = useRef<"left" | "right">("right");
   const [showLive, setShowLive] = useState(false);
-  const [liveStreamId, setLiveStreamId] = useState<string | undefined>(undefined);
-
-  // Lazily load LiveScrollScreen only when needed
+  const [liveStreamId, setLiveStreamId] = useState<string | undefined>();
   const [LiveScrollScreen, setLiveScrollScreen] = useState<React.ComponentType<{
     initialStreamId?: string;
     onClose: () => void;
@@ -198,204 +214,352 @@ export default function HomeScreen() {
     if (showLive && !LiveScrollScreen && !liveScreenLoading) {
       setLiveScreenLoading(true);
       import("@/components/livestream/LiveScrollScreen")
-        .then((module) => {
-          setLiveScrollScreen(() => module.default);
-          setLiveScreenLoading(false);
-        })
+        .then((m) => { setLiveScrollScreen(() => m.default); setLiveScreenLoading(false); })
         .catch(() => setLiveScreenLoading(false));
     }
   }, [showLive, LiveScrollScreen, liveScreenLoading]);
 
-  const handleTabPress = (tab: TabType) => {
-    const tabOrder: TabType[] = ["foryou", "featured", "live", "norbu", "bidding"];
-    const currentIndex = tabOrder.indexOf(activeTab);
-    const nextIndex = tabOrder.indexOf(tab);
-    animationDirection.current = nextIndex >= currentIndex ? "right" : "left";
-    setActiveTab(tab);
-  };
+  const {
+    products,
+    marketplaceItems,
+    services,
+    loading,
+    isClosingSaleTime,
+    sortOrder,
+    showSortMenu,
+    toggleSortMenu,
+    selectSort,
+    getSortLabel,
+    closingSaleFoodItems,
+    discountedProducts,
+    reload,
+  } = useForYouData();
 
-  const onRefresh = async () => {
+  const handleTabPress = useCallback((tab: TabType) => setActiveTab(tab), []);
+
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    setRefreshKey((prev) => prev + 1);
-    setTimeout(() => {
-      setRefreshing(false);
-    }, 1000);
-  };
+    setRefreshKey((k) => k + 1);
+    await reload();
+    setRefreshing(false);
+  }, [reload]);
 
-  const renderTabContent = () => {
+  // ─── Stable card render callbacks ────────────────────────────────────────
+
+  const renderClosingSaleCard = useCallback((item: Product) => {
+    const dp = item.discount_percent
+      ? item.price - (item.price * item.discount_percent) / 100
+      : item.price;
+    return (
+      <HomeCard
+        imageUrl={item.images[0] || ""}
+        title={item.name} subtitle="FOOD"
+        price={`Nu. ${dp.toLocaleString()}`}
+        discountPercent={item.discount_percent} isClosingSale
+        profileImage={(item as any).profiles?.avatar_url}
+        profileName={(item as any).profiles?.name}
+        onPress={() => router.push(`/(users)/product/${item.id}` as any)}
+      />
+    );
+  }, [router]);
+
+  const renderFlashDealCard = useCallback((product: Product) => (
+    <HomeCard
+      imageUrl={product.images[0] || ""}
+      title={product.name}
+      subtitle={product.category?.toUpperCase() || "PRODUCT"}
+      price={product.current_price && product.current_price > 0 ? `Nu. ${product.current_price}` : undefined}
+      discountPercent={product.discount_percent} isClosingSale={false}
+      profileImage={(product as any).profiles?.avatar_url}
+      profileName={(product as any).profiles?.name}
+      onPress={() => router.push(`/(users)/product/${product.id}` as any)}
+    />
+  ), [router]);
+
+  const renderProductCard = useCallback((product: Product) => {
+    const isFoodSale = product.category === "food" && product.is_discount_active;
+    const price = isFoodSale ? product.price : product.current_price || product.price;
+    const hasDiscount = product.is_currently_active && product.discount_percent && !isFoodSale;
+    return (
+      <HomeCard
+        imageUrl={product.images[0] || ""}
+        title={product.name}
+        subtitle={product.category?.toUpperCase() || "PRODUCT"}
+        price={price && price > 0 ? `Nu. ${price}` : undefined}
+        discountPercent={hasDiscount ? product.discount_percent : undefined}
+        isClosingSale={false}
+        profileImage={(product as any).profiles?.avatar_url}
+        profileName={(product as any).profiles?.name}
+        onPress={() => router.push(`/(users)/product/${product.id}` as any)}
+      />
+    );
+  }, [router]);
+
+  const renderServiceCard = useCallback((service: ProviderServiceWithDetails) => (
+    <HomeCard
+      imageUrl={service.images[0] || ""}
+      title={service.name}
+      subtitle={service.service_categories?.name || "Service"}
+      profileImage={service.service_providers?.profile_url || service.service_providers?.profiles?.avatar_url}
+      profileName={service.service_providers?.profiles?.name || service.service_providers?.name}
+      onPress={() => router.push(`/(users)/servicedetail/${service.id}` as any)}
+    />
+  ), [router]);
+
+  const renderMarketplaceCard = useCallback((item: MarketplaceItem) => (
+    <HomeCard
+      imageUrl={item.images[0] || ""}
+      title={item.title}
+      subtitle={item.type.replace("_", " ")}
+      price={item.price && item.price > 0 ? `Nu. ${item.price}` : undefined}
+      location={item.dzongkhag}
+      profileImage={(item as any).profiles?.avatar_url}
+      profileName={(item as any).profiles?.name}
+      onPress={() => router.push(`/(users)/marketplace/${item.id}` as any)}
+    />
+  ), [router]);
+
+  const goCategories = useCallback(() => router.push("/(users)/categories" as any), [router]);
+  const goServices   = useCallback(() => router.push("/(users)/services/index" as any), [router]);
+  const goMarketplace = useCallback(() => router.push("/(users)/marketplace" as any), [router]);
+
+  // ─── Flat items list ──────────────────────────────────────────────────────
+  const hasFlashDeals = loading || discountedProducts.length > 0;
+  const items = useMemo<PageItem[]>(() => {
+    const result: PageItem[] = [{ key: "header" }];
     switch (activeTab) {
       case "foryou":
-        return <ForYou key={`foryou-${refreshKey}`} />;
-      case "featured":
-        return (
-          <View className="mt-6">
-            <FeaturedSellers key={`featured-${refreshKey}`} />
-          </View>
-        );
-      case "live":
-        return (
-          <LiveTab
-            onOpen={(streamId) => {
-              setLiveStreamId(streamId);
-              setShowLive(true);
-            }}
-          />
-        );
-      case "bidding":
-        return (
-          <View className="mt-6 min-h-96 justify-center items-center">
-            <Text className="text-base font-semibold text-primary mb-2">
-              Bidding (Coming Soon)
-            </Text>
-          </View>
-        );
-      case "norbu":
-        return (
-          <View className="mt-6 min-h-96 justify-center items-center">
-            <Text className="text-base font-semibold text-primary mb-2">
-              Norbu Coin (Coming Soon)
-            </Text>
-          </View>
-        );
-      default:
-        return <ForYou key={`foryou-default-${refreshKey}`} />;
+        result.push({ key: "closing-sale" });
+        if (hasFlashDeals) result.push({ key: "flash-deals" });
+        result.push({ key: "products" });
+        result.push({ key: "services" });
+        result.push({ key: "marketplace" });
+        break;
+      case "featured": result.push({ key: "featured" }); break;
+      case "live":     result.push({ key: "live" }); break;
+      case "norbu":    result.push({ key: "coming-soon", label: "Norbu Coin" }); break;
+      case "lottery":  result.push({ key: "coming-soon", label: "Lottery" }); break;
     }
+    result.push({ key: "footer" });
+    return result;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, hasFlashDeals]);
+
+  // Use ref to always have latest data in renderItem without changing its reference
+  const dataRef = useRef({
+    products, marketplaceItems, services, loading,
+    isClosingSaleTime, sortOrder, showSortMenu,
+    closingSaleFoodItems, discountedProducts,
+    activeTab, searchQuery, refreshKey,
+    renderClosingSaleCard, renderFlashDealCard, renderProductCard,
+    renderServiceCard, renderMarketplaceCard,
+    goCategories, goServices, goMarketplace,
+    toggleSortMenu, selectSort, getSortLabel,
+  });
+  dataRef.current = {
+    products, marketplaceItems, services, loading,
+    isClosingSaleTime, sortOrder, showSortMenu,
+    closingSaleFoodItems, discountedProducts,
+    activeTab, searchQuery, refreshKey,
+    renderClosingSaleCard, renderFlashDealCard, renderProductCard,
+    renderServiceCard, renderMarketplaceCard,
+    goCategories, goServices, goMarketplace,
+    toggleSortMenu, selectSort, getSortLabel,
   };
 
-  const headerData: HeaderDataItem[] = [
-    { key: "header", component: "header" },
-    { key: "content", component: "content" },
-    { key: "footer", component: "footer" },
-  ];
+  const renderItem = useCallback<ListRenderItem<PageItem>>(({ item }) => {
+    const d = dataRef.current;
 
-  const renderItem: ListRenderItem<HeaderDataItem> = ({ item }) => {
-    if (item.component === "header") {
-      return (
-        <View>
-          <TopNavbar />
-          <View className="px-4 gap-2">
-            <SearchBar value={searchQuery} onChangeText={setSearchQuery} />
-            <Banner />
-
-            {/* Tab Navigation */}
-            <View className="flex-row items-center w-full mx-auto mt-2 gap-2">
-              <TouchableOpacity
-                onPress={() => handleTabPress("foryou")}
-                className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm ${
-                  activeTab === "foryou" ? "bg-primary" : "bg-white"
-                }`}
-              >
-                <Heart
-                  size={20}
-                  color={activeTab === "foryou" ? "white" : "black"}
-                  fill={activeTab === "foryou" ? "white" : "none"}
-                />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => handleTabPress("featured")}
-                className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm ${
-                  activeTab === "featured" ? "bg-primary" : "bg-white"
-                }`}
-              >
-                <Users
-                  size={20}
-                  color={activeTab === "featured" ? "white" : "black"}
-                />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => handleTabPress("live")}
-                className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm ${
-                  activeTab === "live" ? "bg-primary" : "bg-white"
-                }`}
-              >
-                <Radio
-                  size={20}
-                  color={activeTab === "live" ? "white" : "black"}
-                />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => handleTabPress("norbu")}
-                className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm ${
-                  activeTab === "norbu" ? "bg-primary" : "bg-white"
-                }`}
-              >
-                <Coins
-                  size={20}
-                  color={activeTab === "norbu" ? "white" : "black"}
-                />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => handleTabPress("bidding")}
-                className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm ${
-                  activeTab === "bidding" ? "bg-primary" : "bg-white"
-                }`}
-              >
-                <Ticket
-                  size={20}
-                  color={activeTab === "bidding" ? "white" : "black"}
-                />
-              </TouchableOpacity>
+    switch (item.key) {
+      case "header":
+        return (
+          <View>
+            <TopNavbar />
+            <View className="px-4 gap-2">
+              <SearchBar value={d.searchQuery} onChangeText={(t) => setSearchQuery(t)} />
+              <Banner />
+              <TabPills activeTab={d.activeTab} onTabPress={handleTabPress} />
             </View>
           </View>
-        </View>
-      );
+        );
+
+      case "closing-sale":
+        return (
+          <View style={{ marginBottom: 16, paddingTop: 8 }}>
+            {d.isClosingSaleTime ? (
+              /* ── Connected: banner + cards share one bordered container ── */
+              <View
+                style={{
+                  marginHorizontal: 16,
+                  borderWidth: 1.5,
+                  borderColor: "#F59E0B",
+                  borderRadius: 16,
+                }}
+              >
+                {/* Top: gradient banner — clip only the top corners */}
+                <View
+                  style={{
+                    borderTopLeftRadius: 14,
+                    borderTopRightRadius: 14,
+                    overflow: "hidden",
+                  }}
+                >
+                  <ClosingSaleBanner
+                    foodItems={d.closingSaleFoodItems}
+                    connected
+                  />
+                </View>
+
+                {/* Bottom: sort + cards — no background, shares the border */}
+                <View style={{ paddingBottom: 14 }}>
+                  <View style={{ paddingHorizontal: 14, marginTop: 10, marginBottom: 8 }}>
+                    <TouchableOpacity
+                      onPress={d.toggleSortMenu}
+                      className="bg-white/90 px-3 py-2 rounded-xl shadow-sm border border-white/50 flex-row items-center self-start"
+                      style={{ backgroundColor: "rgba(255,255,255,0.9)" }}
+                    >
+                      <ArrowUpDown size={16} color="#1F2937" />
+                      <Text className="ml-1.5 text-xs font-semibold text-gray-700">
+                        {d.getSortLabel(d.sortOrder)}
+                      </Text>
+                    </TouchableOpacity>
+                    {d.showSortMenu && (
+                      <View className="mt-2 bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+                        {(["latest","oldest","high_discount","low_discount","high_price","low_price"] as SortOrder[]).map((sort) => (
+                          <TouchableOpacity
+                            key={sort}
+                            onPress={() => d.selectSort(sort)}
+                            className={`p-3 border-b border-gray-100 ${d.sortOrder === sort ? "bg-primary/10" : ""}`}
+                          >
+                            <Text className={`text-sm font-medium ${d.sortOrder === sort ? "text-primary" : "text-gray-700"}`}>
+                              {d.getSortLabel(sort)}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                  {d.closingSaleFoodItems.length > 0 && (
+                    <ScrollView
+                      horizontal showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={{ paddingLeft: 14, paddingRight: 14 }}
+                      style={{ height: CARD_LIST_HEIGHT }}
+                      bounces={false} overScrollMode="never" decelerationRate="fast"
+                    >
+                      {d.closingSaleFoodItems.map((c) => (
+                        <View key={c.id}>{d.renderClosingSaleCard(c)}</View>
+                      ))}
+                    </ScrollView>
+                  )}
+                </View>
+              </View>
+            ) : (
+              /* ── Dormant: standalone banner, no connected border ── */
+              <ClosingSaleBanner foodItems={d.closingSaleFoodItems} />
+            )}
+          </View>
+        );
+
+      case "flash-deals":
+        return (
+          <ForYouSection
+            title="🔥 Flash Deals"
+            items={d.discountedProducts}
+            loading={d.loading}
+            renderCard={d.renderFlashDealCard}
+            viewAllRoute="/(users)/categories"
+            onViewAll={d.goCategories}
+          />
+        );
+
+      case "products":
+        return (
+          <ForYouSection
+            title="Products"
+            items={d.products}
+            loading={d.loading}
+            renderCard={d.renderProductCard}
+            viewAllRoute="/(users)/categories"
+            showEmptyState
+            onViewAll={d.goCategories}
+          />
+        );
+
+      case "services":
+        return (
+          <ForYouSection
+            title="Services"
+            items={d.services}
+            loading={d.loading}
+            renderCard={d.renderServiceCard}
+            viewAllRoute="/(users)/services/index"
+            showEmptyState
+            onViewAll={d.goServices}
+          />
+        );
+
+      case "marketplace":
+        return (
+          <ForYouSection
+            title="Marketplace"
+            items={d.marketplaceItems}
+            loading={d.loading}
+            renderCard={d.renderMarketplaceCard}
+            viewAllRoute="/(users)/marketplace"
+            showEmptyState
+            onViewAll={d.goMarketplace}
+          />
+        );
+
+      case "featured":
+        return (
+          <View className="mt-2 px-4">
+            <FeaturedSellers key={`featured-${d.refreshKey}`} />
+          </View>
+        );
+
+      case "live":
+        return (
+          <LiveTab onOpen={(id) => { setLiveStreamId(id); setShowLive(true); }} />
+        );
+
+      case "coming-soon":
+        return (
+          <View className="mt-6 min-h-96 justify-center items-center">
+            <Text className="text-base font-semibold text-primary mb-2">
+              {item.label} (Coming Soon)
+            </Text>
+          </View>
+        );
+
+      case "footer":
+        return <View style={{ height: 40 }} />;
+
+      default:
+        return null;
     }
-
-    if (item.component === "content") {
-      const isMovingRight = animationDirection.current === "right";
-
-      return (
-        <View className="px-4 mt-2" style={{ minHeight: 400 }}>
-          <Animated.View
-            key={activeTab}
-            entering={
-              isMovingRight
-                ? FadeInRight.duration(200)
-                : FadeInLeft.duration(200)
-            }
-          >
-            {renderTabContent()}
-          </Animated.View>
-        </View>
-      );
-    }
-
-    if (item.component === "footer") {
-      if (activeTab !== "foryou") {
-        return <View className="mb-10" />;
-      }
-
-      return <View className="px-4 gap-2 mb-10"></View>;
-    }
-
-    return null;
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handleTabPress]);
+  // renderItem is intentionally stable — it reads live data via dataRef
 
   return (
     <>
       <FlatList
-        data={headerData}
+        data={items}
         renderItem={renderItem}
-        keyExtractor={(item: HeaderDataItem) => item.key}
+        keyExtractor={(item) => item.key}
         className="flex-1 bg-background"
-        contentContainerStyle={{ paddingBottom: 80 }}
+        contentContainerStyle={{ paddingBottom: 72 + insets.bottom }}
         showsVerticalScrollIndicator={false}
-        scrollEventThrottle={16}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={["#059669"]}
-            tintColor="#059669"
-          />
-        }
+        windowSize={2}
+        maxToRenderPerBatch={1}
+        initialNumToRender={2}
+        removeClippedSubviews={true}
+        overScrollMode="never"
+        bounces={false}
+        extraData={activeTab}
       />
 
-      {/* Live scroll modal */}
       {showLive && (
         <Modal
           visible={showLive}

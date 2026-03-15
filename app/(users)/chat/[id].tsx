@@ -1538,7 +1538,7 @@ export default function ChatScreen() {
     return (
       <View className="flex-1 bg-background">
         {/* Status Bar Space */}
-        <View className="h-12 bg-white" />
+        <View style={{ height: insets.top, backgroundColor: 'white' }} />
 
         {/* Loading Header */}
         <View className="flex-row items-center p-4 border-b border-gray-200 bg-white">
@@ -2787,7 +2787,7 @@ export default function ChatScreen() {
   return (
     <View className="flex-1 bg-white">
       {/* Status Bar Space */}
-      <View className="h-12 bg-white" style={{ zIndex: 10 }} />
+      <View style={{ height: insets.top, backgroundColor: 'white', zIndex: 10 }} />
 
       {/* Fixed Header */}
       <View className="flex-row items-center p-4 border-b border-gray-200 bg-white" style={{ zIndex: 10 }}>
@@ -2828,14 +2828,10 @@ export default function ChatScreen() {
             <Text className="text-sm text-gray-500">Delivery Person</Text>
           ) : (
             <Text className="text-sm text-gray-500">
-              {/* Show phone if we have a proper name, otherwise just show "User" */}
               {chatPartnerData?.name ||
-              chatPartnerData?.username ||
-              chatPartnerData?.full_name
-                ? chatPartnerData.phone_number
-                  ? `+975${chatPartnerData.phone_number}`
-                  : "User"
-                : "User"}
+                chatPartnerData?.username ||
+                chatPartnerData?.full_name ||
+                "Unknown User"}
             </Text>
           )}
 

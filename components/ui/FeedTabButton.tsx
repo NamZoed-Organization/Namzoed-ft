@@ -1,5 +1,5 @@
 import React, { useRef } from "react";
-import { Pressable } from "react-native";
+import { TouchableOpacity } from "react-native-gesture-handler";
 import { feedEvents } from "@/utils/feedEvents";
 
 // Custom tab button for feed that handles double-tap
@@ -23,14 +23,14 @@ const FeedTabButton = React.forwardRef<any, any>((props, ref) => {
   };
 
   return (
-    <Pressable 
-      ref={ref} 
-      android_ripple={null} 
+    <TouchableOpacity
+      ref={ref}
+      activeOpacity={0.7}
       {...props}
       onPress={handlePress}
     >
       {props.children}
-    </Pressable>
+    </TouchableOpacity>
   );
 });
 

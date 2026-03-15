@@ -1,8 +1,10 @@
 import {
+  Camera,
   CheckCircle2,
   Edit3,
   FileText,
   MoreVertical,
+  Plus,
   Upload,
   Wrench,
 } from "lucide-react-native";
@@ -12,7 +14,6 @@ import {
   Image,
   Switch,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -36,11 +37,9 @@ interface ServiceProviderSectionProps {
   loadingProviderServices: boolean;
   isServiceSelectionMode: boolean;
   selectedServiceIds: string[];
-  onToggleEditProvider: () => void;
-  onSaveProviderProfile: () => void;
+  onEditWork: () => void;
   onShowProviderAvatarMenu: () => void;
   onEditProviderProfile: () => void;
-  setProviderFormData: (data: any) => void;
   onUploadLicense: () => void;
   onShowLicenseMenu: () => void;
   onServiceLongPress: (serviceId: string) => void;
@@ -48,11 +47,11 @@ interface ServiceProviderSectionProps {
   onToggleStatus: (serviceId: string, status: boolean) => void;
   onEditService: (service: ProviderServiceWithDetails) => void;
   onNavigateToService: (serviceId: string) => void;
+  onAddService: () => void;
 }
 
 export default function ServiceProviderSection({
   loadingServiceProvider,
-  isEditingProvider,
   providerImageUri,
   verificationStatus,
   providerFormData,
@@ -62,11 +61,9 @@ export default function ServiceProviderSection({
   loadingProviderServices,
   isServiceSelectionMode,
   selectedServiceIds,
-  onToggleEditProvider,
-  onSaveProviderProfile,
+  onEditWork,
   onShowProviderAvatarMenu,
   onEditProviderProfile,
-  setProviderFormData,
   onUploadLicense,
   onShowLicenseMenu,
   onServiceLongPress,
@@ -74,6 +71,7 @@ export default function ServiceProviderSection({
   onToggleStatus,
   onEditService,
   onNavigateToService,
+  onAddService,
 }: ServiceProviderSectionProps) {
   if (loadingServiceProvider) {
     return (
@@ -83,183 +81,112 @@ export default function ServiceProviderSection({
 
   return (
     <View className="px-4 py-6">
-      {/* Service Provider Header */}
-      <View className="bg-white rounded-2xl p-6 mb-4 shadow-sm">
-        {/* Top Bar with Title and Menu Button */}
-        <View className="flex-row items-center justify-between mb-6">
-          <Text className="text-xl font-mbold text-gray-900">
-            Service Provider Profile
-          </Text>
 
-          {isEditingProvider ? (
-            <View className="flex-row gap-2">
-              <TouchableOpacity
-                className="bg-primary rounded-full px-4 py-2 items-center"
-                onPress={onSaveProviderProfile}
-              >
-                <Text className="text-white font-msemibold text-sm">Save</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                className="bg-gray-100 rounded-full px-4 py-2 items-center"
-                onPress={onToggleEditProvider}
-              >
-                <Text className="text-gray-700 font-msemibold text-sm">
-                  Cancel
-                </Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <View className="flex-row items-center gap-2">
-              <TouchableOpacity
-                className="flex-row items-center gap-1 bg-primary rounded-full px-4 py-2"
-                onPress={onToggleEditProvider}
-              >
-                <Edit3 size={14} className="text-white" />
-                <Text className="text-white font-msemibold text-sm">Edit</Text>
-              </TouchableOpacity>
-              {providerImageUri && (
-                <TouchableOpacity
-                  onPress={onShowProviderAvatarMenu}
-                  className="w-10 h-10 bg-gray-100 rounded-full items-center justify-center"
-                >
-                  <MoreVertical size={20} className="text-gray-700" />
-                </TouchableOpacity>
-              )}
-            </View>
-          )}
-        </View>
+      {/* ── PROFILE HEADER CARD ── */}
+      <View className="bg-white rounded-2xl p-5 mb-4 shadow-sm">
 
-        {/* Avatar Section */}
-        <View className="items-center mb-6">
-          <View className="relative mb-4">
-            <View className="w-24 h-24 rounded-full bg-gray-200 items-center justify-center overflow-hidden">
+        {/* Top row: info left, avatar right */}
+        <View className="flex-row items-start">
+
+          {/* Left: name, bio, email, phone */}
+          <View className="flex-1 pr-4">
+            <Text
+              className="text-lg font-mbold text-gray-900 mb-0.5"
+              numberOfLines={2}
+            >
+              {providerFormData.businessName || "Business Name"}
+            </Text>
+
+            {/* Email */}
+            {providerFormData.email ? (
+              <Text className="text-xs font-regular text-gray-500 mb-1" numberOfLines={1}>
+                ✉  {providerFormData.email}
+              </Text>
+            ) : null}
+
+            {/* Phone */}
+            {providerFormData.phone ? (
+              <Text className="text-xs font-regular text-gray-500 mb-2" numberOfLines={1}>
+                📞  {providerFormData.phone}
+              </Text>
+            ) : null}
+
+            {/* Bio */}
+            {providerFormData.bio ? (
+              <Text
+                className="text-sm font-regular text-gray-500"
+                numberOfLines={3}
+              >
+                {providerFormData.bio}
+              </Text>
+            ) : (
+              <Text className="text-sm font-regular text-gray-400 italic">
+                No bio set
+              </Text>
+            )}
+          </View>
+
+          {/* Right: avatar */}
+          <View className="relative">
+            <TouchableOpacity
+              onPress={onShowProviderAvatarMenu}
+              className="w-[86px] h-[86px] rounded-full bg-gray-200 overflow-hidden border-2 border-gray-100"
+            >
               {providerImageUri ? (
                 <Image
                   source={{ uri: providerImageUri }}
-                  className="w-24 h-24 rounded-full"
+                  className="w-full h-full"
                   resizeMode="cover"
                 />
               ) : (
-                <Wrench size={40} className="text-gray-400" />
+                <View className="w-full h-full items-center justify-center bg-gray-100">
+                  <Wrench size={34} strokeWidth={1.5} color="#9ca3af" />
+                </View>
               )}
-            </View>
-            {/* Verified Badge */}
+            </TouchableOpacity>
+
+            {/* Camera button */}
+            <TouchableOpacity
+              onPress={providerImageUri ? onShowProviderAvatarMenu : onEditProviderProfile}
+              className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-primary border-2 border-white items-center justify-center"
+            >
+              <Camera size={12} strokeWidth={1.5} color="white" />
+            </TouchableOpacity>
+
+            {/* Verified badge */}
             {verificationStatus === "verified" && (
-              <View className="absolute top-0 right-0 w-9 h-9 bg-blue-500 rounded-full items-center justify-center border-3 border-white shadow-lg">
-                <CheckCircle2 size={20} color="white" fill="white" />
+              <View className="absolute top-0 left-0 w-6 h-6 bg-blue-500 rounded-full items-center justify-center border-2 border-white">
+                <CheckCircle2 size={12} color="white" fill="white" />
               </View>
-            )}
-            {!providerImageUri && (
-              <TouchableOpacity
-                onPress={onEditProviderProfile}
-                className="absolute -bottom-1 -right-1 w-8 h-8 bg-primary rounded-full items-center justify-center border-2 border-white"
-              >
-                <Edit3 size={16} className="text-white" />
-              </TouchableOpacity>
             )}
           </View>
         </View>
 
-        {/* Form Fields */}
-        <View className="space-y-4">
-          {/* Business Name */}
-          <View className="mb-4">
-            <Text className="text-sm font-msemibold text-gray-700 mb-2">
-              Business Name
-            </Text>
-            {isEditingProvider ? (
-              <TextInput
-                className="bg-gray-50 rounded-xl px-4 py-3 text-base font-regular text-gray-900 border border-gray-200"
-                placeholder="Enter business name"
-                placeholderTextColor="#9CA3AF"
-                value={providerFormData.businessName}
-                onChangeText={(text) =>
-                  setProviderFormData({
-                    ...providerFormData,
-                    businessName: text,
-                  })
-                }
-              />
-            ) : (
-              <View className="bg-gray-50 rounded-xl px-4 py-3">
-                <Text className="text-base font-regular text-gray-400 italic">
-                  Not set
-                </Text>
-              </View>
-            )}
-          </View>
+        {/* Action Buttons */}
+        <View className="flex-row gap-2 mt-4">
+          <TouchableOpacity
+            onPress={onEditWork}
+            className="flex-1 py-[9px] rounded-lg flex-row items-center justify-center bg-gray-100 border border-gray-300"
+          >
+            <Edit3 size={13} color="#1f2937" style={{ marginRight: 5 }} />
+            <Text className="text-sm font-semibold text-gray-800">Edit</Text>
+          </TouchableOpacity>
 
-          {/* Email & Phone */}
-          <View className="flex-row gap-3 mb-4">
-            <View className="flex-1">
-              <Text className="text-sm font-msemibold text-gray-700 mb-2">
-                Email
-              </Text>
-              <View className="bg-gray-50 rounded-xl px-4 py-3 border border-gray-200">
-                <Text
-                  className="text-base font-regular text-gray-900"
-                  numberOfLines={1}
-                >
-                  {providerFormData.email || "Not set"}
-                </Text>
-              </View>
-            </View>
-
-            <View className="flex-1">
-              <Text className="text-sm font-msemibold text-gray-700 mb-2">
-                Phone
-              </Text>
-              <View className="bg-gray-50 rounded-xl px-4 py-3 border border-gray-200">
-                <Text
-                  className="text-base font-regular text-gray-900"
-                  numberOfLines={1}
-                >
-                  {providerFormData.phone || "Not set"}
-                </Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Business Bio */}
-          <View className="mb-4">
-            <Text className="text-sm font-msemibold text-gray-700 mb-2">
-              Business Bio
-            </Text>
-            {isEditingProvider ? (
-              <TextInput
-                className="bg-gray-50 rounded-xl px-4 py-3 text-base font-regular text-gray-900 border border-gray-200"
-                placeholder="Tell us about your business"
-                placeholderTextColor="#9CA3AF"
-                value={providerFormData.bio}
-                onChangeText={(text) =>
-                  setProviderFormData({
-                    ...providerFormData,
-                    bio: text,
-                  })
-                }
-                multiline
-                numberOfLines={4}
-                textAlignVertical="top"
-                style={{ minHeight: 100 }}
-              />
-            ) : (
-              <View className="bg-gray-50 rounded-xl px-4 py-3">
-                <Text className="text-base font-regular text-gray-900">
-                  {providerFormData.bio || (
-                    <Text className="italic text-gray-400">Not set</Text>
-                  )}
-                </Text>
-              </View>
-            )}
-          </View>
+          <TouchableOpacity
+            onPress={onAddService}
+            className="flex-1 py-[9px] rounded-lg flex-row items-center justify-center bg-primary"
+          >
+            <Plus size={13} color="white" style={{ marginRight: 5 }} />
+            <Text className="text-sm font-semibold text-white">Add Service</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
-      {/* License Verification Section */}
+      {/* ── LICENSE VERIFICATION ── */}
       <View className="bg-white rounded-2xl p-6 mb-4 shadow-sm">
         <View className="flex-row items-center justify-between mb-4">
           <View className="flex-row items-center">
-            <FileText size={20} className="text-primary mr-2" />
+            <FileText size={20} color="#094569" style={{ marginRight: 8 }} />
             <Text className="text-lg font-mbold text-gray-900">
               License Verification
             </Text>
@@ -268,21 +195,15 @@ export default function ServiceProviderSection({
             {!uploadingLicense && verificationStatus !== "not_verified" && (
               <View
                 className={`px-3 py-1 rounded-full ${
-                  verificationStatus === "verified"
-                    ? "bg-green-100"
-                    : "bg-yellow-100"
+                  verificationStatus === "verified" ? "bg-green-100" : "bg-yellow-100"
                 }`}
               >
                 <Text
                   className={`text-xs font-msemibold ${
-                    verificationStatus === "verified"
-                      ? "text-green-700"
-                      : "text-yellow-700"
+                    verificationStatus === "verified" ? "text-green-700" : "text-yellow-700"
                   }`}
                 >
-                  {verificationStatus === "verified"
-                    ? "Verified"
-                    : "Pending Verification"}
+                  {verificationStatus === "verified" ? "Verified" : "Pending Verification"}
                 </Text>
               </View>
             )}
@@ -291,7 +212,7 @@ export default function ServiceProviderSection({
                 onPress={onShowLicenseMenu}
                 className="w-8 h-8 items-center justify-center"
               >
-                <MoreVertical size={20} className="text-gray-700" />
+                <MoreVertical size={20} color="#374151" />
               </TouchableOpacity>
             )}
           </View>
@@ -319,13 +240,13 @@ export default function ServiceProviderSection({
             onPress={onUploadLicense}
             className="flex-row items-center justify-center bg-primary rounded-xl py-3 px-4"
           >
-            <Upload size={18} className="text-white mr-2" />
+            <Upload size={18} color="white" style={{ marginRight: 8 }} />
             <Text className="text-white font-msemibold">Upload License</Text>
           </TouchableOpacity>
         ) : null}
       </View>
 
-      {/* Your Services Section */}
+      {/* ── YOUR SERVICES ── */}
       <View className="bg-white rounded-2xl p-6 shadow-sm">
         <Text className="text-lg font-mbold text-gray-900 mb-2">
           Your Services
@@ -363,7 +284,6 @@ export default function ServiceProviderSection({
                   }`}
                 >
                   <View className="flex-row">
-                    {/* Service Image */}
                     <View className="w-20 h-20 rounded-2xl overflow-hidden bg-gray-100 relative">
                       {service.images && service.images.length > 0 ? (
                         <Image
@@ -373,11 +293,9 @@ export default function ServiceProviderSection({
                         />
                       ) : (
                         <View className="w-full h-full items-center justify-center">
-                          <Wrench size={32} className="text-gray-400" />
+                          <Wrench size={32} color="#9ca3af" />
                         </View>
                       )}
-
-                      {/* Selection Checkmark */}
                       {selectedServiceIds.includes(service.id) && (
                         <View className="absolute inset-0 bg-primary/30 items-center justify-center">
                           <CheckCircle2 color="white" size={28} strokeWidth={3} />
@@ -385,43 +303,27 @@ export default function ServiceProviderSection({
                       )}
                     </View>
 
-                    {/* Service Info */}
                     <View className="flex-1 ml-4">
-                      <Text
-                        className="text-base font-mbold text-gray-900"
-                        numberOfLines={1}
-                      >
+                      <Text className="text-base font-mbold text-gray-900" numberOfLines={1}>
                         {service.name}
                       </Text>
-
                       {service.service_categories && (
                         <Text className="text-xs font-regular text-primary mb-1">
                           {service.service_categories.name}
                         </Text>
                       )}
-
-                      <Text
-                        className="text-sm font-regular text-gray-600"
-                        numberOfLines={2}
-                      >
+                      <Text className="text-sm font-regular text-gray-600" numberOfLines={2}>
                         {service.description}
                       </Text>
                     </View>
 
-                    {/* Action Controls */}
                     {!isServiceSelectionMode && (
                       <View className="items-center justify-between ml-2">
-                        {/* Toggle Switch */}
                         <View className="items-center mb-2">
                           <Switch
                             value={service.status}
-                            onValueChange={(value) =>
-                              onToggleStatus(service.id, value)
-                            }
-                            trackColor={{
-                              false: "#D1D5DB",
-                              true: "#10B981",
-                            }}
+                            onValueChange={(value) => onToggleStatus(service.id, value)}
+                            trackColor={{ false: "#D1D5DB", true: "#10B981" }}
                             thumbColor={service.status ? "#059669" : "#F3F4F6"}
                             ios_backgroundColor="#D1D5DB"
                           />
@@ -433,8 +335,6 @@ export default function ServiceProviderSection({
                             {service.status ? "Active" : "Inactive"}
                           </Text>
                         </View>
-
-                        {/* Edit Button */}
                         <TouchableOpacity
                           onPress={() => onEditService(service)}
                           className="w-9 h-9 bg-gray-50 items-center justify-center rounded-full border border-gray-100"
@@ -450,10 +350,8 @@ export default function ServiceProviderSection({
           </View>
         ) : (
           <View className="items-center justify-center py-8 bg-gray-50 rounded-xl">
-            <Wrench size={48} className="text-gray-400 mb-4" />
-            <Text className="text-base text-gray-500">
-              No services listed yet
-            </Text>
+            <Wrench size={48} color="#9ca3af" />
+            <Text className="text-base text-gray-500 mt-4">No services listed yet</Text>
           </View>
         )}
       </View>

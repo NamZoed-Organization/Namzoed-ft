@@ -1,4 +1,6 @@
 export { default as AboutApp } from './AboutApp';
+export { default as EditProfile } from './EditProfile';
+export { default as EditWorkProfile } from './EditWorkProfile';
 export { default as AppearanceManager } from './AppearanceManager';
 export { default as AppVersion } from './AppVersion';
 export { default as ChangePassword } from './ChangePassword';

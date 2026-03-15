@@ -1,5 +1,6 @@
 import { Entypo, Ionicons } from "@expo/vector-icons";
 import FormInput from "@/components/ui/FormInput";
+import PopupMessage from "@/components/ui/PopupMessage";
 import { clamp, useResponsive } from "@/utils/responsive";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
@@ -41,6 +42,12 @@ export default function ResetPassword() {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [popup, setPopup] = useState<{visible: boolean, type: 'success'|'error'|'warning'|'white', title: string, message: string}>({visible: false, type: 'success', title: '', message: ''});
+
+  const showPopup = (type: 'success'|'error'|'warning'|'white', title: string, message: string) => {
+    setPopup({visible: true, type, title, message});
+    setTimeout(() => setPopup(p => ({...p, visible: false})), 2500);
+  };
 
   const isPasswordValid = () => {
     return (
@@ -51,7 +58,7 @@ export default function ResetPassword() {
 
   const handleResetPassword = async () => {
     if (!isPasswordValid()) {
-      Alert.alert("Invalid Password", "Passwords must be at least 6 characters and match");
+      showPopup("error", "Invalid Password", "Passwords must be at least 6 characters and match");
       return;
     }
 
@@ -66,7 +73,7 @@ export default function ResetPassword() {
         .single();
 
       if (profileError || !profile) {
-        Alert.alert("Error", "Unable to find your account");
+        showPopup("error", "Account Not Found", "Unable to find your account");
         setLoading(false);
         return;
       }
@@ -75,7 +82,7 @@ export default function ResetPassword() {
       const userEmail = profile.email;
       
       if (!userEmail) {
-        Alert.alert("Error", "No email associated with this account");
+        showPopup("error", "No Email", "No email associated with this account");
         setLoading(false);
         return;
       }
@@ -126,7 +133,7 @@ export default function ResetPassword() {
 
     } catch (error: any) {
       console.error("Password reset error:", error);
-      Alert.alert("Error", error.message || "Failed to reset password");
+      showPopup("error", "Reset Failed", error.message || "Failed to reset password");
     } finally {
       setLoading(false);
     }
@@ -284,6 +291,14 @@ export default function ResetPassword() {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Popup */}
+      <PopupMessage
+        visible={popup.visible}
+        type={popup.type}
+        title={popup.title}
+        message={popup.message}
+      />
     </TouchableWithoutFeedback>
   );
 }

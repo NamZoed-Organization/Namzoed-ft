@@ -58,6 +58,7 @@ export default function CreateProductModal({
   // Error popup state
   const [showError, setShowError] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [errorTitle, setErrorTitle] = useState("");
 
   // Category dropdown state
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
@@ -146,7 +147,7 @@ export default function CreateProductModal({
       }
     } catch (error) {
       console.error("Failed to open camera:", error);
-      showErrorPopup("Failed to open camera.");
+      showErrorPopup("Failed to open camera.", "Camera Error");
     }
   };
 
@@ -164,7 +165,7 @@ export default function CreateProductModal({
       }
     } catch (error) {
       console.error("Failed to open gallery:", error);
-      showErrorPopup("Failed to open gallery.");
+      showErrorPopup("Failed to open gallery.", "Gallery Error");
     }
   };
 
@@ -204,8 +205,9 @@ export default function CreateProductModal({
   };
 
   // Show error popup helper
-  const showErrorPopup = (message: string) => {
+  const showErrorPopup = (message: string, title: string = "Error") => {
     setErrorMessage(message);
+    setErrorTitle(title);
     setShowError(true);
     setTimeout(() => setShowError(false), 2500);
   };
@@ -213,17 +215,17 @@ export default function CreateProductModal({
   // In handlePost:
   const handlePost = async () => {
     if (!name || !price || !selectedCategory) {
-      showErrorPopup("Please fill in the Name, Price, and Category.");
+      showErrorPopup("Please fill in the Name, Price, and Category.", "Missing Fields");
       return;
     }
 
     if (tags.length === 0) {
-      showErrorPopup("Please select at least one tag.");
+      showErrorPopup("Please select at least one tag.", "No Tags");
       return;
     }
 
     if (images.length === 0) {
-      showErrorPopup("Please add at least one image.");
+      showErrorPopup("Please add at least one image.", "No Images");
       return;
     }
 
@@ -265,6 +267,7 @@ export default function CreateProductModal({
       console.error("Post error:", error);
       showErrorPopup(
         error.message || "Failed to create post. Please try again.",
+        "Post Failed"
       );
     } finally {
       setLoading(false);
@@ -623,7 +626,7 @@ export default function CreateProductModal({
         />
 
         {/* Error Popup */}
-        <PopupMessage visible={showError} type="error" message={errorMessage} />
+        <PopupMessage visible={showError} type="error" title={errorTitle} message={errorMessage} />
 
         {/* Image Picker Sheet */}
         <ImagePickerSheet

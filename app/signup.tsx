@@ -3,6 +3,7 @@ import {
   MaterialIcons
 } from "@expo/vector-icons";
 import FormInput from "@/components/ui/FormInput";
+import PopupMessage from "@/components/ui/PopupMessage";
 import { clamp, useResponsive } from "@/utils/responsive";
 import { Link, useRouter } from "expo-router";
 import React, { useRef, useState } from "react";
@@ -32,7 +33,13 @@ export default function SignupTab2() {
   const scrollRef = useRef<ScrollView>(null);
 
   const [loading, setLoading] = useState(false);
+  const [popup, setPopup] = useState<{visible: boolean, type: 'success'|'error'|'warning'|'white', title: string, message: string}>({visible: false, type: 'success', title: '', message: ''});
   const { ms, vs, wp } = useResponsive();
+
+  const showPopup = (type: 'success'|'error'|'warning'|'white', title: string, message: string) => {
+    setPopup({visible: true, type, title, message});
+    setTimeout(() => setPopup(p => ({...p, visible: false})), 2500);
+  };
   const pagePaddingX = clamp(wp(10), 20, 44);
   const contentPaddingY = clamp(vs(40), 24, 52);
   const fieldGap = clamp(vs(15), 12, 20);
@@ -321,6 +328,14 @@ export default function SignupTab2() {
             </Link>
           </Text>
       </ScrollView>
+
+      {/* Popup */}
+      <PopupMessage
+        visible={popup.visible}
+        type={popup.type}
+        title={popup.title}
+        message={popup.message}
+      />
     </KeyboardAvoidingView>
   );
 }

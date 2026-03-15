@@ -1,10 +1,12 @@
 import { Feather } from "@expo/vector-icons";
+import { Image } from "expo-image";
 import { MapPin } from "lucide-react-native";
 import React from "react";
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 const CARD_WIDTH = 180;
 const IMAGE_HEIGHT = 140;
+
 
 interface HomeCardProps {
   imageUrl?: string;
@@ -45,17 +47,19 @@ const HomeCard = React.memo(function HomeCard({
   }
 
   return (
-    <Pressable onPress={onPress} style={styles.card}>
+    <TouchableOpacity onPress={onPress} style={styles.card} activeOpacity={0.85}>
       <View style={styles.cardContainer}>
-        {/* 1. THE IMAGE FRAME */}
+        {/* 1. THE IMAGE FRAME — overflow:hidden here only, not on the whole card */}
         <View style={styles.imageFrame}>
           <Image
             source={{ uri: imageUrl }}
             style={styles.image}
-            resizeMode="cover"
+            contentFit="cover"
+            transition={0}
+            cachePolicy="memory-disk"
           />
 
-          {/* Discount Badge on Image */}
+          {/* Discount Badge */}
           {discountPercent && (
             <View
               style={[
@@ -80,7 +84,9 @@ const HomeCard = React.memo(function HomeCard({
                 <Image
                   source={{ uri: profileImage }}
                   style={styles.profileImage}
-                  resizeMode="cover"
+                  contentFit="cover"
+                  transition={0}
+                  cachePolicy="memory-disk"
                 />
               ) : (
                 <View style={styles.profileImagePlaceholder}>
@@ -120,7 +126,7 @@ const HomeCard = React.memo(function HomeCard({
           )}
         </View>
       </View>
-    </Pressable>
+    </TouchableOpacity>
   );
 });
 
@@ -137,13 +143,16 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: "#E5E7EB",
-    overflow: "hidden",
+    // NO overflow: "hidden" here — that forces an offscreen compositing pass
+    // per card on Android. Image clipping is handled by imageFrame below.
   },
   imageFrame: {
     width: "100%",
     height: IMAGE_HEIGHT,
     backgroundColor: "#F8F8F8",
-    position: "relative",
+    borderTopLeftRadius: 15,
+    borderTopRightRadius: 15,
+    overflow: "hidden", // clip only the image to the top corners
   },
   image: {
     width: "100%",

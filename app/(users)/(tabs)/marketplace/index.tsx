@@ -7,36 +7,38 @@ import TopNavbar from "@/components/ui/TopNavbar";
 import { useUser } from "@/contexts/UserContext";
 import { dzongkhagCenters } from "@/data/dzongkhag";
 import {
-    fetchMarketplaceItems,
-    MarketplaceItemWithUser,
+  fetchMarketplaceItems,
+  MarketplaceItemWithUser,
 } from "@/lib/postMarketPlace";
 import { Picker } from "@react-native-picker/picker";
 import { useRouter } from "expo-router";
 import {
-    Briefcase,
-    Filter,
-    Gift,
-    Home,
-    MapPin,
-    Plus,
-    RefreshCw,
-    ShoppingCart,
-    X,
+  Briefcase,
+  Filter,
+  Gift,
+  Home,
+  MapPin,
+  Plus,
+  RefreshCw,
+  ShoppingCart,
+  X,
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Modal,
-    RefreshControl,
-    ScrollView,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Modal,
+  RefreshControl,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import Animated, { SlideInDown, SlideOutDown } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function MarketplaceScreen() {
+  const insets = useSafeAreaInsets();
   const { currentUser } = useUser();
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
@@ -161,7 +163,10 @@ export default function MarketplaceScreen() {
         if (typeof item.description === "string") {
           descriptionText = item.description;
         } else if (item.description) {
-          descriptionText = (item.description as any).text || (item.description as any).description || "";
+          descriptionText =
+            (item.description as any).text ||
+            (item.description as any).description ||
+            "";
         }
 
         if (
@@ -206,7 +211,7 @@ export default function MarketplaceScreen() {
       swap: "Swap Options",
       second_hand: "Second Hand Buy",
       free: "Free Options",
-      job_vacancy: "Job Vacancies",
+      job_vacancy: "Oppurtunities and Scholarships",
     }[activeTab];
 
     if (isLoading) {
@@ -401,6 +406,7 @@ export default function MarketplaceScreen() {
       <ScrollView
         className="flex-1"
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 72 + insets.bottom }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -413,82 +419,84 @@ export default function MarketplaceScreen() {
         <View className="bg-gray-50">
           <TopNavbar />
           <View className="px-4 gap-2">
-
-          {/* SearchBar with Plus Button */}
-          <View className="flex-row items-center gap-2">
-            <View className="flex-1">
-              <SearchBar value={searchQuery} onChangeText={setSearchQuery} />
+            {/* SearchBar with Plus Button */}
+            <View className="flex-row items-center gap-2">
+              <View className="flex-1">
+                <SearchBar value={searchQuery} onChangeText={setSearchQuery} />
+              </View>
+              <TouchableOpacity
+                className="w-10 h-10 bg-primary rounded-lg items-center justify-center"
+                onPress={() => {
+                  if (!currentUser) {
+                    setShowAuthModal(true);
+                    return;
+                  }
+                  setShowPostOverlay(true);
+                }}
+              >
+                <Plus size={24} color="white" />
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              className="w-10 h-10 bg-primary rounded-lg items-center justify-center"
-              onPress={() => {
-                if (!currentUser) { setShowAuthModal(true); return; }
-                setShowPostOverlay(true);
-              }}
-            >
-              <Plus size={24} color="white" />
-            </TouchableOpacity>
-          </View>
 
-          <Banner />
+            <Banner />
 
-          {/* Marketplace Options H1 */}
-          <Text className="text-2xl font-bold text-gray-900 mt-4 mb-4">
-            Marketplace Options
-          </Text>
+            {/* Marketplace Options H1 */}
+            <Text className="text-2xl font-bold text-gray-900 mt-4 mb-4">
+              Marketplace Options
+            </Text>
 
-          {/* Tab Navigation */}
-          <View className="flex-row items-center w-full mx-auto mt-2 gap-2 mb-4">
-            <TouchableOpacity
-              onPress={() => handleTabChange("job_vacancy")}
-              className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm bg-white ${
-                activeTab === "job_vacancy" ? "border-2 border-black" : ""
-              }`}
-              disabled={isLoading}
-            >
-              <Briefcase size={20} color={isLoading ? "#ccc" : "black"} />
-            </TouchableOpacity>
+            {/* Tab Navigation */}
+            <View className="flex-row items-center w-full mx-auto mt-2 gap-2 mb-4">
+              <TouchableOpacity
+                onPress={() => handleTabChange("job_vacancy")}
+                className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm bg-white ${
+                  activeTab === "job_vacancy" ? "border-2 border-black" : ""
+                }`}
+                disabled={isLoading}
+              >
+                <Briefcase size={20} color={isLoading ? "#ccc" : "black"} />
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              onPress={() => handleTabChange("rent")}
-              className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm bg-white ${
-                activeTab === "rent" ? "border-2 border-black" : ""
-              }`}
-              disabled={isLoading}
-            >
-              <Home size={20} color={isLoading ? "#ccc" : "black"} />
-            </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => handleTabChange("rent")}
+                className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm bg-white ${
+                  activeTab === "rent" ? "border-2 border-black" : ""
+                }`}
+                disabled={isLoading}
+              >
+                <Home size={20} color={isLoading ? "#ccc" : "black"} />
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              onPress={() => handleTabChange("second_hand")}
-              className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm bg-white ${
-                activeTab === "second_hand" ? "border-2 border-black" : ""
-              }`}
-              disabled={isLoading}
-            >
-              <ShoppingCart size={20} color={isLoading ? "#ccc" : "black"} />
-            </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => handleTabChange("second_hand")}
+                className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm bg-white ${
+                  activeTab === "second_hand" ? "border-2 border-black" : ""
+                }`}
+                disabled={isLoading}
+              >
+                <ShoppingCart size={20} color={isLoading ? "#ccc" : "black"} />
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              onPress={() => handleTabChange("swap")}
-              className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm bg-white ${
-                activeTab === "swap" ? "border-2 border-black" : ""
-              }`}
-              disabled={isLoading}
-            >
-              <RefreshCw size={20} color={isLoading ? "#ccc" : "black"} />
-            </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => handleTabChange("swap")}
+                className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm bg-white ${
+                  activeTab === "swap" ? "border-2 border-black" : ""
+                }`}
+                disabled={isLoading}
+              >
+                <RefreshCw size={20} color={isLoading ? "#ccc" : "black"} />
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              onPress={() => handleTabChange("free")}
-              className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm bg-white ${
-                activeTab === "free" ? "border-2 border-black" : ""
-              }`}
-              disabled={isLoading}
-            >
-              <Gift size={20} color={isLoading ? "#ccc" : "black"} />
-            </TouchableOpacity>
-          </View>
+              <TouchableOpacity
+                onPress={() => handleTabChange("free")}
+                className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm bg-white ${
+                  activeTab === "free" ? "border-2 border-black" : ""
+                }`}
+                disabled={isLoading}
+              >
+                <Gift size={20} color={isLoading ? "#ccc" : "black"} />
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
 

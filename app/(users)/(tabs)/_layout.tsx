@@ -22,6 +22,8 @@ export default function UsersTabsLayout() {
     <View className="flex-1 bg-background">
       <Tabs
         safeAreaInsets={{ bottom: 0 }}
+        // Pre-mount all screens so tab switching is always instant
+        {...({ lazy: false } as any)}
         tabBar={(props) => (
           <View
             style={{
@@ -56,6 +58,7 @@ export default function UsersTabsLayout() {
         screenOptions={{
           headerShown: false,
           tabBarShowLabel: false,
+          animation: "none",
           tabBarBackground: () => null,
           tabBarStyle: {
             backgroundColor: "#fff",

@@ -29,6 +29,7 @@ import TopNavbar from "@/components/ui/TopNavbar";
 import { useUser } from "@/contexts/UserContext";
 import { categories as categoryData } from "@/data/categories";
 import { supabase } from "@/lib/supabase";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const slugify = (str: string): string => str;
 
@@ -47,6 +48,7 @@ interface ProductSummary {
 }
 
 export default function CategoriesScreen() {
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { currentUser } = useUser();
 
@@ -200,6 +202,7 @@ export default function CategoriesScreen() {
         showsVerticalScrollIndicator={false}
         scrollEventThrottle={16}
         keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ paddingBottom: 72 + insets.bottom }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -209,7 +212,7 @@ export default function CategoriesScreen() {
           />
         }
       >
-        <View className="mb-20">
+        <View>
           <TopNavbar />
           <View className="px-4 gap-2">
 

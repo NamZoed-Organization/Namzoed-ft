@@ -1,5 +1,5 @@
 import { useBanners } from "@/data/bannerData";
-import React, { useRef, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import {
     Animated,
     Dimensions,
@@ -22,10 +22,10 @@ export default function Banner() {
 
   const handleScroll = Animated.event(
     [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-    { useNativeDriver: false }
+    { useNativeDriver: true }
   );
 
-  const renderItem = ({ item, index }: any) => {
+  const renderItem = useCallback(({ item, index }: any) => {
     const inputRange = [
       (index - 1) * CARD_WIDTH,
       index * CARD_WIDTH,
@@ -87,7 +87,8 @@ export default function Banner() {
         </View>
       </View>
     );
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scrollX]);
 
   return (
     <View className="relative mt-3">
