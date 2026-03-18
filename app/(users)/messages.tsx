@@ -2,6 +2,7 @@
 import BookMongooseModal from "@/components/BookMongooseModal";
 import FollowRequests from "@/components/modals/FollowRequests";
 import TrackMongooseModal from "@/components/modals/TrackMongooseModal";
+import PopupMessage from "@/components/ui/PopupMessage";
 import { useUnreadMessages } from "@/contexts/UnreadMessagesContext";
 import { useUser } from "@/contexts/UserContext";
 import userData17123456 from "@/data/17123456";
@@ -323,6 +324,8 @@ export default function MessageScreen() {
   const [showMessageRequests, setShowMessageRequests] = useState(false);
   const [isLoadingConversations, setIsLoadingConversations] = useState(false);
   const [debugInfo, setDebugInfo] = useState<string>("");
+  const [popup, setPopup] = useState<{visible: boolean; type: 'success'|'warning'|'error'|'white'; title: string; message: string}>({visible: false, type: 'white', title: '', message: ''});
+  const showPopup = (type: 'success'|'warning'|'error'|'white', title: string, message: string) => setPopup({visible: true, type, title, message});
   const [mongooseUsers, setMongooseUsers] = useState<any[]>([]);
   const [isLoadingMongoose, setIsLoadingMongoose] = useState(false);
   const [showBookingModal, setShowBookingModal] = useState(false);
@@ -1079,7 +1082,7 @@ export default function MessageScreen() {
   const handleAcceptMessageRequest = async (senderId: string) => {
     const myId = currentUserUUID || currentUser?.id;
     if (!myId) {
-      Alert.alert("Error", "Could not identify your account. Please try again.");
+      showPopup('error', 'Account Error', 'Could not identify your account. Please try again.');
       return;
     }
 
@@ -1096,7 +1099,7 @@ export default function MessageScreen() {
         console.error("Accept request error:", error.message);
         // If the table doesn't exist, still move the conversation optimistically
         if (!error.message.includes("does not exist")) {
-          Alert.alert("Error", "Failed to accept request: " + error.message);
+          showPopup('error', 'Accept Failed', 'Failed to accept request: ' + error.message);
           return;
         }
       }
@@ -1109,7 +1112,7 @@ export default function MessageScreen() {
       });
     } catch (e: any) {
       console.error("Accept request exception:", e);
-      Alert.alert("Error", e?.message || "An unexpected error occurred.");
+      showPopup('error', 'Something Went Wrong', e?.message || 'An unexpected error occurred.');
     }
   };
 
@@ -1125,7 +1128,7 @@ export default function MessageScreen() {
           onPress: async () => {
             const myId = currentUserUUID || currentUser?.id;
             if (!myId) {
-              Alert.alert("Error", "Could not identify your account. Please try again.");
+              showPopup('error', 'Account Error', 'Could not identify your account. Please try again.');
               return;
             }
 
@@ -1616,6 +1619,7 @@ export default function MessageScreen() {
 
   return (
     <View className="flex-1 bg-background">
+      <PopupMessage visible={popup.visible} type={popup.type} title={popup.title} message={popup.message} onHide={() => setPopup(p => ({...p, visible: false}))} />
       {/* Status Bar Space */}
       <View className="h-12 bg-white" />
 

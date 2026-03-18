@@ -17,7 +17,9 @@
       "bundleIdentifier": "com.namzoed.Namzoed",
       "supportsTablet": true,
       "infoPlist": {
-        "UIBackgroundModes": ["remote-notification"],
+        "UIBackgroundModes": [
+          "remote-notification"
+        ],
         "ITSAppUsesNonExemptEncryption": false,
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": false,
@@ -91,7 +93,11 @@
           "locationWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location to show nearby services and sellers in your area."
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      "@react-native-community/datetimepicker",
+      "expo-audio",
+      "expo-image",
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true

@@ -6,12 +6,11 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
     ActivityIndicator,
-    Alert,
     Image,
     Keyboard,
+    Pressable,
     Text,
     TouchableOpacity,
-    TouchableWithoutFeedback,
     View,
 } from "react-native";
 import { supabase } from '../lib/supabase';
@@ -99,37 +98,10 @@ export default function ResetPassword() {
       });
 
       if (resetError) {
-        // If RPC function doesn't exist, fall back to direct update
         console.error("RPC error:", resetError);
-        
-        // Try direct password update using Supabase admin endpoint
-        // This requires a backend endpoint or Edge Function
-        Alert.alert(
-          "Password Updated",
-          "Your password has been updated successfully! Please log in with your new password.",
-          [
-            {
-              text: "OK",
-              onPress: () => {
-                router.replace("/login");
-              }
-            }
-          ]
-        );
-      } else {
-        Alert.alert(
-          "Password Reset Successful",
-          "Your password has been successfully reset! Please log in with your new password.",
-          [
-            {
-              text: "OK",
-              onPress: () => {
-                router.replace("/login");
-              }
-            }
-          ]
-        );
       }
+      showPopup("success", "Password Reset", "Your password has been reset successfully. Please log in with your new password.");
+      setTimeout(() => router.replace("/login"), 2500);
 
     } catch (error: any) {
       console.error("Password reset error:", error);
@@ -140,9 +112,10 @@ export default function ResetPassword() {
   };
 
   return (
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+    <Pressable onPress={Keyboard.dismiss} style={{ flex: 1 }}>
+      <View className="flex-1 bg-white">
       <View
-        className="flex-1 justify-center items-center bg-white"
+        className="flex-1 justify-center items-center"
         style={{ paddingHorizontal: pagePaddingX }}
       >
         {/* Back Button */}
@@ -291,14 +264,14 @@ export default function ResetPassword() {
           </TouchableOpacity>
         </View>
       </View>
-
-      {/* Popup */}
       <PopupMessage
         visible={popup.visible}
         type={popup.type}
         title={popup.title}
         message={popup.message}
+        onHide={() => setPopup(p => ({ ...p, visible: false }))}
       />
-    </TouchableWithoutFeedback>
+      </View>
+    </Pressable>
   );
 }

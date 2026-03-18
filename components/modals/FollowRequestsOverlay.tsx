@@ -3,11 +3,12 @@ import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
 import { useRouter } from 'expo-router';
 import { ArrowDownAZ, ArrowUpAZ, UserCheck, Users, X } from 'lucide-react-native';
+import PopupMessage from '@/components/ui/PopupMessage';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Image,
+  Modal,
   RefreshControl,
   Text,
   TouchableOpacity,
@@ -52,6 +53,8 @@ export default function FollowRequestsOverlay({
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
+  const [popup, setPopup] = useState<{visible: boolean; type: 'error'; title: string; message: string}>({visible: false, type: 'error', title: '', message: ''});
+  const showPopup = (title: string, message: string) => setPopup({visible: true, type: 'error', title, message});
   const previousTab = useRef<TabType>('following');
 
   useEffect(() => {
@@ -106,11 +109,11 @@ export default function FollowRequestsOverlay({
         }
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } else {
-        Alert.alert('Error', result.error || 'Failed to follow user');
+        showPopup('Follow Failed', result.error || 'Could not follow this user. Try again.');
       }
     } catch (error) {
       console.error('Error following user:', error);
-      Alert.alert('Error', 'Failed to follow user');
+      showPopup('Follow Failed', 'Could not follow this user. Try again.');
     }
   };
 
@@ -130,11 +133,11 @@ export default function FollowRequestsOverlay({
         }
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } else {
-        Alert.alert('Error', result.error || 'Failed to unfollow user');
+        showPopup('Unfollow Failed', result.error || 'Could not unfollow this user. Try again.');
       }
     } catch (error) {
       console.error('Error unfollowing user:', error);
-      Alert.alert('Error', 'Failed to unfollow user');
+      showPopup('Unfollow Failed', 'Could not unfollow this user. Try again.');
     }
   };
 
@@ -367,6 +370,9 @@ export default function FollowRequestsOverlay({
           />
         </Animated.View>
       )}
+      <Modal visible={popup.visible} transparent animationType="none" statusBarTranslucent>
+        <PopupMessage visible={popup.visible} type={popup.type} title={popup.title} message={popup.message} onHide={() => setPopup(p => ({...p, visible: false}))} />
+      </Modal>
     </View>
   );
 }

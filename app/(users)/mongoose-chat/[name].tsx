@@ -1,4 +1,5 @@
 // mongoose-chat/[chat].tsx
+import PopupMessage from "@/components/ui/PopupMessage";
 import { useUser } from "@/contexts/UserContext";
 import mongooses from "@/data/mongoose";
 import { Ionicons } from "@expo/vector-icons";
@@ -255,6 +256,8 @@ export default function MongooseChatScreen() {
   const recordingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioPlayerRef = useRef<AudioPlayer | null>(null);
   const audioPlayerSubscriptionRef = useRef<{ remove: () => void } | null>(null);
+  const [popup, setPopup] = useState<{visible: boolean; type: 'success'|'warning'|'error'|'white'; title: string; message: string}>({visible: false, type: 'white', title: '', message: ''});
+  const showPopup = (type: 'success'|'warning'|'error'|'white', title: string, message: string) => setPopup({visible: true, type, title, message});
   const replyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
 
@@ -344,7 +347,7 @@ export default function MongooseChatScreen() {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission denied', 'Location permission is required to share your location.');
+        showPopup('warning', 'Permission Denied', 'Location permission is required to share your location.');
         return null;
       }
 
@@ -352,7 +355,7 @@ export default function MongooseChatScreen() {
       const locationText = `loc: ${location.coords.latitude.toFixed(6)}, ${location.coords.longitude.toFixed(6)}`;
       return locationText;
     } catch (error) {
-      Alert.alert('Error', 'Failed to get current location. Please try again.');
+      showPopup('error', 'Location Error', 'Failed to get current location. Please try again.');
       return null;
     }
   };
@@ -386,7 +389,7 @@ export default function MongooseChatScreen() {
       // Request audio permissions
       const { status } = await requestRecordingPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission required', 'Please grant microphone permission to record voice messages.');
+        showPopup('warning', 'Microphone Access Needed', 'Please grant microphone permission to record voice messages.');
         return;
       }
 
@@ -765,6 +768,7 @@ export default function MongooseChatScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: 'white' }}>
+      <PopupMessage visible={popup.visible} type={popup.type} title={popup.title} message={popup.message} onHide={() => setPopup(p => ({...p, visible: false}))} />
 
       {/* Header */}
       <View style={{

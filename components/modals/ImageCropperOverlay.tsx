@@ -1,11 +1,12 @@
 import * as ImageManipulator from "expo-image-manipulator";
 import { Check, X } from "lucide-react-native";
+import PopupMessage from "@/components/ui/PopupMessage";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Dimensions,
   Image,
+  Modal,
   StatusBar,
   StyleSheet,
   Text,
@@ -51,6 +52,7 @@ export default function ResizableImageCropper({
   });
   const [originalSize, setOriginalSize] = useState({ width: 0, height: 0 });
   const [isSaving, setIsSaving] = useState(false);
+  const [popup, setPopup] = useState<{visible: boolean; title: string; message: string}>({visible: false, title: '', message: ''});
 
   // --- Shared Values ---
   const cropX = useSharedValue(0);
@@ -291,7 +293,7 @@ export default function ResizableImageCropper({
       onSave(cropped.uri);
     } catch (e) {
       console.error(e);
-      Alert.alert("Error", "Failed to crop");
+      setPopup({visible: true, title: 'Crop Failed', message: 'Could not crop the image. Please try again.'});
     } finally {
       setIsSaving(false);
     }
@@ -451,6 +453,9 @@ export default function ResizableImageCropper({
           </View>
         </View>
       </View>
+      <Modal visible={popup.visible} transparent animationType="none" statusBarTranslucent>
+        <PopupMessage visible={popup.visible} type="error" title={popup.title} message={popup.message} onHide={() => setPopup(p => ({...p, visible: false}))} />
+      </Modal>
     </GestureHandlerRootView>
   );
 }

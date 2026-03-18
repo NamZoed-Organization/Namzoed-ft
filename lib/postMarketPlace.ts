@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { uploadFileToSupabase } from './uploadFile';
 
 export interface MarketplaceItem {
   id: string;
@@ -191,22 +192,7 @@ export const uploadMarketplaceImage = async (imageUri: string): Promise<string> 
     const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
     const filePath = fileName;
 
-    const response = await fetch(imageUri);
-    const arrayBuffer = await response.arrayBuffer();
-    const fileData = new Uint8Array(arrayBuffer);
-
-    const { data, error } = await supabase.storage
-      .from('market')
-      .upload(filePath, fileData, {
-        contentType: 'image/jpeg',
-        cacheControl: '3600',
-        upsert: false
-      });
-
-    if (error) {
-      console.error('Error uploading marketplace image:', error);
-      throw error;
-    }
+    await uploadFileToSupabase(imageUri, 'market', filePath, 'image/jpeg');
 
     const { data: { publicUrl } } = supabase.storage
       .from('market')

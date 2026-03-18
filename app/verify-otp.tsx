@@ -8,10 +8,10 @@ import {
     Alert,
     Image,
     Keyboard,
+    Pressable,
     Text,
     TextInput,
     TouchableOpacity,
-    TouchableWithoutFeedback,
     View,
 } from "react-native";
 
@@ -184,9 +184,10 @@ export default function VerifyOTP() {
   };
 
   return (
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+    <Pressable onPress={Keyboard.dismiss} style={{ flex: 1 }}>
+      <View className="flex-1 bg-white">
       <View
-        className="flex-1 justify-center items-center bg-white"
+        className="flex-1 justify-center items-center"
         style={{ paddingHorizontal: pagePaddingX }}
       >
         {/* Back Button */}
@@ -357,14 +358,13 @@ export default function VerifyOTP() {
           </TouchableOpacity>
         </View>
       </View>
-
-      {/* Popup */}
       <PopupMessage
         visible={popup.visible}
         type={popup.type}
         title={popup.title}
         message={popup.message}
       />
-    </TouchableWithoutFeedback>
+      </View>
+    </Pressable>
   );
 }

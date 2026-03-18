@@ -1,4 +1,5 @@
 import EarlyAccessBadge from "@/components/EarlyAccessBadge";
+import PopupMessage from "@/components/ui/PopupMessage";
 import FollowRequestsOverlay from "@/components/modals/FollowRequestsOverlay";
 import ImageViewer from "@/components/modals/ImageViewer";
 import ProfileImageViewer from "@/components/modals/ProfileImageViewer";
@@ -125,6 +126,8 @@ export default function PublicProfileScreen() {
   const [followRequestsTab, setFollowRequestsTab] = useState<
     "followers" | "following"
   >("followers");
+  const [popup, setPopup] = useState<{visible: boolean; type: 'success'|'warning'|'error'|'white'; title: string; message: string}>({visible: false, type: 'white', title: '', message: ''});
+  const showPopup = (type: 'success'|'warning'|'error'|'white', title: string, message: string) => setPopup({visible: true, type, title, message});
 
   // Early-access badge for this profile
   const [badgeType, setBadgeType] = useState<EarlyAccessBadgeType>(null);
@@ -201,7 +204,7 @@ export default function PublicProfileScreen() {
         setLoadingServiceProvider(false);
       } catch (error) {
         console.error("Error loading public profile:", error);
-        Alert.alert("Error", "Could not load user profile");
+        showPopup('error', 'Load Failed', 'Could not load user profile. Please try again.');
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -337,10 +340,10 @@ export default function PublicProfileScreen() {
                   setUserProfile((prev: any) => prev ? { ...prev, follower_count: Math.max(0, (prev.follower_count || 0) - 1) } : prev);
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                 } else {
-                  Alert.alert("Error", result.error || "Failed to unfollow");
+                  showPopup('error', 'Unfollow Failed', result.error || 'Failed to unfollow user.');
                 }
               } catch (error) {
-                Alert.alert("Error", "Failed to unfollow");
+                showPopup('error', 'Unfollow Failed', 'Could not unfollow this user. Please try again.');
               } finally {
                 setLoadingFollow(false);
               }
@@ -358,10 +361,10 @@ export default function PublicProfileScreen() {
           setUserProfile((prev: any) => prev ? { ...prev, follower_count: (prev.follower_count || 0) + 1 } : prev);
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         } else {
-          Alert.alert("Error", result.error || "Failed to follow user");
+          showPopup('error', 'Follow Failed', result.error || 'Failed to follow user.');
         }
       } catch (error) {
-        Alert.alert("Error", "Failed to follow user");
+        showPopup('error', 'Follow Failed', 'Could not follow this user. Please try again.');
       } finally {
         setLoadingFollow(false);
       }
@@ -394,9 +397,9 @@ export default function PublicProfileScreen() {
                 Haptics.notificationAsync(
                   Haptics.NotificationFeedbackType.Success,
                 );
-                Alert.alert("Success", "User unblocked");
+                showPopup('success', 'User Unblocked', 'This user has been unblocked successfully.');
               } else {
-                Alert.alert("Error", result.error || "Failed to unblock user");
+                showPopup('error', 'Unblock Failed', result.error || 'Failed to unblock user.');
               }
             },
           },
@@ -420,9 +423,9 @@ export default function PublicProfileScreen() {
                 Haptics.notificationAsync(
                   Haptics.NotificationFeedbackType.Success,
                 );
-                Alert.alert("Success", "User blocked");
+                showPopup('success', 'User Blocked', 'This user has been blocked successfully.');
               } else {
-                Alert.alert("Error", result.error || "Failed to block user");
+                showPopup('error', 'Block Failed', result.error || 'Failed to block user.');
               }
             },
           },
@@ -467,6 +470,7 @@ export default function PublicProfileScreen() {
 
   return (
     <View className="flex-1 bg-background">
+      <PopupMessage visible={popup.visible} type={popup.type} title={popup.title} message={popup.message} onHide={() => setPopup(p => ({...p, visible: false}))} />
 
       <Stack.Screen options={{ headerShown: false }} />
 

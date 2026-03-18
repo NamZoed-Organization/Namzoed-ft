@@ -7,9 +7,9 @@ import {
   ActivityIndicator,
   Image,
   Keyboard,
+  Pressable,
   Text,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   View,
 } from "react-native";
 import { supabase } from '../lib/supabase';
@@ -173,7 +173,7 @@ export default function Forgot() {
   };
 
   return (
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+    <Pressable onPress={Keyboard.dismiss} style={{ flex: 1 }}>
       <View
         className="flex-1 justify-center items-center bg-white"
         style={{ paddingHorizontal: pagePaddingX }}
@@ -184,6 +184,7 @@ export default function Forgot() {
           type={popup.type}
           title={popup.title}
           message={popup.message}
+          onHide={() => setPopup(p => ({ ...p, visible: false }))}
         />
 
         {/* Back Button */}
@@ -281,6 +282,6 @@ export default function Forgot() {
           </TouchableOpacity>
         </View>
       </View>
-    </TouchableWithoutFeedback>
+    </Pressable>
   );
 }

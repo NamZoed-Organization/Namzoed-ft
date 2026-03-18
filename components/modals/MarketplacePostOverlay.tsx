@@ -391,6 +391,7 @@ export default function MarketplacePostOverlay({
               className="flex-1"
               showsVerticalScrollIndicator={false}
               bounces={false}
+              contentContainerStyle={{ paddingBottom: 48 }}
             >
               {/* Header */}
               <View className="px-4 py-4 border-b border-gray-100">

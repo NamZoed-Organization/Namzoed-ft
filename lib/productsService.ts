@@ -1,6 +1,7 @@
 // lib/productsService.ts
 import * as ImageManipulator from 'expo-image-manipulator';
 import { supabase } from './supabase';
+import { uploadFileToSupabase } from './uploadFile';
 
 export interface Product {
   id: string;
@@ -218,22 +219,7 @@ export const uploadProductImage = async (imageUri: string, userId: string): Prom
 
     const fileName = `${userId}/${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
 
-    const response = await fetch(compressed.uri);
-    const arrayBuffer = await response.arrayBuffer();
-    const fileData = new Uint8Array(arrayBuffer);
-
-    const { error } = await supabase.storage
-      .from('product-images')
-      .upload(fileName, fileData, {
-        contentType: 'image/jpeg',
-        cacheControl: '3600',
-        upsert: false
-      });
-
-    if (error) {
-      console.error('Error uploading product image:', error);
-      throw error;
-    }
+    await uploadFileToSupabase(compressed.uri, 'product-images', fileName, 'image/jpeg');
 
     const { data: { publicUrl } } = supabase.storage
       .from('product-images')

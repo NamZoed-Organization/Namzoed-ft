@@ -1,6 +1,7 @@
 import { getFollowerIdsOf } from '@/lib/followService';
 import { notifyNewPost } from '@/services/notificationService';
 import { supabase } from './supabase';
+import { uploadFileToSupabase } from './uploadFile';
 
 export interface Post {
   id: string;
@@ -201,26 +202,8 @@ export const uploadImage = async (imageUri: string): Promise<string> => {
     const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
     const filePath = fileName;
 
-    // For React Native, we need to create a file object from URI
-    const response = await fetch(imageUri);
-    const arrayBuffer = await response.arrayBuffer();
-    const fileData = new Uint8Array(arrayBuffer);
+    await uploadFileToSupabase(imageUri, 'post-images', filePath, 'image/jpeg');
 
-    // Upload to Supabase storage
-    const { data, error } = await supabase.storage
-      .from('post-images')
-      .upload(filePath, fileData, {
-        contentType: 'image/jpeg',
-        cacheControl: '3600',
-        upsert: false
-      });
-
-    if (error) {
-      console.error('Error uploading image:', error);
-      throw error;
-    }
-
-    // Get public URL
     const { data: { publicUrl } } = supabase.storage
       .from('post-images')
       .getPublicUrl(filePath);
@@ -245,26 +228,8 @@ export const uploadVideo = async (videoUri: string): Promise<string> => {
     const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.mp4`;
     const filePath = fileName;
 
-    // For React Native, we need to create a file object from URI
-    const response = await fetch(videoUri);
-    const arrayBuffer = await response.arrayBuffer();
-    const fileData = new Uint8Array(arrayBuffer);
+    await uploadFileToSupabase(videoUri, 'post-videos', filePath, 'video/mp4');
 
-    // Upload to Supabase storage
-    const { data, error } = await supabase.storage
-      .from('post-videos')
-      .upload(filePath, fileData, {
-        contentType: 'video/mp4',
-        cacheControl: '3600',
-        upsert: false
-      });
-
-    if (error) {
-      console.error('Error uploading video:', error);
-      throw error;
-    }
-
-    // Get public URL
     const { data: { publicUrl } } = supabase.storage
       .from('post-videos')
       .getPublicUrl(filePath);

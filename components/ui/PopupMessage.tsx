@@ -1,7 +1,7 @@
 import { AlertCircle, AlertTriangle, CheckCircle } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
-import { Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
 type PopupType = 'success' | 'error' | 'warning' | 'white';
@@ -11,6 +11,7 @@ interface PopupMessageProps {
   type: PopupType;
   title?: string;
   message: string;
+  onHide?: () => void;
 }
 
 const popupConfig = {
@@ -40,7 +41,7 @@ const popupConfig = {
   },
 };
 
-export default function PopupMessage({ visible, type, title, message }: PopupMessageProps) {
+export default function PopupMessage({ visible, type, title, message, onHide }: PopupMessageProps) {
   if (!visible) return null;
 
   const config = popupConfig[type];
@@ -55,10 +56,13 @@ export default function PopupMessage({ visible, type, title, message }: PopupMes
     <Animated.View
       entering={FadeIn.duration(300)}
       exiting={FadeOut.duration(200)}
-      pointerEvents="none"
       className="absolute inset-0 items-center justify-center z-50"
       style={{ backgroundColor: 'rgba(0,0,0,0.4)' }}
     >
+      <Pressable
+        style={{ position: 'absolute', inset: 0 } as any}
+        onPress={onHide}
+      />
       <Animated.View
         entering={FadeIn.duration(400)}
         className="mx-4 rounded-3xl overflow-hidden"
@@ -126,3 +130,4 @@ export default function PopupMessage({ visible, type, title, message }: PopupMes
     </Animated.View>
   );
 }
+

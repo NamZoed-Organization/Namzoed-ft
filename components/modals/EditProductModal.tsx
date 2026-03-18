@@ -14,7 +14,6 @@ import { Check, DollarSign, Upload, X } from "lucide-react-native";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
-    Alert,
     Image,
     KeyboardAvoidingView,
     Modal,
@@ -167,10 +166,7 @@ export default function EditProductModal({
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert(
-          "Permission Required",
-          "Camera access is needed to take photos.",
-        );
+        showErrorPopup("Camera access is needed to take photos.", "Camera Access Needed");
         return;
       }
 
@@ -195,10 +191,7 @@ export default function EditProductModal({
       const permission =
         await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert(
-          "Permission Required",
-          "Gallery access is needed to select photos.",
-        );
+        showErrorPopup("Gallery access is needed to select photos.", "Gallery Access Needed");
         return;
       }
 

@@ -12,7 +12,6 @@ import * as WebBrowser from "expo-web-browser";
 import React, { useState } from "react";
 import {
     ActivityIndicator,
-    Alert,
     Image,
     Keyboard,
     KeyboardAvoidingView,
@@ -21,7 +20,6 @@ import {
     Pressable,
     Text,
     TouchableOpacity,
-    TouchableWithoutFeedback,
     View,
 } from "react-native";
 import Svg, { Path } from "react-native-svg";
@@ -251,7 +249,7 @@ export default function Login() {
       });
 
       if (error || !data?.url) {
-        Alert.alert("Login Failed", error?.message || "Unable to start OAuth");
+        showPopup("error", "Login Failed", error?.message || "Unable to start OAuth");
         return;
       }
 
@@ -317,8 +315,9 @@ export default function Login() {
     }
 
     if (!isIdentifierValid) {
-      Alert.alert(
-        "Error",
+      showPopup(
+        "error",
+        "Invalid Input",
         isIdentifierEmail
           ? "Please enter a valid email address"
           : "Please enter a valid Bhutanese phone number (17/77 + 8 digits), with or without +975",
@@ -354,7 +353,7 @@ export default function Login() {
       });
 
       if (error || !data?.user?.id) {
-        Alert.alert("Login Failed", error?.message || "Unable to sign in");
+        showPopup("error", "Login Failed", error?.message || "Unable to sign in. Please check your credentials.");
         return;
       }
 
@@ -371,11 +370,7 @@ export default function Login() {
   };
 
   return (
-    <TouchableWithoutFeedback
-      onPress={() => {
-        Keyboard.dismiss();
-      }}
-    >
+    <Pressable onPress={Keyboard.dismiss} style={{ flex: 1 }}>
       <View className="flex-1">
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -742,8 +737,9 @@ export default function Login() {
         type={popup.type}
         title={popup.title}
         message={popup.message}
+        onHide={() => setPopup(p => ({ ...p, visible: false }))}
       />
       </View>
-    </TouchableWithoutFeedback>
+    </Pressable>
   );
 }

@@ -1,4 +1,5 @@
 import LocationTrackingControl from "@/components/location/LocationTrackingControl";
+import PopupMessage from "@/components/ui/PopupMessage";
 import { useUser } from "@/contexts/UserContext";
 import { supabase } from "@/lib/supabase";
 import { isMongooseUser, MONGOOSE_EMAIL } from "@/utils/roleCheck";
@@ -54,6 +55,8 @@ export default function MongooseDashboard() {
   );
   const debounceTimerRef = useRef<number | null>(null);
   const hasLoadedRef = useRef(false);
+  const [popup, setPopup] = useState<{visible: boolean; type: 'success'|'warning'|'error'|'white'; title: string; message: string}>({visible: false, type: 'white', title: '', message: ''});
+  const showPopup = (type: 'success'|'warning'|'error'|'white', title: string, message: string) => setPopup({visible: true, type, title, message});
 
   // Load availability status from database (memoized)
   const loadAvailabilityStatus = useCallback(async () => {
@@ -123,10 +126,7 @@ export default function MongooseDashboard() {
   useEffect(() => {
     const checkAccess = async () => {
       if (!currentUser || !isMongooseUser(currentUser.email)) {
-        Alert.alert(
-          "Access Denied",
-          "You don't have permission to access this page.",
-        );
+        showPopup('warning', 'Access Denied', "You don't have permission to access this page.");
         router.replace("/(users)/(tabs)");
       } else if (!hasLoadedRef.current) {
         hasLoadedRef.current = true;
@@ -186,20 +186,14 @@ export default function MongooseDashboard() {
         .limit(1);
 
       if (acceptedBookings && acceptedBookings.length > 0 && !value) {
-        Alert.alert(
-          "Cannot Change Status",
-          "You have accepted bookings. Please complete them first by marking them as done.",
-        );
+        showPopup('warning', 'Cannot Change Status', 'You have accepted bookings. Please complete them first by marking them as done.');
       } else {
         setIsAvailable(value);
-        Alert.alert(
-          "Info",
-          "Availability is automatically managed based on accepted bookings.",
-        );
+        showPopup('white', 'Availability Info', 'Availability is automatically managed based on accepted bookings.');
       }
     } catch (error) {
       console.error("Error updating availability:", error);
-      Alert.alert("Error", "Failed to update availability status");
+      showPopup('error', 'Update Failed', 'Failed to update availability status.');
     } finally {
       setUpdatingStatus(false);
     }
@@ -218,12 +212,9 @@ export default function MongooseDashboard() {
 
       if (error) {
         console.error("Error updating booking:", error);
-        Alert.alert("Error", "Failed to update booking request");
+        showPopup('error', 'Update Failed', 'Failed to update booking request.');
       } else {
-        Alert.alert(
-          "Success",
-          `Booking ${action === "accept" ? "accepted" : "rejected"} successfully`,
-        );
+        showPopup('success', 'Booking Updated', `Booking ${action === "accept" ? "accepted" : "rejected"} successfully.`);
 
         // Real-time update: Immediately update availability status
         if (action === "accept") {
@@ -259,7 +250,7 @@ export default function MongooseDashboard() {
 
               if (updateError) {
                 console.error("Error completing booking:", updateError);
-                Alert.alert("Error", `Failed: ${updateError.message}`);
+                showPopup('error', 'Completion Failed', `Failed: ${updateError.message}`);
                 return;
               }
 
@@ -324,10 +315,10 @@ export default function MongooseDashboard() {
 
               // 3. Refresh local state
               await Promise.all([loadBookingRequests(), loadAvailabilityStatus()]);
-              Alert.alert("Delivery Complete", `Booking for ${userName} has been marked as delivered.`);
+              showPopup('success', 'Delivery Complete', `Booking for ${userName} has been marked as delivered.`);
             } catch (error: any) {
               console.error("Error completing booking:", error);
-              Alert.alert("Error", error?.message || "An unexpected error occurred.");
+              showPopup('error', 'Something Went Wrong', error?.message || 'An unexpected error occurred.');
             }
           },
         },
@@ -530,6 +521,7 @@ export default function MongooseDashboard() {
 
   return (
     <View className="flex-1 bg-gray-50">
+      <PopupMessage visible={popup.visible} type={popup.type} title={popup.title} message={popup.message} onHide={() => setPopup(p => ({...p, visible: false}))} />
       {loading ? (
         <View className="flex-1 bg-background justify-center items-center">
           <ActivityIndicator size="large" color="#094569" />

@@ -1,11 +1,11 @@
 import { reportUser } from '@/lib/reportService';
+import PopupMessage from '@/components/ui/PopupMessage';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { AlertCircle, X } from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
     ActivityIndicator,
-    Alert,
     KeyboardAvoidingView,
     Modal,
     ScrollView,
@@ -44,15 +44,17 @@ export default function ReportUserModal({
   const [selectedReason, setSelectedReason] = useState<string>('');
   const [details, setDetails] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [popup, setPopup] = useState<{ visible: boolean; type: 'warning' | 'error'; title: string; message: string }>({ visible: false, type: 'warning', title: '', message: '' });
+  const [showSuccess, setShowSuccess] = useState(false);
 
   const handleSubmit = async () => {
     if (!selectedReason) {
-      Alert.alert('Select Reason', 'Please select a reason for reporting');
+      setPopup({ visible: true, type: 'warning', title: 'Select Reason', message: 'Please select a reason for reporting' });
       return;
     }
 
     if (!details.trim()) {
-      Alert.alert('Provide Details', 'Please provide additional details');
+      setPopup({ visible: true, type: 'warning', title: 'Provide Details', message: 'Please provide additional details' });
       return;
     }
 
@@ -75,30 +77,15 @@ export default function ReportUserModal({
       setSelectedReason('');
       setDetails('');
 
-      // Ask if user wants to block
-      Alert.alert(
-        'Report Submitted',
-        'Reported successfully. Do you want to block this user?',
-        [
-          {
-            text: 'No',
-            style: 'cancel',
-            onPress: () => {
-              onClose();
-            }
-          },
-          {
-            text: 'Block',
-            style: 'destructive',
-            onPress: () => {
-              onClose();
-              onReportSuccess?.();
-            }
-          }
-        ]
-      );
+      // Show success popup
+      setShowSuccess(true);
+      setTimeout(() => {
+        setShowSuccess(false);
+        onClose();
+        onReportSuccess?.();
+      }, 2500);
     } else {
-      Alert.alert('Error', result.error || 'Failed to submit report');
+      setPopup({ visible: true, type: 'error', title: 'Error', message: result.error || 'Failed to submit report' });
     }
   };
 
@@ -114,6 +101,7 @@ export default function ReportUserModal({
   };
 
   return (
+    <>
     <Modal
       visible={visible}
       transparent
@@ -222,7 +210,30 @@ export default function ReportUserModal({
             </BlurView>
           </KeyboardAvoidingView>
         </Animated.View>
+        <PopupMessage
+          visible={popup.visible}
+          type={popup.type}
+          title={popup.title}
+          message={popup.message}
+          onHide={() => setPopup(p => ({ ...p, visible: false }))}
+        />
       </View>
     </Modal>
+
+    {/* Success Popup */}
+    <Modal
+      visible={showSuccess}
+      transparent={true}
+      animationType="none"
+      statusBarTranslucent={true}
+    >
+      <PopupMessage
+        visible={showSuccess}
+        type="white"
+        title="Report Submitted"
+        message="Thanks for letting us know. We'll review this user soon."
+      />
+    </Modal>
+    </>
   );
 }

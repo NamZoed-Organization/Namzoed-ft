@@ -9,7 +9,6 @@ import { Check, ChevronDown, Upload, X } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
-    Alert,
     Animated,
     Dimensions,
     Image,
@@ -128,10 +127,7 @@ export default function CreateProductModal({
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert(
-          "Permission Required",
-          "Camera access is needed to take photos.",
-        );
+        showErrorPopup("Camera access is needed to take photos.", "Camera Access Needed");
         return;
       }
 

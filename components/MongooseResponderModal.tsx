@@ -12,12 +12,12 @@ import SingleLocationPicker, {
     PickedLocation,
 } from "@/components/location/SingleLocationPicker";
 import { supabase } from "@/lib/supabase";
+import PopupMessage from "@/components/ui/PopupMessage";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import React, { useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
-    Alert,
     Modal,
     ScrollView,
     Text,
@@ -57,6 +57,8 @@ export default function MongooseResponderModal({
   const [showMapPicker, setShowMapPicker] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const fetchedRef = useRef(false);
+  const [popup, setPopup] = useState<{visible: boolean; type: 'warning'|'error'; title: string; message: string}>({visible: false, type: 'warning', title: '', message: ''});
+  const showPopup = (type: 'warning'|'error', title: string, message: string) => setPopup({visible: true, type, title, message});
 
   // Auto-fetch GPS each time the modal opens
   useEffect(() => {
@@ -75,10 +77,7 @@ export default function MongooseResponderModal({
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert(
-          "Permission denied",
-          "Location access is needed. You can pick your location on the map instead.",
-        );
+        showPopup("warning", "Permission Denied", "Location access is needed. You can pick your location on the map instead.");
         return;
       }
       const pos = await Location.getCurrentPositionAsync({
@@ -102,10 +101,7 @@ export default function MongooseResponderModal({
         });
       }
     } catch {
-      Alert.alert(
-        "Location error",
-        "Could not get your location. Please pick it manually.",
-      );
+      showPopup("error", "Location Error", "Could not get your location. Please pick it manually.");
     } finally {
       setLocationLoading(false);
     }
@@ -171,10 +167,7 @@ export default function MongooseResponderModal({
 
       if (error || !booking) {
         console.error("Booking insert error:", error);
-        Alert.alert(
-          "Error",
-          "Failed to submit the booking. Please try again.",
-        );
+        showPopup("error", "Booking Failed", "Failed to submit the booking. Please try again.");
         setSubmitting(false);
         return;
       }
@@ -182,7 +175,7 @@ export default function MongooseResponderModal({
       onConfirmed(booking.id, location);
     } catch (err) {
       console.error("Unexpected booking error:", err);
-      Alert.alert("Error", "An unexpected error occurred.");
+      showPopup("error", "Something Went Wrong", "An unexpected error occurred. Please try again.");
       setSubmitting(false);
     }
   };
@@ -579,6 +572,9 @@ export default function MongooseResponderModal({
             : "Set Delivery Location"
         }
       />
+      <Modal visible={popup.visible} transparent animationType="none" statusBarTranslucent>
+        <PopupMessage visible={popup.visible} type={popup.type} title={popup.title} message={popup.message} onHide={() => setPopup(p => ({...p, visible: false}))} />
+      </Modal>
     </>
   );
 }

@@ -3,7 +3,6 @@ import { AlertCircle, X } from 'lucide-react-native';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   Dimensions,
   Keyboard,
@@ -53,6 +52,7 @@ export default function ReportPostModal({
   const [details, setDetails] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [popup, setPopup] = useState<{ visible: boolean; type: 'warning' | 'error'; title: string; message: string }>({ visible: false, type: 'warning', title: '', message: '' });
 
   // Vertical slide for drag-to-close
   const panY = useRef(new Animated.Value(0)).current;
@@ -138,12 +138,12 @@ export default function ReportPostModal({
 
   const handleSubmit = async () => {
     if (!selectedReason) {
-      Alert.alert('Select Reason', 'Please select a reason for reporting');
+      setPopup({ visible: true, type: 'warning', title: 'Select Reason', message: 'Please select a reason for reporting' });
       return;
     }
 
     if (!details.trim()) {
-      Alert.alert('Provide Details', 'Please provide additional details');
+      setPopup({ visible: true, type: 'warning', title: 'Provide Details', message: 'Please provide additional details' });
       return;
     }
 
@@ -183,7 +183,7 @@ export default function ReportPostModal({
         onReportSuccess?.();
       }, 2000);
     } else {
-      Alert.alert('Error', result.error || 'Failed to submit report');
+      setPopup({ visible: true, type: 'error', title: 'Error', message: result.error || 'Failed to submit report' });
     }
   };
 
@@ -320,6 +320,13 @@ export default function ReportPostModal({
               </ScrollView>
             </Animated.View>
           </Pressable>
+          <PopupMessage
+            visible={popup.visible}
+            type={popup.type}
+            title={popup.title}
+            message={popup.message}
+            onHide={() => setPopup(p => ({ ...p, visible: false }))}
+          />
         </Pressable>
     </Modal>
 

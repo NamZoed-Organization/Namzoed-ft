@@ -1,3 +1,4 @@
+import PopupMessage from '@/components/ui/PopupMessage';
 import { useUser } from '@/contexts/UserContext';
 import { followUser, getFollowingIds, unfollowUser } from '@/lib/followService';
 import { FeaturedSellerProfile, fetchFeaturedSellers, fetchRandomSellers } from '@/lib/profileService';
@@ -7,9 +8,9 @@ import { Clock, MapPin, Package, Search, User as UserIcon, X } from 'lucide-reac
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Dimensions,
   Image,
+  Modal,
   Text,
   TextInput,
   TouchableOpacity,
@@ -109,6 +110,8 @@ const FeaturedSellers = () => {
   const { currentUser } = useUser();
   const [searchQuery, setSearchQuery] = useState('');
   const [users, setUsers] = useState<FeaturedSellerProfile[]>([]);
+  const [popup, setPopup] = useState<{visible: boolean; type: 'success'|'warning'|'error'|'white'; title: string; message: string}>({visible: false, type: 'white', title: '', message: ''});
+  const showPopup = (type: 'success'|'warning'|'error'|'white', title: string, message: string) => setPopup({visible: true, type, title, message});
   const [loading, setLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [page, setPage] = useState(0);
@@ -196,7 +199,7 @@ const FeaturedSellers = () => {
       setHasMore(fetchedUsers.length === PAGE_SIZE);
     } catch (error) {
       console.error('Error loading users:', error);
-      Alert.alert('Error', 'Failed to load sellers');
+      showPopup('error', 'Load Failed', 'Failed to load sellers. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -227,7 +230,7 @@ const FeaturedSellers = () => {
 
   const handleFollow = async (user: FeaturedSellerProfile) => {
     if (!currentUser?.id) {
-      Alert.alert('Error', 'Please log in to follow users');
+      showPopup('warning', 'Login Required', 'Please log in to follow users.');
       return;
     }
 
@@ -243,17 +246,17 @@ const FeaturedSellers = () => {
         // Remove from unfollowed list if re-following
         setUnfollowedIds(prev => prev.filter(id => id !== user.id));
       } else {
-        Alert.alert('Error', result.error || 'Failed to follow user');
+        showPopup('error', 'Follow Failed', result.error || 'Failed to follow user.');
       }
     } catch (error) {
       console.error('Error following user:', error);
-      Alert.alert('Error', 'Failed to follow user');
+      showPopup('error', 'Follow Failed', 'Could not follow this user. Please try again.');
     }
   };
 
   const handleUnfollow = async (user: FeaturedSellerProfile) => {
     if (!currentUser?.id) {
-      Alert.alert('Error', 'Please log in to unfollow users');
+      showPopup('warning', 'Login Required', 'Please log in to unfollow users.');
       return;
     }
 
@@ -269,11 +272,11 @@ const FeaturedSellers = () => {
         // Remove from following IDs
         setFollowingIds(prev => prev.filter(id => id !== user.id));
       } else {
-        Alert.alert('Error', result.error || 'Failed to unfollow user');
+        showPopup('error', 'Unfollow Failed', result.error || 'Failed to unfollow user.');
       }
     } catch (error) {
       console.error('Error unfollowing user:', error);
-      Alert.alert('Error', 'Failed to unfollow user');
+      showPopup('error', 'Unfollow Failed', 'Could not unfollow this user. Please try again.');
     }
   };
 
@@ -290,6 +293,9 @@ const FeaturedSellers = () => {
 
   return (
     <View className="bg-background px-4">
+      <Modal visible={popup.visible} transparent animationType="none" statusBarTranslucent>
+        <PopupMessage visible={popup.visible} type={popup.type} title={popup.title} message={popup.message} onHide={() => setPopup(p => ({...p, visible: false}))} />
+      </Modal>
       {/* Header */}
       <View className="mb-4 pt-4">
         <Text className="text-sm font-regular text-gray-500">

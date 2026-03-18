@@ -7,7 +7,6 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Modal,
   Platform,
   Pressable,
@@ -81,10 +80,7 @@ export default function BookMongooseModal({
   const handleSubmit = async () => {
     // Validation
     if (!bookingDate || !bookingTime) {
-      Alert.alert(
-        "Missing Information",
-        "Please fill in the date and time for your booking.",
-      );
+      showPopup("warning", "Missing Details", "Please fill in the date and time for your booking.");
       return;
     }
 

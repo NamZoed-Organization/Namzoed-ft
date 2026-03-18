@@ -335,6 +335,7 @@ export default function SignupTab2() {
         type={popup.type}
         title={popup.title}
         message={popup.message}
+        onHide={() => setPopup(p => ({ ...p, visible: false }))}
       />
     </KeyboardAvoidingView>
   );

@@ -1,4 +1,5 @@
 // app/(users)/chat/[id].tsx
+import PopupMessage from "@/components/ui/PopupMessage";
 import MongooseInitiatorModal from "@/components/MongooseInitiatorModal";
 import MongooseInviteCard, {
     type MongooseInviteData,
@@ -37,7 +38,6 @@ import React, {
 } from "react";
 import {
     ActivityIndicator,
-    Alert,
     Animated,
     Easing,
     Image,
@@ -597,6 +597,8 @@ export default function ChatScreen() {
   const [showMongooseTracker, setShowMongooseTracker] = useState(false);
   const [mongooseTrackerBooking, setMongooseTrackerBooking] =
     useState<any>(null);
+  const [popup, setPopup] = useState<{visible: boolean; type: 'success'|'warning'|'error'|'white'; title: string; message: string}>({visible: false, type: 'white', title: '', message: ''});
+  const showPopup = (type: 'success'|'warning'|'error'|'white', title: string, message: string) => setPopup({visible: true, type, title, message});
   const [isSharingLocation, setIsSharingLocation] = useState(false);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [locationPickerInitial, setLocationPickerInitial] = useState<{
@@ -1833,7 +1835,7 @@ export default function ChatScreen() {
       if (error) {
         console.error("❌ Location send error:", error.message);
         setLocalMessages((prev) => prev.filter((m) => m.id !== optimisticId));
-        Alert.alert("Error", "Failed to share location.");
+        showPopup('error', 'Share Failed', 'Failed to share location. Please try again.');
       } else {
         setTimeout(() => {
           setMessages((prev) => {
@@ -1845,7 +1847,7 @@ export default function ChatScreen() {
       }
     } catch (err) {
       console.error("❌ Location error:", err);
-      Alert.alert("Error", "Failed to share location.");
+      showPopup('error', 'Share Failed', 'Failed to share location. Please try again.');
     } finally {
       setIsSharingLocation(false);
     }
@@ -2786,6 +2788,7 @@ export default function ChatScreen() {
 
   return (
     <View className="flex-1 bg-white">
+      <PopupMessage visible={popup.visible} type={popup.type} title={popup.title} message={popup.message} onHide={() => setPopup(p => ({...p, visible: false}))} />
       {/* Status Bar Space */}
       <View style={{ height: insets.top, backgroundColor: 'white', zIndex: 10 }} />
 

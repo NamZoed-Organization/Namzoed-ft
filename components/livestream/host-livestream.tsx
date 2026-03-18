@@ -7,10 +7,11 @@ import {
 } from "@stream-io/video-react-native-sdk";
 import { Camera } from "expo-camera";
 import React, { useCallback, useEffect, useState } from "react";
+import PopupMessage from "@/components/ui/PopupMessage";
 import {
     ActivityIndicator,
-    Alert,
     Linking,
+    Modal,
     Pressable,
     Text,
     View,
@@ -35,6 +36,8 @@ function HostLivestreamUI({ callId }: { callId: string }) {
 
   const [live, setLive] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [popup, setPopup] = useState<{visible: boolean; title: string; message: string}>({visible: false, title: '', message: ''});
+  const showPopup = (title: string, message: string) => setPopup({visible: true, title, message});
 
   const ensureCameraPermission = useCallback(async () => {
     const { status, canAskAgain } = await Camera.requestCameraPermissionsAsync();
@@ -42,26 +45,11 @@ function HostLivestreamUI({ callId }: { callId: string }) {
 
     // If permanently denied, skip the OS prompt and go straight to a settings alert
     if (!canAskAgain) {
-      Alert.alert(
-        "Camera Access Blocked",
-        "Camera access has been denied. Go to Settings to enable it for this app.",
-        [
-          { text: "Not Now", style: "cancel" },
-          { text: "Open Settings", onPress: () => Linking.openSettings() },
-        ]
-      );
+      showPopup("Camera Blocked", "Camera access has been denied. Please enable it in your device settings.");
       return false;
     }
 
-    // OS denied even after we just asked — offer settings route
-    Alert.alert(
-      "Camera Permission Needed",
-      "Camera access is required to go live. Enable it in Settings.",
-      [
-        { text: "Not Now", style: "cancel" },
-        { text: "Open Settings", onPress: () => Linking.openSettings() },
-      ]
-    );
+    showPopup("Camera Access Needed", "Please allow camera access to start the livestream.");
     return false;
   }, []);
 
@@ -162,6 +150,9 @@ function HostLivestreamUI({ callId }: { callId: string }) {
           <ActivityIndicator color="white" />
         </View>
       )}
+      <Modal visible={popup.visible} transparent animationType="none" statusBarTranslucent>
+        <PopupMessage visible={popup.visible} type="warning" title={popup.title} message={popup.message} onHide={() => setPopup(p => ({...p, visible: false}))} />
+      </Modal>
     </View>
   );
 }

@@ -17,6 +17,7 @@ import React, {
     useRef,
     useState,
 } from "react";
+import PopupMessage from "@/components/ui/PopupMessage";
 import {
     ActivityIndicator,
     Alert,
@@ -215,6 +216,8 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose, onMinimize, initialStr
   const [coHostRequests, setCoHostRequests] = useState<CoHostRequest[]>([]);
   const [hasRequestedCoHost, setHasRequestedCoHost] = useState(false);
   const [liveViewerCount, setLiveViewerCount] = useState(0);
+  const [popup, setPopup] = useState<{visible: boolean; title: string; message: string}>({visible: false, title: '', message: ''});
+  const showPopup = (title: string, message: string) => setPopup({visible: true, title, message});
 
   const hostingRecordRef = useRef<Livestream | null>(null);
   const viewerSessionRef = useRef<{ streamId: string } | null>(null);
@@ -425,13 +428,16 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose, onMinimize, initialStr
       setCreatingStream(true);
       setErrorMessage(null);
       setInitializingCall(true);
+      console.log('[Live] handleStartLivestream: starting');
 
       const { identity, client } = await ensureStreamClient();
+      console.log('[Live] ensureStreamClient done, identity:', identity?.id, 'client:', !!client);
 
       const callIdentifier = `namzoed-${sanitizeIdentifier(
         identity.id
       )}-${Date.now()}`;
 
+      console.log('[Live] creating host call, id:', callIdentifier);
       const call = await getStreamService.createHostCall(
         identity,
         callIdentifier,
@@ -439,6 +445,7 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose, onMinimize, initialStr
           title: liveTitle.trim().length > 0 ? liveTitle.trim() : liveTitle,
         }
       );
+      console.log('[Live] host call created, cid:', call?.cid);
 
       const record = await createLivestreamRecord({
         user_id: supabaseUserId,
@@ -462,6 +469,7 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose, onMinimize, initialStr
         },
       });
 
+      console.log('[Live] record created, id:', record?.id);
       setLivestreams((prev) => [record, ...prev]);
       setSelectedStream(record);
       setHostingRecord(record);
@@ -470,8 +478,9 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose, onMinimize, initialStr
       setStreamClient(client);
       setCallRole("host");
       setShowCreateModal(false);
+      console.log('[Live] state set — activeCall:', !!call, 'streamClient:', !!client, 'callRole: host');
     } catch (error) {
-      console.error("Failed to start livestream", error);
+      console.error('[Live] handleStartLivestream FAILED:', error);
       const message =
         error instanceof Error ? error.message : "Unable to start livestream.";
       setErrorMessage(message);
@@ -681,7 +690,9 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose, onMinimize, initialStr
   }, []);
 
   const renderActiveCallScreen = () => {
+    console.log('[Live] renderActiveCallScreen — selectedStream:', !!selectedStream, 'streamClient:', !!streamClient, 'activeCall:', !!activeCall, 'callRole:', callRole);
     if (!selectedStream || !streamClient || !activeCall || !callRole) {
+      console.warn('[Live] renderActiveCallScreen: missing state, showing spinner. selectedStream:', !!selectedStream, 'streamClient:', !!streamClient, 'activeCall:', !!activeCall, 'callRole:', callRole);
       return (
         <View
           style={{
@@ -1649,25 +1660,11 @@ const HostCallContainer: React.FC<HostCallContainerProps> = ({
     if (status === "granted") return true;
 
     if (!canAskAgain) {
-      Alert.alert(
-        "Camera Access Blocked",
-        "Camera access has been denied. Go to Settings to enable it for this app.",
-        [
-          { text: "Not Now", style: "cancel" },
-          { text: "Open Settings", onPress: () => Linking.openSettings() },
-        ]
-      );
+      showPopup("Camera Blocked", "Camera access has been denied. Please enable it in your device settings.");
       return false;
     }
 
-    Alert.alert(
-      "Camera Permission Needed",
-      "Camera access is required to use live video. Enable it in Settings.",
-      [
-        { text: "Not Now", style: "cancel" },
-        { text: "Open Settings", onPress: () => Linking.openSettings() },
-      ]
-    );
+    showPopup("Camera Access Needed", "Please allow camera access to start the livestream.");
     return false;
   }, []);
 
@@ -1700,19 +1697,26 @@ const HostCallContainer: React.FC<HostCallContainerProps> = ({
   // --- STREAM LOGIC ---
   useEffect(() => {
     if (!call) return;
+    console.log('[HostStream] call received, cid:', call.cid, 'callingState:', call.state.callingState);
     const joinCall = async () => {
       try {
+        console.log('[HostStream] joinCall — callingState:', call.state.callingState);
         if (call.state.callingState === "idle") {
+          console.log('[HostStream] calling call.join({ create: true })');
           await call.join({ create: true });
+          console.log('[HostStream] call.join resolved, callingState:', call.state.callingState);
+        } else {
+          console.log('[HostStream] skipping join — not idle:', call.state.callingState);
         }
       } catch (err) {
-        console.error("Host join failed", err);
+        console.error('[HostStream] Host join failed:', err);
       }
     };
     joinCall();
 
     const sub = call.state.backstage$.subscribe((bg) => {
       const live = !bg;
+      console.log('[HostStream] backstage$:', bg, '→ isLive:', live);
       setIsLive(live);
       if (live) {
         hadLiveHostRef.current = true;
@@ -3631,6 +3635,9 @@ const ViewerCallContainer: React.FC<ViewerCallContainerProps> = ({
           </View>
         </TouchableWithoutFeedback>
       </View>
+      <Modal visible={popup.visible} transparent animationType="none" statusBarTranslucent>
+        <PopupMessage visible={popup.visible} type="warning" title={popup.title} message={popup.message} onHide={() => setPopup(p => ({...p, visible: false}))} />
+      </Modal>
     </GestureDetector>
   );
 };

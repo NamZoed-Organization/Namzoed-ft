@@ -10,6 +10,7 @@
  * Uploading: small activity indicator.
  */
 
+import PopupMessage from "@/components/ui/PopupMessage";
 import { supabase } from "@/lib/supabase";
 import { sendChatPushNotification } from "@/services/chatPushService";
 import { triggerSendHaptic } from "@/utils/chatSounds";
@@ -26,8 +27,8 @@ import * as Haptics from "expo-haptics";
 import React, { useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
-    Alert,
     Animated,
+    Modal,
     PanResponder,
     StyleProp,
     Text,
@@ -86,6 +87,8 @@ export default function ChatAudioRecorder({
   const [isUploading, setIsUploading] = useState(false);
   const [cancelZone,  setCancelZone]  = useState(false);
   const [displaySecs, setDisplaySecs] = useState(0);
+  const [popup, setPopup] = useState<{visible: boolean; type: 'warning'|'error'; title: string; message: string}>({visible: false, type: 'warning', title: '', message: ''});
+  const showPopup = (type: 'warning'|'error', title: string, message: string) => setPopup({visible: true, type, title, message});
 
   // ── Refs (always-current values for PanResponder / interval closures) ─────────
   const isMountedRef   = useRef(true);
@@ -229,7 +232,7 @@ export default function ChatAudioRecorder({
     if (isRecordingRef.current) return;
     const perm = await requestRecordingPermissionsAsync();
     if (perm.status !== "granted") {
-      Alert.alert("Microphone Access", "Please allow microphone access to send voice messages.");
+      showPopup("warning", "Microphone Needed", "Please allow microphone access to send voice messages.");
       return;
     }
     try {
@@ -247,7 +250,7 @@ export default function ChatAudioRecorder({
       }, 1000);
     } catch (err) {
       console.error("startRecording failed:", err);
-      Alert.alert("Error", "Could not start recording. Please try again.");
+      showPopup("error", "Recording Failed", "Could not start recording. Please try again.");
     }
   };
 
@@ -569,16 +572,21 @@ export default function ChatAudioRecorder({
 
   // IDLE — just the mic button
   return (
-    <View
-      {...panResponder.panHandlers}
-      style={[
-        hidden
-          ? { width: 0, height: 0, overflow: 'hidden' }
-          : { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-        style as any,
-      ]}
-    >
-      {!hidden && <Ionicons name="mic-outline" size={22} color="#6b7280" />}
-    </View>
+    <>
+      <View
+        {...panResponder.panHandlers}
+        style={[
+          hidden
+            ? { width: 0, height: 0, overflow: 'hidden' }
+            : { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+          style as any,
+        ]}
+      >
+        {!hidden && <Ionicons name="mic-outline" size={22} color="#6b7280" />}
+      </View>
+      <Modal visible={popup.visible} transparent animationType="none" statusBarTranslucent>
+        <PopupMessage visible={popup.visible} type={popup.type} title={popup.title} message={popup.message} onHide={() => setPopup(p => ({...p, visible: false}))} />
+      </Modal>
+    </>
   );
 }

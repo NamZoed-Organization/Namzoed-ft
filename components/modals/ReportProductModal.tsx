@@ -1,10 +1,10 @@
 import { reportProduct } from '@/lib/reportService';
+import PopupMessage from '@/components/ui/PopupMessage';
 import * as Haptics from 'expo-haptics';
 import { AlertCircle, X } from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
     ActivityIndicator,
-    Alert,
     KeyboardAvoidingView,
     Modal,
     ScrollView,
@@ -45,15 +45,17 @@ export default function ReportProductModal({
   const [selectedReason, setSelectedReason] = useState<string>('');
   const [details, setDetails] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [popup, setPopup] = useState<{ visible: boolean; type: 'warning' | 'error'; title: string; message: string }>({ visible: false, type: 'warning', title: '', message: '' });
+  const [showSuccess, setShowSuccess] = useState(false);
 
   const handleSubmit = async () => {
     if (!selectedReason) {
-      Alert.alert('Select Reason', 'Please select a reason for reporting');
+      setPopup({ visible: true, type: 'warning', title: 'Select Reason', message: 'Please select a reason for reporting' });
       return;
     }
 
     if (!details.trim()) {
-      Alert.alert('Provide Details', 'Please provide additional details');
+      setPopup({ visible: true, type: 'warning', title: 'Provide Details', message: 'Please provide additional details' });
       return;
     }
 
@@ -77,22 +79,15 @@ export default function ReportProductModal({
       setSelectedReason('');
       setDetails('');
 
-      // Show success message
-      Alert.alert(
-        'Report Submitted',
-        "Product reported successfully. We'll review it soon.",
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              onClose();
-              onReportSuccess?.();
-            }
-          }
-        ]
-      );
+      // Show success popup
+      setShowSuccess(true);
+      setTimeout(() => {
+        setShowSuccess(false);
+        onClose();
+        onReportSuccess?.();
+      }, 2500);
     } else {
-      Alert.alert('Error', result.error || 'Failed to submit report');
+      setPopup({ visible: true, type: 'error', title: 'Error', message: result.error || 'Failed to submit report' });
     }
   };
 
@@ -108,6 +103,7 @@ export default function ReportProductModal({
   };
 
   return (
+    <>
     <Modal
       visible={visible}
       transparent
@@ -216,7 +212,30 @@ export default function ReportProductModal({
             </View>
           </KeyboardAvoidingView>
         </Animated.View>
+        <PopupMessage
+          visible={popup.visible}
+          type={popup.type}
+          title={popup.title}
+          message={popup.message}
+          onHide={() => setPopup(p => ({ ...p, visible: false }))}
+        />
       </View>
     </Modal>
+
+    {/* Success Popup */}
+    <Modal
+      visible={showSuccess}
+      transparent={true}
+      animationType="none"
+      statusBarTranslucent={true}
+    >
+      <PopupMessage
+        visible={showSuccess}
+        type="white"
+        title="Report Submitted"
+        message="Product reported successfully. We'll review it soon."
+      />
+    </Modal>
+    </>
   );
 }

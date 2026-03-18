@@ -1,9 +1,9 @@
+import PopupMessage from "@/components/ui/PopupMessage";
 import { supabase } from "@/lib/supabase";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import React, { useEffect, useRef, useState } from "react";
 import {
-    Alert,
     Modal,
     Pressable,
     Switch,
@@ -30,6 +30,8 @@ export default function LocationTrackingControl({
   const [lastUpdateTime, setLastUpdateTime] = useState<string>("");
   const [showModal, setShowModal] = useState(false);
   const locationSubscription = useRef<Location.LocationSubscription | null>(null);
+  const [popup, setPopup] = useState<{visible: boolean; type: 'success'|'warning'|'error'|'white'; title: string; message: string}>({visible: false, type: 'white', title: '', message: ''});
+  const showPopup = (type: 'success'|'warning'|'error'|'white', title: string, message: string) => setPopup({visible: true, type, title, message});
 
   useEffect(() => {
     // Check if tracking is already active for this booking
@@ -78,10 +80,7 @@ export default function LocationTrackingControl({
       const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync();
       
       if (foregroundStatus !== 'granted') {
-        Alert.alert(
-          'Permission Required',
-          'Location permission is needed to track your location for deliveries.'
-        );
+        showPopup('warning', 'Permission Required', 'Location permission is needed to track your location for deliveries.');
         return;
       }
 
@@ -129,13 +128,10 @@ export default function LocationTrackingControl({
       locationSubscription.current = subscription;
       setIsTracking(true);
       
-      Alert.alert(
-        'Tracking Started',
-        `Location tracking is now active for ${bookingUserName}'s delivery. The customer can see your location in real-time.`
-      );
+      showPopup('white', 'Tracking On', `Your location is now being shared for ${bookingUserName}'s delivery.`);
     } catch (error) {
       console.error('❌ Error starting location tracking:', error);
-      Alert.alert('Error', `Failed to start location tracking: ${error}`);
+      showPopup('error', 'Tracking Failed', `Could not start location tracking: ${error}`);
     }
   };
 
@@ -158,7 +154,7 @@ export default function LocationTrackingControl({
             }
             setIsTracking(false);
             setCurrentLocation(null);
-            Alert.alert('Tracking Stopped', 'Location sharing has been disabled.');
+            showPopup('white', 'Tracking Off', 'Location sharing has been disabled.');
           },
         },
       ]
@@ -204,10 +200,7 @@ export default function LocationTrackingControl({
 
         if (insertError) {
           console.error('❌ Error inserting location:', insertError);
-          Alert.alert(
-            'Database Error',
-            `Failed to save location: ${insertError.message}\n\nPlease ensure the mongoose_locations table exists and RLS policies are configured.`
-          );
+          showPopup('error', 'Sync Error', `Could not save your location: ${insertError.message}`);
         } else {
         }
       }
@@ -351,6 +344,9 @@ export default function LocationTrackingControl({
             </Pressable>
           </View>
         </View>
+      </Modal>
+      <Modal visible={popup.visible} transparent animationType="none" statusBarTranslucent>
+        <PopupMessage visible={popup.visible} type={popup.type} title={popup.title} message={popup.message} onHide={() => setPopup(p => ({...p, visible: false}))} />
       </Modal>
     </>
   );

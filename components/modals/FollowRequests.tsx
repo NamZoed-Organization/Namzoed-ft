@@ -4,11 +4,12 @@ import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
 import { useRouter } from 'expo-router';
 import { ArrowDownAZ, ArrowUpAZ, X } from 'lucide-react-native';
+import PopupMessage from '@/components/ui/PopupMessage';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Image,
+  Modal,
   RefreshControl,
   Text,
   TouchableOpacity,
@@ -29,6 +30,8 @@ export default function FollowRequests({ onClose, userId }: FollowRequestsProps)
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
+  const [popup, setPopup] = useState<{visible: boolean; title: string; message: string}>({visible: false, title: '', message: ''});
+  const showPopup = (title: string, message: string) => setPopup({visible: true, title, message});
 
   useEffect(() => {
     loadRequests();
@@ -61,11 +64,11 @@ export default function FollowRequests({ onClose, userId }: FollowRequestsProps)
         );
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } else {
-        Alert.alert('Error', result.error || 'Failed to accept request');
+        showPopup('Request Failed', result.error || 'Could not accept this follow request. Try again.');
       }
     } catch (error) {
       console.error('Error accepting request:', error);
-      Alert.alert('Error', 'Failed to accept request');
+      showPopup('Request Failed', 'Could not accept this follow request. Try again.');
     }
   };
 
@@ -244,6 +247,9 @@ export default function FollowRequests({ onClose, userId }: FollowRequestsProps)
           ListEmptyComponent={renderEmptyState}
         />
       )}
+      <Modal visible={popup.visible} transparent animationType="none" statusBarTranslucent>
+        <PopupMessage visible={popup.visible} type="error" title={popup.title} message={popup.message} onHide={() => setPopup(p => ({...p, visible: false}))} />
+      </Modal>
     </View>
   );
 }

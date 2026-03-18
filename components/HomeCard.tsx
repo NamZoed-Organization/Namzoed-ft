@@ -55,7 +55,7 @@ const HomeCard = React.memo(function HomeCard({
             source={{ uri: imageUrl }}
             style={styles.image}
             contentFit="cover"
-            transition={0}
+            transition={150}
             cachePolicy="memory-disk"
           />
 
@@ -85,7 +85,7 @@ const HomeCard = React.memo(function HomeCard({
                   source={{ uri: profileImage }}
                   style={styles.profileImage}
                   contentFit="cover"
-                  transition={0}
+                  transition={100}
                   cachePolicy="memory-disk"
                 />
               ) : (

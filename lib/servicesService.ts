@@ -1,5 +1,6 @@
 // lib/servicesService.ts
 import { supabase } from './supabase';
+import { uploadFileToSupabase } from './uploadFile';
 
 export interface ProviderService {
   id: string;
@@ -82,22 +83,7 @@ export const uploadServiceImage = async (imageUri: string, providerId: string): 
     const fileName = `${providerId}_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
     const filePath = `services/${fileName}`;
 
-    const response = await fetch(imageUri);
-    const arrayBuffer = await response.arrayBuffer();
-    const fileData = new Uint8Array(arrayBuffer);
-
-    const { data, error } = await supabase.storage
-      .from('service-images')
-      .upload(filePath, fileData, {
-        contentType: `image/${fileExt}`,
-        cacheControl: '3600',
-        upsert: false
-      });
-
-    if (error) {
-      console.error('Upload error:', error);
-      throw error;
-    }
+    await uploadFileToSupabase(imageUri, 'service-images', filePath, `image/${fileExt}`);
 
     const { data: { publicUrl } } = supabase.storage
       .from('service-images')
@@ -474,22 +460,7 @@ export const uploadProviderAvatar = async (imageUri: string, userId: string): Pr
     const fileName = `provider_${userId}_${Date.now()}.${fileExt}`;
     const filePath = `avatars/${fileName}`;
 
-    const response = await fetch(imageUri);
-    const arrayBuffer = await response.arrayBuffer();
-    const fileData = new Uint8Array(arrayBuffer);
-
-    const { data, error } = await supabase.storage
-      .from('service-profile')
-      .upload(filePath, fileData, {
-        contentType: `image/${fileExt}`,
-        cacheControl: '3600',
-        upsert: true
-      });
-
-    if (error) {
-      console.error('Upload error:', error);
-      throw error;
-    }
+    await uploadFileToSupabase(imageUri, 'service-profile', filePath, `image/${fileExt}`, true);
 
     const { data: { publicUrl } } = supabase.storage
       .from('service-profile')
@@ -531,21 +502,7 @@ export const uploadLicenseImage = async (imageUri: string, userId: string): Prom
     const fileName = `license_${userId}_${Date.now()}.${fileExt}`;
     const filePath = `licenses/${fileName}`;
 
-    const response = await fetch(imageUri);
-    const arrayBuffer = await response.arrayBuffer();
-    const fileData = new Uint8Array(arrayBuffer);
-
-    const { error } = await supabase.storage
-      .from('service-license')
-      .upload(filePath, fileData, {
-        contentType: `image/${fileExt}`,
-        cacheControl: '3600',
-        upsert: true
-      });
-
-    if (error) {
-      throw error;
-    }
+    await uploadFileToSupabase(imageUri, 'service-license', filePath, `image/${fileExt}`, true);
 
     const { data: { publicUrl } } = supabase.storage
       .from('service-license')

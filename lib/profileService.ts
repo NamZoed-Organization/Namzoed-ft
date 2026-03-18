@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { uploadFileToSupabase } from './uploadFile';
 
 export interface Profile {
   id: string;
@@ -54,26 +55,8 @@ export const uploadAvatar = async (imageUri: string, userId: string): Promise<st
     const fileExt = imageUri.split('.').pop()?.toLowerCase() || 'jpg';
     const fileName = `${userId}/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
 
-    // For React Native/Expo, create a blob/buffer from the URI
-    const response = await fetch(imageUri);
-    const arrayBuffer = await response.arrayBuffer();
-    const fileData = new Uint8Array(arrayBuffer);
+    await uploadFileToSupabase(imageUri, 'profile', fileName, `image/${fileExt}`, true);
 
-    // Upload to Supabase storage
-    const { data, error } = await supabase.storage
-      .from('profile') // Matches the bucket name in your SQL
-      .upload(fileName, fileData, {
-        contentType: `image/${fileExt}`,
-        cacheControl: '3600',
-        upsert: true // Overwrite if same name, though random name prevents this mostly
-      });
-
-    if (error) {
-      console.error('Error uploading avatar:', error);
-      throw error;
-    }
-
-    // Get public URL
     const { data: { publicUrl } } = supabase.storage
       .from('profile')
       .getPublicUrl(fileName);

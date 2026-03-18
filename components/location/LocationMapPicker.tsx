@@ -1,8 +1,8 @@
+import PopupMessage from "@/components/ui/PopupMessage";
 import { Ionicons } from "@expo/vector-icons";
 import React, { useState } from "react";
 import {
     ActivityIndicator,
-    Alert,
     Modal,
     Pressable,
     Text,
@@ -49,6 +49,8 @@ export default function LocationMapPicker({
   const [mapRegion, setMapRegion] = useState(defaultRegion);
   const [loadingAddress, setLoadingAddress] = useState(false);
   const [mapType, setMapType] = useState<'standard' | 'satellite' | 'hybrid'>('standard');
+  const [popup, setPopup] = useState<{visible: boolean; type: 'success'|'warning'|'white'; title: string; message: string}>({visible: false, type: 'white', title: '', message: ''});
+  const showPopup = (type: 'success'|'warning'|'white', title: string, message: string) => setPopup({visible: true, type, title, message});
 
   // Get address from coordinates using reverse geocoding
   const getAddressFromCoordinates = async (
@@ -93,11 +95,7 @@ export default function LocationMapPicker({
         longitude,
         address,
       });
-      Alert.alert(
-        "Pickup Location Set",
-        "Green pin placed! Now tap to set the delivery location (blue pin).",
-        [{ text: "OK" }]
-      );
+      showPopup("white", "Pickup Set", "Green pin placed! Now tap to set the delivery location.");
     }
     // If pickup is set but delivery isn't, set delivery (blue pin)
     else if (!deliveryLocation) {
@@ -106,29 +104,17 @@ export default function LocationMapPicker({
         longitude,
         address,
       });
-      Alert.alert(
-        "Delivery Location Set",
-        "Blue pin placed! Both locations are now set. You can tap 'Confirm Locations' or reset to change them.",
-        [{ text: "OK" }]
-      );
+      showPopup("white", "Delivery Set", "Blue pin placed! Both locations are now set.");
     }
     // If both are set, user needs to reset first
     else {
-      Alert.alert(
-        "Both Locations Set",
-        "Please use 'Reset Locations' button to select new locations.",
-        [{ text: "OK" }]
-      );
+      showPopup("white", "Locations Ready", "Use 'Reset Locations' to select new locations.");
     }
   };
 
   const handleConfirm = () => {
     if (!pickupLocation || !deliveryLocation) {
-      Alert.alert(
-        "Missing Locations",
-        "Please mark both pickup (green pin) and delivery (blue pin) locations on the map.",
-        [{ text: "OK" }]
-      );
+      showPopup("warning", "Locations Missing", "Please set both pickup and delivery locations on the map.");
       return;
     }
 
@@ -380,6 +366,9 @@ export default function LocationMapPicker({
             </View>
           </View>
         </View>
+        <Modal visible={popup.visible} transparent animationType="none" statusBarTranslucent>
+          <PopupMessage visible={popup.visible} type={popup.type} title={popup.title} message={popup.message} onHide={() => setPopup(p => ({...p, visible: false}))} />
+        </Modal>
       </View>
     </Modal>
   );

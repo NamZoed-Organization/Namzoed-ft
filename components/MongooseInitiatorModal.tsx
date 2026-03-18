@@ -12,11 +12,11 @@ import SingleLocationPicker, {
 } from "@/components/location/SingleLocationPicker";
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import PopupMessage from "@/components/ui/PopupMessage";
 import * as Location from "expo-location";
 import React, { useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
-    Alert,
     Modal,
     Platform,
     Pressable,
@@ -59,6 +59,8 @@ export default function MongooseInitiatorModal({
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [showMapPicker, setShowMapPicker] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [popup, setPopup] = useState<{visible: boolean; type: 'warning'|'error'; title: string; message: string}>({visible: false, type: 'warning', title: '', message: ''});
+  const showPopup = (type: 'warning'|'error', title: string, message: string) => setPopup({visible: true, type, title, message});
 
   const fetchedRef = useRef(false);
 
@@ -92,10 +94,7 @@ export default function MongooseInitiatorModal({
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert(
-          "Permission denied",
-          "Location permission is needed to auto-fill your location. You can pick manually on the map.",
-        );
+        showPopup("warning", "Permission Denied", "Location permission is needed to auto-fill your location. You can pick manually on the map.");
         setLocationLoading(false);
         return;
       }
@@ -121,10 +120,7 @@ export default function MongooseInitiatorModal({
         });
       }
     } catch {
-      Alert.alert(
-        "Location error",
-        "Could not get your current location. Please pick it manually.",
-      );
+      showPopup("error", "Location Error", "Could not get your current location. Please pick it manually.");
     } finally {
       setLocationLoading(false);
     }
@@ -851,6 +847,9 @@ export default function MongooseInitiatorModal({
           role === "seller" ? "Set Pickup Location" : "Set Delivery Location"
         }
       />
+      <Modal visible={popup.visible} transparent animationType="none" statusBarTranslucent>
+        <PopupMessage visible={popup.visible} type={popup.type} title={popup.title} message={popup.message} onHide={() => setPopup(p => ({...p, visible: false}))} />
+      </Modal>
     </>
   );
 }
