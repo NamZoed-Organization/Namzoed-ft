@@ -91,13 +91,14 @@ export default function ChatAudioRecorder({
   const showPopup = (type: 'warning'|'error', title: string, message: string) => setPopup({visible: true, type, title, message});
 
   // ── Refs (always-current values for PanResponder / interval closures) ─────────
-  const isMountedRef   = useRef(true);
-  const isRecordingRef = useRef(false);
-  const isLockedRef    = useRef(false);
-  const cancelZoneRef  = useRef(false);
-  const secondsRef     = useRef(0);
-  const amplitudeRef   = useRef(0);
-  const timerRef       = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isMountedRef    = useRef(true);
+  const isRecordingRef  = useRef(false);
+  const isLockedRef     = useRef(false);
+  const cancelZoneRef   = useRef(false);
+  const amplitudeRef    = useRef(0);
+  const timerRef        = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pendingLockRef  = useRef(false); // tap fired before startRecording finished
+  const isSendingRef    = useRef(false); // prevent double-send
 
   // ── Audio recorder ────────────────────────────────────────────────────────────
   const recorder      = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
@@ -180,35 +181,18 @@ export default function ChatAudioRecorder({
     }).start();
   }, [isRecording]);
 
-  // ── Lock badge tooltip ────────────────────────────────────────────────────────
-  useEffect(() => {
-    Animated.spring(lockBadgeAnim, {
-      toValue: isRecording && !isLocked ? 1 : 0,
-      useNativeDriver: true, speed: 22, bounciness: 10,
-    }).start();
-  }, [isRecording, isLocked]);
-  // ── Slide-to-cancel bounce + lock-hint bounce ─────────────────────────────
+  // ── Slide-to-cancel bounce ────────────────────────────────────────────────────
   useEffect(() => {
     if (isRecording && !isLocked) {
-      // Chevron slides left in a looping bounce to hint swipe direction
       Animated.loop(
         Animated.sequence([
           Animated.timing(cancelSlideAnim, { toValue: -7, duration: 500, useNativeDriver: true }),
           Animated.timing(cancelSlideAnim, { toValue:  0, duration: 500, useNativeDriver: true }),
         ])
       ).start();
-      // Lock icon bounces upward to hint slide-up-to-lock
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(lockSlideAnim, { toValue: -6, duration: 480, useNativeDriver: true }),
-          Animated.timing(lockSlideAnim, { toValue:  0, duration: 480, useNativeDriver: true }),
-        ])
-      ).start();
     } else {
       cancelSlideAnim.stopAnimation();
       Animated.timing(cancelSlideAnim, { toValue: 0, duration: 100, useNativeDriver: true }).start();
-      lockSlideAnim.stopAnimation();
-      Animated.timing(lockSlideAnim,   { toValue: 0, duration: 100, useNativeDriver: true }).start();
     }
   }, [isRecording, isLocked]);
   // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -239,25 +223,35 @@ export default function ChatAudioRecorder({
       await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
       await recorder.prepareToRecordAsync();
       recorder.record();
-      secondsRef.current = 0;
-      if (isMountedRef.current) { setDisplaySecs(0); _setRec(true); }
+      if (isMountedRef.current) {
+        setDisplaySecs(0);
+        _setRec(true);
+      }
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      // Poll recorder.currentTime every 500ms — more reliable than useAudioRecorderState on Android
       timerRef.current = setInterval(() => {
         if (!isMountedRef.current) return;
-        secondsRef.current += 1;
-        setDisplaySecs(secondsRef.current);
-        if (secondsRef.current >= 300) void stopAndSend();
-      }, 1000);
+        const secs = Math.floor(recorder.currentTime);
+        setDisplaySecs(secs);
+        if (secs >= 300) void stopAndSend();
+      }, 500);
+      // If user tapped (quick release) before we finished starting, lock now
+      if (pendingLockRef.current) {
+        pendingLockRef.current = false;
+        lockRecording();
+      }
     } catch (err) {
-      console.error("startRecording failed:", err);
+      pendingLockRef.current = false;
       showPopup("error", "Recording Failed", "Could not start recording. Please try again.");
     }
   };
 
   const stopAndSend = async () => {
-    if (!isRecordingRef.current) return;
+    if (isSendingRef.current) { return; }
+    if (!isRecordingRef.current && !recorder.isRecording) { return; }
+    isSendingRef.current = true;
     _clearTimer();
-    const dur = Math.max(1, secondsRef.current);
+    const dur = Math.max(1, Math.round(recorder.currentTime));
     try {
       await recorder.stop();
       const uri = recorder.uri;
@@ -266,17 +260,20 @@ export default function ChatAudioRecorder({
         _setRec(false);
         setIsLocked(false);     isLockedRef.current   = false;
         setCancelZone(false);   cancelZoneRef.current = false;
-        setDisplaySecs(0);      secondsRef.current    = 0;
+        setDisplaySecs(0);
       }
       if (uri) { void triggerSendHaptic(); await uploadAudio(uri, dur); }
-    } catch (err) {
-      console.error("stopAndSend failed:", err);
-      if (isMountedRef.current) { _setRec(false); setIsLocked(false); isLockedRef.current = false; }
+    } catch (_) {
+      if (isMountedRef.current) { _setRec(false); setIsLocked(false); isLockedRef.current = false; setDisplaySecs(0); }
+    } finally {
+      isSendingRef.current = false;
     }
   };
 
   const cancelRecording = async () => {
     _clearTimer();
+    pendingLockRef.current = false;
+    isSendingRef.current = false;
     try {
       if (_isActive()) await recorder.stop();
       await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
@@ -285,13 +282,20 @@ export default function ChatAudioRecorder({
       _setRec(false);
       setIsLocked(false);     isLockedRef.current   = false;
       setCancelZone(false);   cancelZoneRef.current = false;
-      setDisplaySecs(0);      secondsRef.current    = 0;
+      setDisplaySecs(0);
     }
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   };
 
   const lockRecording = () => {
     if (isLockedRef.current) return;
+    if (!isRecordingRef.current) {
+      // startRecording still in progress — defer lock until it finishes
+      pendingLockRef.current = true;
+      isLockedRef.current = true;
+      setIsLocked(true);
+      return;
+    }
     isLockedRef.current = true;
     setIsLocked(true);
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -353,8 +357,7 @@ export default function ChatAudioRecorder({
         messageType: "audio",
         messagePreview: "Voice message",
       });
-    } catch (err) {
-      console.error("uploadAudio failed:", err);
+    } catch (_) {
       onUploadError(optId);
     } finally {
       if (isMountedRef.current) setIsUploading(false);
@@ -370,6 +373,8 @@ export default function ChatAudioRecorder({
     PanResponder.create({
       onStartShouldSetPanResponder: () => !isLockedRef.current,
       onMoveShouldSetPanResponder:  () => !isLockedRef.current,
+      // Prevent React Native from terminating the gesture when the View re-renders (IDLE → PRESSING)
+      onPanResponderTerminationRequest: () => false,
 
       onPanResponderGrant: () => {
         touchStartTimeRef.current = Date.now();
@@ -384,7 +389,6 @@ export default function ChatAudioRecorder({
           setCancelZone(entered);
           void Haptics.selectionAsync();
         }
-        if (gs.dy < LOCK_THRESHOLD) lockRecording();
       },
 
       onPanResponderRelease: (_, gs) => {
@@ -413,6 +417,8 @@ export default function ChatAudioRecorder({
   ).current;
 
   // ── Render ────────────────────────────────────────────────────────────────────
+  const accent    = cancelZone ? "#ef4444" : PRIMARY;
+  const hintColor = cancelZone ? "#ef4444" : "#9ca3af";
 
   // UPLOADING
   if (isUploading) {
@@ -423,167 +429,167 @@ export default function ChatAudioRecorder({
     );
   }
 
-  // LOCKED — explicit cancel / send tap buttons
+  // LOCKED — explicit cancel / send tap buttons (no panHandlers needed)
   if (isLocked) {
     return (
-      <Animated.View
-        style={[{
-          flex: 1,
-          flexDirection: "row",
-          alignItems: "center",
-          backgroundColor: "#f0f9ff",
-          borderRadius: 22,
-          paddingHorizontal: 8,
-          paddingVertical: 4,
-          opacity: slideAnim,
-          transform: [{
-            scale: slideAnim.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1] }),
-          }],
-        }, style as any]}
-      >
-        {/* Cancel */}
-        <TouchableOpacity
-          onPress={cancelRecording}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          style={{ width: 32, height: 32, alignItems: "center", justifyContent: "center", marginRight: 4 }}
+      <>
+        <Animated.View
+          style={[{
+            flex: 1,
+            flexDirection: "row",
+            alignItems: "center",
+            backgroundColor: "#f0f9ff",
+            borderRadius: 22,
+            paddingHorizontal: 8,
+            paddingVertical: 4,
+            opacity: slideAnim,
+            transform: [{
+              scale: slideAnim.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1] }),
+            }],
+          }, style as any]}
         >
-          <Ionicons name="close-circle" size={26} color="#ef4444" />
-        </TouchableOpacity>
+          {/* Cancel */}
+          <TouchableOpacity
+            onPress={cancelRecording}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={{ width: 32, height: 32, alignItems: "center", justifyContent: "center", marginRight: 4 }}
+          >
+            <Ionicons name="close-circle" size={26} color="#ef4444" />
+          </TouchableOpacity>
 
-        {/* Waveform */}
-        <View style={{ flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", height: 36, overflow: "hidden" }}>
-          {barAnims.map((a, i) => (
-            <Animated.View
-              key={i}
-              style={{ width: 2.5, marginHorizontal: 0.8, borderRadius: 2, backgroundColor: PRIMARY, height: a }}
-            />
-          ))}
-        </View>
+          {/* Waveform */}
+          <View style={{ flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", height: 36, overflow: "hidden" }}>
+            {barAnims.map((a, i) => (
+              <Animated.View
+                key={i}
+                style={{ width: 2.5, marginHorizontal: 0.8, borderRadius: 2, backgroundColor: PRIMARY, height: a }}
+              />
+            ))}
+          </View>
 
-        {/* Timer */}
-        <View style={{ flexDirection: "row", alignItems: "center", marginHorizontal: 6 }}>
-          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: "#ef4444", marginRight: 4 }} />
-          <Text style={{ color: "#dc2626", fontSize: 13, fontWeight: "600", fontVariant: ["tabular-nums"] }}>
-            {fmt(displaySecs)}
-          </Text>
-        </View>
+          {/* Timer */}
+          <View style={{ flexDirection: "row", alignItems: "center", marginHorizontal: 6 }}>
+            <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: "#ef4444", marginRight: 4 }} />
+            <Text style={{ color: "#dc2626", fontSize: 13, fontWeight: "600", fontVariant: ["tabular-nums"] }}>
+              {fmt(displaySecs)}
+            </Text>
+          </View>
 
-        {/* Send */}
-        <TouchableOpacity
-          onPress={stopAndSend}
-          style={{
-            width: 36, height: 36, borderRadius: 18,
-            backgroundColor: PRIMARY,
-            alignItems: "center", justifyContent: "center",
-            shadowColor: PRIMARY, shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.35, shadowRadius: 4, elevation: 4,
-          }}
-        >
-          <Ionicons name="send" size={16} color="white" />
-        </TouchableOpacity>
-      </Animated.View>
+          {/* Send */}
+          <TouchableOpacity
+            onPress={stopAndSend}
+            style={{
+              width: 36, height: 36, borderRadius: 18,
+              backgroundColor: PRIMARY,
+              alignItems: "center", justifyContent: "center",
+              shadowColor: PRIMARY, shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.35, shadowRadius: 4, elevation: 4,
+            }}
+          >
+            <Ionicons name="send" size={16} color="white" />
+          </TouchableOpacity>
+        </Animated.View>
+        <Modal visible={popup.visible} transparent animationType="none" statusBarTranslucent>
+          <PopupMessage visible={popup.visible} type={popup.type} title={popup.title} message={popup.message} onHide={() => setPopup(p => ({...p, visible: false}))} />
+        </Modal>
+      </>
     );
   }
 
-  // PRESSING — slide-to-cancel row, mic button with PanResponder on the right
-  if (isRecording) {
-    const accent    = cancelZone ? "#ef4444" : PRIMARY;
-    const hintColor = cancelZone ? "#ef4444" : "#9ca3af";
-    return (
+  // IDLE + PRESSING — single unified render so the mic button View never unmounts.
+  // The panHandlers stay on the same View node regardless of recording state,
+  // which keeps the active gesture alive through the IDLE→PRESSING transition.
+  return (
+    <>
       <Animated.View
-        style={[{ flex: 1, flexDirection: "row", alignItems: "center", opacity: slideAnim }, style as any]}
+        style={[
+          { flexDirection: "row", alignItems: "center" },
+          isRecording
+            ? { flex: 1, opacity: slideAnim }
+            : hidden
+              ? { width: 0, height: 0, overflow: "hidden" }
+              : {},
+          style as any,
+        ]}
       >
-        {/* Slide-to-cancel hint — chevron bounces left as a gesture cue */}
-        <Animated.View
-          style={{
-            flexDirection: "row", alignItems: "center", marginLeft: 6, marginRight: 4,
-            transform: [{ translateX: cancelSlideAnim }],
-          }}
-        >
-          <Ionicons name="chevron-back" size={13} color={hintColor} />
-          <Text style={{ fontSize: 12, color: hintColor, marginLeft: 1 }} numberOfLines={1}>
-            {cancelZone ? "Release to cancel" : "Slide to cancel"}
-          </Text>
-        </Animated.View>
-
-        {/* Waveform */}
-        <View style={{ flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", height: 36, overflow: "hidden" }}>
-          {barAnims.map((a, i) => (
-            <Animated.View
-              key={i}
-              style={{ width: 2.5, marginHorizontal: 0.8, borderRadius: 2, backgroundColor: accent, height: a }}
-            />
-          ))}
-        </View>
-
-        {/* Timer */}
-        <Text style={{ fontSize: 13, fontWeight: "600", color: accent, fontVariant: ["tabular-nums"], marginHorizontal: 6 }}>
-          {fmt(displaySecs)}
-        </Text>
-
-        {/* Mic button with panResponder + floating lock badge */}
-        <View style={{ position: "relative" }}>
-          {/* Lock hint — floats above mic, fades in then bounces upward as a gesture cue */}
+        {/* ── PRESSING only: slide-to-cancel hint ── */}
+        {isRecording && (
           <Animated.View
-            pointerEvents="none"
             style={{
-              position: "absolute",
-              bottom: "100%",
-              left: 0,
-              right: 0,
-              alignItems: "center",
-              marginBottom: 4,
-              opacity: lockBadgeAnim,
-              transform: [
-                { translateY: lockBadgeAnim.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) },
-                { translateY: lockSlideAnim },  // secondary bounce upward
-              ],
+              flexDirection: "row", alignItems: "center", marginLeft: 6, marginRight: 4,
+              transform: [{ translateX: cancelSlideAnim }],
             }}
           >
-            <View style={{
-              backgroundColor: PRIMARY, borderRadius: 10,
-              paddingHorizontal: 6, paddingVertical: 4,
-              flexDirection: "row", alignItems: "center",
-              shadowColor: PRIMARY, shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.4, shadowRadius: 4, elevation: 3,
-            }}>
-              <Ionicons name="lock-closed" size={11} color="white" />
-              <Text style={{ color: "white", fontSize: 9, marginLeft: 2, fontWeight: "700", letterSpacing: 0.5 }}>LOCK</Text>
-            </View>
+            <Ionicons name="chevron-back" size={13} color={hintColor} />
+            <Text style={{ fontSize: 12, color: hintColor, marginLeft: 1 }} numberOfLines={1}>
+              {cancelZone ? "Release to cancel" : "Slide to cancel"}
+            </Text>
           </Animated.View>
+        )}
 
-          {/* Mic button — PanResponder is here, stays mounted during pressing */}
+        {/* ── PRESSING only: waveform ── */}
+        {isRecording && (
+          <View style={{ flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", height: 36, overflow: "hidden" }}>
+            {barAnims.map((a, i) => (
+              <Animated.View
+                key={i}
+                style={{ width: 2.5, marginHorizontal: 0.8, borderRadius: 2, backgroundColor: accent, height: a }}
+              />
+            ))}
+          </View>
+        )}
+
+        {/* ── PRESSING only: timer ── */}
+        {isRecording && (
+          <Text style={{ fontSize: 13, fontWeight: "600", color: accent, fontVariant: ["tabular-nums"], marginHorizontal: 6 }}>
+            {fmt(displaySecs)}
+          </Text>
+        )}
+
+        {/* ── Mic button container — always mounted so panHandlers never drop ── */}
+        <View style={{ position: "relative" }}>
+          {/* "Release to send" hint — floats above mic during PRESSING */}
+          {isRecording && !isLocked && (
+            <View
+              pointerEvents="none"
+              style={{
+                position: "absolute",
+                bottom: "100%",
+                left: "50%",
+                transform: [{ translateX: -40 }],
+                alignItems: "center",
+                marginBottom: 6,
+                width: 80,
+              }}
+            >
+              <Text style={{ color: PRIMARY, fontSize: 9, fontWeight: "700", textAlign: "center", letterSpacing: 0.3 }}>
+                Release{"\n"}to send
+              </Text>
+            </View>
+          )}
+
+          {/* Mic button — panHandlers ALWAYS on this same View */}
           <View
             {...panResponder.panHandlers}
-            style={{
-              width: 40, height: 40, borderRadius: 20,
-              backgroundColor: cancelZone ? "#fee2e2" : "#ffe4e6",
-              alignItems: "center", justifyContent: "center",
-            }}
+            style={
+              isRecording
+                ? { width: 40, height: 40, borderRadius: 20, backgroundColor: cancelZone ? "#fee2e2" : "#ffe4e6", alignItems: "center", justifyContent: "center" }
+                : hidden
+                  ? { width: 0, height: 0, overflow: "hidden" }
+                  : { width: 36, height: 36, alignItems: "center", justifyContent: "center" }
+            }
           >
             <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-              <Ionicons name="mic" size={22} color={cancelZone ? "#b91c1c" : "#ef4444"} />
+              <Ionicons
+                name={isRecording ? "mic" : "mic-outline"}
+                size={22}
+                color={isRecording ? (cancelZone ? "#b91c1c" : "#ef4444") : "#6b7280"}
+              />
             </Animated.View>
           </View>
         </View>
       </Animated.View>
-    );
-  }
 
-  // IDLE — just the mic button
-  return (
-    <>
-      <View
-        {...panResponder.panHandlers}
-        style={[
-          hidden
-            ? { width: 0, height: 0, overflow: 'hidden' }
-            : { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-          style as any,
-        ]}
-      >
-        {!hidden && <Ionicons name="mic-outline" size={22} color="#6b7280" />}
-      </View>
       <Modal visible={popup.visible} transparent animationType="none" statusBarTranslucent>
         <PopupMessage visible={popup.visible} type={popup.type} title={popup.title} message={popup.message} onHide={() => setPopup(p => ({...p, visible: false}))} />
       </Modal>

@@ -10,12 +10,13 @@ import { feedEvents } from "@/utils/feedEvents";
 import { useRouter } from "expo-router";
 import { VideoView, useVideoPlayer } from "expo-video";
 import { Bookmark, Heart, MessageCircle, MoreHorizontal, X } from "lucide-react-native";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Dimensions,
     Image,
     Modal,
+    Platform,
     ScrollView,
     Text,
     TouchableOpacity,
@@ -23,7 +24,13 @@ import {
     View,
 } from "react-native";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
+import Animated, {
+    runOnJS,
+    useAnimatedStyle,
+    useSharedValue,
+    withSpring,
+    withTiming,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 interface ImageViewerProps {
@@ -40,45 +47,92 @@ interface ImageViewerProps {
 }
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
+const MEDIA_HEIGHT = screenHeight * 0.7;
 
-// Helper to check if URL is a video
 const isVideoUrl = (url: string): boolean => {
   const videoExtensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.m4v'];
   const lowerUrl = url.toLowerCase();
   return videoExtensions.some(ext => lowerUrl.includes(ext)) || lowerUrl.includes('post-videos');
 };
 
-// Zoomable Image Component
-const ZoomableImage = ({ uri }: { uri: string }) => {
+// Zoomable image with pinch + pan (only when zoomed) + single-tap to toggle UI
+const ZoomableImage = ({
+  uri,
+  onToggleUI,
+  onZoomChange,
+}: {
+  uri: string;
+  onToggleUI?: () => void;
+  onZoomChange?: (zoomed: boolean) => void;
+}) => {
+  const [isZoomed, setIsZoomed] = useState(false);
   const scale = useSharedValue(1);
   const savedScale = useSharedValue(1);
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const savedTranslateX = useSharedValue(0);
+  const savedTranslateY = useSharedValue(0);
+
+  const notifyZoom = useCallback((zoomed: boolean) => {
+    setIsZoomed(zoomed);
+    onZoomChange?.(zoomed);
+  }, [onZoomChange]);
 
   const pinchGesture = Gesture.Pinch()
     .onUpdate((e) => {
-      scale.value = savedScale.value * e.scale;
+      scale.value = Math.min(Math.max(savedScale.value * e.scale, 1), 5);
     })
     .onEnd(() => {
-      // Reset zoom if too zoomed out
-      if (scale.value < 1) {
+      if (scale.value <= 1) {
         scale.value = withSpring(1);
+        translateX.value = withSpring(0);
+        translateY.value = withSpring(0);
         savedScale.value = 1;
-      }
-      // Limit max zoom
-      else if (scale.value > 3) {
-        scale.value = withSpring(3);
-        savedScale.value = 3;
+        savedTranslateX.value = 0;
+        savedTranslateY.value = 0;
+        runOnJS(notifyZoom)(false);
       } else {
         savedScale.value = scale.value;
+        runOnJS(notifyZoom)(true);
       }
     });
 
+  const panGesture = Gesture.Pan()
+    .onUpdate((e) => {
+      translateX.value = savedTranslateX.value + e.translationX;
+      translateY.value = savedTranslateY.value + e.translationY;
+    })
+    .onEnd(() => {
+      savedTranslateX.value = translateX.value;
+      savedTranslateY.value = translateY.value;
+    });
+
+  const tapGesture = Gesture.Tap().onEnd(() => {
+    if (onToggleUI) runOnJS(onToggleUI)();
+  });
+
+  // When not zoomed: no pan — horizontal swipes pass through to the carousel ScrollView
+  // When zoomed: add pan so the image can be moved around
+  const composed = isZoomed
+    ? Gesture.Race(tapGesture, Gesture.Simultaneous(pinchGesture, panGesture))
+    : Gesture.Race(tapGesture, pinchGesture);
+
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
+    transform: [
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+      { scale: scale.value },
+    ],
   }));
 
   return (
-    <GestureDetector gesture={pinchGesture}>
-      <Animated.View style={[{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }, animatedStyle]}>
+    <GestureDetector gesture={composed}>
+      <Animated.View
+        style={[
+          { width: screenWidth, height: MEDIA_HEIGHT, justifyContent: 'center', alignItems: 'center' },
+          animatedStyle,
+        ]}
+      >
         <Image
           source={{ uri }}
           style={{ width: '100%', height: '100%' }}
@@ -89,84 +143,62 @@ const ZoomableImage = ({ uri }: { uri: string }) => {
   );
 };
 
-// Individual media item component
-const MediaItem = ({ uri, index, isActive }: { uri: string; index: number; isActive?: boolean }) => {
+const MediaItem = ({
+  uri,
+  index,
+  isActive,
+  onToggleUI,
+  onZoomChange,
+}: {
+  uri: string;
+  index: number;
+  isActive?: boolean;
+  onToggleUI?: () => void;
+  onZoomChange?: (zoomed: boolean) => void;
+}) => {
   const isVideo = isVideoUrl(uri);
   const [videoLoading, setVideoLoading] = useState(true);
 
   const player = isVideo
-    ? useVideoPlayer(uri, player => {
-        player.loop = true;
-        player.muted = false;
-      })
+    ? useVideoPlayer(uri, (p) => { p.loop = true; p.muted = false; })
     : null;
 
-  // Check when video is ready to play - Use event listener instead of polling
   useEffect(() => {
     if (!isVideo || !player) return;
-
-    const statusListener = player.addListener('statusChange', (payload) => {
-      if (payload.status === 'readyToPlay') {
-        setVideoLoading(false);
-      }
+    const sub = player.addListener('statusChange', (payload) => {
+      if (payload.status === 'readyToPlay') setVideoLoading(false);
     });
-
-    return () => {
-      statusListener.remove();
-    };
+    return () => sub.remove();
   }, [player, isVideo]);
 
-  // Play/pause based on active state
   useEffect(() => {
     if (isVideo && player) {
-      if (isActive) {
-        player.play();
-      } else {
-        player.pause();
-      }
+      if (isActive) player.play();
+      else player.pause();
     }
   }, [isActive, isVideo, player]);
 
   if (isVideo) {
     return (
-      <View
-        key={index}
-        className="items-center justify-center bg-black"
-        style={{
-          width: screenWidth,
-          height: screenHeight,
-          backgroundColor: '#000000'
-        }}
-      >
-        {videoLoading ? (
-          <View className="items-center justify-center flex-1">
-            <ActivityIndicator size="large" color="white" />
-            <Text className="text-white mt-4">Loading video...</Text>
-          </View>
-        ) : null}
-        {player ? (
-          <VideoView
-            player={player}
-            style={{ width: '100%', height: '70%' }}
-            nativeControls={true}
-            contentFit="contain"
-          />
-        ) : null}
-      </View>
+      <TouchableWithoutFeedback onPress={onToggleUI}>
+        <View style={{ width: screenWidth, height: MEDIA_HEIGHT, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' }}>
+          {videoLoading && (
+            <View style={{ position: 'absolute', alignItems: 'center' }}>
+              <ActivityIndicator size="large" color="white" />
+              <Text style={{ color: 'white', marginTop: 12 }}>Loading video...</Text>
+            </View>
+          )}
+          {player && (
+            <VideoView player={player} style={{ width: '100%', height: '100%' }} nativeControls contentFit="contain" />
+          )}
+        </View>
+      </TouchableWithoutFeedback>
     );
   }
 
   return (
-    <View
-      key={index}
-      className="items-center justify-center bg-black"
-      style={{
-        width: screenWidth,
-        height: screenHeight,
-        backgroundColor: '#000000'
-      }}
-    >
-      <ZoomableImage uri={uri} />
+    <View style={{ width: screenWidth, height: MEDIA_HEIGHT, backgroundColor: '#000' }}>
+      <ZoomableImage uri={uri} onToggleUI={onToggleUI} onZoomChange={onZoomChange} />
     </View>
   );
 };
@@ -196,108 +228,87 @@ export default function ImageViewer({
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
+  const [carouselScrollEnabled, setCarouselScrollEnabled] = useState(true);
+
+  // Tap-to-toggle UI (close button always visible)
+  const showUIRef = useRef(true);
+  const [showUI, setShowUI] = useState(true);
+  const uiOpacity = useSharedValue(1);
+
+  const toggleUI = useCallback(() => {
+    const next = !showUIRef.current;
+    showUIRef.current = next;
+    setShowUI(next);
+    uiOpacity.value = withTiming(next ? 1 : 0, { duration: 180 });
+  }, [uiOpacity]);
+
+  const uiAnimStyle = useAnimatedStyle(() => ({ opacity: uiOpacity.value }));
+
+  useEffect(() => {
+    if (visible) {
+      setCurrentIndex(initialIndex);
+      setCarouselScrollEnabled(true);
+      showUIRef.current = true;
+      setShowUI(true);
+      uiOpacity.value = 1;
+    }
+  }, [visible, initialIndex]);
+
   const isOwnPost = currentUser?.id === postUserId;
 
-  const showErrorPopup = (message: string) => {
-    setPopupMessage(message);
+  const showErrorPopup = (msg: string) => {
+    setPopupMessage(msg);
     setShowError(true);
     setTimeout(() => setShowError(false), 2500);
   };
 
-  // Check if post is liked and bookmarked when modal becomes visible
   useEffect(() => {
     if (!visible) return;
-
-    const checkLikeStatus = async () => {
+    const checkStatus = async () => {
       if (!currentUser?.id) return;
-      const liked = await hasUserLikedPost(postId, currentUser.id);
+      const [liked, bookmarked, count] = await Promise.all([
+        hasUserLikedPost(postId, currentUser.id),
+        hasUserBookmarkedPost(postId, currentUser.id),
+        getPostLikeCount(postId),
+      ]);
       setIsLiked(liked);
-      const count = await getPostLikeCount(postId);
+      setIsBookmarked(bookmarked);
       setLikesCount(count);
     };
-
-    const checkBookmarkStatus = async () => {
-      if (!currentUser?.id) return;
-      const bookmarked = await hasUserBookmarkedPost(postId, currentUser.id);
-      setIsBookmarked(bookmarked);
-    };
-
-    checkLikeStatus();
-    checkBookmarkStatus();
+    checkStatus();
   }, [visible, currentUser?.id, postId]);
 
   const handleLike = async () => {
     if (!currentUser?.id) return;
-
-    // Optimistic update
-    const previousLiked = isLiked;
-    const previousCount = likesCount;
-
+    const prev = isLiked;
+    const prevCount = likesCount;
     setIsLiked(!isLiked);
     setLikesCount(isLiked ? likesCount - 1 : likesCount + 1);
-
     try {
       const result = await togglePostLike(postId, currentUser.id, isLiked);
-
-      if (!result.success) {
-        // Rollback on failure
-        setIsLiked(previousLiked);
-        setLikesCount(previousCount);
-      } else {
-        // Update with actual values from database
-        setIsLiked(result.isLiked);
-        setLikesCount(result.likeCount);
-      }
-    } catch (error) {
-      console.error("Error toggling like:", error);
-      // Rollback on error
-      setIsLiked(previousLiked);
-      setLikesCount(previousCount);
+      if (!result.success) { setIsLiked(prev); setLikesCount(prevCount); }
+      else { setIsLiked(result.isLiked); setLikesCount(result.likeCount); }
+    } catch {
+      setIsLiked(prev); setLikesCount(prevCount);
     }
   };
 
   const handleBookmark = async () => {
     if (!currentUser?.id) return;
-
-    // Optimistic update
-    const previousBookmarked = isBookmarked;
+    const prev = isBookmarked;
     setIsBookmarked(!isBookmarked);
-
     try {
       const result = await togglePostBookmark(postId, currentUser.id, isBookmarked);
-
-      if (!result.success) {
-        // Rollback on failure
-        setIsBookmarked(previousBookmarked);
-      } else {
-        // Update with actual value from database
-        setIsBookmarked(result.isBookmarked);
-      }
-    } catch (error) {
-      console.error("Error toggling bookmark:", error);
-      // Rollback on error
-      setIsBookmarked(previousBookmarked);
-    }
+      if (!result.success) setIsBookmarked(prev);
+      else setIsBookmarked(result.isBookmarked);
+    } catch { setIsBookmarked(prev); }
   };
 
   const handleMessage = () => {
-    if (!currentUser?.id) {
-      showErrorPopup("Please sign in to send messages");
-      return;
-    }
-
-    if (isOwnPost) {
-      showErrorPopup("You cannot send a message to your own post");
-      return;
-    }
-
+    if (!currentUser?.id) { showErrorPopup("Please sign in to send messages"); return; }
+    if (isOwnPost) { showErrorPopup("You cannot send a message to your own post"); return; }
     onClose();
     router.push(`/(users)/chat/${postUserId}` as any);
-  };
-
-  const handleDeletePress = () => {
-    setShowActionSheet(false);
-    setShowDeleteConfirmation(true);
   };
 
   const handleConfirmDelete = async () => {
@@ -306,163 +317,186 @@ export default function ImageViewer({
       setShowDeleteConfirmation(false);
       onClose();
       feedEvents.emit('postDeleted', postId);
-    } catch (error) {
-      console.error('Error deleting post:', error);
-      setShowDeleteConfirmation(false);
-    }
-  };
-
-  const handleReportPress = () => {
-    setShowActionSheet(false);
-    setShowReportModal(true);
+    } catch { setShowDeleteConfirmation(false); }
   };
 
   const handleScroll = (event: any) => {
-    const contentOffsetX = event.nativeEvent.contentOffset.x;
-    const index = Math.round(contentOffsetX / screenWidth);
+    const index = Math.round(event.nativeEvent.contentOffset.x / screenWidth);
     setCurrentIndex(index);
   };
+
+  const topInset = Platform.OS === "ios" ? (insets.top || 44) : (insets.top || 0) + 8;
 
   return (
     <Modal
       visible={visible}
-      transparent={true}
+      transparent={false}
       animationType="fade"
-      statusBarTranslucent={true}
+      statusBarTranslucent
       onRequestClose={onClose}
     >
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <View className="flex-1 bg-black" style={{ backgroundColor: '#000000' }}>
-          {/* Header */}
-          <View className="absolute top-0 left-0 right-0 z-10 flex-row items-center justify-between p-4 pt-16">
-            <TouchableOpacity
-              onPress={onClose}
-              className="bg-black/50 rounded-full p-2"
-            >
-              <X size={24} color="white" />
-            </TouchableOpacity>
+        <View style={{ flex: 1, backgroundColor: '#000' }}>
 
-            <View className="flex-row items-center gap-3">
-              {images.length > 1 && (
-                <View className="bg-black/50 rounded-full px-3 py-1">
-                  <Text className="text-white font-medium">
-                    {currentIndex + 1} / {images.length}
-                  </Text>
-                </View>
-              )}
-
-              <TouchableOpacity
-                onPress={() => setShowActionSheet(true)}
-                className="bg-black/50 rounded-full p-2"
-              >
-                <MoreHorizontal size={24} color="white" />
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Media Carousel */}
-          <ScrollView
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            onMomentumScrollEnd={handleScroll}
-            contentOffset={{ x: initialIndex * screenWidth, y: 0 }}
-            className="flex-1 bg-black"
-            style={{ backgroundColor: '#000000' }}
+          {/* ── Close button — always visible ── */}
+          <TouchableOpacity
+            onPress={onClose}
+            style={{
+              position: 'absolute',
+              top: topInset + 8,
+              left: 16,
+              zIndex: 20,
+              backgroundColor: 'rgba(0,0,0,0.55)',
+              borderRadius: 20,
+              padding: 7,
+            }}
           >
-            {images.map((mediaUri, index) => (
-              <MediaItem key={index} uri={mediaUri} index={index} isActive={index === currentIndex} />
-            ))}
-          </ScrollView>
+            <X size={22} color="white" />
+          </TouchableOpacity>
 
-        {/* Bottom Section with Dots and Description */}
-        <View
-          className="absolute bottom-0 left-0 right-0 z-10"
-          style={{ paddingBottom: Math.max(insets.bottom, 20) }}
-        >
-          {/* Dots Indicator - 5px below image */}
-          {images.length > 1 && (
-            <View className="flex-row justify-center" style={{ marginBottom: 12 }}>
-              <View className="flex-row bg-black/50 rounded-full px-3 py-2">
-                {images.map((_, index) => (
-                  <View
+          {/* ── Toggleable: top-right page counter + more ── */}
+          <Animated.View
+            style={[uiAnimStyle, {
+              position: 'absolute',
+              top: topInset + 8,
+              right: 16,
+              zIndex: 15,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 8,
+            }]}
+            pointerEvents={showUI ? 'box-none' : 'none'}
+          >
+            {images.length > 1 && (
+              <View style={{ backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 5 }}>
+                <Text style={{ color: 'white', fontWeight: '600', fontSize: 13 }}>
+                  {currentIndex + 1} / {images.length}
+                </Text>
+              </View>
+            )}
+            <TouchableOpacity
+              onPress={() => setShowActionSheet(true)}
+              style={{ backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 20, padding: 7 }}
+            >
+              <MoreHorizontal size={22} color="white" />
+            </TouchableOpacity>
+          </Animated.View>
+
+          {/* ── Main content: image + caption, centered vertically ── */}
+          <View style={{ flex: 1, justifyContent: 'center' }}>
+
+            {/* Image carousel */}
+            <View style={{ height: MEDIA_HEIGHT }}>
+              <ScrollView
+                horizontal
+                pagingEnabled
+                scrollEnabled={carouselScrollEnabled}
+                showsHorizontalScrollIndicator={false}
+                onMomentumScrollEnd={handleScroll}
+                contentOffset={{ x: initialIndex * screenWidth, y: 0 }}
+                scrollEventThrottle={16}
+                style={{ height: MEDIA_HEIGHT }}
+              >
+                {images.map((mediaUri, index) => (
+                  <MediaItem
                     key={index}
-                    className={`w-2 h-2 rounded-full mx-1 ${
-                      index === currentIndex ? "bg-white" : "bg-white/40"
-                    }`}
+                    uri={mediaUri}
+                    index={index}
+                    isActive={index === currentIndex}
+                    onToggleUI={toggleUI}
+                    onZoomChange={(zoomed) => setCarouselScrollEnabled(!zoomed)}
                   />
                 ))}
+              </ScrollView>
+            </View>
+
+            {/* Dots indicator */}
+            {images.length > 1 && (
+              <Animated.View
+                style={[uiAnimStyle, { flexDirection: 'row', justifyContent: 'center', paddingTop: 10 }]}
+                pointerEvents="none"
+              >
+                {images.map((_, i) => (
+                  <View
+                    key={i}
+                    style={{
+                      width: 7, height: 7, borderRadius: 4, marginHorizontal: 3,
+                      backgroundColor: i === currentIndex ? 'white' : 'rgba(255,255,255,0.35)',
+                    }}
+                  />
+                ))}
+              </Animated.View>
+            )}
+
+            {/* Bottom row: 60% caption left, 40% controls right */}
+            <Animated.View
+              style={[uiAnimStyle, {
+                flexDirection: 'row',
+                alignItems: 'center',
+                paddingHorizontal: 16,
+                paddingTop: 12,
+                paddingBottom: 8,
+              }]}
+              pointerEvents={showUI ? 'box-none' : 'none'}
+            >
+              {/* Caption — 60% */}
+              <View style={{ flex: 3, paddingRight: 12 }}>
+                {username && (
+                  <Text style={{ color: 'white', fontWeight: '700', fontSize: 13, marginBottom: 3 }}>
+                    {username}
+                  </Text>
+                )}
+                {postContent ? (
+                  <Text style={{ color: 'rgba(255,255,255,0.88)', fontSize: 13, lineHeight: 19 }} numberOfLines={3}>
+                    {postContent}
+                  </Text>
+                ) : null}
               </View>
-            </View>
-          )}
 
-          {/* Post Description Box */}
-          {postContent && (
-            <View className="mx-4 p-4 border-2 border-gray-400 rounded-lg" style={{ backgroundColor: 'transparent', marginBottom: 8 }}>
-              {username && (
-                <Text className="text-white font-semibold text-sm mb-1">
-                  {username}
-                </Text>
-              )}
-              <Text className="text-white text-base leading-5">
-                {postContent}
-              </Text>
-            </View>
-          )}
+              {/* Controls — 40%, horizontal, right-aligned */}
+              <View style={{ flex: 2, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 18 }}>
+                {/* Like */}
+                <TouchableOpacity
+                  onPress={handleLike}
+                  disabled={!currentUser?.id}
+                  style={{ alignItems: 'center' }}
+                >
+                  <Heart
+                    size={26}
+                    color={isLiked ? "#e91e63" : "white"}
+                    fill={isLiked ? "#e91e63" : "none"}
+                    strokeWidth={1.5}
+                  />
+                  {likesCount > 0 && (
+                    <Text style={{ color: isLiked ? '#e91e63' : 'white', fontSize: 11, fontWeight: '600', marginTop: 2 }}>
+                      {likesCount}
+                    </Text>
+                  )}
+                </TouchableOpacity>
 
-          {/* Action Strip - Like, Bookmark, Message */}
-          <View className="mx-4 px-4 py-3 border border-gray-400 rounded-lg flex-row items-center justify-around" style={{ backgroundColor: 'transparent' }}>
-            <TouchableOpacity
-              className="flex-row items-center"
-              onPress={handleLike}
-              disabled={!currentUser?.id}
-            >
-              <Heart
-                size={20}
-                color={isLiked ? "#e91e63" : "white"}
-                fill={isLiked ? "#e91e63" : "none"}
-                strokeWidth={1.5}
-              />
-              <Text className={`ml-2 font-medium ${isLiked ? 'text-pink-500' : 'text-white'}`}>
-                {likesCount > 0 ? likesCount : 'Like'}
-              </Text>
-            </TouchableOpacity>
+                {/* Bookmark */}
+                <TouchableOpacity onPress={handleBookmark} disabled={!currentUser?.id}>
+                  <Bookmark
+                    size={26}
+                    color={isBookmarked ? "#60a5fa" : "white"}
+                    fill={isBookmarked ? "#60a5fa" : "none"}
+                    strokeWidth={1.5}
+                  />
+                </TouchableOpacity>
 
-            <TouchableOpacity
-              className="flex-row items-center"
-              onPress={handleBookmark}
-              disabled={!currentUser?.id}
-            >
-              <Bookmark
-                size={20}
-                color={isBookmarked ? "#1976d2" : "white"}
-                fill={isBookmarked ? "#1976d2" : "none"}
-                strokeWidth={1.5}
-              />
-              <Text className={`ml-2 font-medium ${isBookmarked ? 'text-blue-500' : 'text-white'}`}>
-                {isBookmarked ? 'Saved' : 'Save'}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              className="flex-row items-center"
-              onPress={handleMessage}
-            >
-              <MessageCircle size={20} color="white" strokeWidth={1.5} />
-              <Text className="text-white ml-2 font-medium">Message</Text>
-            </TouchableOpacity>
+                {/* Message */}
+                <TouchableOpacity onPress={handleMessage}>
+                  <MessageCircle size={26} color="white" strokeWidth={1.5} />
+                </TouchableOpacity>
+              </View>
+            </Animated.View>
           </View>
+
         </View>
-      </View>
       </GestureHandlerRootView>
 
-      {/* Error Popup */}
-      <Modal
-        visible={showError}
-        transparent={true}
-        animationType="none"
-        statusBarTranslucent={true}
-      >
+      {/* Error popup */}
+      <Modal visible={showError} transparent animationType="none" statusBarTranslucent>
         <TouchableWithoutFeedback onPress={() => setShowError(false)}>
           <View style={{ flex: 1 }}>
             <PopupMessage visible={showError} type="error" message={popupMessage} />
@@ -470,16 +504,14 @@ export default function ImageViewer({
         </TouchableWithoutFeedback>
       </Modal>
 
-      {/* Post Action Sheet */}
       <PostActionSheet
         visible={showActionSheet}
         onClose={() => setShowActionSheet(false)}
         isOwnPost={isOwnPost}
-        onDelete={handleDeletePress}
-        onReport={handleReportPress}
+        onDelete={() => { setShowActionSheet(false); setShowDeleteConfirmation(true); }}
+        onReport={() => { setShowActionSheet(false); setShowReportModal(true); }}
       />
 
-      {/* Delete Confirmation Modal */}
       <DeleteConfirmationModal
         visible={showDeleteConfirmation}
         onClose={() => setShowDeleteConfirmation(false)}
@@ -487,23 +519,15 @@ export default function ImageViewer({
         postContent={postContent || ""}
       />
 
-      {/* Report Modal */}
       {currentUser?.id && postUserId && (
         <ReportPostModal
           visible={showReportModal}
           onClose={() => setShowReportModal(false)}
           postId={postId}
-          postContent={
-            postContent
-              ? postContent.substring(0, 50) + (postContent.length > 50 ? "..." : "")
-              : ""
-          }
+          postContent={postContent ? postContent.substring(0, 50) + (postContent.length > 50 ? "..." : "") : ""}
           postOwnerId={postUserId}
-          currentUserId={currentUser?.id ?? ""}
-          onReportSuccess={() => {
-            setShowReportModal(false);
-            onClose();
-          }}
+          currentUserId={currentUser.id}
+          onReportSuccess={() => { setShowReportModal(false); onClose(); }}
         />
       )}
     </Modal>

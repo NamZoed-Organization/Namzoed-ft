@@ -77,17 +77,25 @@ const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } =
 function CallJoiner({ streamId }: { streamId: string }) {
   const call = useCall();
   const joiningRef = useRef(false);
+  const backstageBlockedRef = useRef(false);
 
   useEffect(() => {
     if (!call) return;
 
     const tryJoin = () => {
       if (joiningRef.current) return;
+      if (backstageBlockedRef.current) return; // don't retry a backstage-blocked call
       if (call.state.callingState !== "idle") return;
       joiningRef.current = true;
       call
         .join()
-        .catch(() => {})
+        .catch((err: any) => {
+          // 403 JoinBackstage — stream not live yet, stop retrying until backstage$ fires
+          const msg: string = err?.message ?? err?.data?.message ?? "";
+          if (msg.includes("JoinBackstage") || (err?.data?.StatusCode ?? err?.status) === 403) {
+            backstageBlockedRef.current = true;
+          }
+        })
         .finally(() => {
           joiningRef.current = false;
         });
@@ -95,9 +103,10 @@ function CallJoiner({ streamId }: { streamId: string }) {
 
     tryJoin();
 
-    // If host goes live while we're connected, retry join
+    // If host goes live while we're waiting, retry join
     const sub = call.state.backstage$?.subscribe((backstage: boolean) => {
       if (!backstage && call.state.callingState !== "joined") {
+        backstageBlockedRef.current = false; // clear block — stream is now live
         tryJoin();
       }
     });
@@ -748,11 +757,14 @@ function LivePage({
 interface LiveScrollScreenProps {
   initialStreamId?: string;
   onClose: () => void;
+  /** When true, immediately opens the "Create Live" modal on mount */
+  openCreateOnMount?: boolean;
 }
 
 export default function LiveScrollScreen({
   initialStreamId,
   onClose,
+  openCreateOnMount,
 }: LiveScrollScreenProps) {
   const { currentUser } = useUser();
   const { setSession, minimize } = useLiveSession();
@@ -957,6 +969,14 @@ export default function LiveScrollScreen({
     await ensureLiveWrapper();
     setHostMode(true);
   }, [ensureLiveWrapper]);
+
+  // Auto-open create modal when launched from "Go Live" button
+  const hasAutoOpenedCreate = useRef(false);
+  useEffect(() => {
+    if (!openCreateOnMount || hasAutoOpenedCreate.current) return;
+    hasAutoOpenedCreate.current = true;
+    handleCreateLive();
+  }, [openCreateOnMount, handleCreateLive]);
 
   const handleHostClose = useCallback(() => {
     setHostMode(false);
@@ -1414,10 +1434,12 @@ export default function LiveScrollScreen({
 
   // ── Wrap with Stream SDK providers when ready ─────────────────────────────
   if (streamClient && activeCall && currentStream) {
+    // Don't join as viewer if this is our own stream — the host interface handles that
+    const isOwnStream = identity?.id && currentStream.user_id === identity.id;
     return (
       <StreamVideo client={streamClient}>
         <StreamCall call={activeCall}>
-          <CallJoiner streamId={currentStream.id} />
+          {!isOwnStream && <CallJoiner streamId={currentStream.id} />}
           {mainContent}
         </StreamCall>
       </StreamVideo>

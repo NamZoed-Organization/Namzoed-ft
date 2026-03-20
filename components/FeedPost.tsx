@@ -1,3 +1,4 @@
+import ImageViewer from "@/components/modals/ImageViewer";
 import CommentsModal from "@/components/modals/CommentsModal";
 import DeleteConfirmationModal from "@/components/modals/DeleteConfirmationModal";
 import LikesListModal from "@/components/modals/LikesListModal";
@@ -102,6 +103,7 @@ const MEDIA_HEIGHT = SCREEN_WIDTH * MEDIA_ASPECT;
 interface MediaCarouselProps {
   images: string[];
   onDoubleTapAt?: (x: number, y: number) => void;
+  onImagePress?: (index: number) => void;
   isVisible?: boolean;
   hasTaggedItems: boolean;
   onTagPress: () => void;
@@ -356,18 +358,30 @@ function InlineVideoPlayer({ uri, isVisible, onDoubleTapAt }: InlineVideoPlayerP
 }
 
 const MediaCarousel = React.memo(
-  ({ images, onDoubleTapAt, isVisible = true, hasTaggedItems, onTagPress }: MediaCarouselProps) => {
+  ({ images, onDoubleTapAt, onImagePress, isVisible = true, hasTaggedItems, onTagPress }: MediaCarouselProps) => {
     const [activeIndex, setActiveIndex] = useState(0);
     const multipleMedia = images.length > 1;
     const lastTapRef = useRef(0);
+    const singleTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const handleImageTap = useCallback((event: GestureResponderEvent) => {
+    const handleImageTap = useCallback((event: GestureResponderEvent, index: number) => {
       const now = Date.now();
       if (now - lastTapRef.current < 300) {
+        // double tap — cancel pending single-tap and trigger like
+        if (singleTapTimerRef.current) {
+          clearTimeout(singleTapTimerRef.current);
+          singleTapTimerRef.current = null;
+        }
         onDoubleTapAt?.(event.nativeEvent.locationX, event.nativeEvent.locationY);
+      } else {
+        // potential single tap — wait to confirm it's not a double
+        singleTapTimerRef.current = setTimeout(() => {
+          singleTapTimerRef.current = null;
+          onImagePress?.(index);
+        }, 300);
       }
       lastTapRef.current = now;
-    }, [onDoubleTapAt]);
+    }, [onDoubleTapAt, onImagePress]);
 
     const handleScroll = useCallback(
       (e: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -394,7 +408,7 @@ const MediaCarousel = React.memo(
 
         return (
           <TouchableOpacity
-            onPress={handleImageTap}
+            onPress={(e) => handleImageTap(e, index)}
             activeOpacity={1}
             style={{ width: SCREEN_WIDTH, height: MEDIA_HEIGHT }}
           >
@@ -638,6 +652,7 @@ export default function FeedPost({ post, isVisible = true }: FeedPostProps) {
   const [showComments, setShowComments] = useState(false);
   const [showLikesList, setShowLikesList] = useState(false);
   const [flyingHearts, setFlyingHearts] = useState<Array<{ id: number; x: number; y: number }>>([]);
+  const [previewIndex, setPreviewIndex] = useState<number | null>(null);
   const flyHeartId = useRef(0);
 
   const hasTaggedProducts = (post.tagged_products?.length ?? 0) > 0;
@@ -844,6 +859,7 @@ export default function FeedPost({ post, isVisible = true }: FeedPostProps) {
         <MediaCarousel
           images={post.images}
           onDoubleTapAt={handleDoubleTapAt}
+          onImagePress={(index) => setPreviewIndex(index)}
           isVisible={isVisible}
           hasTaggedItems={hasTaggedItems}
           onTagPress={() => setShowTaggedItems(true)}
@@ -1050,6 +1066,20 @@ export default function FeedPost({ post, isVisible = true }: FeedPostProps) {
       {flyingHearts.map(h => (
         <FlyingHeart key={h.id} startX={h.x} startY={h.y} onDone={() => removeFlyingHeart(h.id)} />
       ))}
+
+      {/* Fullscreen Image Viewer */}
+      <ImageViewer
+        visible={previewIndex !== null}
+        images={post.images}
+        initialIndex={previewIndex ?? 0}
+        onClose={() => setPreviewIndex(null)}
+        postContent={post.content}
+        username={post.username}
+        likes={likesCount}
+        comments={commentsCount}
+        postId={post.id}
+        postUserId={post.userId}
+      />
     </View>
   );
 }

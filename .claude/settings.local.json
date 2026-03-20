@@ -17,7 +17,12 @@
       "Bash(node -e \"const i = require\\(''''./node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/lib/create-icon-set''''\\); console.log\\(''''done''''\\)\")",
       "Bash(node -e \"const map = require\\(''./node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/glyphmaps/Ionicons.json''\\); console.log\\(''eye:'', map[''eye'']\\); console.log\\(''eye-off:'', map[''eye-off'']\\); console.log\\(''eye-outline:'', map[''eye-outline'']\\); console.log\\(''eye-off-outline:'', map[''eye-off-outline'']\\);\")",
       "Bash(node -e \"const p = require\\(''./package.json''\\); const keys = [''expo'', ''expo-asset'', ''expo-font'', ''expo-modules-core'', ''react-native'']; keys.forEach\\(k => console.log\\(k + '':'', p.dependencies[k] || p.devDependencies?.[k] || ''not found''\\)\\)\")",
-      "Bash(node -e \"console.log\\(''expo-asset installed:'', require\\(''./node_modules/expo-asset/package.json''\\).version\\); console.log\\(''expo-modules-core installed:'', require\\(''./node_modules/expo-modules-core/package.json''\\).version\\); console.log\\(''expo-font installed:'', require\\(''./node_modules/expo-font/package.json''\\).version\\);\")"
+      "Bash(node -e \"console.log\\(''expo-asset installed:'', require\\(''./node_modules/expo-asset/package.json''\\).version\\); console.log\\(''expo-modules-core installed:'', require\\(''./node_modules/expo-modules-core/package.json''\\).version\\); console.log\\(''expo-font installed:'', require\\(''./node_modules/expo-font/package.json''\\).version\\);\")",
+      "Bash(grep -l \"uploadImages\\\\|uploadVideos\\\\|uploadProductImages\\\\|uploadFileToSupabase\" /c/Users/sonam/Desktop/namzoed/Namzoed-ft/lib/*.ts)",
+      "Bash(grep -l \"Image\\\\|image\" /c/Users/sonam/Desktop/namzoed/Namzoed-ft/components/modals/*Viewer*.tsx)",
+      "Bash(wc -l \"c:/Users/sonam/Desktop/namzoed/Namzoed-ft/app/\\(users\\)/chat/[id].tsx\")",
+      "Bash(grep -E \"\\\\.\\(sql|ts|tsx\\)$\")",
+      "Bash(grep -l \"LiveSessionProvider\\\\|useLiveSession\" \"c:\\\\Users\\\\sonam\\\\Desktop\\\\namzoed\\\\Namzoed-ft/contexts\"/*.tsx)"
     ]
   }
 }

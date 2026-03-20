@@ -6,8 +6,8 @@ import MongooseInviteCard, {
 } from "@/components/MongooseInviteCard";
 import MongooseResponderModal from "@/components/MongooseResponderModal";
 import AudioMessagePlayer from "@/components/chat/AudioMessagePlayer";
-import ChatAudioRecorder from "@/components/chat/ChatAudioRecorder";
 import ChatImagePicker from "@/components/chat/ChatImagePicker";
+import ChatImageViewer from "@/components/chat/ChatImageViewer";
 import SingleLocationPicker from "@/components/location/SingleLocationPicker";
 import TrackMongooseModal from "@/components/modals/TrackMongooseModal";
 import { useAppearance } from "@/contexts/AppearanceContext";
@@ -22,9 +22,17 @@ import { supabase } from "@/lib/supabase";
 import { sendChatPushNotification } from "@/services/chatPushService";
 import { playReceiveSound, playSendSound, preloadChatSounds, triggerReceiveHaptic, triggerSendHaptic, unloadChatSounds } from "@/utils/chatSounds";
 import { Ionicons } from "@expo/vector-icons";
+import {
+    RecordingPresets,
+    requestRecordingPermissionsAsync,
+    setAudioModeAsync,
+    useAudioPlayer,
+    useAudioPlayerStatus,
+    useAudioRecorder,
+} from "expo-audio";
+import * as FileSystem from "expo-file-system/legacy";
 import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
-import { LinearGradient } from "expo-linear-gradient";
 import * as Location from "expo-location";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { Bike } from "lucide-react-native";
@@ -40,13 +48,13 @@ import {
     ActivityIndicator,
     Animated,
     Easing,
+    FlatList,
     Image,
     Keyboard,
     Linking,
     Modal,
     Platform,
     Pressable,
-    ScrollView,
     Text,
     TextInput,
     TouchableOpacity,
@@ -55,17 +63,16 @@ import {
 } from "react-native";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { Gesture, GestureDetector, ScrollView as GestureScrollView } from "react-native-gesture-handler";
 import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
 import Reanimated, {
-    Extrapolation,
-    interpolate,
-    runOnJS,
-    useAnimatedKeyboard,
-    useAnimatedStyle,
-    useSharedValue,
-    withSpring,
-    withTiming,
+  Extrapolation,
+  interpolate,
+  runOnJS,
+  useAnimatedKeyboard,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -92,6 +99,7 @@ const REPLY_META_PREFIX = "[reply-meta]";
 const REPLY_META_SUFFIX = "[/reply-meta]";
 const PRODUCT_META_PREFIX = "[product-meta]";
 const PRODUCT_META_SUFFIX = "[/product-meta]";
+
 
 type ReplyMeta = {
   id: string;
@@ -367,22 +375,21 @@ const SwipeableRow = React.memo(function SwipeableRow({
   children,
   onTriggered,
   isCurrentUser = false,
+  onPress,
+  onLongPress,
 }: {
   children: React.ReactNode;
   onTriggered: () => void;
   isCurrentUser?: boolean;
+  onPress?: () => void;
+  onLongPress?: (pageY: number) => void;
 }) {
   const translateX = useSharedValue(0);
   const hasFired = useSharedValue(false);
 
   const pan = Gesture.Pan()
-    // Only claim gesture after 20px rightward movement.
-    // 20px gives scroll a head-start and keeps clear of the iOS edge-back swipe.
     .activeOffsetX([20, Infinity])
-    // Fail immediately if user moves left — let iOS back gesture win
     .failOffsetX(-8)
-    // Fail as soon as there's ±5px vertical movement → scroll gets priority.
-    // Previously ±20px which was too lenient and let swipe compete with scroll.
     .failOffsetY([-5, 5])
     .onUpdate((e) => {
       "worklet";
@@ -405,11 +412,33 @@ const SwipeableRow = React.memo(function SwipeableRow({
       }
     });
 
+  // Tap and LongPress are composed at the RNGH level so they fire reliably
+  // even though the GestureDetector is the sole touch responder.
+  const tap = onPress
+    ? Gesture.Tap().onEnd((_, success) => {
+        "worklet";
+        if (success) runOnJS(onPress)();
+      })
+    : null;
+
+  const longPress = onLongPress
+    ? Gesture.LongPress()
+        .minDuration(400)
+        .onEnd((e, success) => {
+          "worklet";
+          if (success) runOnJS(onLongPress)(e.absoluteY);
+        })
+    : null;
+
+  const composed = (() => {
+    const gestures = [longPress, tap, pan].filter(Boolean) as any[];
+    return gestures.length > 1 ? Gesture.Race(...gestures) : pan;
+  })();
+
   const animStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }],
   }));
 
-  // Reply icon fades + scales in as the user drags right
   const replyIconStyle = useAnimatedStyle(() => {
     const progress = interpolate(
       translateX.value,
@@ -426,26 +455,18 @@ const SwipeableRow = React.memo(function SwipeableRow({
   });
 
   return (
-    <GestureDetector gesture={pan}>
-      {/*
-       * OUTER: alignSelf:'stretch' so it fills the full row width.
-       * This is essential — percentage-based maxWidth on Pressable children
-       * (max-w-[72%]) would resolve against an unsized parent and collapse
-       * without this explicit stretch.
-       * overflow:'visible' lets the bubble translate past the edge.
-       */}
-      <Reanimated.View style={{ overflow: "visible", alignSelf: "stretch" }}>
-        {/* Reply icon — always at the left margin, stays put while bubble slides */}
+    <GestureDetector gesture={composed}>
+      <Reanimated.View style={[animStyle, { overflow: "visible" }]}>
         <Reanimated.View
           pointerEvents="none"
           style={[
             replyIconStyle,
             {
               position: "absolute",
-              left: 6,
+              right: "100%",
               top: 0,
               bottom: 0,
-              width: 36,
+              width: 40,
               alignItems: "center",
               justifyContent: "center",
             },
@@ -464,96 +485,48 @@ const SwipeableRow = React.memo(function SwipeableRow({
             <Ionicons name="arrow-undo" size={14} color="#6366f1" />
           </View>
         </Reanimated.View>
-        {/*
-         * Inner animated view fills full width and uses flexDirection:'row' +
-         * justifyContent to align the bubble left or right — identical to what
-         * the outer row container was doing before SwipeableRow was introduced.
-         */}
-        <Reanimated.View
-          style={[
-            animStyle,
-            {
-              flexDirection: "row",
-              justifyContent: isCurrentUser ? "flex-end" : "flex-start",
-            },
-          ]}
-        >
-          {children}
-        </Reanimated.View>
+        {children}
       </Reanimated.View>
     </GestureDetector>
   );
 });
 
-/**
- * Tracks which reaction pill key-combos have already played their entrance
- * animation. Module-level so it survives re-renders and re-visits to the chat.
- * Key format: `${messageId}::${reactions.join('')}`
- */
-const _playedReactionPills = new Set<string>();
-
-/**
- * AnimatedReactionPill — fades + scales in on first appearance only.
- * Pass a stable `animKey` (messageId + reaction content) — if that key has
- * already animated (even from a previous visit), the pill appears instantly.
- */
-function AnimatedReactionPill({
+/** Static reaction pill shown beneath reacted messages. */
+function ReactionPill({
   reactions,
   isCurrentUser,
-  animKey,
 }: {
   reactions: string[];
   isCurrentUser: boolean;
-  animKey: string;
 }) {
-  const alreadyPlayed = _playedReactionPills.has(animKey);
-  const scale = useSharedValue(alreadyPlayed ? 1 : 0.5);
-  const opacity = useSharedValue(alreadyPlayed ? 1 : 0);
-
-  useEffect(() => {
-    if (!alreadyPlayed) {
-      _playedReactionPills.add(animKey);
-      scale.value = withSpring(1, { damping: 22, stiffness: 280, mass: 0.6 });
-      opacity.value = withTiming(1, { duration: 180 });
-    }
-  }, []);
-
-  const pillStyle = useAnimatedStyle(() => ({
-    opacity: opacity.value,
-    transform: [{ scale: scale.value }],
-  }));
-
   return (
-    <Reanimated.View
-      style={[
-        pillStyle,
-        {
-          flexDirection: "row",
-          alignSelf: isCurrentUser ? "flex-end" : "flex-start",
-          marginTop: -8,
-          marginBottom: 2,
-          marginRight: isCurrentUser ? 10 : 0,
-          marginLeft: isCurrentUser ? 0 : 10,
-          backgroundColor: "rgba(255,255,255,0.95)",
-          borderRadius: 20,
-          paddingHorizontal: 6,
-          paddingVertical: 3,
-          borderWidth: 1,
-          borderColor: "#e5e7eb",
-          shadowColor: "#000",
-          shadowOffset: { width: 0, height: 1 },
-          shadowOpacity: 0.08,
-          shadowRadius: 4,
-          elevation: 2,
-        },
-      ]}
+    <View
+      style={{
+        flexDirection: "row",
+        alignSelf: isCurrentUser ? "flex-end" : "flex-start",
+        marginTop: -8,
+        marginBottom: 2,
+        marginRight: isCurrentUser ? 10 : 0,
+        marginLeft: isCurrentUser ? 0 : 10,
+        backgroundColor: "rgba(255,255,255,0.95)",
+        borderRadius: 20,
+        paddingHorizontal: 6,
+        paddingVertical: 3,
+        borderWidth: 1,
+        borderColor: "#e5e7eb",
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.08,
+        shadowRadius: 4,
+        elevation: 2,
+      }}
     >
       {reactions.map((emoji, i) => (
         <Text key={i} style={{ fontSize: 16, marginHorizontal: 2 }}>
           {emoji}
         </Text>
       ))}
-    </Reanimated.View>
+    </View>
   );
 }
 
@@ -565,21 +538,6 @@ export default function ChatScreen() {
     currentUserUUID: contextUserUUID,
   } = useUnreadMessages();
   const router = useRouter();
-  const {
-    id,
-    context_product_id,
-    context_product_title,
-    context_product_price,
-    context_product_image,
-    context_source,
-  } = useLocalSearchParams<{
-    id?: string | string[];
-    context_product_id?: string;
-    context_product_title?: string;
-    context_product_price?: string;
-    context_product_image?: string;
-    context_source?: "product" | "marketplace";
-  }>();
   const [messageText, setMessageText] = useState("");
   const [messages, setMessages] = useState<any[]>([]);
   const [localMessages, setLocalMessages] = useState<any[]>([]);
@@ -619,23 +577,96 @@ export default function ChatScreen() {
   const [messageReactions, setMessageReactions] = useState<
     Record<string, string[]>
   >({});
-  // Shared values for the context-menu card entry animation
-  const modalCardScale = useSharedValue(0.88);
-  const modalCardOpacity = useSharedValue(0);
   const [isEditMode, setIsEditMode] = useState(false);
-  const [isVoiceRecording, setIsVoiceRecording] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [replyingToMessage, setReplyingToMessage] = useState<any | null>(null);
+  const [replyFocusRequestToken, setReplyFocusRequestToken] = useState(0);
   const [pendingProductContext, setPendingProductContext] =
     useState<ProductMeta | null>(null);
   const [outgoingStatusById, setOutgoingStatusById] = useState<
     Record<string, OutgoingDeliveryStatus>
   >({});
   const [showImagePreview, setShowImagePreview] = useState(false);
-  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
+  const [previewImageIndex, setPreviewImageIndex] = useState(0);
   const [nowTs, setNowTs] = useState(Date.now());
-  const scrollViewRef = useRef<ScrollView>(null);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const oldestCursorRef = useRef<string | null>(null);
+  // ── Header voice recorder ─────────────────────────────────────────────────────
+  const [headerRecording, setHeaderRecording] = useState(false);
+  const [headerRecordingSecs, setHeaderRecordingSecs] = useState(0);
+  const [headerUploading, setHeaderUploading] = useState(false);
+  const headerRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const headerTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const headerIsSendingRef = useRef(false);
+
+  const headerStartRecording = async () => {
+    const perm = await requestRecordingPermissionsAsync();
+    if (perm.status !== 'granted') return;
+    try {
+      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+      await headerRecorder.prepareToRecordAsync();
+      headerRecorder.record();
+      setHeaderRecording(true);
+      setHeaderRecordingSecs(0);
+      headerTimerRef.current = setInterval(() => {
+        setHeaderRecordingSecs(s => s + 1);
+      }, 1000);
+    } catch (_) {}
+  };
+
+  const headerStopAndSend = async () => {
+    if (headerIsSendingRef.current) return;
+    headerIsSendingRef.current = true;
+    if (headerTimerRef.current) { clearInterval(headerTimerRef.current); headerTimerRef.current = null; }
+    const dur = Math.max(1, Math.round(headerRecorder.currentTime));
+    try {
+      await headerRecorder.stop();
+      const uri = headerRecorder.uri;
+      await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
+      setHeaderRecording(false);
+      setHeaderRecordingSecs(0);
+      if (!uri) { return; }
+      setHeaderUploading(true);
+      const uid = currentUserUUID || contextUserUUID;
+      const pid = chatPartnerId;
+      const convKey = [uid, pid].sort().join('_');
+      const filePath = `${convKey}/hdr_${Date.now()}.m4a`;
+      const b64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+      const binary = atob(b64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const { error: upErr } = await supabase.storage.from('chat-audio').upload(filePath, bytes.buffer, { contentType: 'audio/m4a', upsert: true });
+      if (upErr) throw upErr;
+      const { data: { publicUrl } } = supabase.storage.from('chat-audio').getPublicUrl(filePath);
+      const { data: msg, error: msgErr } = await supabase.from('messages').insert([{
+        sender_id: uid, receiver_id: pid,
+        message_type: 'audio', audio_url: publicUrl, audio_duration: dur,
+        content: null, is_read: false,
+      }]).select().single();
+      if (msgErr) throw msgErr;
+    } catch (_) {
+    } finally {
+      setHeaderUploading(false);
+      headerIsSendingRef.current = false;
+    }
+  };
+
+  const headerCancel = async () => {
+    if (headerTimerRef.current) { clearInterval(headerTimerRef.current); headerTimerRef.current = null; }
+    try { await headerRecorder.stop(); } catch (_) {}
+    try { await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }); } catch (_) {}
+    setHeaderRecording(false);
+    setHeaderRecordingSecs(0);
+  };
+
+  const flatListRef = useRef<FlatList<any>>(null);
   const chatInputRef = useRef<TextInput>(null);
+  const messageTextRef = useRef(messageText);
+  const composerFocusFrameRef = useRef<number | null>(null);
+  const composerFocusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const channelRef = useRef<any>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typingSendTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
@@ -654,9 +685,6 @@ export default function ChatScreen() {
   const [composerInputHeight, setComposerInputHeight] = useState(
     CHAT_INPUT_LINE_HEIGHT,
   );
-  const [areComposerActionsCollapsed, setAreComposerActionsCollapsed] =
-    useState(false);
-  const composerActionsProgress = useRef(new Animated.Value(1)).current;
   const { height: screenHeight, width: screenWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   // Keep insets.bottom in a ref so keyboard-listener callbacks always see the latest value.
@@ -664,37 +692,41 @@ export default function ChatScreen() {
   useEffect(() => {
     insetsBottomRef.current = insets.bottom;
   }, [insets.bottom]);
+  useEffect(() => {
+    messageTextRef.current = messageText;
+  }, [messageText]);
 
   // Early-access badge types for gradient chat bubbles
-  const [currentUserBadgeType, setCurrentUserBadgeType] =
+  const [, setCurrentUserBadgeType] =
     useState<EarlyAccessBadgeType>(null);
-  const [chatPartnerBadgeType, setChatPartnerBadgeType] =
+  const [, setChatPartnerBadgeType] =
     useState<EarlyAccessBadgeType>(null);
   const { bubbleSkin } = useAppearance();
 
-  // Animated style for the context-menu card (scale spring on open)
-  const modalCardAnimStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: modalCardScale.value }],
-  }));
-  // Animated style for the backdrop (fade in/out)
-  const modalBackdropAnimStyle = useAnimatedStyle(() => ({
-    opacity: modalCardOpacity.value,
-  }));
-
-  // Drive modal card animation whenever the sheet opens / closes
-  useEffect(() => {
-    if (showMessageActions) {
-      modalCardScale.value = withTiming(1, { duration: 160 });
-      modalCardOpacity.value = withTiming(1, { duration: 160 });
-    } else {
-      modalCardScale.value = withTiming(0.88, { duration: 100 });
-      modalCardOpacity.value = withTiming(0, { duration: 100 });
-    }
-  }, [showMessageActions]);
-
-  const isMongooseChat = typeof id === "string" && id.startsWith("mongoose-");
-  const mongooseName = isMongooseChat ? id.replace("mongoose-", "") : null;
-  const chatPartnerId = Array.isArray(id) ? id[0] : id;
+  const {
+    id: chatPartnerRouteParam,
+    context_product_id,
+    context_product_title,
+    context_product_price,
+    context_product_image,
+    context_source,
+  } = useLocalSearchParams<{
+    id?: string | string[];
+    context_product_id?: string;
+    context_product_title?: string;
+    context_product_price?: string;
+    context_product_image?: string;
+    context_source?: "product" | "marketplace";
+  }>();
+  const isMongooseChat =
+    typeof chatPartnerRouteParam === "string" &&
+    chatPartnerRouteParam.startsWith("mongoose-");
+  const mongooseName = isMongooseChat
+    ? chatPartnerRouteParam.replace("mongoose-", "")
+    : null;
+  const chatPartnerId = Array.isArray(chatPartnerRouteParam)
+    ? chatPartnerRouteParam[0]
+    : chatPartnerRouteParam;
   const effectiveCurrentUserUUID = currentUserUUID || contextUserUUID;
 
   useEffect(() => {
@@ -763,6 +795,23 @@ export default function ChatScreen() {
       return aTime - bTime;
     });
   }, [messages, localMessages]);
+
+  const chatImageUrls = useMemo(
+    () =>
+      allMessages
+        .filter((m) => m?.image_url)
+        .map((m) => m.image_url as string),
+    [allMessages],
+  );
+  const chatImageIndexByUrl = useMemo(() => {
+    const indexByUrl: Record<string, number> = {};
+    chatImageUrls.forEach((url, index) => {
+      if (!(url in indexByUrl)) {
+        indexByUrl[url] = index;
+      }
+    });
+    return indexByUrl;
+  }, [chatImageUrls]);
 
   const latestOutgoingMessageId = useMemo(() => {
     if (!effectiveCurrentUserUUID) return null;
@@ -841,7 +890,7 @@ export default function ChatScreen() {
       if (needsDivider) {
         items.push({
           type: "separator",
-          id: `sep-${messageDate.getTime()}-${Math.random().toString(36).slice(2, 6)}`,
+          id: `sep-${messageDate.getTime()}`,
           label: formatDividerLabel(messageDate),
         });
         lastDividerTime = messageDate;
@@ -873,6 +922,11 @@ export default function ChatScreen() {
 
     return items;
   }, [allMessages, nowTs]);
+
+  const reversedTimelineItems = useMemo(
+    () => [...timelineItems].reverse(),
+    [timelineItems],
+  );
 
   const chatPartnerName = useMemo(() => {
     if (isLoadingPartner) {
@@ -954,23 +1008,41 @@ export default function ChatScreen() {
     [],
   );
 
+  const loadMoreMessages = useCallback(async () => {
+    if (isLoadingMore || !hasMoreMessages || !oldestCursorRef.current || !effectiveCurrentUserUUID || !chatPartnerId) return;
+    setIsLoadingMore(true);
+    try {
+      const { data } = await supabase
+        .from("messages")
+        .select("*")
+        .or(
+          `and(sender_id.eq.${effectiveCurrentUserUUID},receiver_id.eq.${chatPartnerId}),and(sender_id.eq.${chatPartnerId},receiver_id.eq.${effectiveCurrentUserUUID})`,
+        )
+        .lt("created_at", oldestCursorRef.current)
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (data && data.length > 0) {
+        oldestCursorRef.current = data[data.length - 1].created_at;
+        setMessages((prev) => [...data.slice().reverse(), ...prev]);
+        setHasMoreMessages(data.length === 50);
+      } else {
+        setHasMoreMessages(false);
+      }
+    } catch { /* ignore */ }
+    setIsLoadingMore(false);
+  }, [isLoadingMore, hasMoreMessages, effectiveCurrentUserUUID, chatPartnerId]);
+
   const startReplyToMessage = useCallback(
     (message: any) => {
       if (!message || message.isOptimistic) return;
       setReplyingToMessage(message);
+      setReplyFocusRequestToken((prev) => prev + 1);
       setShowMessageActions(false);
       setSelectedMessage(null);
       setIsEditMode(false);
       setEditingMessageId(null);
-      setAreComposerActionsCollapsed(true);
-      Animated.timing(composerActionsProgress, {
-        toValue: 0,
-        duration: 220,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: false,
-      }).start();
     },
-    [composerActionsProgress],
+    [],
   );
 
   const buildReplyMetaForMessage = useCallback(
@@ -1116,8 +1188,8 @@ export default function ChatScreen() {
             .or(
               `and(sender_id.eq.${userUUID},receiver_id.eq.${chatPartnerId}),and(sender_id.eq.${chatPartnerId},receiver_id.eq.${userUUID})`,
             )
-            .order("created_at", { ascending: true })
-            .limit(200);
+            .order("created_at", { ascending: false })
+            .limit(50);
 
           if (deletedAt) {
             query = query.gt("created_at", deletedAt);
@@ -1130,7 +1202,14 @@ export default function ChatScreen() {
             return;
           }
           if (!isSubscribed) return;
-          setMessages(messagesData || []);
+          // Data arrives newest-first; reverse to oldest-first for timelineItems
+          const ordered = (messagesData || []).slice().reverse();
+          setMessages(ordered);
+          setHasMoreMessages((messagesData || []).length === 50);
+          if (messagesData && messagesData.length > 0) {
+            // Last item in desc order = oldest message
+            oldestCursorRef.current = messagesData[messagesData.length - 1].created_at;
+          }
           // Seed emoji reactions from the DB data on (re)load
           const initRxns: Record<string, string[]> = {};
           for (const m of messagesData || []) {
@@ -1387,7 +1466,7 @@ export default function ChatScreen() {
   // Auto-scroll to bottom when new messages are added
   useEffect(() => {
     const timer = setTimeout(() => {
-      scrollViewRef.current?.scrollToEnd({ animated: true });
+      flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
     }, 100);
 
     return () => clearTimeout(timer);
@@ -1397,7 +1476,7 @@ export default function ChatScreen() {
   useEffect(() => {
     if (allMessages.length > 0) {
       const timer = setTimeout(() => {
-        scrollViewRef.current?.scrollToEnd({ animated: false });
+        flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
       }, 50);
 
       return () => clearTimeout(timer);
@@ -1427,14 +1506,19 @@ export default function ChatScreen() {
       Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
       () => {
         setIsKeyboardVisible(true);
-        setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 80);
+        setTimeout(() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true }), 80);
       },
     );
     const hide = Keyboard.addListener(
       Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
       () => {
         setIsKeyboardVisible(false);
-        setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 40);
+        setReplyingToMessage(null);
+        setReplyFocusRequestToken(0);
+        if (!messageTextRef.current.trim()) {
+          setComposerInputHeight(CHAT_INPUT_LINE_HEIGHT);
+        }
+        setTimeout(() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true }), 40);
       },
     );
     return () => {
@@ -1447,7 +1531,7 @@ export default function ChatScreen() {
   useEffect(() => {
     if (!isKeyboardVisible) return;
     const timer = setTimeout(() => {
-      scrollViewRef.current?.scrollToEnd({ animated: true });
+      flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
     }, 120);
     return () => clearTimeout(timer);
   }, [isKeyboardVisible]);
@@ -1456,7 +1540,7 @@ export default function ChatScreen() {
   useEffect(() => {
     if (!isKeyboardVisible) return;
     const timer = setTimeout(() => {
-      scrollViewRef.current?.scrollToEnd({ animated: true });
+      flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
     }, 80);
     return () => clearTimeout(timer);
   }, [inputBarHeight, messageText, isKeyboardVisible]);
@@ -1476,7 +1560,7 @@ export default function ChatScreen() {
   useEffect(() => {
     if (isKeyboardVisible) return;
     const timer = setTimeout(() => {
-      scrollViewRef.current?.scrollToEnd({ animated: true });
+      flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
     }, 220);
     return () => clearTimeout(timer);
   }, [isKeyboardVisible, chatBottomPadding, inputBarHeight]);
@@ -1498,18 +1582,47 @@ export default function ChatScreen() {
     [effectiveCurrentUserUUID, chatPartnerId],
   );
 
-  const setComposerActionsCollapsed = useCallback(
-    (collapsed: boolean) => {
-      setAreComposerActionsCollapsed(collapsed);
-      Animated.timing(composerActionsProgress, {
-        toValue: collapsed ? 0 : 1,
-        duration: 220,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: false,
-      }).start();
-    },
-    [composerActionsProgress],
-  );
+  const focusComposerInput = useCallback(() => {
+    if (composerFocusFrameRef.current != null) {
+      cancelAnimationFrame(composerFocusFrameRef.current);
+    }
+    if (composerFocusTimeoutRef.current) {
+      clearTimeout(composerFocusTimeoutRef.current);
+    }
+
+    const performFocus = () => {
+      chatInputRef.current?.focus();
+      flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+    };
+
+    performFocus();
+    composerFocusFrameRef.current = requestAnimationFrame(() => {
+      performFocus();
+      composerFocusFrameRef.current = null;
+    });
+    composerFocusTimeoutRef.current = setTimeout(() => {
+      performFocus();
+      composerFocusTimeoutRef.current = null;
+    }, 80);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (composerFocusFrameRef.current != null) {
+        cancelAnimationFrame(composerFocusFrameRef.current);
+      }
+      if (composerFocusTimeoutRef.current) {
+        clearTimeout(composerFocusTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!replyingToMessage || replyFocusRequestToken === 0) {
+      return;
+    }
+    focusComposerInput();
+  }, [focusComposerInput, replyFocusRequestToken, replyingToMessage]);
 
   const handleBackNavigation = useCallback(() => {
     if (router.canGoBack()) {
@@ -1518,58 +1631,6 @@ export default function ChatScreen() {
     }
     router.replace("/(users)/messages");
   }, [router]);
-
-  if (!currentUser) {
-    return (
-      <View className="flex-1 items-center justify-center bg-background">
-        <Ionicons name="person-circle-outline" size={80} color="#9ca3af" />
-        <Text className="text-gray-500 text-lg mt-4">
-          Please login to view messages
-        </Text>
-        <TouchableOpacity
-          onPress={() => router.push("/login")}
-          className="mt-6 bg-primary px-6 py-3 rounded-full"
-        >
-          <Text className="text-white font-semibold">Go to Login</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  if (isLoadingPartner) {
-    return (
-      <View className="flex-1 bg-background">
-        {/* Status Bar Space */}
-        <View style={{ height: insets.top, backgroundColor: 'white' }} />
-
-        {/* Loading Header */}
-        <View className="flex-row items-center p-4 border-b border-gray-200 bg-white">
-          <TouchableOpacity onPress={handleBackNavigation} className="mr-3">
-            <Ionicons name="chevron-back-outline" size={24} color="#007AFF" />
-          </TouchableOpacity>
-
-          <View className="w-10 h-10 bg-gray-300 rounded-full items-center justify-center mr-3 animate-pulse">
-            <Text className="text-gray-500 font-bold">...</Text>
-          </View>
-
-          <View className="flex-1">
-            <View
-              className="h-5 bg-gray-300 rounded animate-pulse mb-1"
-              style={{ width: "60%" }}
-            />
-            <View
-              className="h-3 bg-gray-200 rounded animate-pulse"
-              style={{ width: "40%" }}
-            />
-          </View>
-        </View>
-
-        <View className="flex-1 items-center justify-center">
-          <Text className="text-gray-500">Loading chat...</Text>
-        </View>
-      </View>
-    );
-  }
 
   const handleSendMessage = async () => {
     const baseMessageContent = messageText.trim();
@@ -1624,7 +1685,7 @@ export default function ChatScreen() {
     });
   };
 
-  const sendMessageToServer = async ({
+  const sendMessageToServer = useCallback(async ({
     messageContent,
     optimisticId,
     messagePreview,
@@ -1740,13 +1801,15 @@ export default function ChatScreen() {
         ),
       );
     }
-  };
+  }, [
+    chatPartnerId,
+    effectiveCurrentUserUUID,
+    pendingProductContext,
+    updateOutgoingStatus,
+  ]);
 
   // Debounced typing indicator - prevents timeout accumulation
   const handleTextChange = (text: string) => {
-    if (text.length > 0 && !areComposerActionsCollapsed) {
-      setComposerActionsCollapsed(true);
-    }
     setMessageText(text);
 
     // Clear previous timeout to prevent accumulation
@@ -2049,7 +2112,7 @@ export default function ChatScreen() {
   };
 
   /** Called by MongooseInviteCard when the initiator taps "Cancel Request" */
-  const handleMongooseCancelRequest = async (messageId: string) => {
+  const handleMongooseCancelRequest = useCallback(async (messageId: string) => {
     const updatedContent = JSON.stringify({
       ...JSON.parse(
         messages.find((m) => String(m.id) === messageId)?.content ?? "{}",
@@ -2065,16 +2128,16 @@ export default function ChatScreen() {
         String(m.id) === messageId ? { ...m, content: updatedContent } : m,
       ),
     );
-  };
+  }, [messages]);
 
   /** Called by MongooseInviteCard when the receiver taps "Confirm Your Location" */
-  const handleMongooseInviteResponse = (
+  const handleMongooseInviteResponse = useCallback((
     messageId: string,
     data: MongooseInviteData,
   ) => {
     setPendingMongooseInvite({ messageId, data });
     setShowMongooseResponder(true);
-  };
+  }, []);
 
   /** Called by MongooseResponderModal after booking_request inserted successfully */
   const handleMongooseConfirmed = async (bookingRequestId: string) => {
@@ -2117,7 +2180,7 @@ export default function ChatScreen() {
   };
 
   /** Called by MongooseInviteCard's confirmed-state "Track" button */
-  const handleMongooseTrack = async (bookingId: string) => {
+  const handleMongooseTrack = useCallback(async (bookingId: string) => {
     const { data } = await supabase
       .from("booking_requests")
       .select("*")
@@ -2127,9 +2190,9 @@ export default function ChatScreen() {
       setMongooseTrackerBooking(data);
       setShowMongooseTracker(true);
     }
-  };
+  }, []);
 
-  const openMessageActions = (
+  const openMessageActions = useCallback((
     message: any,
     pageY?: number,
     isCurrentUser?: boolean,
@@ -2140,9 +2203,9 @@ export default function ChatScreen() {
     setSelectedMessagePageY(pageY ?? 0);
     setSelectedMessageIsCurrentUser(isCurrentUser ?? false);
     setShowMessageActions(true);
-  };
+  }, []);
 
-  const renderOutgoingStatus = (
+  const renderOutgoingStatus = useCallback((
     message: any,
     isCurrentUser: boolean,
     isOptimistic: boolean,
@@ -2179,77 +2242,9 @@ export default function ChatScreen() {
     if (!label) return null;
 
     return <Text className={`text-[11px] mt-1 ${tone} mr-3`}>{label}</Text>;
-  };
+  }, [outgoingStatusById]);
 
-  /** Metallic border gradient — matches the badge's outer frame per tier. */
-  /** Neon glow color per tier. */
-  const getBubbleNeonColor = (badge: EarlyAccessBadgeType): string => {
-    if (badge === "founding") return "#ff6eb4";
-    if (badge === "waitlist") return "#ffd235";
-    return "#3de4ff";
-  };
-
-  /** Frosted semi-transparent fill per tier + sender/receiver. */
-  const getBubbleFrostedBg = (
-    badge: EarlyAccessBadgeType,
-    forCurrentUser: boolean,
-  ): string => {
-    if (badge === "founding")
-      return forCurrentUser ? "rgba(100,0,160,0.44)" : "rgba(70,0,110,0.36)";
-    if (badge === "waitlist")
-      return forCurrentUser ? "rgba(150,70,0,0.44)" : "rgba(100,50,0,0.36)";
-    return forCurrentUser ? "rgba(0,50,140,0.44)" : "rgba(0,35,100,0.36)";
-  };
-
-  /**
-   * Metallic border gradient — matches the badge’s outer frame per tier.
-   * Sender (you) → vivid full-brightness metal.
-   * Receiver (them) → muted, aged version of the same metal.
-   */
-  const getBubbleBorderColors = (
-    badge: EarlyAccessBadgeType,
-    forCurrentUser: boolean,
-  ): [string, string, string, string] => {
-    if (badge === "founding") {
-      return forCurrentUser
-        ? ["#c9a96e", "#f0d79a", "#e8c07a", "#c9a96e"] // vivid rose-gold
-        : ["#5a4535", "#7a6048", "#968060", "#7a6048"]; // muted aged bronze
-    }
-    if (badge === "waitlist") {
-      return forCurrentUser
-        ? ["#a16207", "#d97706", "#f5d264", "#d97706"] // vivid 24k gold
-        : ["#4a3200", "#6a4e00", "#8a6a14", "#6a4e00"]; // muted antique gold
-    }
-    return forCurrentUser
-      ? ["#475569", "#94a3b8", "#e2e8f0", "#94a3b8"] // vivid brushed steel
-      : ["#1e2530", "#2d3748", "#3d4e62", "#2d3748"]; // muted gunmetal
-  };
-
-  /**
-   * Inner dark fill.
-   * Sender → warm, rich tier material (deep violet / cognac / sapphire).
-   * Receiver → cool slate-charcoal — clearly a different read.
-   */
-  const getBubbleGradient = (
-    badge: EarlyAccessBadgeType,
-    forCurrentUser: boolean,
-  ): [string, string, string] => {
-    if (badge === "founding") {
-      return forCurrentUser
-        ? ["#3b0f5e", "#200838", "#13042a"] // sender — rich violet-obsidian
-        : ["#12162e", "#0d1124", "#080c1c"]; // receiver — cool slate-indigo
-    }
-    if (badge === "waitlist") {
-      return forCurrentUser
-        ? ["#3d1b00", "#261100", "#160900"] // sender — warm cognac
-        : ["#141008", "#0e0b06", "#090704"]; // receiver — cool espresso-charcoal
-    }
-    return forCurrentUser
-      ? ["#072040", "#041628", "#020f1c"] // sender — deep sapphire
-      : ["#171c24", "#10141c", "#090d14"]; // receiver — cool steel-charcoal
-  };
-
-  const renderMessage = (
+  const renderMessage = useCallback((
     message: any,
     index: number,
     connectPrev = false,
@@ -2275,10 +2270,6 @@ export default function ChatScreen() {
     const visibleTextContent = parsedContent.text;
     const embeddedReplyMeta = parsedContent.replyMeta;
     const embeddedProductMeta = parsedContent.productMeta;
-    // Badge tier for this specific message's sender (drives gradient bubbles)
-    const senderBadgeType: EarlyAccessBadgeType = isCurrentUser
-      ? currentUserBadgeType
-      : chatPartnerBadgeType;
     const RADIUS_LARGE = 20;
     const RADIUS_SMALL = 6;
     const rowSpacingClass = connectNext ? "mb-1" : "mb-3";
@@ -2323,7 +2314,8 @@ export default function ChatScreen() {
 
     const handleImagePress = () => {
       if (isImage && message.image_url) {
-        setPreviewImageUrl(message.image_url);
+        const idx = chatImageIndexByUrl[message.image_url] ?? -1;
+        setPreviewImageIndex(idx >= 0 ? idx : 0);
         setShowImagePreview(true);
       }
     };
@@ -2355,29 +2347,24 @@ export default function ChatScreen() {
           key={key}
           className={`${rowSpacingClass} ${isCurrentUser ? "items-end" : "items-start"}`}
         >
-          <SwipeableRow
-            onTriggered={() => startReplyToMessage(message)}
-            isCurrentUser={isCurrentUser}
+          <Pressable
+            onLongPress={(e) =>
+              openMessageActions(message, e.nativeEvent.pageY, isCurrentUser)
+            }
+            delayLongPress={400}
           >
-            <Pressable
-              onLongPress={(e) =>
-                openMessageActions(message, e.nativeEvent.pageY, isCurrentUser)
-              }
-              delayLongPress={400}
-              className={`${isCurrentUser ? "mr-2" : "ml-2"}`}
-            >
+            <View className={`${isCurrentUser ? "mr-2" : "ml-2"}`}>
               <AudioMessagePlayer
                 audioUrl={message.audio_url}
                 duration={message.audio_duration}
                 isCurrentUser={isCurrentUser}
                 isOptimistic={isOptimistic}
               />
-            </Pressable>
-          </SwipeableRow>
+            </View>
+          </Pressable>
           {reactionsForMsg.length > 0 && (
-            <AnimatedReactionPill
+            <ReactionPill
               key={reactionsForMsg.join("-")}
-              animKey={`${key}::${reactionsForMsg.join("")}`}
               reactions={reactionsForMsg}
               isCurrentUser={isCurrentUser}
             />
@@ -2401,20 +2388,24 @@ export default function ChatScreen() {
           key={key}
           className={`${rowSpacingClass} ${isCurrentUser ? "items-end" : "items-start"}`}
         >
-          <SwipeableRow
-            onTriggered={() => startReplyToMessage(message)}
-            isCurrentUser={isCurrentUser}
+          <Pressable
+            onPress={handleImagePress}
+            onLongPress={(e) =>
+              openMessageActions(message, e.nativeEvent.pageY, isCurrentUser)
+            }
+            delayLongPress={400}
           >
-            <Pressable
-              onPress={handleImagePress}
-              onLongPress={(e) =>
-                openMessageActions(message, e.nativeEvent.pageY, isCurrentUser)
-              }
-              delayLongPress={400}
-              className={`max-w-[72%] overflow-hidden ${
-                isCurrentUser ? "mr-2" : "ml-2"
-              } ${isOptimistic ? "opacity-70" : ""}`}
-              style={bubbleRadiusStyle}
+            <View
+              style={[
+                bubbleRadiusStyle,
+                {
+                  maxWidth: screenWidth * 0.72,
+                  overflow: "hidden",
+                  marginRight: isCurrentUser ? 8 : 0,
+                  marginLeft: isCurrentUser ? 0 : 8,
+                  opacity: isOptimistic ? 0.7 : 1,
+                },
+              ]}
             >
               <Image
                 source={{ uri: message.image_url }}
@@ -2427,12 +2418,11 @@ export default function ChatScreen() {
                   <Text className="text-white text-xs mt-2">Uploading...</Text>
                 </View>
               )}
-            </Pressable>
-          </SwipeableRow>
+            </View>
+          </Pressable>
           {reactionsForMsg.length > 0 && (
-            <AnimatedReactionPill
+            <ReactionPill
               key={reactionsForMsg.join("-")}
-              animKey={`${key}::${reactionsForMsg.join("")}`}
               reactions={reactionsForMsg}
               isCurrentUser={isCurrentUser}
             />
@@ -2466,10 +2456,10 @@ export default function ChatScreen() {
                 openMessageActions(message, e.nativeEvent.pageY, isCurrentUser)
               }
               delayLongPress={400}
-              className={`max-w-[72%] overflow-hidden ${
+              className={`overflow-hidden ${
                 isCurrentUser ? "mr-2" : "ml-2"
               } ${isOptimistic ? "opacity-70" : ""}`}
-              style={bubbleRadiusStyle}
+              style={[bubbleRadiusStyle, { maxWidth: screenWidth * 0.72 }]}
             >
               <MapView
                 style={{ width: 250, height: 150 }}
@@ -2513,9 +2503,8 @@ export default function ChatScreen() {
             </Pressable>
           </SwipeableRow>
           {reactionsForMsg.length > 0 && (
-            <AnimatedReactionPill
+            <ReactionPill
               key={reactionsForMsg.join("-")}
-              animKey={`${key}::${reactionsForMsg.join("")}`}
               reactions={reactionsForMsg}
               isCurrentUser={isCurrentUser}
             />
@@ -2608,82 +2597,32 @@ export default function ChatScreen() {
               openMessageActions(message, e.nativeEvent.pageY, isCurrentUser)
             }
             delayLongPress={400}
-            className={`max-w-[72%] px-3 py-3 ${
+            className={`px-3 py-3 ${
               isCurrentUser
-                ? senderBadgeType
-                  ? "mr-2"
-                  : "bg-primary mr-2"
-                : senderBadgeType
-                  ? "ml-2"
-                  : "bg-gray-200 ml-2"
+                ? "bg-primary mr-2"
+                : "bg-[#f7f8fa] ml-2"
             } ${isOptimistic ? "opacity-70" : ""}`}
-            style={[bubbleRadiusStyle, { overflow: "hidden" }]}
+            style={[
+              bubbleRadiusStyle,
+              {
+                overflow: "hidden",
+                maxWidth: screenWidth * 0.72,
+                borderWidth: isCurrentUser ? 0 : 1,
+                borderColor: isCurrentUser ? "transparent" : "#eceff3",
+              },
+            ]}
           >
-            {/* ── Badge-holder bubble: metallic gradient per tier ── */}
-            {senderBadgeType ? (
-              <>
-                <LinearGradient
-                  colors={getBubbleBorderColors(senderBadgeType, isCurrentUser)}
-                  start={{ x: 0, y: 0.5 }}
-                  end={{ x: 1, y: 0.5 }}
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                  }}
-                />
-                <LinearGradient
-                  colors={getBubbleGradient(senderBadgeType, isCurrentUser)}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={{
-                    position: "absolute",
-                    top: 1.5,
-                    left: 1.5,
-                    right: 1.5,
-                    bottom: 1.5,
-                    borderRadius: 18,
-                  }}
-                />
-                <View
-                  style={{
-                    position: "absolute",
-                    top: 1.5,
-                    bottom: 1.5,
-                    left: "22%",
-                    width: 36,
-                    backgroundColor: "rgba(255,255,255,0.045)",
-                    transform: [{ skewX: "-18deg" }],
-                  }}
-                  pointerEvents="none"
-                />
-                <View
-                  style={{
-                    position: "absolute",
-                    top: 1.5,
-                    bottom: 1.5,
-                    left: "55%",
-                    width: 14,
-                    backgroundColor: "rgba(255,255,255,0.025)",
-                    transform: [{ skewX: "-18deg" }],
-                  }}
-                  pointerEvents="none"
-                />
-              </>
-            ) : null}
             {embeddedReplyMeta ? (
               <View
                 className={`mb-2 rounded-xl px-2 py-1.5 border-l-2 ${
-                  isCurrentUser || senderBadgeType
+                  isCurrentUser
                     ? "bg-white/15 border-white/80"
-                    : "bg-white border-gray-300"
+                    : "bg-white/90 border-gray-300"
                 }`}
               >
                 <Text
                   className={`text-[11px] font-semibold ${
-                    isCurrentUser || senderBadgeType
+                    isCurrentUser
                       ? "text-blue-100"
                       : "text-gray-700"
                   }`}
@@ -2693,7 +2632,7 @@ export default function ChatScreen() {
                 </Text>
                 <Text
                   className={`text-[11px] ${
-                    isCurrentUser || senderBadgeType
+                    isCurrentUser
                       ? "text-blue-100"
                       : "text-gray-600"
                   }`}
@@ -2704,7 +2643,7 @@ export default function ChatScreen() {
               </View>
             ) : null}
             <Text
-              className={`${isCurrentUser || senderBadgeType ? "text-white" : "text-gray-800"} text-[15px]`}
+              className={`${isCurrentUser ? "text-white" : "text-gray-800"} text-[15px]`}
               style={{ lineHeight: 20 }}
             >
               {visibleTextContent}
@@ -2713,9 +2652,8 @@ export default function ChatScreen() {
         </SwipeableRow>
         {/* Emoji reactions pill */}
         {reactionsForMsg.length > 0 && (
-          <AnimatedReactionPill
+          <ReactionPill
             key={reactionsForMsg.join("-")}
-            animKey={`${key}::${reactionsForMsg.join("")}`}
             reactions={reactionsForMsg}
             isCurrentUser={isCurrentUser}
           />
@@ -2784,7 +2722,151 @@ export default function ChatScreen() {
         )}
       </View>
     );
-  };
+  }, [
+    chatImageIndexByUrl,
+    chatPartnerName,
+    effectiveCurrentUserUUID,
+    latestOutgoingMessageId,
+    messageReactions,
+    openMessageActions,
+    openProductContext,
+    renderOutgoingStatus,
+    replyCountByMessageId,
+    screenWidth,
+    sendMessageToServer,
+    startReplyToMessage,
+    handleMongooseCancelRequest,
+    handleMongooseInviteResponse,
+    handleMongooseTrack,
+  ]);
+  const renderTimelineItem = useCallback(
+    ({ item, index }: any) => {
+      if (item.type === "separator") {
+        return (
+          <View key={item.id} className="items-center my-3">
+            <View className="px-3 py-1 rounded-full">
+              <Text className="text-[11px] text-gray-600 font-medium">
+                {item.label}
+              </Text>
+            </View>
+          </View>
+        );
+      }
+      return renderMessage(
+        item.message,
+        index,
+        item.connectPrev,
+        item.connectNext,
+      );
+    },
+    [renderMessage],
+  );
+  const timelineKeyExtractor = useCallback((item: any) => item.id, []);
+  const renderGestureScrollComponent = useCallback(
+    (props: any) => <GestureScrollView {...props} />,
+    [],
+  );
+  const timelineContentContainerStyle = useMemo(
+    () => ({
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      paddingTop: chatBottomPadding,
+      flexGrow: 1,
+    }),
+    [chatBottomPadding],
+  );
+  const typingHeaderComponent = useMemo(
+    () => (isPartnerTyping ? <TypingIndicator /> : null),
+    [isPartnerTyping],
+  );
+  const emptyChatComponent = useMemo(
+    () => (
+      <View className="flex-1 items-center justify-center min-h-[200px]">
+        <View className="w-16 h-16 bg-primary rounded-full items-center justify-center mb-4">
+          <Text className="text-white font-bold text-xl">
+            {chatPartnerName.charAt(0).toUpperCase()}
+          </Text>
+        </View>
+        <Text className="text-gray-800 font-semibold text-lg mb-2">
+          {chatPartnerName}
+        </Text>
+        <Text className="text-gray-500 text-center px-8">
+          {chatPartnerName.startsWith("+975") ||
+          chatPartnerName === "Unknown User"
+            ? "No messages yet. Start the conversation!"
+            : `No messages yet. Start the conversation with ${chatPartnerName}!`}
+        </Text>
+      </View>
+    ),
+    [chatPartnerName],
+  );
+  const loadingMoreFooterComponent = useMemo(
+    () =>
+      isLoadingMore ? (
+        <View className="items-center py-3">
+          <ActivityIndicator size="small" color="#9ca3af" />
+        </View>
+      ) : null,
+    [isLoadingMore],
+  );
+  const showExpandedComposerActions =
+    !headerRecording &&
+    !isKeyboardVisible &&
+    !messageText.trim() &&
+    !replyingToMessage &&
+    !isEditMode;
+
+  if (!currentUser) {
+    return (
+      <View className="flex-1 items-center justify-center bg-background">
+        <Ionicons name="person-circle-outline" size={80} color="#9ca3af" />
+        <Text className="text-gray-500 text-lg mt-4">
+          Please login to view messages
+        </Text>
+        <TouchableOpacity
+          onPress={() => router.push("/login")}
+          className="mt-6 bg-primary px-6 py-3 rounded-full"
+        >
+          <Text className="text-white font-semibold">Go to Login</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (isLoadingPartner) {
+    return (
+      <View className="flex-1 bg-background">
+        {/* Status Bar Space */}
+        <View style={{ height: insets.top, backgroundColor: "white" }} />
+
+        {/* Loading Header */}
+        <View className="flex-row items-center p-4 border-b border-gray-200 bg-white">
+          <TouchableOpacity onPress={handleBackNavigation} className="mr-3">
+            <Ionicons name="chevron-back-outline" size={24} color="#007AFF" />
+          </TouchableOpacity>
+
+          <View className="w-10 h-10 bg-gray-300 rounded-full items-center justify-center mr-3 animate-pulse">
+            <Text className="text-gray-500 font-bold">...</Text>
+          </View>
+
+          <View className="flex-1">
+            <View
+              className="h-5 bg-gray-300 rounded animate-pulse mb-1"
+              style={{ width: "60%" }}
+            />
+            <View
+              className="h-3 bg-gray-200 rounded animate-pulse"
+              style={{ width: "40%" }}
+            />
+          </View>
+        </View>
+
+        <View className="flex-1 items-center justify-center">
+          <Text className="text-gray-500">Loading chat...</Text>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View className="flex-1 bg-white">
@@ -2876,65 +2958,28 @@ export default function ChatScreen() {
       {/* Keyboard-aware body — slides up with the keyboard on the native UI thread */}
       <Reanimated.View style={[{ flex: 1 }, keyboardAwareStyle]}>
       {/* Scrollable Messages Area */}
-      <ScrollView
-        ref={scrollViewRef}
-        className="flex-1 px-4 py-2"
+      <FlatList
+        ref={flatListRef}
+        data={reversedTimelineItems}
+        keyExtractor={timelineKeyExtractor}
+        inverted
         showsVerticalScrollIndicator={false}
-        // "always": taps anywhere never dismiss the keyboard — no accidental
-        // keyboard-close when touching a bubble or empty space between messages.
         keyboardShouldPersistTaps="always"
-        // "on-drag": keyboard dismisses as soon as the user intentionally drags
-        // to scroll — mirrors WhatsApp / iMessage behaviour.
         keyboardDismissMode="on-drag"
-        contentContainerStyle={{
-          flexGrow: 1,
-          justifyContent: allMessages.length > 0 ? "flex-end" : "center",
-          paddingBottom: chatBottomPadding,
-        }}
-      >
-        {allMessages.length > 0 ? (
-          timelineItems.map((item, index) => {
-            if (item.type === "separator") {
-              return (
-                <View key={item.id} className="items-center my-3">
-                  <View className=" px-3 py-1 rounded-full">
-                    <Text className="text-[11px] text-gray-600 font-medium">
-                      {item.label}
-                    </Text>
-                  </View>
-                </View>
-              );
-            }
-            return renderMessage(
-              item.message,
-              index,
-              item.connectPrev,
-              item.connectNext,
-            );
-          })
-        ) : (
-          <View className="flex-1 items-center justify-center min-h-[200px]">
-            <View className="w-16 h-16 bg-primary rounded-full items-center justify-center mb-4">
-              <Text className="text-white font-bold text-xl">
-                {chatPartnerName.charAt(0).toUpperCase()}
-              </Text>
-            </View>
-            <Text className="text-gray-800 font-semibold text-lg mb-2">
-              {chatPartnerName}
-            </Text>
-            <Text className="text-gray-500 text-center px-8">
-              {/* Show a more natural message */}
-              {chatPartnerName.startsWith("+975") ||
-              chatPartnerName === "Unknown User"
-                ? "No messages yet. Start the conversation!"
-                : `No messages yet. Start the conversation with ${chatPartnerName}!`}
-            </Text>
-          </View>
-        )}
-
-        {/* Typing indicator */}
-        {isPartnerTyping && <TypingIndicator />}
-      </ScrollView>
+        contentContainerStyle={timelineContentContainerStyle}
+        renderScrollComponent={renderGestureScrollComponent}
+        removeClippedSubviews={Platform.OS === "android"}
+        initialNumToRender={12}
+        maxToRenderPerBatch={6}
+        updateCellsBatchingPeriod={32}
+        windowSize={5}
+        renderItem={renderTimelineItem}
+        ListHeaderComponent={typingHeaderComponent}
+        ListEmptyComponent={emptyChatComponent}
+        onEndReached={loadMoreMessages}
+        onEndReachedThreshold={0.3}
+        ListFooterComponent={loadingMoreFooterComponent}
+      />
 
       {/* Fixed Input Bar */}
       <View
@@ -3022,114 +3067,64 @@ export default function ChatScreen() {
             ) : null}
 
             <View className="flex-row items-center px-2 py-2">
-              {/* Action tray (image + location) — hidden while recording */}
-              {!isVoiceRecording && (
-                <Animated.View
-                  className="relative h-9 mr-1 overflow-hidden justify-center"
-                  style={{
-                    width: composerActionsProgress.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [36, 116],
-                    }),
-                  }}
-                >
-                  <Animated.View
-                    pointerEvents={areComposerActionsCollapsed ? "none" : "auto"}
-                    className="absolute left-0 right-0 flex-row items-center"
-                    style={{
-                      opacity: composerActionsProgress,
-                      transform: [
-                        {
-                          translateX: composerActionsProgress.interpolate({
-                            inputRange: [0, 1],
-                            outputRange: [-14, 0],
-                          }),
-                        },
-                      ],
-                    }}
+              {showExpandedComposerActions && (
+                <View className="mr-1 flex-row items-center">
+                  <ChatImagePicker
+                    currentUserUUID={effectiveCurrentUserUUID || ""}
+                    chatPartnerId={chatPartnerId as string}
+                    onOptimisticImage={handleOptimisticImage}
+                    onUploadSuccess={handleImageUploadSuccess}
+                    onUploadError={handleImageUploadError}
+                  />
+                  <ChatImagePicker
+                    mode="camera"
+                    currentUserUUID={effectiveCurrentUserUUID || ""}
+                    chatPartnerId={chatPartnerId as string}
+                    onOptimisticImage={handleOptimisticImage}
+                    onUploadSuccess={handleImageUploadSuccess}
+                    onUploadError={handleImageUploadError}
+                  />
+                  <TouchableOpacity
+                    onPress={handleShareLocation}
+                    disabled={isSharingLocation}
+                    className="w-9 h-9 items-center justify-center"
                   >
-                    <ChatImagePicker
-                      currentUserUUID={effectiveCurrentUserUUID || ""}
-                      chatPartnerId={chatPartnerId as string}
-                      onOptimisticImage={handleOptimisticImage}
-                      onUploadSuccess={handleImageUploadSuccess}
-                      onUploadError={handleImageUploadError}
-                    />
-                    <ChatImagePicker
-                      mode="camera"
-                      currentUserUUID={effectiveCurrentUserUUID || ""}
-                      chatPartnerId={chatPartnerId as string}
-                      onOptimisticImage={handleOptimisticImage}
-                      onUploadSuccess={handleImageUploadSuccess}
-                      onUploadError={handleImageUploadError}
-                    />
-                    <TouchableOpacity
-                      onPress={handleShareLocation}
-                      disabled={isSharingLocation}
-                      className="w-9 h-9 items-center justify-center"
-                    >
-                      {isSharingLocation ? (
-                        <Text className="text-xs text-gray-500">...</Text>
-                      ) : (
-                        <Ionicons
-                          name="location-outline"
-                          size={20}
-                          color="#6b7280"
-                        />
-                      )}
-                    </TouchableOpacity>
-                  </Animated.View>
-
-                  <Animated.View
-                    pointerEvents={areComposerActionsCollapsed ? "auto" : "none"}
-                    className="absolute left-0 right-0 items-center"
-                    style={{
-                      opacity: composerActionsProgress.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [1, 0],
-                      }),
-                      transform: [
-                        {
-                          translateX: composerActionsProgress.interpolate({
-                            inputRange: [0, 1],
-                            outputRange: [0, 10],
-                          }),
-                        },
-                      ],
-                    }}
-                  >
-                    <TouchableOpacity
-                      onPress={() => setComposerActionsCollapsed(false)}
-                      className="w-9 h-9 items-center justify-center"
-                    >
+                    {isSharingLocation ? (
+                      <Text className="text-xs text-gray-500">...</Text>
+                    ) : (
                       <Ionicons
-                        name="chevron-forward"
+                        name="location-outline"
                         size={20}
                         color="#6b7280"
                       />
-                    </TouchableOpacity>
-                  </Animated.View>
-                </Animated.View>
+                    )}
+                  </TouchableOpacity>
+                </View>
               )}
 
-              {/* Voice recorder — always mounted so recording state is preserved.
-                  hidden={collapsed} collapses it to 0×0 when typing (tray is closed),
-                  becomes full-width flex:1 bar while recording. */}
-              <ChatAudioRecorder
-                currentUserUUID={effectiveCurrentUserUUID || ""}
-                chatPartnerId={chatPartnerId as string}
-                onOptimisticAudio={handleOptimisticAudio}
-                onUploadSuccess={handleAudioUploadSuccess}
-                onUploadError={handleAudioUploadError}
-                onRecordingStateChange={setIsVoiceRecording}
-                hidden={areComposerActionsCollapsed && !isVoiceRecording}
-                style={isVoiceRecording ? { flex: 1 } : undefined}
-              />
+              <TouchableOpacity
+                onPress={headerStartRecording}
+                disabled={headerRecording || headerUploading}
+                className="w-9 h-9 items-center justify-center"
+              >
+                {headerUploading ? (
+                  <ActivityIndicator size="small" color="#094569" />
+                ) : (
+                  <Ionicons
+                    name="mic-outline"
+                    size={20}
+                    color={headerRecording ? "#ef4444" : "#6b7280"}
+                  />
+                )}
+              </TouchableOpacity>
 
               {/* Text input + send/edit buttons — hidden while recording */}
-              {!isVoiceRecording && (
+              {!headerRecording && (
                 <>
-                  <View className="flex-1 self-center min-h-[36px] justify-center">
+                  <Pressable
+                    onPressIn={focusComposerInput}
+                    className="flex-1 self-center min-h-[36px] justify-center"
+                  >
                     <TextInput
                       ref={chatInputRef}
                       className="w-full px-3 text-[16px]"
@@ -3147,7 +3142,6 @@ export default function ChatScreen() {
                       placeholder="Type a message..."
                       value={messageText}
                       onChangeText={handleTextChange}
-                      onFocus={() => setComposerActionsCollapsed(true)}
                       multiline
                       maxLength={500}
                       textAlignVertical="center"
@@ -3165,7 +3159,7 @@ export default function ChatScreen() {
                         }
                       }}
                     />
-                  </View>
+                  </Pressable>
 
                   {isEditMode && (
                     <TouchableOpacity
@@ -3270,12 +3264,11 @@ export default function ChatScreen() {
       <Modal
         visible={showMessageActions}
         transparent
-        animationType="none"
+        animationType="fade"
         onRequestClose={() => setShowMessageActions(false)}
         statusBarTranslucent
       >
-        {/* Outer animated wrapper — fades the whole overlay in/out */}
-        <Reanimated.View style={[modalBackdropAnimStyle, { flex: 1 }]}>
+        <View style={{ flex: 1 }}>
           {/* Blurred backdrop */}
           <BlurView
             intensity={55}
@@ -3348,18 +3341,15 @@ export default function ChatScreen() {
                 messageReactions[String(selectedMessage.id)] || [];
 
               return (
-                <Reanimated.View
+                <View
                   pointerEvents="box-none"
-                  style={[
-                    modalCardAnimStyle,
-                    {
-                      position: "absolute",
-                      top: cardTop,
-                      left: 0,
-                      right: 0,
-                      paddingHorizontal: 14,
-                    },
-                  ]}
+                  style={{
+                    position: "absolute",
+                    top: cardTop,
+                    left: 0,
+                    right: 0,
+                    paddingHorizontal: 14,
+                  }}
                 >
                   {/* Mini message bubble preview */}
                   <View
@@ -3632,11 +3622,10 @@ export default function ChatScreen() {
                       </TouchableOpacity>
                     )}
                   </View>
-                </Reanimated.View>
+                </View>
               );
             })()}
-        </Reanimated.View>
-        {/* end backdrop wrapper */}
+        </View>
       </Modal>
 
       {/* ── Location Picker Modal ────────────────────────────── */}
@@ -3697,41 +3686,61 @@ export default function ChatScreen() {
       )}
 
       {/* Image Preview Modal */}
-      <Modal
+      <ChatImageViewer
         visible={showImagePreview}
-        animationType="fade"
-        onRequestClose={() => setShowImagePreview(false)}
-      >
-        <View className="flex-1 bg-black">
-          {/* Header */}
-          <View
-            className="bg- px-4 py-4 border-b border-gray-800"
-            style={{ paddingTop: Platform.OS === "ios" ? 50 : 20 }}
-          >
-            <View className="flex-row items-center justify-between">
-              <TouchableOpacity
-                onPress={() => setShowImagePreview(false)}
-                className="p-2"
-              >
-                <Ionicons name="close" size={28} color="white" />
-              </TouchableOpacity>
-              <Text className="text-lg font-semibold text-white">Image</Text>
-              <View className="w-10" />
-            </View>
+        images={chatImageUrls}
+        initialIndex={previewImageIndex}
+        onClose={() => setShowImagePreview(false)}
+      />
+
+      {/* Header voice recording overlay */}
+      {headerRecording && (
+        <View style={{
+          position: 'absolute', bottom: 0, left: 0, right: 0,
+          backgroundColor: 'white',
+          borderTopWidth: 1, borderTopColor: '#e5e7eb',
+          paddingBottom: insets.bottom + 12,
+          paddingTop: 16, paddingHorizontal: 24,
+          alignItems: 'center',
+          shadowColor: '#000', shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.08, shadowRadius: 8, elevation: 10,
+        }}>
+          {/* Recording indicator */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
+            <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#ef4444', marginRight: 8 }} />
+            <Text style={{ fontSize: 16, fontWeight: '600', color: '#111827' }}>
+              Recording...
+            </Text>
+            <Text style={{ fontSize: 16, fontWeight: '600', color: '#ef4444', marginLeft: 12 }}>
+              {`${Math.floor(headerRecordingSecs / 60)}:${(headerRecordingSecs % 60).toString().padStart(2, '0')}`}
+            </Text>
           </View>
 
-          {/* Image */}
-          <View className="flex-1 items-center justify-center">
-            {previewImageUrl && (
-              <Image
-                source={{ uri: previewImageUrl }}
-                style={{ width: "100%", height: "100%" }}
-                resizeMode="contain"
-              />
-            )}
+          {/* Cancel and Send buttons */}
+          <View style={{ flexDirection: 'row', gap: 16 }}>
+            <TouchableOpacity
+              onPress={headerCancel}
+              style={{
+                flex: 1, height: 48, borderRadius: 24,
+                borderWidth: 1, borderColor: '#d1d5db',
+                alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <Text style={{ fontSize: 15, fontWeight: '600', color: '#6b7280' }}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={headerStopAndSend}
+              style={{
+                flex: 1, height: 48, borderRadius: 24,
+                backgroundColor: '#094569',
+                alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <Text style={{ fontSize: 15, fontWeight: '600', color: 'white' }}>Send</Text>
+            </TouchableOpacity>
           </View>
         </View>
-      </Modal>
+      )}
     </View>
   );
 }

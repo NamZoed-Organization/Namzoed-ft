@@ -45,6 +45,14 @@ export interface CoHostRequest {
 const TABLE_NAME = "live_streams";
 
 export async function fetchActiveLivestreams(): Promise<Livestream[]> {
+  // Auto-expire streams older than 8 hours that were never properly ended
+  const staleThreshold = new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString();
+  await supabase
+    .from(TABLE_NAME)
+    .update({ is_active: false })
+    .eq("is_active", true)
+    .lt("started_at", staleThreshold);
+
   const { data, error } = await supabase
     .from(TABLE_NAME)
     .select("*")

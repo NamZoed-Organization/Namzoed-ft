@@ -48,6 +48,7 @@ export default function FeedScreen() {
   const [LiveScrollScreen, setLiveScrollScreen] = useState<React.ComponentType<{
     initialStreamId?: string;
     onClose: () => void;
+    openCreateOnMount?: boolean;
   }> | null>(null);
   const [liveScreenLoading, setLiveScreenLoading] = useState(false);
 
@@ -398,6 +399,7 @@ export default function FeedScreen() {
         {LiveScrollScreen ? (
           <LiveScrollScreen
             initialStreamId={selectedStreamId ?? undefined}
+            openCreateOnMount={selectedStreamId === null}
             onClose={() => setShowLive(false)}
           />
         ) : (
