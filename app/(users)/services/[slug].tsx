@@ -2,7 +2,7 @@ import TopNavbar from "@/components/ui/TopNavbar";
 import { getServiceCategoryBySlug } from "@/data/servicecategory";
 import { fetchAllServiceProviders, fetchProviderServicesByCategory, ProviderServiceWithDetails } from "@/lib/servicesService";
 import { Href, router, useLocalSearchParams, useFocusEffect } from "expo-router";
-import { User, ArrowUpDown, Shuffle, ChevronLeft, CheckCircle2 } from "lucide-react-native";
+import { User, ArrowUpDown, Shuffle, ChevronLeft, Verified } from "lucide-react-native";
 import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { ActivityIndicator, FlatList, Image, Text, TouchableOpacity, View, BackHandler } from "react-native";
 import * as Haptics from "expo-haptics";
@@ -212,7 +212,7 @@ export default function ServiceDetailScreen() {
   };
 
   const renderServiceCard = ({ item }: { item: ProviderServiceWithDetails }) => {
-    const providerName = item.service_providers?.profiles?.name || 'Unknown Provider';
+    const providerName = item.service_providers?.name || item.service_providers?.profiles?.name || 'Unknown Provider';
     const providerImage = item.service_providers?.profile_url ||
                          item.service_providers?.profiles?.avatar_url;
 
@@ -247,25 +247,22 @@ export default function ServiceDetailScreen() {
 
           {/* Provider Info */}
           <View className="flex-row items-center pt-2 border-t border-gray-100">
-            <View className="relative mr-1.5">
+            <View className="mr-1.5">
               {providerImage ? (
-                <Image
-                  source={{ uri: providerImage }}
-                  className="w-6 h-6 rounded-full"
-                />
+                <Image source={{ uri: providerImage }} className="w-6 h-6 rounded-full" />
               ) : (
                 <View className="w-6 h-6 rounded-full bg-gray-200" />
-              )}
-              {/* Verified Badge for small avatar */}
-              {item.service_providers?.status === 'verified' && (
-                <View className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-blue-500 rounded-full items-center justify-center border border-white">
-                  <CheckCircle2 size={8} color="white" fill="white" />
-                </View>
               )}
             </View>
             <View className="flex-1">
               <Text className="text-[10px] text-gray-500">Service by</Text>
               <Text className="text-xs font-medium text-gray-900" numberOfLines={1}>{providerName}</Text>
+              {item.service_providers?.verification_status === 'verified' && (
+                <View className="flex-row items-center bg-blue-50 border border-[#094569] rounded-full px-1.5 py-0.5 gap-0.5 self-start mt-0.5">
+                  <Verified size={9} color="#094569" />
+                  <Text className="text-[9px] font-msemibold text-[#094569] leading-none">Verified</Text>
+                </View>
+              )}
             </View>
           </View>
         </View>
@@ -308,27 +305,24 @@ export default function ServiceDetailScreen() {
         activeOpacity={0.7}
       >
         <View className="items-center mb-2">
-          <View className="relative mb-2">
+          <View className="mb-2">
             {providerImage ? (
-              <Image
-                source={{ uri: providerImage }}
-                className="w-16 h-16 rounded-full"
-              />
+              <Image source={{ uri: providerImage }} className="w-16 h-16 rounded-full" />
             ) : (
               <View className="w-16 h-16 rounded-full bg-primary/20 items-center justify-center">
                 <User size={24} color="#059669" />
-              </View>
-            )}
-            {/* Verified Badge */}
-            {item.status === 'verified' && (
-              <View className="absolute top-0 right-0 w-5 h-5 bg-blue-500 rounded-full items-center justify-center border-2 border-white">
-                <CheckCircle2 size={12} color="white" fill="white" />
               </View>
             )}
           </View>
           <Text className="text-sm font-msemibold text-gray-900 text-center" numberOfLines={1}>
             {providerName}
           </Text>
+          {item.verification_status === 'verified' && (
+            <View className="flex-row items-center bg-blue-50 border border-[#094569] rounded-full px-1.5 py-0.5 gap-0.5 mt-0.5">
+              <Verified size={9} color="#094569" />
+              <Text className="text-[9px] font-msemibold text-[#094569] leading-none">Verified</Text>
+            </View>
+          )}
           <Text className="text-xs text-gray-500 text-center">
             {serviceCount} {serviceCount === 1 ? 'Service' : 'Services'}
           </Text>

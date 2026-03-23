@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { Image } from "expo-image";
-import { MapPin } from "lucide-react-native";
+import { MapPin, Verified } from "lucide-react-native";
 import React from "react";
 import { Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
@@ -19,6 +19,7 @@ interface HomeCardProps {
   price?: string;
   profileImage?: string;
   profileName?: string;
+  isVerified?: boolean;
   location?: string;
 }
 
@@ -33,6 +34,7 @@ const HomeCard = React.memo(function HomeCard({
   price,
   profileImage,
   profileName,
+  isVerified = false,
   location,
 }: HomeCardProps) {
   if (isSeeMore) {
@@ -98,6 +100,12 @@ const HomeCard = React.memo(function HomeCard({
               <Text style={styles.profileName} numberOfLines={1}>
                 {profileName}
               </Text>
+              {isVerified && (
+                <View style={styles.verifiedBadge}>
+                  <Verified size={9} color="#094569" />
+                  <Text style={styles.verifiedText}>Verified</Text>
+                </View>
+              )}
             </View>
           )}
 
@@ -218,6 +226,23 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#4B5563",
     flex: 1,
+  },
+  verifiedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#EFF6FF",
+    borderWidth: 1,
+    borderColor: "#094569",
+    borderRadius: 99,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    gap: 2,
+    marginLeft: 4,
+  },
+  verifiedText: {
+    fontSize: 8,
+    fontWeight: "700",
+    color: "#094569",
   },
   topRow: {
     flexDirection: "row",

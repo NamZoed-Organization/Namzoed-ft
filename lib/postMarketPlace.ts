@@ -13,6 +13,7 @@ export interface MarketplaceItem {
   tags: string[];
   created_at: string;
   updated_at: string;
+  isVerified?: boolean;
 }
 
 export interface MarketplaceItemWithUser extends MarketplaceItem {

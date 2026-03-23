@@ -22,7 +22,9 @@
       "Bash(grep -l \"Image\\\\|image\" /c/Users/sonam/Desktop/namzoed/Namzoed-ft/components/modals/*Viewer*.tsx)",
       "Bash(wc -l \"c:/Users/sonam/Desktop/namzoed/Namzoed-ft/app/\\(users\\)/chat/[id].tsx\")",
       "Bash(grep -E \"\\\\.\\(sql|ts|tsx\\)$\")",
-      "Bash(grep -l \"LiveSessionProvider\\\\|useLiveSession\" \"c:\\\\Users\\\\sonam\\\\Desktop\\\\namzoed\\\\Namzoed-ft/contexts\"/*.tsx)"
+      "Bash(grep -l \"LiveSessionProvider\\\\|useLiveSession\" \"c:\\\\Users\\\\sonam\\\\Desktop\\\\namzoed\\\\Namzoed-ft/contexts\"/*.tsx)",
+      "Read(//c/Users/sonam/Desktop/namzoed/**)",
+      "Bash(keytool -list -v -keystore \"C:/Users/sonam/Desktop/namzoed/build khatara/android/app/release.keystore\" -alias my-key-alias)"
     ]
   }
 }

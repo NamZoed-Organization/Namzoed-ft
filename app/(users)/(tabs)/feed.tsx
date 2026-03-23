@@ -5,6 +5,7 @@ import { useUser } from "@/contexts/UserContext";
 import { useFeedPagination } from "@/hooks/usePagination";
 import { useVirtualizedList } from "@/hooks/useVirtualizedList";
 import { fetchPosts, PostWithUser } from "@/lib/postsService";
+import { supabase } from "@/lib/supabase";
 import { getReportedPostIds } from "@/lib/reportService";
 import { PostData } from "@/types/post";
 import { useLocalSearchParams } from "expo-router";
@@ -55,17 +56,23 @@ export default function FeedScreen() {
   // Dynamically import LiveScrollScreen only when user opens live
   useEffect(() => {
     if (showLive && !LiveScrollScreen && !liveScreenLoading) {
+      console.log("[FeedLive] Opening live modal, importing LiveScrollScreen", {
+        selectedStreamId,
+        openCreateOnMount: selectedStreamId === null,
+      });
       setLiveScreenLoading(true);
       import("@/components/livestream/LiveScrollScreen")
         .then((module) => {
+          console.log("[FeedLive] LiveScrollScreen imported successfully");
           setLiveScrollScreen(() => module.default);
           setLiveScreenLoading(false);
         })
-        .catch(() => {
+        .catch((error) => {
+          console.error("[FeedLive] Failed to import LiveScrollScreen", error);
           setLiveScreenLoading(false);
         });
     }
-  }, [showLive, LiveScrollScreen, liveScreenLoading]);
+  }, [showLive, LiveScrollScreen, liveScreenLoading, selectedStreamId]);
 
   // Convert Supabase post to PostData format
   const convertToPostData = (post: PostWithUser): PostData => {
@@ -107,7 +114,22 @@ export default function FeedScreen() {
         return;
       }
 
-      const convertedPosts = fetchedPosts.map(convertToPostData);
+      // Batch-fetch verified service providers for all post authors
+      const userIds = [...new Set(fetchedPosts.map((p) => p.user_id))];
+      const { data: spData } = await supabase
+        .from("service_providers")
+        .select("user_id, verification_status")
+        .in("user_id", userIds);
+      const verifiedIds = new Set(
+        (spData || [])
+          .filter((sp) => sp.verification_status === "verified")
+          .map((sp) => sp.user_id)
+      );
+
+      const convertedPosts = fetchedPosts.map((post) => ({
+        ...convertToPostData(post),
+        isVerified: verifiedIds.has(post.user_id),
+      }));
 
       // Sort by date (newest first)
       const sortedNewPosts = convertedPosts.sort(
@@ -277,11 +299,16 @@ export default function FeedScreen() {
   };
 
   const handleJoinLive = useCallback((stream: { id: string }) => {
+    console.log("[FeedLive] handleJoinLive", { streamId: stream.id });
     setSelectedStreamId(stream.id);
     setShowLive(true);
   }, []);
 
   const handleGoLive = useCallback(() => {
+    console.log("[FeedLive] handleGoLive", {
+      selectedStreamId: null,
+      openCreateOnMount: true,
+    });
     setSelectedStreamId(null);
     setShowLive(true);
   }, []);

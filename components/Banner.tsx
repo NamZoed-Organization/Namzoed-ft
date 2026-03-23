@@ -18,13 +18,6 @@ export default function Banner() {
   const [activeIndex, setActiveIndex] = useState(0);
   const { banners, loading } = useBanners();
 
-  if (loading || banners.length === 0) return null;
-
-  const handleScroll = Animated.event(
-    [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-    { useNativeDriver: true }
-  );
-
   const renderItem = useCallback(({ item, index }: any) => {
     const inputRange = [
       (index - 1) * CARD_WIDTH,
@@ -89,6 +82,13 @@ export default function Banner() {
     );
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scrollX]);
+
+  const handleScroll = Animated.event(
+    [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+    { useNativeDriver: true }
+  );
+
+  if (loading || banners.length === 0) return null;
 
   return (
     <View className="relative mt-3">

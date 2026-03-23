@@ -10,6 +10,7 @@ import {
   fetchMarketplaceItems,
   MarketplaceItemWithUser,
 } from "@/lib/postMarketPlace";
+import { supabase } from "@/lib/supabase";
 import { Picker } from "@react-native-picker/picker";
 import { useRouter } from "expo-router";
 import {
@@ -21,6 +22,7 @@ import {
   Plus,
   RefreshCw,
   ShoppingCart,
+  Verified,
   X,
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useState } from "react";
@@ -35,6 +37,7 @@ import {
   View,
 } from "react-native";
 import Animated, { SlideInDown, SlideOutDown } from "react-native-reanimated";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function MarketplaceScreen() {
@@ -51,6 +54,7 @@ export default function MarketplaceScreen() {
   const [marketplaceItems, setMarketplaceItems] = useState<
     MarketplaceItemWithUser[]
   >([]);
+  const [verifiedUserIds, setVerifiedUserIds] = useState<Set<string>>(new Set());
   const [filters, setFilters] = useState({
     dzongkhag: "",
     minPrice: "",
@@ -64,6 +68,16 @@ export default function MarketplaceScreen() {
       setIsLoading(true);
       const { items } = await fetchMarketplaceItems(0, 50);
       setMarketplaceItems(items || []);
+      const userIds = [...new Set((items || []).map((i) => i.user_id))];
+      if (userIds.length > 0) {
+        const { data: spData } = await supabase
+          .from("service_providers")
+          .select("user_id, verification_status")
+          .in("user_id", userIds);
+        setVerifiedUserIds(
+          new Set((spData || []).filter((sp) => sp.verification_status === "verified").map((sp) => sp.user_id))
+        );
+      }
     } catch (error) {
       console.error("Error loading marketplace items:", error);
     } finally {
@@ -108,29 +122,49 @@ export default function MarketplaceScreen() {
       <View className="p-3">
         {/* Title */}
         <Text
-          className="text-sm font-semibold text-gray-900 mb-2"
+          className="text-sm font-semibold text-gray-900 mb-1.5"
           numberOfLines={2}
         >
           {item.title}
         </Text>
 
-        {/* Location */}
-        {item.dzongkhag && (
-          <View className="flex-row items-center mb-2">
-            <MapPin size={12} color="#666" />
-            <Text className="text-xs text-gray-600 ml-1">{item.dzongkhag}</Text>
+        {/* Row 2: Seller name + verified badge */}
+        {item.profiles?.name && (
+          <View className="flex-row items-center mb-2 gap-1">
+            <Text className="text-xs text-gray-500 font-medium" numberOfLines={1} style={{ flex: 1 }}>
+              {item.profiles.name}
+            </Text>
+            {verifiedUserIds.has(item.user_id) && (
+              <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: "#EFF6FF", borderWidth: 1, borderColor: "#094569", borderRadius: 99, paddingHorizontal: 5, paddingVertical: 2, gap: 2 }}>
+                <Verified size={8} color="#094569" />
+                <Text style={{ fontSize: 8, fontWeight: "700", color: "#094569" }}>Verified</Text>
+              </View>
+            )}
           </View>
         )}
 
-        {/* Price */}
+        {/* Row 3: Price + Location */}
         {(item.type === "rent" ||
           item.type === "second_hand" ||
           item.type === "job_vacancy") &&
-          item.price > 0 && (
-            <Text className="text-base font-bold text-primary mb-2">
+          item.price > 0 ? (
+          <View className="flex-row items-center justify-between mb-2">
+            <Text className="text-base font-bold text-primary">
               Nu. {item.price}
             </Text>
-          )}
+            {item.dzongkhag && (
+              <View className="flex-row items-center gap-0.5">
+                <MapPin size={11} color="#9CA3AF" />
+                <Text className="text-xs text-gray-400" numberOfLines={1}>{item.dzongkhag}</Text>
+              </View>
+            )}
+          </View>
+        ) : item.dzongkhag ? (
+          <View className="flex-row items-center mb-2 gap-0.5">
+            <MapPin size={11} color="#9CA3AF" />
+            <Text className="text-xs text-gray-400" numberOfLines={1}>{item.dzongkhag}</Text>
+          </View>
+        ) : null}
 
         {/* Tags */}
         {item.tags && item.tags.length > 0 && (
@@ -211,7 +245,7 @@ export default function MarketplaceScreen() {
       swap: "Swap Options",
       second_hand: "Second Hand Buy",
       free: "Free Options",
-      job_vacancy: "Oppurtunities and Scholarships",
+      job_vacancy: "Opportunities and Scholarships",
     }[activeTab];
 
     if (isLoading) {
@@ -401,7 +435,24 @@ export default function MarketplaceScreen() {
     );
   };
 
+  const MARKETPLACE_TABS = ["job_vacancy", "rent", "second_hand", "swap", "free"];
+
+  const swipeGesture = Gesture.Pan()
+    .runOnJS(true)
+    .activeOffsetX([-20, 20])
+    .failOffsetY([-15, 15])
+    .onEnd((e) => {
+      if (isLoading) return;
+      const idx = MARKETPLACE_TABS.indexOf(activeTab);
+      if (e.translationX < -50 && idx < MARKETPLACE_TABS.length - 1) {
+        handleTabChange(MARKETPLACE_TABS[idx + 1]);
+      } else if (e.translationX > 50 && idx > 0) {
+        handleTabChange(MARKETPLACE_TABS[idx - 1]);
+      }
+    });
+
   return (
+    <GestureDetector gesture={swipeGesture}>
     <View className="flex-1 bg-gray-50">
       <ScrollView
         className="flex-1"
@@ -539,5 +590,6 @@ export default function MarketplaceScreen() {
         message="Sign in to post on the marketplace"
       />
     </View>
+    </GestureDetector>
   );
 }

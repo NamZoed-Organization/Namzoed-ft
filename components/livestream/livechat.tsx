@@ -94,7 +94,10 @@ export const LiveChat = ({
 
   const { height: windowHeight } = useWindowDimensions();
   const maxPanelHeight = Math.round(windowHeight * (isHostView ? 0.45 : 0.33));
-
+  const androidInputLift =
+    Platform.OS === "android" && keyboardHeight > 0
+      ? Math.min(40, Math.max(16, Math.round(keyboardHeight * 0.12)))
+      : 0;
   // Android keyboard listener — KeyboardAvoidingView is unreliable in
   // absolute-positioned overlays on Android so we manually track keyboard height.
   useEffect(() => {
@@ -532,14 +535,10 @@ export const LiveChat = ({
       style={{ flex: 1 }}
       pointerEvents="auto"
     >
-      {/* Android: push panel up by keyboard height */}
       <View
         style={[
           styles.panelContainer,
           { height: maxPanelHeight },
-          Platform.OS === "android" && keyboardHeight > 0
-            ? { bottom: keyboardHeight }
-            : null,
         ]}
         pointerEvents="auto"
       >
@@ -559,7 +558,10 @@ export const LiveChat = ({
             keyExtractor={(item) => item.id}
             renderItem={renderItem}
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: 8, paddingTop: 8 }}
+            contentContainerStyle={{
+              paddingTop: 8,
+              paddingBottom: 64 + androidInputLift,
+            }}
             style={{ flex: 1 }}
             scrollEnabled
             nestedScrollEnabled
@@ -621,7 +623,12 @@ export const LiveChat = ({
           </Animated.View>
         )}
 
-        <View style={styles.inputWrapper}>
+        <View
+          style={[
+            styles.inputWrapper,
+            androidInputLift > 0 ? { marginBottom: androidInputLift } : null,
+          ]}
+        >
           <View style={styles.inputInner}>
             <TextInput
               style={styles.input}

@@ -88,14 +88,18 @@ export async function sendChatPushNotification({
 
     if (error) {
       const detail = await summarizeInvokeError(error);
+      console.error("[ChatPush] Function invoke error:", detail);
       if (detail.includes("status=404") || detail.includes('"code":"NOT_FOUND"')) {
+        console.warn("[ChatPush] Edge function not found — is notify-chat-message deployed?");
       }
       return false;
     }
 
     if (!data?.success) {
       if (data?.error) {
+        console.error("[ChatPush] Notification failed:", data.error);
       } else {
+        console.warn("[ChatPush] Notification returned success=false with no error detail:", data);
       }
       return false;
     }
@@ -109,6 +113,7 @@ export async function sendChatPushNotification({
 
     return true;
   } catch (err) {
+    console.error("[ChatPush] Unexpected error:", err);
     return false;
   }
 }

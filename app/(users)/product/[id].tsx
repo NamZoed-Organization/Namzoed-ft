@@ -19,7 +19,6 @@ import {
   Share2,
   ShoppingBag,
   Sparkles,
-  Star,
   Tag,
   User,
   Verified,
@@ -118,6 +117,7 @@ export default function ProductDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [sellerVerified, setSellerVerified] = useState(false);
 
   // Image viewer state
   const [showImageViewer, setShowImageViewer] = useState(false);
@@ -159,6 +159,15 @@ export default function ProductDetail() {
       try {
         const data = await fetchProductById(id);
         setProduct(data);
+
+        if (data?.user_id) {
+          supabase
+            .from("service_providers")
+            .select("verification_status")
+            .eq("user_id", data.user_id)
+            .maybeSingle()
+            .then(({ data: sp }) => setSellerVerified(sp?.verification_status === "verified"));
+        }
 
         if (currentUser) {
           const { data: bookmarkData } = await supabase
@@ -621,28 +630,22 @@ export default function ProductDetail() {
                         <User size={24} color="#094569" />
                       </View>
                     )}
-                    {/* Online Indicator */}
-                    <View className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 rounded-full border-2 border-white" />
                   </View>
 
                   {/* Seller Info */}
                   <View className="flex-1 ml-4">
-                    <View className="flex-row items-center gap-2">
+                    <View className="flex-row items-center gap-2 flex-wrap">
                       <Text className="text-base font-bold text-gray-900">
                         {product.profiles.name}
                       </Text>
-                      <Verified size={16} color="#094569" />
+                      {sellerVerified && (
+                        <View className="flex-row items-center bg-blue-50 border border-[#094569] rounded-full px-2 py-0.5 gap-1">
+                          <Verified size={11} color="#094569" />
+                          <Text className="text-[10px] font-msemibold text-[#094569] leading-none">Verified</Text>
+                        </View>
+                      )}
                     </View>
-                    <View className="flex-row items-center gap-3 mt-1">
-                      <View className="flex-row items-center gap-1">
-                        <Star size={12} color="#FBBF24" fill="#FBBF24" />
-                        <Text className="text-xs text-gray-600">4.9</Text>
-                      </View>
-                      <Text className="text-xs text-gray-400">•</Text>
-                      <Text className="text-xs text-gray-500">
-                        Active seller
-                      </Text>
-                    </View>
+                    <Text className="text-xs text-gray-500 mt-1">Active seller</Text>
                   </View>
 
                   {/* View Profile Arrow */}
@@ -655,17 +658,6 @@ export default function ProductDetail() {
                   </View>
                 </TouchableOpacity>
 
-                {/* Message Button - Only show for other users' products */}
-                {!isOwnProduct && (
-                  <TouchableOpacity
-                    onPress={handleMessageSeller}
-                    activeOpacity={0.8}
-                    className="bg-primary flex-row items-center justify-center py-3 rounded-2xl"
-                  >
-                    <MessageCircle size={18} color="white" />
-                    <Text className="text-white font-semibold ml-2">Message Seller</Text>
-                  </TouchableOpacity>
-                )}
               </View>
             )}
 

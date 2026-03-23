@@ -35,6 +35,7 @@ import {
     ShoppingBag,
     Tag,
     UserRound,
+    Verified,
     Volume2,
     VolumeX,
 } from "lucide-react-native";
@@ -845,7 +846,10 @@ export default function FeedPost({ post, isVisible = true }: FeedPostProps) {
             </View>
           )}
           <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text style={styles.username}>{post.username || "Unknown"}</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <Text style={styles.username}>{post.username || "Unknown"}</Text>
+              {post.isVerified && <Verified size={14} color="#094569" />}
+            </View>
             <Text style={styles.timestamp}>{formatDate(post.date)}</Text>
           </View>
         </TouchableOpacity>

@@ -25,6 +25,7 @@ export interface ProviderServiceWithDetails extends ProviderService {
     name?: string;
     master_bio?: string;
     profile_url?: string;
+    verification_status?: string;
     profiles?: {
       name?: string;
       email?: string;
@@ -136,6 +137,16 @@ export const createProviderService = async (
 
 // Fetch all provider services by user ID
 export const fetchUserProviderServices = async (userId: string): Promise<ProviderServiceWithDetails[]> => {
+  // Step 1: get the service_provider row for this user
+  const { data: sp } = await supabase
+    .from('service_providers')
+    .select('id')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (!sp?.id) return [];
+
+  // Step 2: filter provider_services by provider_id directly
   const { data, error } = await supabase
     .from('provider_services')
     .select(`
@@ -145,12 +156,13 @@ export const fetchUserProviderServices = async (userId: string): Promise<Provide
         name,
         slug
       ),
-      service_providers!inner (
+      service_providers (
         id,
         user_id,
         master_bio,
         profile_url,
         name,
+        verification_status,
         profiles (
           name,
           email,
@@ -159,7 +171,7 @@ export const fetchUserProviderServices = async (userId: string): Promise<Provide
         )
       )
     `)
-    .eq('service_providers.user_id', userId)
+    .eq('provider_id', sp.id)
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -187,6 +199,7 @@ export const fetchProviderServicesByCategory = async (categorySlug: string): Pro
         master_bio,
         profile_url,
         name,
+        verification_status,
         profiles (
           name,
           email,
@@ -223,6 +236,7 @@ export const fetchProviderServiceById = async (serviceId: string): Promise<Provi
         master_bio,
         profile_url,
         name,
+        verification_status,
         profiles (
           name,
           email,
@@ -360,6 +374,7 @@ export const fetchAllProviderServices = async (page: number = 0, pageSize: numbe
         master_bio,
         profile_url,
         name,
+        verification_status,
         profiles (
           name,
           email,
@@ -389,6 +404,7 @@ export const fetchAllServiceProviders = async (): Promise<any[]> => {
       name,
       master_bio,
       profile_url,
+      verification_status,
       profiles (
         name,
         email,

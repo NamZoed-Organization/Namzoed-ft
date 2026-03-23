@@ -750,12 +750,14 @@ export default function MarketplacePostOverlay({
         <PopupMessage
           visible={showSuccess}
           type="success"
+          title="Posted!"
           message={popupMessage}
         />
         <PopupMessage visible={showError} type="error" message={popupMessage} />
         <PopupMessage
           visible={showWarning}
           type="warning"
+          title="Heads Up"
           message={popupMessage}
         />
       </View>

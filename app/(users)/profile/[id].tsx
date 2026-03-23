@@ -31,6 +31,7 @@ import {
     Play,
     ShoppingBag,
     User,
+    Verified,
     Wrench
 } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
@@ -84,9 +85,7 @@ export default function PublicProfileScreen() {
   const router = useRouter();
 
   // State - ALL hooks must be called before any conditional returns
-  const [mainTab, setMainTab] = useState<"main" | "work">(
-    tab === "work" ? "work" : "main",
-  );
+  const [mainTab, setMainTab] = useState<"main" | "work">("main");
   const [activeTab, setActiveTab] = useState<
     "images" | "products" | "services"
   >("images");
@@ -214,17 +213,6 @@ export default function PublicProfileScreen() {
     loadData();
   }, [id, currentUser?.id]);
 
-  // Scroll to Work tab if tab parameter is "work"
-  useEffect(() => {
-    if (tab === "work" && horizontalScrollRef.current) {
-      setTimeout(() => {
-        horizontalScrollRef.current?.scrollTo({
-          x: SCREEN_WIDTH,
-          animated: true,
-        });
-      }, 100);
-    }
-  }, [tab]);
 
   // Refresh Handler
   const handleRefresh = () => {
@@ -555,9 +543,9 @@ export default function PublicProfileScreen() {
               }
             >
               {/* Profile Info Section — Instagram style */}
-              <View className="px-4 pt-5 pb-4">
+              <View className="px-4 pt-7 pb-5">
                 {/* Row: Avatar + Stats */}
-                <View className="flex-row items-center mb-3">
+                <View className="flex-row items-center mb-5">
                   {/* Avatar */}
                   <TouchableOpacity
                     onPress={() => handleOpenProfileImage(userProfile.avatar_url)}
@@ -578,70 +566,80 @@ export default function PublicProfileScreen() {
                     )}
                   </TouchableOpacity>
 
-                  {/* Stats row */}
-                  <View className="flex-1 flex-row items-center justify-around ml-4">
-                    <View className="items-center">
-                      <Text className="text-lg font-mbold text-gray-900">
-                        {userPosts.length}
-                      </Text>
-                      <Text className="text-xs font-regular text-gray-500">
-                        Posts
-                      </Text>
+                  {/* Stats row + Badge */}
+                  <View className="flex-1 ml-4">
+                    <View className="flex-row items-center justify-around">
+                      <View className="items-center">
+                        <Text className="text-lg font-mbold text-gray-900">
+                          {userPosts.length}
+                        </Text>
+                        <Text className="text-xs font-regular text-gray-500">
+                          Posts
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        className="items-center"
+                        onPress={() => {
+                          if (!id || typeof id !== "string") return;
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          setFollowRequestsTab("followers");
+                          setShowFollowRequests(true);
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <Text className="text-lg font-mbold text-gray-900">
+                          {userProfile.follower_count || 0}
+                        </Text>
+                        <Text className="text-xs font-regular text-gray-500">
+                          Followers
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        className="items-center"
+                        onPress={() => {
+                          if (!id || typeof id !== "string") return;
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          setFollowRequestsTab("following");
+                          setShowFollowRequests(true);
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <Text className="text-lg font-mbold text-gray-900">
+                          {userProfile.following_count || 0}
+                        </Text>
+                        <Text className="text-xs font-regular text-gray-500">
+                          Following
+                        </Text>
+                      </TouchableOpacity>
                     </View>
-                    <TouchableOpacity
-                      className="items-center"
-                      onPress={() => {
-                        if (!id || typeof id !== "string") return;
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        setFollowRequestsTab("followers");
-                        setShowFollowRequests(true);
-                      }}
-                      activeOpacity={0.8}
-                    >
-                      <Text className="text-lg font-mbold text-gray-900">
-                        {userProfile.follower_count || 0}
-                      </Text>
-                      <Text className="text-xs font-regular text-gray-500">
-                        Followers
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      className="items-center"
-                      onPress={() => {
-                        if (!id || typeof id !== "string") return;
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        setFollowRequestsTab("following");
-                        setShowFollowRequests(true);
-                      }}
-                      activeOpacity={0.8}
-                    >
-                      <Text className="text-lg font-mbold text-gray-900">
-                        {userProfile.following_count || 0}
-                      </Text>
-                      <Text className="text-xs font-regular text-gray-500">
-                        Following
-                      </Text>
-                    </TouchableOpacity>
+                    {badgeType && (
+                      <View style={{ marginTop: 8 }}>
+                        <EarlyAccessBadge badgeType={badgeType} size="sm" />
+                      </View>
+                    )}
                   </View>
                 </View>
 
                 {/* Name, Badge & Bio */}
-                <View className="flex-row items-center gap-4 mb-0.5 flex-wrap">
+                <View className="flex-row items-center gap-1.5 mb-1.5 flex-wrap">
                   <Text className="text-base font-mbold text-gray-900">
                     {userProfile.name}
                   </Text>
-                  {badgeType && (
-                    <EarlyAccessBadge badgeType={badgeType} size="sm" />
+                  {serviceProvider?.verification_status === "verified" && (
+                    <View className="flex-row items-center bg-blue-50 border border-[#094569] rounded-full px-2 py-0.5 gap-1">
+                      <Verified size={11} color="#094569" />
+                      <Text className="text-[10px] font-msemibold text-[#094569] leading-none">Verified</Text>
+                    </View>
                   )}
                 </View>
                 {userProfile.bio && (
-                  <Text className="text-sm font-regular text-gray-600 mb-3">
+                  <Text className="text-sm font-regular text-gray-600 mb-4">
                     {userProfile.bio}
                   </Text>
                 )}
 
                 {/* Action Buttons */}
-                <View className="flex-row gap-2 mt-2">
+                <View className="flex-row gap-2 mt-4">
                   {/* Follow / Following button */}
                   <TouchableOpacity
                     onPress={handleMainAction}
@@ -688,7 +686,7 @@ export default function PublicProfileScreen() {
               </View>
 
               {/* Tab Navigation */}
-              <View className="bg-transparent border-b border-gray-100 mt-2">
+              <View className="bg-transparent border-b border-gray-100 mt-5">
                 <View className="flex-row">
                   <TouchableOpacity
                     className={`flex-1 py-4 items-center border-b-2 ${
@@ -901,16 +899,57 @@ export default function PublicProfileScreen() {
                 )}
 
                 {activeTab === "services" && (
-                  <View className="items-center justify-center py-16 px-6">
-                    <View className="w-14 h-14 rounded-full bg-gray-50 items-center justify-center mb-3">
-                      <Wrench size={26} strokeWidth={1.5} color="#9CA3AF" />
-                    </View>
-                    <Text className="text-sm font-semibold text-gray-500">
-                      No services offered yet
-                    </Text>
-                    <Text className="text-xs text-gray-400 mt-1">
-                      Services will appear here when available
-                    </Text>
+                  <View className="flex-row flex-wrap">
+                    {providerServices.length > 0 ? (
+                      providerServices.map((service) => (
+                        <View key={service.id} className="w-[50%] p-2">
+                          <TouchableOpacity
+                            onPress={() => router.push(`/(users)/servicedetail/${service.id}` as any)}
+                            className="bg-transparent rounded-xl overflow-hidden border border-gray-100"
+                          >
+                            {service.images && service.images.length > 0 ? (
+                              <Image
+                                source={{ uri: service.images[0] }}
+                                className="w-full h-40"
+                                resizeMode="cover"
+                              />
+                            ) : (
+                              <View className="w-full h-40 bg-gray-100 items-center justify-center">
+                                <Wrench size={32} strokeWidth={1.5} color="#9CA3AF" />
+                              </View>
+                            )}
+                            <View className="p-3">
+                              <Text
+                                className="text-sm font-msemibold text-gray-900"
+                                numberOfLines={2}
+                              >
+                                {service.name}
+                              </Text>
+                              {service.service_categories?.name && (
+                                <Text
+                                  className="text-xs font-regular text-gray-500 mt-1"
+                                  numberOfLines={1}
+                                >
+                                  {service.service_categories.name}
+                                </Text>
+                              )}
+                            </View>
+                          </TouchableOpacity>
+                        </View>
+                      ))
+                    ) : (
+                      <View className="w-full py-16 items-center px-6">
+                        <View className="w-14 h-14 rounded-full bg-gray-50 items-center justify-center mb-3">
+                          <Wrench size={26} strokeWidth={1.5} color="#9CA3AF" />
+                        </View>
+                        <Text className="text-sm font-semibold text-gray-500">
+                          No services offered yet
+                        </Text>
+                        <Text className="text-xs text-gray-400 mt-1">
+                          Services will appear here when available
+                        </Text>
+                      </View>
+                    )}
                   </View>
                 )}
               </View>
@@ -942,128 +981,91 @@ export default function PublicProfileScreen() {
                   className="py-12"
                 />
               ) : serviceProvider ? (
-                <View>
-                  {/* Profile Info Section — Instagram style */}
-                  <View className="px-4 pt-5 pb-2">
-                    {/* Certified badge above avatar */}
-                    {serviceProvider.verification_status === "verified" && (
-                      <View className="flex-row items-center bg-blue-50 border border-blue-100 px-3 py-1 rounded-full mb-3 self-start">
-                        <CheckCircle2 size={13} color="#3B82F6" fill="#3B82F6" />
-                        <Text className="text-xs font-msemibold text-blue-600 ml-1">
-                          Certified
-                        </Text>
-                      </View>
-                    )}
+                <View className="px-4 py-8">
 
-                    {/* Row: Avatar + Stats */}
-                    <View className="flex-row items-center mb-3 w-full">
-                      {/* Avatar */}
+                  {/* ── PROFILE HEADER CARD ── */}
+                  <View className="bg-white rounded-2xl p-5 mb-6 shadow-sm">
+
+                    {/* Top row: info left, avatar right */}
+                    <View className="flex-row items-start">
+
+                      {/* Left: name, verified, email, phone, bio */}
+                      <View className="flex-1 pr-4">
+                        <View className="flex-row items-center gap-1.5 mb-0.5 flex-wrap">
+                          <Text className="text-lg font-mbold text-gray-900" numberOfLines={2}>
+                            {serviceProvider.name || userProfile.name}
+                          </Text>
+                          {serviceProvider.verification_status === "verified" && (
+                            <View className="flex-row items-center bg-blue-50 border border-[#094569] rounded-full px-2 py-0.5 gap-1">
+                              <Verified size={11} color="#094569" />
+                              <Text className="text-[10px] font-msemibold text-[#094569] leading-none">Verified</Text>
+                            </View>
+                          )}
+                        </View>
+
+                        {serviceProvider.profiles?.email ? (
+                          <Text className="text-xs font-regular text-gray-500 mb-1" numberOfLines={1}>
+                            ✉  {serviceProvider.profiles.email}
+                          </Text>
+                        ) : null}
+
+                        {serviceProvider.profiles?.phone ? (
+                          <Text className="text-xs font-regular text-gray-500 mb-2" numberOfLines={1}>
+                            📞  {serviceProvider.profiles.phone}
+                          </Text>
+                        ) : null}
+
+                        {serviceProvider.master_bio ? (
+                          <Text className="text-sm font-regular text-gray-500" numberOfLines={3}>
+                            {serviceProvider.master_bio}
+                          </Text>
+                        ) : (
+                          <Text className="text-sm font-regular text-gray-400 italic">No bio set</Text>
+                        )}
+                      </View>
+
+                      {/* Right: work avatar (provider image first, then profile avatar, then initials) */}
                       <TouchableOpacity
-                        onPress={() =>
-                          handleOpenProfileImage(
-                            serviceProvider.profile_url || userProfile.avatar_url,
-                          )
-                        }
+                        onPress={() => handleOpenProfileImage(serviceProvider.profile_url || userProfile.avatar_url)}
                         disabled={!serviceProvider.profile_url && !userProfile.avatar_url}
                         activeOpacity={0.85}
                         className="w-[86px] h-[86px] rounded-full bg-gray-200 overflow-hidden border-2 border-gray-100"
                       >
-                        {serviceProvider.profile_url || userProfile.avatar_url ? (
+                        {serviceProvider.profile_url ? (
                           <Image
-                            source={{
-                              uri: serviceProvider.profile_url || userProfile.avatar_url,
-                            }}
+                            source={{ uri: serviceProvider.profile_url }}
+                            className="w-full h-full"
+                            resizeMode="cover"
+                          />
+                        ) : userProfile.avatar_url ? (
+                          <Image
+                            source={{ uri: userProfile.avatar_url }}
                             className="w-full h-full"
                             resizeMode="cover"
                           />
                         ) : (
-                          <View className="w-full h-full items-center justify-center bg-gray-100">
-                            <Wrench size={32} color="#9ca3af" />
+                          <View className="w-full h-full items-center justify-center bg-primary/10">
+                            <Text style={{ fontSize: 28, fontWeight: "700", color: "#094569" }}>
+                              {(serviceProvider.name || userProfile.name || "?").charAt(0).toUpperCase()}
+                            </Text>
                           </View>
                         )}
                       </TouchableOpacity>
-
-                      {/* Work stats */}
-                      <View className="flex-1 flex-row items-center justify-around ml-4">
-                        <View className="items-center">
-                          <Text className="text-lg font-mbold text-gray-900">
-                            {providerServices.length}
-                          </Text>
-                          <Text className="text-xs font-regular text-gray-500">
-                            Services
-                          </Text>
-                        </View>
-                        <TouchableOpacity
-                          className="items-center"
-                          onPress={() => {
-                            if (!id || typeof id !== "string") return;
-                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                            setFollowRequestsTab("followers");
-                            setShowFollowRequests(true);
-                          }}
-                          activeOpacity={0.8}
-                        >
-                          <Text className="text-lg font-mbold text-gray-900">
-                            {userProfile.follower_count || 0}
-                          </Text>
-                          <Text className="text-xs font-regular text-gray-500">
-                            Followers
-                          </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          className="items-center"
-                          onPress={() => {
-                            if (!id || typeof id !== "string") return;
-                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                            setFollowRequestsTab("following");
-                            setShowFollowRequests(true);
-                          }}
-                          activeOpacity={0.8}
-                        >
-                          <Text className="text-lg font-mbold text-gray-900">
-                            {userProfile.following_count || 0}
-                          </Text>
-                          <Text className="text-xs font-regular text-gray-500">
-                            Following
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
                     </View>
 
-                    {/* Name */}
-                    <Text className="text-base font-mbold text-gray-900 mb-0.5">
-                      {userProfile.name}
-                    </Text>
-
-                    {/* Business bio */}
-                    {serviceProvider.master_bio ? (
-                      <Text className="text-sm font-regular text-gray-500 mb-3">
-                        {serviceProvider.master_bio}
-                      </Text>
-                    ) : null}
-
-                    {/* Action Buttons for Work tab */}
-                    <View className="flex-row gap-2 mt-1">
+                    {/* Action Buttons */}
+                    <View className="flex-row gap-2 mt-4">
                       <TouchableOpacity
                         onPress={handleMainAction}
                         disabled={loadingFollow}
                         className={`flex-1 py-[9px] rounded-lg flex-row items-center justify-center ${
-                          isFollowingUser
-                            ? "bg-gray-100 border border-gray-300"
-                            : "bg-primary"
+                          isFollowingUser ? "bg-gray-100 border border-gray-300" : "bg-primary"
                         }`}
                       >
                         {loadingFollow ? (
-                          <ActivityIndicator
-                            size="small"
-                            color={isFollowingUser ? "#374151" : "white"}
-                          />
+                          <ActivityIndicator size="small" color={isFollowingUser ? "#374151" : "white"} />
                         ) : (
-                          <Text
-                            className={`text-sm font-msemibold ${
-                              isFollowingUser ? "text-gray-800" : "text-white"
-                            }`}
-                          >
+                          <Text className={`text-sm font-semibold ${isFollowingUser ? "text-gray-800" : "text-white"}`}>
                             {isFollowingUser ? "Following" : "Follow"}
                           </Text>
                         )}
@@ -1078,120 +1080,79 @@ export default function PublicProfileScreen() {
                           }}
                           className="flex-1 py-[9px] rounded-lg flex-row items-center justify-center gap-1.5 bg-gray-100 border border-gray-300"
                         >
-                          <MessageCircle size={16} color="#374151" />
-                          <Text className="text-sm font-msemibold text-gray-800">
-                            Message
-                          </Text>
+                          <MessageCircle size={13} color="#1f2937" style={{ marginRight: 5 }} />
+                          <Text className="text-sm font-semibold text-gray-800">Message</Text>
                         </TouchableOpacity>
                       )}
                     </View>
-
-                    {/* Contact info row */}
-                    {(serviceProvider.profiles?.email || serviceProvider.profiles?.phone) && (
-                      <View className="flex-row items-center gap-3 mt-2">
-                        {serviceProvider.profiles?.email ? (
-                          <Text className="text-xs font-regular text-gray-500" numberOfLines={1}>
-                            {serviceProvider.profiles.email}
-                          </Text>
-                        ) : null}
-                        {serviceProvider.profiles?.email && serviceProvider.profiles?.phone && (
-                          <View className="w-[1px] h-3 bg-gray-300" />
-                        )}
-                        {serviceProvider.profiles?.phone ? (
-                          <Text className="text-xs font-regular text-gray-500">
-                            {serviceProvider.profiles.phone}
-                          </Text>
-                        ) : null}
-                      </View>
-                    )}
                   </View>
 
-                  {/* Divider */}
-                  <View className="h-[1px] bg-gray-100 mx-4 mb-4" />
-
                   {/* Services Section */}
-                  <View className="bg-transparent border-b border-gray-100">
-                    <View className="flex-row items-center justify-between px-4 py-3 border-b border-gray-100">
-                      <Text className="text-base font-mbold text-gray-900">
-                        Services Offered
-                      </Text>
-                      {providerServices.length > 0 && (
-                        <Text className="text-xs font-regular text-gray-400">
-                          {providerServices.length} service{providerServices.length > 1 ? "s" : ""}
-                        </Text>
-                      )}
-                    </View>
+                  <View className="bg-white rounded-2xl mx-4 mb-4 p-5 shadow-sm">
+                    <Text className="text-lg font-mbold text-gray-900 mb-1">
+                      Services Offered
+                    </Text>
+                    <Text className="text-sm text-gray-500 mb-4">
+                      {providerServices.length > 0
+                        ? `${providerServices.length} service${providerServices.length > 1 ? "s" : ""} listed`
+                        : "No services listed yet"}
+                    </Text>
 
                     {providerServices.length > 0 ? (
                       <View>
                         {providerServices.map((service) => (
                           <TouchableOpacity
                             key={service.id}
-                            className="flex-row items-center px-4 py-4 border-b border-gray-100"
+                            activeOpacity={0.8}
+                            className="bg-white rounded-[24px] p-3 mb-3 shadow-sm border border-gray-100"
                             onPress={() =>
                               router.push(
                                 `/(users)/servicedetail/${service.id}` as any,
                               )
                             }
                           >
-                            {/* Service Image */}
-                            {service.images && service.images.length > 0 ? (
-                              <Image
-                                source={{ uri: service.images[0] }}
-                                className="w-16 h-16 rounded-xl"
-                                resizeMode="cover"
-                              />
-                            ) : (
-                              <View className="w-16 h-16 rounded-xl bg-gray-100 items-center justify-center">
-                                <Wrench size={24} className="text-gray-400" />
+                            <View className="flex-row">
+                              <View className="w-20 h-20 rounded-2xl overflow-hidden bg-gray-100">
+                                {service.images && service.images.length > 0 ? (
+                                  <Image
+                                    source={{ uri: service.images[0] }}
+                                    className="w-full h-full"
+                                    resizeMode="cover"
+                                  />
+                                ) : (
+                                  <View className="w-full h-full items-center justify-center">
+                                    <Wrench size={32} color="#9ca3af" />
+                                  </View>
+                                )}
                               </View>
-                            )}
 
-                            {/* Service Info */}
-                            <View className="flex-1 ml-3">
-                              <Text
-                                className="text-sm font-msemibold text-gray-900 mb-0.5"
-                                numberOfLines={1}
-                              >
-                                {service.name}
-                              </Text>
-                              {service.service_categories && (
-                                <Text className="text-xs font-regular text-primary mb-1">
-                                  {service.service_categories.name}
+                              <View className="flex-1 ml-4">
+                                <Text className="text-base font-mbold text-gray-900" numberOfLines={1}>
+                                  {service.name}
                                 </Text>
-                              )}
-                              <Text
-                                className="text-xs font-regular text-gray-500"
-                                numberOfLines={2}
-                              >
-                                {service.description}
-                              </Text>
-                            </View>
+                                {service.service_categories && (
+                                  <Text className="text-xs font-regular text-primary mb-1">
+                                    {service.service_categories.name}
+                                  </Text>
+                                )}
+                                <Text className="text-sm font-regular text-gray-600" numberOfLines={2}>
+                                  {service.description}
+                                </Text>
+                              </View>
 
-                            {/* Active badge */}
-                            <View
-                              className={`px-2 py-1 rounded-full ml-2 ${service.status ? "bg-green-100" : "bg-red-100"}`}
-                            >
-                              <Text
-                                className={`text-xs font-msemibold ${service.status ? "text-green-700" : "text-red-700"}`}
-                              >
-                                {service.status ? "Active" : "Inactive"}
-                              </Text>
+                              <View className={`self-start px-2 py-1 rounded-full ml-2 ${service.status ? "bg-green-100" : "bg-gray-100"}`}>
+                                <Text className={`text-xs font-msemibold ${service.status ? "text-green-700" : "text-gray-500"}`}>
+                                  {service.status ? "Active" : "Inactive"}
+                                </Text>
+                              </View>
                             </View>
                           </TouchableOpacity>
                         ))}
                       </View>
                     ) : (
-                      <View className="items-center justify-center py-16 px-6">
-                        <View className="w-14 h-14 rounded-full bg-gray-50 items-center justify-center mb-3">
-                          <Wrench size={26} strokeWidth={1.5} color="#9CA3AF" />
-                        </View>
-                        <Text className="text-sm font-semibold text-gray-500">
-                          No services listed yet
-                        </Text>
-                        <Text className="text-xs text-gray-400 mt-1">
-                          Services will appear here when available
-                        </Text>
+                      <View className="items-center justify-center py-8 bg-gray-50 rounded-xl">
+                        <Wrench size={40} color="#9ca3af" />
+                        <Text className="text-sm text-gray-500 mt-3">No services listed yet</Text>
                       </View>
                     )}
                   </View>

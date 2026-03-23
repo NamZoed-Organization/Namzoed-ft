@@ -1,5 +1,7 @@
 import MarketplaceImageViewer from "@/components/modals/MarketplaceImageViewer";
+import PopupMessage from "@/components/ui/PopupMessage";
 import { useUser } from "@/contexts/UserContext";
+import { supabase } from "@/lib/supabase";
 import {
     fetchProviderServiceById,
     ProviderServiceWithDetails,
@@ -14,7 +16,7 @@ import {
 } from "expo-router";
 import {
     ArrowLeft,
-    CheckCircle2,
+    Bookmark,
     Clock,
     MessageCircle,
     Tag,
@@ -27,6 +29,7 @@ import {
     BackHandler,
     Dimensions,
     Image,
+    RefreshControl,
     Animated as RNAnimated,
     ScrollView,
     StatusBar,
@@ -114,19 +117,89 @@ export default function ServiceDetail() {
   const [loading, setLoading] = useState(true);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [showImageViewer, setShowImageViewer] = useState(false);
+  const [isBookmarked, setIsBookmarked] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [showError, setShowError] = useState(false);
+  const [popupMessage, setPopupMessage] = useState("");
+  const [popupTitle, setPopupTitle] = useState("");
 
-  const loadService = useCallback(async () => {
+  const showSuccessPopup = (message: string, title: string = "Success") => {
+    setPopupMessage(message);
+    setPopupTitle(title);
+    setShowSuccess(true);
+    setTimeout(() => setShowSuccess(false), 2000);
+  };
+
+  const showErrorPopup = (message: string, title: string = "Error") => {
+    setPopupMessage(message);
+    setPopupTitle(title);
+    setShowError(true);
+    setTimeout(() => setShowError(false), 2500);
+  };
+
+  const loadService = useCallback(async (isRefreshing = false) => {
     if (!id) return;
     try {
-      setLoading(true);
+      if (!isRefreshing) setLoading(true);
       const data = await fetchProviderServiceById(id);
       setService(data);
+
+      if (currentUser) {
+        const { data: bookmarkData } = await supabase
+          .from("user_bookmarks")
+          .select("*")
+          .eq("user_id", currentUser.id)
+          .eq("service_id", id)
+          .single();
+        setIsBookmarked(!!bookmarkData);
+      }
     } catch (error) {
       console.error("Error loading service:", error);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  }, [id]);
+  }, [id, currentUser]);
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    loadService(true);
+  };
+
+  const toggleBookmark = async () => {
+    if (!currentUser) {
+      showErrorPopup("Please sign in to save items", "Sign In Required");
+      return;
+    }
+    if (!service) return;
+
+    const previousState = isBookmarked;
+    setIsBookmarked(!isBookmarked);
+
+    try {
+      if (previousState) {
+        const { error } = await supabase
+          .from("user_bookmarks")
+          .delete()
+          .eq("user_id", currentUser.id)
+          .eq("service_id", service.id);
+        if (error) throw error;
+        showSuccessPopup("Removed from saves", "Removed!");
+      } else {
+        const { error } = await supabase.from("user_bookmarks").insert({
+          user_id: currentUser.id,
+          service_id: service.id,
+        });
+        if (error) throw error;
+        showSuccessPopup("Saved to collection", "Saved!");
+      }
+    } catch (err: any) {
+      console.error("Bookmark error:", err);
+      setIsBookmarked(previousState);
+      showErrorPopup(err?.message || "Failed to update bookmark", "Update Failed");
+    }
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -230,6 +303,14 @@ export default function ServiceDetail() {
         className="flex-1"
         showsVerticalScrollIndicator={false}
         bounces={true}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor="#094569"
+            colors={["#094569"]}
+          />
+        }
       >
         {/* Hero Image Section */}
         <View style={{ height: IMAGE_HEIGHT }}>
@@ -288,33 +369,58 @@ export default function ServiceDetail() {
 
           {/* Top Navigation Bar */}
           <View className="absolute top-0 left-0 right-0 pt-14 px-5">
-            <TouchableOpacity
-              onPress={handleGoBack}
-              activeOpacity={0.8}
-              className="w-11 h-11 rounded-full overflow-hidden"
-            >
-              <BlurView
-                intensity={30}
-                tint="dark"
-                className="flex-1 items-center justify-center"
+            <View className="flex-row justify-between items-center">
+              <TouchableOpacity
+                onPress={handleGoBack}
+                activeOpacity={0.8}
+                className="w-11 h-11 rounded-full overflow-hidden"
               >
-                <ArrowLeft size={22} color="white" strokeWidth={2.5} />
-              </BlurView>
-            </TouchableOpacity>
+                <BlurView
+                  intensity={30}
+                  tint="dark"
+                  className="flex-1 items-center justify-center"
+                >
+                  <ArrowLeft size={22} color="white" strokeWidth={2.5} />
+                </BlurView>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={toggleBookmark}
+                activeOpacity={0.8}
+                className="w-11 h-11 rounded-full overflow-hidden"
+              >
+                <BlurView
+                  intensity={30}
+                  tint="dark"
+                  className="flex-1 items-center justify-center"
+                >
+                  <Bookmark
+                    size={20}
+                    color={isBookmarked ? "#FBBF24" : "white"}
+                    fill={isBookmarked ? "#FBBF24" : "transparent"}
+                  />
+                </BlurView>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Image Pagination Dots */}
           {images.length > 1 && (
             <View className="absolute bottom-6 left-0 right-0 flex-row justify-center gap-2">
               {images.map((_, index) => (
-                <View
+                <TouchableOpacity
                   key={index}
-                  className={`h-2 rounded-full ${
-                    activeImageIndex === index
-                      ? "bg-white w-6"
-                      : "bg-white/40 w-2"
-                  }`}
-                />
+                  onPress={() => setActiveImageIndex(index)}
+                  activeOpacity={0.8}
+                >
+                  <View
+                    className={`h-2 rounded-full ${
+                      activeImageIndex === index
+                        ? "bg-white w-6"
+                        : "bg-white/40 w-2"
+                    }`}
+                  />
+                </TouchableOpacity>
               ))}
             </View>
           )}
@@ -377,21 +483,19 @@ export default function ServiceDetail() {
                       <User size={24} color="#094569" />
                     </View>
                   )}
-                  {(service.service_providers as any)?.status === "verified" && (
-                    <View className="absolute -bottom-1 -right-1 w-5 h-5 bg-blue-500 rounded-full border-2 border-white items-center justify-center">
-                      <CheckCircle2 size={10} color="white" fill="white" />
-                    </View>
-                  )}
                 </View>
 
                 {/* Provider Info */}
                 <View className="flex-1 ml-4">
-                  <View className="flex-row items-center gap-2">
+                  <View className="flex-row items-center gap-2 flex-wrap">
                     <Text className="text-base font-bold text-gray-900">
                       {providerName}
                     </Text>
-                    {(service.service_providers as any)?.status === "verified" && (
-                      <Verified size={16} color="#094569" />
+                    {(service.service_providers as any)?.verification_status === "verified" && (
+                      <View className="flex-row items-center bg-blue-50 border border-[#094569] rounded-full px-2 py-0.5 gap-1">
+                        <Verified size={11} color="#094569" />
+                        <Text className="text-[10px] font-msemibold text-[#094569] leading-none">Verified</Text>
+                      </View>
                     )}
                   </View>
                   <Text className="text-xs text-gray-500 mt-1">
@@ -409,19 +513,6 @@ export default function ServiceDetail() {
                 </View>
               </TouchableOpacity>
 
-              {/* Message Button - Only for other providers */}
-              {!isOwnService && (
-                <TouchableOpacity
-                  onPress={handleMessageProvider}
-                  activeOpacity={0.8}
-                  className="bg-primary flex-row items-center justify-center py-3 rounded-2xl"
-                >
-                  <MessageCircle size={18} color="white" />
-                  <Text className="text-white font-semibold ml-2">
-                    Message Provider
-                  </Text>
-                </TouchableOpacity>
-              )}
             </View>
 
             {/* Description Section */}
@@ -465,6 +556,20 @@ export default function ServiceDetail() {
           onClose={() => setShowImageViewer(false)}
         />
       )}
+
+      {/* Popups */}
+      <PopupMessage
+        visible={showSuccess}
+        type="success"
+        title={popupTitle}
+        message={popupMessage}
+      />
+      <PopupMessage
+        visible={showError}
+        type="error"
+        title={popupTitle}
+        message={popupMessage}
+      />
 
       {/* Floating Bottom Action Bar - Only for other providers */}
       {!isOwnService && (

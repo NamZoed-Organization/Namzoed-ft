@@ -45,6 +45,8 @@ import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import {
     Camera,
+    CheckCircle2,
+    Verified,
     Copy,
     Eye,
     GalleryHorizontal,
@@ -1218,9 +1220,17 @@ export default function ProfileScreen() {
                 </View>
 
                 {/* Name & Email */}
-                <Text className="text-base font-mbold text-gray-900 mb-0.5">
-                  {currentUser.name}
-                </Text>
+                <View className="flex-row items-center gap-1.5 mb-0.5">
+                  <Text className="text-base font-mbold text-gray-900">
+                    {currentUser.name}
+                  </Text>
+                  {verificationStatus === "verified" && (
+                    <View className="flex-row items-center bg-blue-50 border border-[#094569] rounded-full px-2 py-0.5 gap-1">
+                      <Verified size={11} color="#094569" />
+                      <Text className="text-[10px] font-msemibold text-[#094569] leading-none">Verified</Text>
+                    </View>
+                  )}
+                </View>
                 {currentUser.email && (
                   <Text className="text-sm font-regular text-gray-500 mb-3">
                     {currentUser.email}
@@ -1482,16 +1492,51 @@ export default function ProfileScreen() {
                 )}
 
                 {activeTab === "services" && (
-                  <View className="items-center justify-center py-16 px-6">
-                    <View className="w-14 h-14 rounded-full bg-amber-50 items-center justify-center mb-3">
-                      <Wrench size={26} strokeWidth={1.5} color="#D97706" />
-                    </View>
-                    <Text className="text-sm font-semibold text-gray-700">
-                      Offer your skills as services
-                    </Text>
-                    <Text className="text-xs text-gray-400 mt-1 text-center">
-                      Switch to the Work tab to manage your services
-                    </Text>
+                  <View className="flex-row flex-wrap">
+                    {providerServices.length > 0 ? (
+                      providerServices.map((service) => (
+                        <View key={service.id} className="w-[50%] p-2">
+                          <TouchableOpacity
+                            onPress={() => router.push(`/(users)/servicedetail/${service.id}` as any)}
+                            className="bg-transparent rounded-xl overflow-hidden border border-gray-100"
+                          >
+                            {service.images && service.images.length > 0 ? (
+                              <Image
+                                source={{ uri: service.images[0] }}
+                                className="w-full h-40"
+                                resizeMode="cover"
+                              />
+                            ) : (
+                              <View className="w-full h-40 bg-gray-100 items-center justify-center">
+                                <Wrench size={32} strokeWidth={1.5} color="#9CA3AF" />
+                              </View>
+                            )}
+                            <View className="p-3">
+                              <Text className="text-sm font-msemibold text-gray-900" numberOfLines={2}>
+                                {service.name}
+                              </Text>
+                              {service.service_categories?.name && (
+                                <Text className="text-xs font-regular text-gray-500 mt-1" numberOfLines={1}>
+                                  {service.service_categories.name}
+                                </Text>
+                              )}
+                            </View>
+                          </TouchableOpacity>
+                        </View>
+                      ))
+                    ) : (
+                      <View className="w-full py-16 items-center px-6">
+                        <View className="w-14 h-14 rounded-full bg-amber-50 items-center justify-center mb-3">
+                          <Wrench size={26} strokeWidth={1.5} color="#D97706" />
+                        </View>
+                        <Text className="text-sm font-semibold text-gray-700">
+                          Offer your skills as services
+                        </Text>
+                        <Text className="text-xs text-gray-400 mt-1 text-center">
+                          Switch to the Work tab to manage your services
+                        </Text>
+                      </View>
+                    )}
                   </View>
                 )}
               </View>
@@ -2075,12 +2120,7 @@ export default function ProfileScreen() {
           <Animated.View
             entering={SlideInDown.springify()}
             exiting={SlideOutDown}
-            style={{
-              height: "100%",
-              borderTopLeftRadius: 24,
-              borderTopRightRadius: 24,
-              overflow: "hidden",
-            }}
+            style={{ flex: 1 }}
           >
             <ManageListingsOverlay
               onClose={() => {

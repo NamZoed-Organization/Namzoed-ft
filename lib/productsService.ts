@@ -23,6 +23,7 @@ export interface Product {
   is_currently_active?: boolean;     // True if discount is active RIGHT NOW
   current_price?: number;            // Auto-calculated price with discount applied
   discount_ends_at?: string;         // Timestamp when discount expires
+  isVerified?: boolean;
 }
 
 export interface ProductWithUser extends Product {

@@ -1,4 +1,5 @@
 import { fetchMarketplaceItems, MarketplaceItem } from "@/lib/postMarketPlace";
+import { supabase } from "@/lib/supabase";
 import { fetchProducts, Product } from "@/lib/productsService";
 import {
   fetchAllProviderServices,
@@ -51,9 +52,31 @@ export function useForYouData() {
         fetchAllProviderServices(0, 15),
       ]);
       if (!isMountedRef.current) return;
+
+      // Batch-fetch verified service provider IDs for marketplace + products
+      const allUserIds = [...new Set([
+        ...(marketplaceData.items || []).map((i) => i.user_id),
+        ...(productsData.products || []).map((p) => p.user_id),
+      ])];
+      let verifiedIds = new Set<string>();
+      if (allUserIds.length > 0) {
+        const { data: spData } = await supabase
+          .from("service_providers")
+          .select("user_id, verification_status")
+          .in("user_id", allUserIds);
+        verifiedIds = new Set(
+          (spData || []).filter((sp) => sp.verification_status === "verified").map((sp) => sp.user_id)
+        );
+      }
+      const verifiedMktIds = verifiedIds;
+
       unstable_batchedUpdates(() => {
-      setProducts(shuffleArray(productsData.products || []).slice(0, 6));
-      setMarketplaceItems(shuffleArray(marketplaceData.items || []).slice(0, 6));
+      setProducts(shuffleArray(productsData.products || []).slice(0, 6).map((p) => ({ ...p, isVerified: verifiedIds.has(p.user_id) })));
+      setMarketplaceItems(
+        shuffleArray(marketplaceData.items || [])
+          .slice(0, 6)
+          .map((item) => ({ ...item, isVerified: verifiedMktIds.has(item.user_id) }))
+      );
       setServices(
         shuffleArray(servicesData || [])
           .slice(0, 6)
@@ -71,6 +94,7 @@ export function useForYouData() {
                   ? {
                       name: s.service_providers.name,
                       profile_url: s.service_providers.profile_url,
+                      verification_status: s.service_providers.verification_status,
                       profiles: s.service_providers.profiles
                         ? {
                             name: s.service_providers.profiles.name,

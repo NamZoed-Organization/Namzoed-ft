@@ -17,6 +17,8 @@ import {
   ArrowUpDown,
   Bookmark,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   Edit3,
   Eye,
   Package,
@@ -40,18 +42,21 @@ import {
   View
 } from "react-native";
 import Animated, { FadeInDown, FadeOutDown } from "react-native-reanimated";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 
 interface BookmarkedItem {
   id: string;
   product_id?: string;
   marketplace_id?: string;
   post_id?: string;
+  service_id?: string;
   created_at: string;
   products?: {
     id: string;
     name: string;
     price: number;
     images: string[];
+    category?: string;
   };
   marketplace?: {
     id: string;
@@ -70,6 +75,12 @@ interface BookmarkedItem {
     profiles?: {
       full_name: string;
     };
+  };
+  provider_services?: {
+    id: string;
+    name: string;
+    images: string[];
+    service_categories?: { name: string };
   };
 }
 
@@ -112,6 +123,18 @@ export default function ManageListingsOverlay({
   const [showImageViewer, setShowImageViewer] = useState(false);
   const [selectedPost, setSelectedPost] = useState<any | null>(null);
 
+  // Collapsible sections state for Saves tab (all collapsed by default)
+  const [collapsedSections, setCollapsedSections] = useState<{
+    products: boolean;
+    marketplace: boolean;
+    services: boolean;
+  }>({ products: true, marketplace: true, services: true });
+
+  const toggleSection = useCallback((section: "products" | "marketplace" | "services") => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setCollapsedSections((prev) => ({ ...prev, [section]: !prev[section] }));
+  }, []);
+
   useEffect(() => {
     loadData();
   }, [userId]);
@@ -123,6 +146,22 @@ export default function ManageListingsOverlay({
     setIsSelectionMode(false);
     setSelectedIds([]);
   };
+
+  const SWIPEABLE_TABS: TabType[] = ["products", "marketplace", "bookmarks"];
+
+  const swipeGesture = Gesture.Pan()
+    .runOnJS(true)
+    .activeOffsetX([-20, 20])
+    .failOffsetY([-15, 15])
+    .onEnd((e) => {
+      if (activeTab === "edit") return;
+      const idx = SWIPEABLE_TABS.indexOf(activeTab);
+      if (e.translationX < -50 && idx < SWIPEABLE_TABS.length - 1) {
+        handleTabChange(SWIPEABLE_TABS[idx + 1]);
+      } else if (e.translationX > 50 && idx > 0) {
+        handleTabChange(SWIPEABLE_TABS[idx - 1]);
+      }
+    });
 
   // Toggle sort order
   const toggleSortOrder = () => {
@@ -167,10 +206,12 @@ export default function ManageListingsOverlay({
             product_id,
             marketplace_id,
             post_id,
+            service_id,
             created_at,
             products (id, name, price, images, category),
             marketplace (id, title, price, images, type),
-            posts (id, content, images, likes, comments, user_id, profiles:user_id (name))
+            posts (id, content, images, likes, comments, user_id, profiles:user_id (name)),
+            provider_services (id, name, images, service_categories (name))
           `,
             )
             .eq("user_id", userId)
@@ -185,23 +226,20 @@ export default function ManageListingsOverlay({
         .map((item) => ({
           ...item,
           products: item.products
-            ? Array.isArray(item.products)
-              ? item.products[0]
-              : item.products
+            ? Array.isArray(item.products) ? item.products[0] : item.products
             : null,
           marketplace: item.marketplace
-            ? Array.isArray(item.marketplace)
-              ? item.marketplace[0]
-              : item.marketplace
+            ? Array.isArray(item.marketplace) ? item.marketplace[0] : item.marketplace
             : null,
           posts: item.posts
-            ? Array.isArray(item.posts)
-              ? item.posts[0]
-              : item.posts
+            ? Array.isArray(item.posts) ? item.posts[0] : item.posts
+            : null,
+          provider_services: item.provider_services
+            ? Array.isArray(item.provider_services) ? item.provider_services[0] : item.provider_services
             : null,
         }))
         .filter(
-          (item) => item.products || item.marketplace || item.posts,
+          (item) => item.products || item.marketplace || item.posts || item.provider_services,
         ) as BookmarkedItem[];
 
       setBookmarks(formattedBookmarks || []);
@@ -304,7 +342,7 @@ export default function ManageListingsOverlay({
     onLongPress: () => void;
     onPress: () => void;
   }) => {
-    // Handle category headers
+    // Handle category headers (Products/Marketplace tabs)
     if (item.type === "category_header") {
       return (
         <View className="px-4 py-3 mt-2">
@@ -315,16 +353,48 @@ export default function ManageListingsOverlay({
       );
     }
 
+    // Handle collapsible section headers (Saves tab)
+    if (item.type === "section_header") {
+      const isCollapsed = collapsedSections[item.section as "products" | "marketplace" | "services"];
+      return (
+        <TouchableOpacity
+          onPress={onPress}
+          className="px-4 py-3 mt-3 flex-row items-center justify-between"
+          activeOpacity={0.7}
+        >
+          <View className="flex-row items-center gap-x-2">
+            <Text className="text-base font-mbold text-gray-900">{item.title}</Text>
+            <View className="bg-primary/10 px-2 py-0.5 rounded-full">
+              <Text className="text-xs font-mbold text-primary">{item.count}</Text>
+            </View>
+          </View>
+          {isCollapsed ? (
+            <ChevronRight size={18} color="#6B7280" />
+          ) : (
+            <ChevronDown size={18} color="#6B7280" />
+          )}
+        </TouchableOpacity>
+      );
+    }
+
     // Normalize data
     const isPost = !!item.posts || !!item.post_id;
+    const isService = !!item.provider_services || !!item.service_id;
     const title = item.name || item.title || item.products?.name || item.marketplace?.title ||
+                  item.provider_services?.name ||
                   (item.posts?.content ? item.posts.content.substring(0, 50) + (item.posts.content.length > 50 ? "..." : "") : "Post");
     const price = item.price || item.products?.price || item.marketplace?.price;
-    const image = item.images?.[0] || item.products?.images?.[0] || item.marketplace?.images?.[0] || item.posts?.images?.[0];
-    const typeLabel = item.type || item.marketplace?.type;
+    const image = item.images?.[0] || item.products?.images?.[0] || item.marketplace?.images?.[0] || item.posts?.images?.[0] || item.provider_services?.images?.[0];
     const hasActiveDiscount = activeTab === "products" && item.is_currently_active;
     const isFood = item.category === "food";
     const postUsername = item.posts?.profiles?.name || "Unknown User";
+
+    // Category badge for Saves tab
+    const categoryTag = activeTab === "bookmarks"
+      ? (item.products?.category || item.marketplace?.type || item.provider_services?.service_categories?.name)
+      : null;
+    // Category badge for Products/Marketplace tabs
+    const typeLabel = activeTab === "marketplace" ? (item.type || item.marketplace?.type) : null;
 
     return (
       <View className="px-4 mb-3">
@@ -352,19 +422,29 @@ export default function ManageListingsOverlay({
 
           {/* Details */}
           <View className="flex-1 ml-4">
-            {/* Type label for marketplace or post */}
-            {isPost ? (
-              <Text className="text-[10px] font-mbold text-pink-600 uppercase tracking-tighter mb-0.5">
-                POST
-              </Text>
-            ) : typeLabel && (activeTab === "marketplace" || (activeTab === "bookmarks" && item.marketplace)) ? (
+            {/* Type label for marketplace tab */}
+            {!isPost && typeLabel && activeTab === "marketplace" ? (
               <Text className="text-[10px] font-mbold text-primary uppercase tracking-tighter mb-0.5">
                 {typeLabel}
               </Text>
             ) : null}
+
             <Text className="text-gray-900 font-msemibold text-lg" numberOfLines={1}>
               {title}
             </Text>
+
+            {/* Category tag pill for Saves tab */}
+            {categoryTag && activeTab === "bookmarks" && (
+              <View className={`self-start px-2 py-0.5 rounded-full mt-1 mb-0.5 ${
+                isService ? "bg-purple-100" : isPost ? "bg-pink-100" : "bg-gray-100"
+              }`}>
+                <Text className={`text-[10px] font-mbold capitalize ${
+                  isService ? "text-purple-700" : isPost ? "text-pink-700" : "text-gray-600"
+                }`}>
+                  {categoryTag}
+                </Text>
+              </View>
+            )}
 
             {/* Price with Discount Info or Post Info */}
             {isPost ? (
@@ -396,7 +476,7 @@ export default function ManageListingsOverlay({
               </View>
             ) : (
               <Text className="text-primary font-mbold text-lg">
-                Nu. {price?.toLocaleString()}
+                {price ? `Nu. ${price?.toLocaleString()}` : ""}
               </Text>
             )}
           </View>
@@ -431,6 +511,8 @@ export default function ManageListingsOverlay({
                       path = `/(users)/product/${item.product_id}`;
                     } else if (item.marketplace_id) {
                       path = `/(users)/marketplace/${item.marketplace_id}`;
+                    } else if (item.service_id) {
+                      path = `/(users)/servicedetail/${item.service_id}`;
                     }
                   } else {
                     path = `/(users)/product/${item.id}`;
@@ -466,6 +548,16 @@ export default function ManageListingsOverlay({
 
   const renderItem = useCallback(
     ({ item }: { item: any }) => {
+      if (item.type === "section_header") {
+        return (
+          <ListItem
+            item={item}
+            isSelected={false}
+            onLongPress={() => {}}
+            onPress={() => toggleSection(item.section)}
+          />
+        );
+      }
       const isSelected = selectedIds.includes(item.id);
       return (
         <ListItem
@@ -481,6 +573,7 @@ export default function ManageListingsOverlay({
       isSelectionMode,
       handleLongPress,
       toggleSelection,
+      toggleSection,
     ],
   );
 
@@ -566,69 +659,57 @@ export default function ManageListingsOverlay({
 
       return flatData;
     } else if (activeTab === "bookmarks") {
-      // Group bookmarks by category/type
-      const grouped: { [key: string]: any[] } = {};
-      bookmarks.forEach((bookmark) => {
-        let category = "uncategorized";
-
-        // Determine category based on bookmark type
-        if (bookmark.products) {
-          category = bookmark.products.category || "products";
-        } else if (bookmark.marketplace) {
-          category = bookmark.marketplace.type || "marketplace";
-        } else if (bookmark.posts) {
-          category = "posts";
-        }
-
-        if (!grouped[category]) {
-          grouped[category] = [];
-        }
-        grouped[category].push(bookmark);
-      });
-
-      // Sort bookmarks within each category
-      Object.keys(grouped).forEach((category) => {
-        grouped[category].sort((a, b) => {
+      const sortItems = (items: any[]) =>
+        [...items].sort((a, b) => {
           const dateA = new Date(a.created_at).getTime();
           const dateB = new Date(b.created_at).getTime();
           return sortOrder === "latest" ? dateB - dateA : dateA - dateB;
         });
-      });
 
-      // Convert to flat array with category headers
-      // Sort categories: food, fashion, rent, posts, then others alphabetically
+      const productBookmarks = sortItems(bookmarks.filter((b) => b.products));
+      const marketplaceBookmarks = sortItems(bookmarks.filter((b) => b.marketplace));
+      const serviceBookmarks = sortItems(bookmarks.filter((b) => b.provider_services));
+
       const flatData: any[] = [];
-      Object.keys(grouped)
-        .sort((a, b) => {
-          // Priority order: food -> fashion -> rent -> posts -> others
-          const getPriority = (cat: string): number => {
-            if (cat === "food") return 1;
-            if (cat === "fashion") return 2;
-            if (cat === "rent") return 3;
-            if (cat === "posts") return 4;
-            return 5; // Others
-          };
 
-          const priorityA = getPriority(a);
-          const priorityB = getPriority(b);
-
-          if (priorityA !== priorityB) {
-            return priorityA - priorityB;
-          }
-
-          // If both are "others" (priority 5), sort alphabetically
-          return a.localeCompare(b);
-        })
-        .forEach((category) => {
-          // Add category header
-          flatData.push({
-            type: "category_header",
-            category: category,
-            id: `header-${category}`,
-          });
-          // Add bookmarks in this category
-          flatData.push(...grouped[category]);
+      if (productBookmarks.length > 0) {
+        flatData.push({
+          type: "section_header",
+          section: "products",
+          title: "Products",
+          count: productBookmarks.length,
+          id: "section-products",
         });
+        if (!collapsedSections.products) {
+          flatData.push(...productBookmarks);
+        }
+      }
+
+      if (marketplaceBookmarks.length > 0) {
+        flatData.push({
+          type: "section_header",
+          section: "marketplace",
+          title: "Marketplace",
+          count: marketplaceBookmarks.length,
+          id: "section-marketplace",
+        });
+        if (!collapsedSections.marketplace) {
+          flatData.push(...marketplaceBookmarks);
+        }
+      }
+
+      if (serviceBookmarks.length > 0) {
+        flatData.push({
+          type: "section_header",
+          section: "services",
+          title: "Services",
+          count: serviceBookmarks.length,
+          id: "section-services",
+        });
+        if (!collapsedSections.services) {
+          flatData.push(...serviceBookmarks);
+        }
+      }
 
       return flatData;
     } else {
@@ -641,7 +722,7 @@ export default function ManageListingsOverlay({
       const dateB = new Date(b.created_at).getTime();
       return sortOrder === "latest" ? dateB - dateA : dateA - dateB;
     });
-  }, [activeTab, products, marketplaceItems, bookmarks, sortOrder]);
+  }, [activeTab, products, marketplaceItems, bookmarks, sortOrder, collapsedSections]);
 
   return (
     <View style={{ flex: 1, backgroundColor: "#F8FAFC" }}>
@@ -759,6 +840,7 @@ export default function ManageListingsOverlay({
 
       {/* Main List - hidden when editing */}
       {activeTab !== "edit" && (
+        <GestureDetector gesture={swipeGesture}>
         <View className="flex-1">
           {loading ? (
             <View className="flex-1 items-center justify-center">
@@ -799,6 +881,7 @@ export default function ManageListingsOverlay({
             />
           )}
         </View>
+        </GestureDetector>
       )}
 
       {/* Context-Aware Floating Deletion Bar */}

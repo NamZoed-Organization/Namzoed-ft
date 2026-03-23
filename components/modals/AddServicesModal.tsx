@@ -462,6 +462,7 @@ export default function AddServicesModal({
         <PopupMessage
           visible={showSuccess}
           type="success"
+          title="Service Added!"
           message={popupMessage}
         />
         <PopupMessage visible={showError} type="error" message={popupMessage} />

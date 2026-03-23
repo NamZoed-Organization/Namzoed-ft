@@ -39,6 +39,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 
 type TabType = "foryou" | "featured" | "live" | "lottery" | "norbu";
 type LiveFilter = "all" | "business" | "entertainment";
@@ -258,6 +259,7 @@ export default function HomeScreen() {
         discountPercent={item.discount_percent} isClosingSale
         profileImage={(item as any).profiles?.avatar_url}
         profileName={(item as any).profiles?.name}
+        isVerified={(item as any).isVerified}
         onPress={() => router.push(`/(users)/product/${item.id}` as any)}
       />
     );
@@ -272,6 +274,7 @@ export default function HomeScreen() {
       discountPercent={product.discount_percent} isClosingSale={false}
       profileImage={(product as any).profiles?.avatar_url}
       profileName={(product as any).profiles?.name}
+      isVerified={(product as any).isVerified}
       onPress={() => router.push(`/(users)/product/${product.id}` as any)}
     />
   ), [router]);
@@ -290,6 +293,7 @@ export default function HomeScreen() {
         isClosingSale={false}
         profileImage={(product as any).profiles?.avatar_url}
         profileName={(product as any).profiles?.name}
+        isVerified={(product as any).isVerified}
         onPress={() => router.push(`/(users)/product/${product.id}` as any)}
       />
     );
@@ -301,7 +305,8 @@ export default function HomeScreen() {
       title={service.name}
       subtitle={service.service_categories?.name || "Service"}
       profileImage={service.service_providers?.profile_url || service.service_providers?.profiles?.avatar_url}
-      profileName={service.service_providers?.profiles?.name || service.service_providers?.name}
+      profileName={service.service_providers?.name || service.service_providers?.profiles?.name}
+      isVerified={(service.service_providers as any)?.verification_status === "verified"}
       onPress={() => router.push(`/(users)/servicedetail/${service.id}` as any)}
     />
   ), [router]);
@@ -315,6 +320,7 @@ export default function HomeScreen() {
       location={item.dzongkhag}
       profileImage={(item as any).profiles?.avatar_url}
       profileName={(item as any).profiles?.name}
+      isVerified={item.isVerified}
       onPress={() => router.push(`/(users)/marketplace/${item.id}` as any)}
     />
   ), [router]);
@@ -542,23 +548,48 @@ export default function HomeScreen() {
   }, [handleTabPress]);
   // renderItem is intentionally stable — it reads live data via dataRef
 
+  const HOME_TABS: TabType[] = ["foryou", "featured", "live", "norbu", "lottery"];
+
+  const swipeGesture = Gesture.Pan()
+    .runOnJS(true)
+    .activeOffsetX([-20, 20])
+    .failOffsetY([-15, 15])
+    .onEnd((e) => {
+      const idx = HOME_TABS.indexOf(activeTab);
+      if (e.translationX < -50 && idx < HOME_TABS.length - 1) {
+        handleTabPress(HOME_TABS[idx + 1]);
+      } else if (e.translationX > 50 && idx > 0) {
+        handleTabPress(HOME_TABS[idx - 1]);
+      }
+    });
+
   return (
     <>
-      <FlatList
-        data={items}
-        renderItem={renderItem}
-        keyExtractor={(item) => item.key}
-        className="flex-1 bg-background"
-        contentContainerStyle={{ paddingBottom: 72 + insets.bottom }}
-        showsVerticalScrollIndicator={false}
-        windowSize={2}
-        maxToRenderPerBatch={1}
-        initialNumToRender={2}
-        removeClippedSubviews={true}
-        overScrollMode="never"
-        bounces={false}
-        extraData={activeTab}
-      />
+      <GestureDetector gesture={swipeGesture}>
+        <FlatList
+          data={items}
+          renderItem={renderItem}
+          keyExtractor={(item) => item.key}
+          className="flex-1 bg-background"
+          contentContainerStyle={{ paddingBottom: 72 + insets.bottom }}
+          showsVerticalScrollIndicator={false}
+          windowSize={2}
+          maxToRenderPerBatch={1}
+          initialNumToRender={2}
+          removeClippedSubviews={true}
+          overScrollMode="never"
+          bounces={true}
+          extraData={activeTab}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={["#094569"]}
+              tintColor="#094569"
+            />
+          }
+        />
+      </GestureDetector>
 
       {showLive && (
         <Modal

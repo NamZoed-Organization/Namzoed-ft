@@ -509,6 +509,7 @@ export default function EditServicesModal({
         <PopupMessage
           visible={showSuccess}
           type="success"
+          title="Service Updated!"
           message={popupMessage}
         />
         <PopupMessage visible={showError} type="error" message={popupMessage} />

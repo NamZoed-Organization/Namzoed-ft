@@ -1,6 +1,7 @@
 import {
   Camera,
   CheckCircle2,
+  Verified,
   Edit3,
   FileText,
   MoreVertical,
@@ -90,12 +91,20 @@ export default function ServiceProviderSection({
 
           {/* Left: name, bio, email, phone */}
           <View className="flex-1 pr-4">
-            <Text
-              className="text-lg font-mbold text-gray-900 mb-0.5"
-              numberOfLines={2}
-            >
-              {providerFormData.businessName || "Business Name"}
-            </Text>
+            <View className="flex-row items-center gap-1.5 mb-0.5">
+              <Text
+                className="text-lg font-mbold text-gray-900 flex-shrink"
+                numberOfLines={2}
+              >
+                {providerFormData.businessName || "Business Name"}
+              </Text>
+              {verificationStatus === "verified" && (
+                <View className="flex-row items-center bg-blue-50 border border-[#094569] rounded-full px-2 py-0.5 gap-1">
+                  <Verified size={11} color="#094569" />
+                  <Text className="text-[10px] font-msemibold text-[#094569] leading-none">Verified</Text>
+                </View>
+              )}
+            </View>
 
             {/* Email */}
             {providerFormData.email ? (
@@ -153,12 +162,6 @@ export default function ServiceProviderSection({
               <Camera size={12} strokeWidth={1.5} color="white" />
             </TouchableOpacity>
 
-            {/* Verified badge */}
-            {verificationStatus === "verified" && (
-              <View className="absolute top-0 left-0 w-6 h-6 bg-blue-500 rounded-full items-center justify-center border-2 border-white">
-                <CheckCircle2 size={12} color="white" fill="white" />
-              </View>
-            )}
           </View>
         </View>
 
@@ -192,19 +195,16 @@ export default function ServiceProviderSection({
             </Text>
           </View>
           <View className="flex-row items-center gap-2">
-            {!uploadingLicense && verificationStatus !== "not_verified" && (
-              <View
-                className={`px-3 py-1 rounded-full ${
-                  verificationStatus === "verified" ? "bg-green-100" : "bg-yellow-100"
-                }`}
-              >
-                <Text
-                  className={`text-xs font-msemibold ${
-                    verificationStatus === "verified" ? "text-green-700" : "text-yellow-700"
-                  }`}
-                >
-                  {verificationStatus === "verified" ? "Verified" : "Pending Verification"}
-                </Text>
+            {!uploadingLicense && verificationStatus === "verified" && (
+              <View className="flex-row items-center bg-blue-50 border border-[#094569] rounded-full px-2 py-0.5 gap-1">
+                <Verified size={11} color="#094569" />
+                <Text className="text-[10px] font-msemibold text-[#094569] leading-none">Verified</Text>
+              </View>
+            )}
+            {!uploadingLicense && verificationStatus === "pending" && (
+              <View className="flex-row items-center bg-yellow-50 border border-yellow-400 rounded-full px-2 py-0.5 gap-1">
+                <FileText size={11} color="#ca8a04" strokeWidth={2.5} />
+                <Text className="text-[10px] font-msemibold text-yellow-700 leading-none">Pending</Text>
               </View>
             )}
             {licenseImageUrl && !uploadingLicense && (

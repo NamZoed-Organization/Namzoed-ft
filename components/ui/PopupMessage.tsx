@@ -5,6 +5,13 @@ import { Pressable, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
 type PopupType = 'success' | 'error' | 'warning' | 'white';
+type PopupActionStyle = 'default' | 'cancel' | 'destructive';
+
+interface PopupAction {
+  label: string;
+  onPress?: () => void;
+  style?: PopupActionStyle;
+}
 
 interface PopupMessageProps {
   visible: boolean;
@@ -12,6 +19,7 @@ interface PopupMessageProps {
   title?: string;
   message: string;
   onHide?: () => void;
+  actions?: PopupAction[];
 }
 
 const popupConfig = {
@@ -41,7 +49,14 @@ const popupConfig = {
   },
 };
 
-export default function PopupMessage({ visible, type, title, message, onHide }: PopupMessageProps) {
+export default function PopupMessage({
+  visible,
+  type,
+  title,
+  message,
+  onHide,
+  actions,
+}: PopupMessageProps) {
   if (!visible) return null;
 
   const config = popupConfig[type];
@@ -125,6 +140,67 @@ export default function PopupMessage({ visible, type, title, message, onHide }: 
           >
             {message}
           </Text>
+
+          {actions && actions.length > 0 && (
+            <View
+              style={{
+                flexDirection: 'row',
+                justifyContent: 'center',
+                marginTop: 24,
+                gap: 12,
+                width: '100%',
+              }}
+            >
+              {actions.map((action, index) => {
+                const isDestructive = action.style === 'destructive';
+                const isCancel = action.style === 'cancel';
+                return (
+                  <Pressable
+                    key={`${action.label}-${index}`}
+                    onPress={() => {
+                      action.onPress?.();
+                      onHide?.();
+                    }}
+                    style={{
+                      minWidth: 120,
+                      paddingHorizontal: 18,
+                      paddingVertical: 12,
+                      borderRadius: 9999,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      backgroundColor: isWhite
+                        ? isDestructive
+                          ? '#dc2626'
+                          : isCancel
+                          ? '#ffffff'
+                          : '#094569'
+                        : isCancel
+                        ? 'rgba(255,255,255,0.18)'
+                        : 'rgba(255,255,255,0.24)',
+                      borderWidth: isWhite && isCancel ? 1.5 : 0,
+                      borderColor: isWhite && isCancel ? 'rgba(9,69,105,0.28)' : 'transparent',
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: isWhite
+                          ? isDestructive
+                            ? '#ffffff'
+                            : isCancel
+                            ? '#094569'
+                            : '#ffffff'
+                          : '#ffffff',
+                        fontSize: 14,
+                        fontWeight: '700',
+                      }}
+                    >
+                      {action.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
         </LinearGradient>
       </Animated.View>
     </Animated.View>

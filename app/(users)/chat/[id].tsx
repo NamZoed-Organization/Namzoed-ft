@@ -35,7 +35,7 @@ import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { Bike } from "lucide-react-native";
+import { Bike, Verified } from "lucide-react-native";
 
 import React, {
     useCallback,
@@ -544,6 +544,7 @@ export default function ChatScreen() {
   const [isPartnerTyping, setIsPartnerTyping] = useState(false);
   const [currentUserUUID, setCurrentUserUUID] = useState<string | null>(null);
   const [chatPartnerData, setChatPartnerData] = useState<any>(null);
+  const [partnerVerified, setPartnerVerified] = useState(false);
   const [isLoadingPartner, setIsLoadingPartner] = useState(true);
   const [isAnimatingMongoose, setIsAnimatingMongoose] = useState(false);
   const [showMongooseInitiator, setShowMongooseInitiator] = useState(false);
@@ -1110,8 +1111,13 @@ export default function ChatScreen() {
 
   useEffect(() => {
     if (!chatPartnerId) return;
-    getEarlyAccessBadge(String(chatPartnerId))
-      .then(setChatPartnerBadgeType)
+    getEarlyAccessBadge(String(chatPartnerId)).then(setChatPartnerBadgeType).catch(() => {});
+    supabase
+      .from("service_providers")
+      .select("verification_status")
+      .eq("user_id", String(chatPartnerId))
+      .maybeSingle()
+      .then(({ data }) => setPartnerVerified(data?.verification_status === "verified"))
       .catch(() => {});
   }, [chatPartnerId]);
 
@@ -1128,6 +1134,7 @@ export default function ChatScreen() {
       .join("_")}`;
 
     const setupChatRealtime = async () => {
+      console.log("[Chat] Setting up chat. chatPartnerId:", chatPartnerId, "contextUserUUID:", contextUserUUID);
       try {
         let userUUID = contextUserUUID;
         if (!userUUID && currentUser?.id) {
@@ -1199,6 +1206,7 @@ export default function ChatScreen() {
 
           if (messagesError) {
             console.error("❌ Error fetching messages:", messagesError);
+            console.error("[Chat] Query was: sender_id/receiver_id =", userUUID, "<->", chatPartnerId);
             return;
           }
           if (!isSubscribed) return;
@@ -2904,9 +2912,17 @@ export default function ChatScreen() {
         </TouchableOpacity>
 
         <View className="flex-1">
-          <Text className="font-semibold text-gray-800 text-lg">
-            {chatPartnerName}
-          </Text>
+          <View className="flex-row items-center gap-1.5 flex-wrap">
+            <Text className="font-semibold text-gray-800 text-lg">
+              {chatPartnerName}
+            </Text>
+            {partnerVerified && (
+              <View className="flex-row items-center bg-blue-50 border border-[#094569] rounded-full px-2 py-0.5 gap-1">
+                <Verified size={11} color="#094569" />
+                <Text className="text-[10px] font-msemibold text-[#094569] leading-none">Verified</Text>
+              </View>
+            )}
+          </View>
 
           {/* Online Status or Additional Info */}
           {isMongooseChat ? (

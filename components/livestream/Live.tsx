@@ -20,7 +20,6 @@ import React, {
 import PopupMessage from "@/components/ui/PopupMessage";
 import {
     ActivityIndicator,
-    Alert,
     FlatList,
     Image,
     ImageBackground,
@@ -216,8 +215,17 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose, onMinimize, initialStr
   const [coHostRequests, setCoHostRequests] = useState<CoHostRequest[]>([]);
   const [hasRequestedCoHost, setHasRequestedCoHost] = useState(false);
   const [liveViewerCount, setLiveViewerCount] = useState(0);
-  const [popup, setPopup] = useState<{visible: boolean; title: string; message: string}>({visible: false, title: '', message: ''});
-  const showPopup = (title: string, message: string) => setPopup({visible: true, title, message});
+  const [popup, setPopup] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+    type: "success" | "error" | "warning" | "white";
+  }>({ visible: false, title: "", message: "", type: "white" });
+  const showPopup = (
+    title: string,
+    message: string,
+    type: "success" | "error" | "warning" | "white" = "white"
+  ) => setPopup({ visible: true, title, message, type });
 
   const hostingRecordRef = useRef<Livestream | null>(null);
   const viewerSessionRef = useRef<{ streamId: string } | null>(null);
@@ -231,6 +239,7 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose, onMinimize, initialStr
     () => deriveUserIdentifier(currentUser),
     [currentUser]
   );
+  const isCreateOnlyEntry = !!showCreateModalOnMount && !initialStreamId;
 
   const supabaseUserId = useMemo(() => {
     const candidate = (currentUser as any)?.id;
@@ -571,12 +580,16 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose, onMinimize, initialStr
   }, [loadLivestreams]);
 
   useEffect(() => {
+    if (isCreateOnlyEntry) {
+      setLoadingStreams(false);
+      return;
+    }
     loadLivestreams(true);
     const unsubscribe = subscribeToLivestreams(handleLivestreamsChange);
     return () => {
       unsubscribe();
     };
-  }, [loadLivestreams, handleLivestreamsChange]);
+  }, [loadLivestreams, handleLivestreamsChange, isCreateOnlyEntry]);
 
   // Auto-join a specific stream when opened from LivesBar
   useEffect(() => {
@@ -812,7 +825,13 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose, onMinimize, initialStr
         >
           <Text className="text-xl font-semibold text-gray-900">Live</Text>
           <TouchableOpacity
-            onPress={() => setShowCreateModal(true)}
+            onPress={() => {
+              console.log("[LiveScreen] open-create-modal-from-list", {
+                livestreamCount: livestreams.length,
+                showCreateModalOnMount: !!showCreateModalOnMount,
+              });
+              setShowCreateModal(true);
+            }}
             className={`flex-row items-center rounded-full px-4 py-2 ${
               isCreateDisabled ? "bg-red-200" : "bg-red-500"
             }`}
@@ -1019,11 +1038,18 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose, onMinimize, initialStr
   // Create-only mode: opened from LiveScrollScreen "Create Live" button.
   // Show a plain black background so the listing screen never flashes behind the modal.
   if (showCreateModalOnMount && showCreateModal && !activeCall) {
+    console.log("[LiveScreen] render:create-only-modal", {
+      initialStreamId: initialStreamId ?? null,
+      showCreateModalOnMount: !!showCreateModalOnMount,
+      loadingStreams,
+      livestreamCount: livestreams.length,
+    });
     return (
       <View style={{ flex: 1, backgroundColor: "#000" }}>
         <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
         <CreateLivestreamModal
           visible
+          inline
           onClose={() => {
             setShowCreateModal(false);
             handleClose();
@@ -1152,6 +1178,7 @@ interface CreateLivestreamModalProps {
   loading: boolean;
   streamType: LivestreamType;
   onStreamTypeChange: (type: LivestreamType) => void;
+  inline?: boolean;
 }
 
 const CreateLivestreamModal: React.FC<CreateLivestreamModalProps> = ({
@@ -1165,27 +1192,28 @@ const CreateLivestreamModal: React.FC<CreateLivestreamModalProps> = ({
   loading,
   streamType,
   onStreamTypeChange,
+  inline = false,
 }) => {
   const insets = useSafeAreaInsets();
+  if (!visible) return null;
 
-  return (
-    <Modal visible={visible} animationType="slide" transparent>
+  const content = (
+    <View
+      style={{
+        flex: 1,
+        justifyContent: "flex-end",
+        backgroundColor: "rgba(0,0,0,0.6)",
+      }}
+    >
       <View
         style={{
-          flex: 1,
-          justifyContent: "flex-end",
-          backgroundColor: "rgba(0,0,0,0.6)",
+          paddingBottom:
+            Platform.OS === "android" && insets.bottom >= 40
+              ? insets.bottom
+              : 0,
         }}
       >
-        <View
-          style={{
-            paddingBottom:
-              Platform.OS === "android" && insets.bottom >= 40
-                ? insets.bottom
-                : 0,
-          }}
-        >
-          <View className="rounded-t-3xl bg-white px-6 pb-8 pt-6">
+        <View className="rounded-t-3xl bg-white px-6 pb-8 pt-6">
             <View className="mb-4 flex-row items-center justify-between">
               <Text className="text-lg font-semibold text-gray-900">
                 Create livestream
@@ -1293,9 +1321,18 @@ const CreateLivestreamModal: React.FC<CreateLivestreamModalProps> = ({
                 </Text>
               )}
             </TouchableOpacity>
-          </View>
         </View>
       </View>
+    </View>
+  );
+
+  if (inline) {
+    return content;
+  }
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      {content}
     </Modal>
   );
 };
@@ -1332,6 +1369,7 @@ const ActiveCallHeader: React.FC<ActiveCallHeaderProps> = ({
   isLive = false,
 }) => {
   const insets = useSafeAreaInsets();
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const router = useRouter();
 
   // Viewer invite state (host-only) — ActiveCallHeader lives inside StreamCall so hooks work
@@ -1447,8 +1485,35 @@ const ActiveCallHeader: React.FC<ActiveCallHeaderProps> = ({
     }
   };
 
+  const handleClosePress = useCallback(() => {
+    if (role !== "host") {
+      void onClose();
+      return;
+    }
+    setShowCloseConfirm(true);
+  }, [role, onClose]);
+
   return (
     <>
+    <Modal visible={showCloseConfirm} transparent animationType="fade" statusBarTranslucent>
+      <PopupMessage
+        visible={showCloseConfirm}
+        type="white"
+        title="End Livestream?"
+        message="Ending now will stop the livestream for everyone watching."
+        onHide={() => setShowCloseConfirm(false)}
+        actions={[
+          { label: "Keep Live", style: "cancel" },
+          {
+            label: "End Live",
+            style: "destructive",
+            onPress: () => {
+              void onClose();
+            },
+          },
+        ]}
+      />
+    </Modal>
     <View
       className="absolute inset-x-0 flex-row items-center justify-between px-4"
       style={{ top: insets.top, paddingTop: 6 }}
@@ -1536,7 +1601,7 @@ const ActiveCallHeader: React.FC<ActiveCallHeaderProps> = ({
           </TouchableOpacity>
         )}
         <TouchableOpacity
-          onPress={onClose}
+          onPress={handleClosePress}
           className={`flex-row items-center rounded-full px-3 py-1.5 ${
             role === "host" ? "bg-red-500" : "bg-white/20"
           }`}
@@ -1897,26 +1962,51 @@ const HostCallContainer: React.FC<HostCallContainerProps> = ({
   })();
 
   const handleToggleLive = () => {
+    console.log("[HostLive] handleToggleLive", {
+      isLive,
+      isRealHost,
+      hasCall: !!call,
+      countdown,
+      livestreamId: livestreamId ?? null,
+      hostId: hostId ?? null,
+    });
     if (isLive) setShowEndConfirm(true);
     else setCountdown(3);
   };
 
   useEffect(() => {
     if (countdown === null) return;
+    console.log("[HostLive] countdown", {
+      countdown,
+      hasCall: !!call,
+      livestreamId: livestreamId ?? null,
+      hostId: hostId ?? null,
+    });
     if (countdown > 0) {
       const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
       return () => clearTimeout(timer);
     }
     if (countdown === 0) {
+      console.log("[HostLive] goLive:start", {
+        livestreamId: livestreamId ?? null,
+        hostId: hostId ?? null,
+        hasCall: !!call,
+      });
       call
         ?.goLive()
         .then(() => {
+          console.log("[HostLive] goLive:success", {
+            livestreamId: livestreamId ?? null,
+            hostId: hostId ?? null,
+          });
           onStartStream?.();
           setCountdown(null);
         })
-        .catch(console.error);
+        .catch((error) => {
+          console.error("[HostLive] goLive:failed", error);
+        });
     }
-  }, [countdown]);
+  }, [countdown, call, livestreamId, hostId, onStartStream]);
 
   // Fetch host's products
   useEffect(() => {
@@ -2192,8 +2282,13 @@ const HostCallContainer: React.FC<HostCallContainerProps> = ({
             </View>
           </Modal>
 
-          {/* TOP SECTION: 70% HEIGHT */}
-          <View style={{ height: "70%", flexDirection: "row" }}>
+          {/* TOP SECTION */}
+          <View
+            style={{
+              height: streamType === "business" ? "64%" : "70%",
+              flexDirection: "row",
+            }}
+          >
             {/* VIDEO COLUMN */}
             <Animated.View
               style={[
@@ -2429,9 +2524,9 @@ const HostCallContainer: React.FC<HostCallContainerProps> = ({
             </View>
           </Modal>
 
-          {/* BOTTOM SECTION: 30% HEIGHT */}
+          {/* BOTTOM SECTION */}
           <View
-            style={{ height: streamType === "business" ? "30%" : "auto" }}
+            style={{ height: streamType === "business" ? "36%" : "auto" }}
             className="p-4 justify-between bg-black"
           >
             <View
@@ -3636,37 +3731,11 @@ const ViewerCallContainer: React.FC<ViewerCallContainerProps> = ({
         </TouchableWithoutFeedback>
       </View>
       <Modal visible={popup.visible} transparent animationType="none" statusBarTranslucent>
-        <PopupMessage visible={popup.visible} type="warning" title={popup.title} message={popup.message} onHide={() => setPopup(p => ({...p, visible: false}))} />
+        <PopupMessage visible={popup.visible} type={popup.type} title={popup.title} message={popup.message} onHide={() => setPopup(p => ({...p, visible: false}))} />
       </Modal>
     </GestureDetector>
   );
 };
 
 export default LiveScreen;
-async function ensureCameraPermission(): Promise<boolean> {
-  const { status, canAskAgain } = await Camera.requestCameraPermissionsAsync();
-  if (status !== "granted") {
-    if (!canAskAgain) {
-      Alert.alert(
-        "Camera Access Blocked",
-        "Camera permission has been denied. Please enable it in Settings to use live video.",
-        [
-          { text: "Not Now", style: "cancel" },
-          { text: "Open Settings", onPress: () => Linking.openSettings() },
-        ]
-      );
-    } else {
-      Alert.alert(
-        "Camera Permission Needed",
-        "Please enable camera access to use live video.",
-        [
-          { text: "Not Now", style: "cancel" },
-          { text: "Open Settings", onPress: () => Linking.openSettings() },
-        ]
-      );
-    }
-    return false;
-  }
-  return true;
-}
 

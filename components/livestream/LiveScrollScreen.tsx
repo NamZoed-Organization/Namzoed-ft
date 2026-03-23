@@ -13,6 +13,7 @@ import { useLiveSession } from "@/contexts/LiveSessionProvider";
 import { useUser } from "@/contexts/UserContext";
 import { useLivestreams } from "@/hooks/useLivestreams";
 import { supabase } from "@/lib/supabase";
+import PopupMessage from "@/components/ui/PopupMessage";
 import getStreamService, {
   type StreamIdentity,
 } from "@/services/getStreamService";
@@ -54,7 +55,6 @@ import {
   Dimensions,
   FlatList,
   Image,
-  KeyboardAvoidingView,
   Modal,
   NativeScrollEvent,
   NativeSyntheticEvent,
@@ -792,6 +792,9 @@ export default function LiveScrollScreen({
     showCreateModalOnMount?: boolean;
   }> | null>(null);
   const [wrapperLoading, setWrapperLoading] = useState(false);
+  const [showHostCloseConfirm, setShowHostCloseConfirm] = useState(false);
+  const shouldAutoOpenCreate =
+    !!openCreateOnMount && !initialStreamId && livestreams.length > 0;
 
   const hasAutoScrolled = useRef(false);
   const flatListRef = useRef<FlatList>(null);
@@ -966,20 +969,31 @@ export default function LiveScrollScreen({
   }, []);
 
   const handleCreateLive = useCallback(async () => {
+    console.log("[LiveScroll] handleCreateLive:start", {
+      openCreateOnMount: !!openCreateOnMount,
+      livestreamCount: livestreams.length,
+      wrapperLoaded: !!LiveWrapper,
+    });
     await ensureLiveWrapper();
+    console.log("[LiveScroll] handleCreateLive:wrapper-ready");
     setHostMode(true);
-  }, [ensureLiveWrapper]);
+  }, [ensureLiveWrapper, openCreateOnMount, livestreams.length, LiveWrapper]);
 
   // Auto-open create modal when launched from "Go Live" button
   const hasAutoOpenedCreate = useRef(false);
   useEffect(() => {
-    if (!openCreateOnMount || hasAutoOpenedCreate.current) return;
+    if (!shouldAutoOpenCreate || hasAutoOpenedCreate.current) return;
     hasAutoOpenedCreate.current = true;
+    console.log("[LiveScroll] auto-open create on mount", {
+      livestreamCount: livestreams.length,
+      initialStreamId: initialStreamId ?? null,
+    });
     handleCreateLive();
-  }, [openCreateOnMount, handleCreateLive]);
+  }, [shouldAutoOpenCreate, handleCreateLive, livestreams.length, initialStreamId]);
 
   const handleHostClose = useCallback(() => {
-    setHostMode(false);
+    console.log("[LiveScroll] handleHostClose");
+    setShowHostCloseConfirm(true);
   }, []);
 
   const handleCohostAccepted = useCallback(async (streamId: string) => {
@@ -1041,7 +1055,7 @@ export default function LiveScrollScreen({
         return true;
       }
       if (hostMode) {
-        setHostMode(false);
+        handleHostClose();
         return true;
       }
       onClose();
@@ -1081,6 +1095,12 @@ export default function LiveScrollScreen({
 
   // ── Empty state ──────────────────────────────────────────────────────────
   if (livestreams.length === 0) {
+    console.log("[LiveScroll] render:no-lives-empty-state", {
+      initialStreamId: initialStreamId ?? null,
+      openCreateOnMount: !!openCreateOnMount,
+      hostMode,
+      wrapperLoaded: !!LiveWrapper,
+    });
     return (
       <View
         style={{
@@ -1172,6 +1192,23 @@ export default function LiveScrollScreen({
               showCreateModalOnMount
             />
           )}
+        </Modal>
+        <Modal visible={showHostCloseConfirm} transparent animationType="fade" statusBarTranslucent>
+          <PopupMessage
+            visible={showHostCloseConfirm}
+            type="white"
+            title="Leave Livestream Setup?"
+            message="If you are already live, leaving now will end the livestream for everyone. If you are still setting up, your current live setup will be closed."
+            onHide={() => setShowHostCloseConfirm(false)}
+            actions={[
+              { label: "Stay Here", style: "cancel" },
+              {
+                label: "Leave",
+                style: "destructive",
+                onPress: () => setHostMode(false),
+              },
+            ]}
+          />
         </Modal>
       </View>
     );
@@ -1340,8 +1377,7 @@ export default function LiveScrollScreen({
 
       {/* ── LiveChat overlay (tap to show/hide) ──────────────────────── */}
       {showChat && currentStream && streamReady && (
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        <View
           style={{
             position: "absolute",
             bottom: 0,
@@ -1373,7 +1409,7 @@ export default function LiveScrollScreen({
               onClose();
             }}
           />
-        </KeyboardAvoidingView>
+        </View>
       )}
 
       {/* ── Loading overlay while LiveWrapper imports ─────────────────── */}
@@ -1405,13 +1441,30 @@ export default function LiveScrollScreen({
         presentationStyle="fullScreen"
         statusBarTranslucent
         onRequestClose={handleHostClose}
-      >
-        {LiveWrapper && (
-          <LiveWrapper
+        >
+          {LiveWrapper && (
+            <LiveWrapper
             onClose={handleHostClose}
             showCreateModalOnMount
           />
-        )}
+          )}
+      </Modal>
+      <Modal visible={showHostCloseConfirm} transparent animationType="fade" statusBarTranslucent>
+        <PopupMessage
+          visible={showHostCloseConfirm}
+          type="white"
+          title="Leave Livestream Setup?"
+          message="If you are already live, leaving now will end the livestream for everyone. If you are still setting up, your current live setup will be closed."
+          onHide={() => setShowHostCloseConfirm(false)}
+          actions={[
+            { label: "Stay Here", style: "cancel" },
+            {
+              label: "Leave",
+              style: "destructive",
+              onPress: () => setHostMode(false),
+            },
+          ]}
+        />
       </Modal>
 
       {/* ── Cohost modal (accepted request → full viewer+speaker) ──── */}

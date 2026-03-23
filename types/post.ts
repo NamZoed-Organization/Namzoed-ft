@@ -30,4 +30,5 @@ export interface PostData {
   shares: number;
   tagged_products?: TaggedProduct[];
   tagged_accounts?: TaggedAccount[];
+  isVerified?: boolean;
 }

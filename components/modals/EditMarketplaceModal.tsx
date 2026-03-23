@@ -666,6 +666,7 @@ export default function EditMarketplaceModal({
         <PopupMessage
           visible={showSuccess}
           type="success"
+          title="Listing Updated!"
           message={popupMessage}
         />
         <PopupMessage visible={showError} type="error" message={popupMessage} />
