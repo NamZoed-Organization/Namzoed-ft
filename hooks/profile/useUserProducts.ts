@@ -1,6 +1,7 @@
 import { useUser } from "@/contexts/UserContext";
 import { fetchUserProducts, Product } from "@/lib/productsService";
 import { useEffect, useState } from "react";
+import { InteractionManager } from "react-native";
 
 export const useUserProducts = (
   refreshKey: number,
@@ -28,7 +29,10 @@ export const useUserProducts = (
       }
     };
 
-    loadProducts();
+    const task = InteractionManager.runAfterInteractions(() => {
+      loadProducts();
+    });
+    return () => task.cancel();
   }, [currentUser?.id, refreshKey]);
 
   return {

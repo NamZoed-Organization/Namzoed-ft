@@ -2,6 +2,7 @@ import { useUser } from "@/contexts/UserContext";
 import { fetchUserProfile } from "@/lib/profileService";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useState } from "react";
+import { InteractionManager } from "react-native";
 
 export const useProfileData = (refreshKey: number) => {
   const { currentUser, setCurrentUser } = useUser();
@@ -16,11 +17,9 @@ export const useProfileData = (refreshKey: number) => {
       try {
         const profile = await fetchUserProfile(currentUser.id);
 
-        // Set profile image
         if (profile?.avatar_url) {
           setProfileImage(profile.avatar_url);
 
-          // ALWAYS sync avatar_url from database to context/AsyncStorage
           if (currentUser?.avatar_url !== profile.avatar_url) {
             const updatedUser = {
               ...currentUser,
@@ -33,14 +32,12 @@ export const useProfileData = (refreshKey: number) => {
             setCurrentUser(updatedUser);
           }
         } else {
-          // Fallback to context
           const user = currentUser as any;
           if (user?.avatar_url) {
             setProfileImage(user.avatar_url);
           }
         }
 
-        // Set follower counts from database
         setFollowerCount(profile?.follower_count || 0);
         setFollowingCount(profile?.following_count || 0);
       } catch (error) {
@@ -48,7 +45,10 @@ export const useProfileData = (refreshKey: number) => {
       }
     };
 
-    loadProfileData();
+    const task = InteractionManager.runAfterInteractions(() => {
+      loadProfileData();
+    });
+    return () => task.cancel();
   }, [currentUser, refreshKey]);
 
   return {

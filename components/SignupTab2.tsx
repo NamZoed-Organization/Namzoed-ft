@@ -5,7 +5,8 @@ import {
   MaterialIcons,
 } from "@expo/vector-icons";
 import FormInput from "@/components/ui/FormInput";
-import { Link, useRouter } from "expo-router";
+import { useAppRouter } from "@/utils/navigation";
+import { Link } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -46,7 +47,7 @@ const dzongkhags = [
 ];
 
 export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
-  const router = useRouter();
+  const router = useAppRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

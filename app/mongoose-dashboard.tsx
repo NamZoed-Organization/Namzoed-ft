@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { isMongooseUser, MONGOOSE_EMAIL } from "@/utils/roleCheck";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useRouter } from "expo-router";
+import { useAppRouter } from "@/utils/navigation";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
@@ -42,7 +42,7 @@ interface BookingRequest {
 
 export default function MongooseDashboard() {
   const { currentUser } = useUser();
-  const router = useRouter();
+  const router = useAppRouter();
   const [isAvailable, setIsAvailable] = useState(true);
   const [bookingRequests, setBookingRequests] = useState<BookingRequest[]>([]);
   const [loading, setLoading] = useState(true);

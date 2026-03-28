@@ -1,13 +1,14 @@
 import { CategoriesIcon, HomeIcon } from "@/components/icons/index";
 import { clamp, useResponsive } from "@/utils/responsive";
-import { usePathname, useRouter } from "expo-router";
+import { useAppRouter } from "@/utils/navigation";
+import { usePathname } from "expo-router";
 import { Plus, Store, Wrench } from "lucide-react-native";
 import React from "react";
 import { Platform, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function BottomNavBar() {
-  const router = useRouter();
+  const router = useAppRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const { ms, vs } = useResponsive();

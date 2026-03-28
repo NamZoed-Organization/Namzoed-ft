@@ -2,6 +2,7 @@ import { AlertCircle, AlertTriangle, CheckCircle } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
 type PopupType = 'success' | 'error' | 'warning' | 'white';
@@ -57,6 +58,8 @@ export default function PopupMessage({
   onHide,
   actions,
 }: PopupMessageProps) {
+  const insets = useSafeAreaInsets();
+
   if (!visible) return null;
 
   const config = popupConfig[type];
@@ -71,17 +74,18 @@ export default function PopupMessage({
     <Animated.View
       entering={FadeIn.duration(300)}
       exiting={FadeOut.duration(200)}
-      className="absolute inset-0 items-center justify-center z-50"
-      style={{ backgroundColor: 'rgba(0,0,0,0.4)' }}
+      style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.32)', zIndex: 50, paddingBottom: insets.bottom + 32, paddingTop: insets.top + 12, paddingHorizontal: 20 }}
     >
       <Pressable
-        style={{ position: 'absolute', inset: 0 } as any}
+        style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0 }}
         onPress={onHide}
       />
       <Animated.View
         entering={FadeIn.duration(400)}
         className="mx-4 rounded-3xl overflow-hidden"
         style={{
+          width: '100%',
+          maxWidth: 320,
           shadowColor: '#000',
           shadowOffset: { width: 0, height: 10 },
           shadowOpacity: 0.3,
@@ -93,25 +97,25 @@ export default function PopupMessage({
           colors={config.colors}
           start={[0, 0]}
           end={[1, 1]}
-          style={{ padding: 32, alignItems: 'center' }}
+          style={{ paddingHorizontal: 20, paddingVertical: 16, alignItems: 'center' }}
         >
           {/* Icon with glow effect */}
           <View
             style={{
               backgroundColor: iconBgColor,
               borderRadius: 50,
-              padding: 16,
-              marginBottom: 20,
+              padding: 10,
+              marginBottom: 10,
             }}
           >
             <View
               style={{
                 backgroundColor: iconInnerBgColor,
                 borderRadius: 40,
-                padding: 12,
+                padding: 7,
               }}
             >
-              <Icon size={48} color={iconColor} strokeWidth={2.5} />
+              <Icon size={30} color={iconColor} strokeWidth={2.4} />
             </View>
           </View>
 
@@ -119,10 +123,11 @@ export default function PopupMessage({
           <Text
             style={{
               color: config.textColor,
-              fontSize: 22,
+              fontSize: 17,
               fontWeight: '700',
-              marginBottom: 8,
-              letterSpacing: -0.5,
+              marginBottom: 4,
+              letterSpacing: -0.3,
+              textAlign: 'center',
             }}
           >
             {displayTitle}
@@ -132,10 +137,10 @@ export default function PopupMessage({
           <Text
             style={{
               color: isWhite ? 'rgba(9,69,105,0.8)' : 'rgba(255,255,255,0.9)',
-              fontSize: 15,
+              fontSize: 13,
               fontWeight: '500',
               textAlign: 'center',
-              lineHeight: 22,
+              lineHeight: 17,
             }}
           >
             {message}
@@ -146,8 +151,8 @@ export default function PopupMessage({
               style={{
                 flexDirection: 'row',
                 justifyContent: 'center',
-                marginTop: 24,
-                gap: 12,
+                marginTop: 14,
+                gap: 10,
                 width: '100%',
               }}
             >
@@ -162,9 +167,9 @@ export default function PopupMessage({
                       onHide?.();
                     }}
                     style={{
-                      minWidth: 120,
-                      paddingHorizontal: 18,
-                      paddingVertical: 12,
+                      minWidth: 96,
+                      paddingHorizontal: 16,
+                      paddingVertical: 8,
                       borderRadius: 9999,
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -190,7 +195,7 @@ export default function PopupMessage({
                             ? '#094569'
                             : '#ffffff'
                           : '#ffffff',
-                        fontSize: 14,
+                        fontSize: 13,
                         fontWeight: '700',
                       }}
                     >

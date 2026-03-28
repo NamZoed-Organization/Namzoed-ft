@@ -18,8 +18,8 @@ import {
     TermsOfService
 } from '@/components/settings';
 import { ArrowLeft, Bookmark, Key, LogOut, MessageSquare, Phone, ScrollText, Shield, Smartphone, Sparkles, Trash2 } from 'lucide-react-native';
-import React, { useRef, useState } from "react";
-import { Animated, Dimensions, Linking, PanResponder, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Animated, BackHandler, Dimensions, Linking, PanResponder, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 interface ProfileSettingsProps {
@@ -35,16 +35,50 @@ export default function ProfileSettings({ onClose, currentUser, onLogout, panHan
   const insets = useSafeAreaInsets();
   
   const [modalStack, setModalStack] = useState<string[]>(initialModal ? [initialModal] : []);
-  
-  // Horizontal slide for nested menus
-  const slideAnim = useRef(new Animated.Value(0)).current;
-  // Vertical slide for drag-to-close
-  const panY = useRef(new Animated.Value(0)).current;
-  
+
   const screenWidth = Dimensions.get('window').width;
   const screenHeight = Dimensions.get('window').height;
 
+  // Horizontal slide for nested menus
+  const slideAnim = useRef(new Animated.Value(0)).current;
+  // Vertical — starts off-screen so the sheet slides up on mount
+  const panY = useRef(new Animated.Value(screenHeight)).current;
+  // Guard: prevent spamming navigation while an animation is in progress
+  const isAnimating = useRef(false);
+
+  // Slide up on mount
+  useEffect(() => {
+    Animated.spring(panY, {
+      toValue: 0,
+      useNativeDriver: false,
+      bounciness: 4,
+      speed: 16,
+    }).start();
+  }, []);
+
+  // Animated close: slide sheet down, then unmount
+  const handleClose = useCallback(() => {
+    Animated.timing(panY, {
+      toValue: screenHeight,
+      duration: 280,
+      useNativeDriver: false,
+    }).start(() => onClose());
+  }, [screenHeight, onClose]);
+
   const activeModal = modalStack[modalStack.length - 1] || null;
+
+  // --- Android back button: pop nested modal first, then close settings ---
+  useEffect(() => {
+    const handler = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (modalStack.length > 0) {
+        closeActiveModal();
+        return true;
+      }
+      handleClose();
+      return true;
+    });
+    return () => handler.remove();
+  }, [modalStack, handleClose]);
 
   // --- Pan Responder for Drag-to-Close ---
   const panResponder = useRef(
@@ -65,7 +99,7 @@ export default function ProfileSettings({ onClose, currentUser, onLogout, panHan
           Animated.timing(panY, {
             toValue: screenHeight,
             duration: 200,
-            useNativeDriver: false, // Changed to false for web compatibility in preview
+            useNativeDriver: false,
           }).start(() => onClose());
         } else {
           // Spring back to top
@@ -80,21 +114,34 @@ export default function ProfileSettings({ onClose, currentUser, onLogout, panHan
   ).current;
 
   const handleNavigation = (modalName: string) => {
+    // Block if already animating or the same screen is already on top
+    if (isAnimating.current) return;
+    if (modalStack[modalStack.length - 1] === modalName) return;
+    isAnimating.current = true;
     setModalStack(prev => [...prev, modalName]);
     slideAnim.setValue(screenWidth);
     Animated.timing(slideAnim, {
       toValue: 0,
-      duration: 300,
-      useNativeDriver: false,
-    }).start();
+      duration: 250,
+      useNativeDriver: true,
+    }).start(() => { isAnimating.current = false; });
   };
 
   const closeActiveModal = () => {
+    // If this was opened directly to a specific modal (e.g. editProfile),
+    // and it's the only item in the stack — close the whole sheet, don't go back to settings list.
+    if (modalStack.length === 1 && initialModal) {
+      handleClose();
+      return;
+    }
+    if (isAnimating.current) return;
+    isAnimating.current = true;
     Animated.timing(slideAnim, {
       toValue: screenWidth,
-      duration: 300,
-      useNativeDriver: false,
+      duration: 250,
+      useNativeDriver: true,
     }).start(({ finished }) => {
+      isAnimating.current = false;
       if (finished) {
         setModalStack(prev => prev.slice(0, -1));
         slideAnim.setValue(screenWidth);
@@ -125,20 +172,24 @@ export default function ProfileSettings({ onClose, currentUser, onLogout, panHan
   };
 
   return (
-    <View className="flex-1 justify-end">
+    <View className="flex-1">
       {/* Backdrop Tap Zone: 
         The transparent area above the sheet. Tapping here closes the sheet.
       */}
-      <TouchableOpacity 
-        activeOpacity={1} 
-        onPress={onClose}
-        className="absolute top-0 left-0 right-0 bottom-0" 
+      <TouchableOpacity
+        activeOpacity={1}
+        onPress={handleClose}
+        className="absolute top-0 left-0 right-0 bottom-0"
       />
 
       {/* --- MAIN SHEET --- */}
-      <Animated.View 
-        className="bg-white rounded-t-3xl overflow-hidden shadow-xl w-full h-[90%]"
+      <Animated.View
+        className="bg-white rounded-t-3xl overflow-hidden shadow-xl w-full"
         style={{
+          flex: 1,
+          marginTop: '50%',
+          marginBottom: -insets.bottom,
+          paddingBottom: insets.bottom,
           transform: [{ translateY: panY }]
         }}
       >

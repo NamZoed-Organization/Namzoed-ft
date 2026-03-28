@@ -2,7 +2,7 @@
 import { FlashList } from "@shopify/flash-list";
 import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
-import { useRouter } from 'expo-router';
+import { useAppRouter } from '@/utils/navigation';
 import { ArrowDownAZ, ArrowUpAZ, X } from 'lucide-react-native';
 import PopupMessage from '@/components/ui/PopupMessage';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -16,6 +16,7 @@ import {
   View
 } from 'react-native';
 import { fetchFollowers, followUser, FollowUser } from '@/lib/followService';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface FollowRequestsProps {
   onClose: () => void;
@@ -25,7 +26,8 @@ interface FollowRequestsProps {
 type SortOrder = 'asc' | 'desc';
 
 export default function FollowRequests({ onClose, userId }: FollowRequestsProps) {
-  const router = useRouter();
+  const router = useAppRouter();
+  const insets = useSafeAreaInsets();
   const [requests, setRequests] = useState<FollowUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -190,7 +192,7 @@ export default function FollowRequests({ onClose, userId }: FollowRequestsProps)
   );
 
   return (
-    <View className="flex-1 bg-[#F8FAFC]">
+    <View className="flex-1 bg-[#F8FAFC]" style={{ marginBottom: -insets.bottom, paddingBottom: insets.bottom }}>
       {/* Premium Header with BlurView */}
       <BlurView intensity={90} tint="light" className="pt-14 pb-4 z-10 border-b border-gray-200/50">
         <View className="flex-row items-center justify-between px-6">

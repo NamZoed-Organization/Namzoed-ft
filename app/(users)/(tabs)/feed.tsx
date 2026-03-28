@@ -20,6 +20,7 @@ import React, {
 import {
     ActivityIndicator,
     FlatList,
+    InteractionManager,
     Modal,
     RefreshControl,
     Text,
@@ -31,15 +32,18 @@ import FeedPost from "@/components/FeedPost";
 import LivesBar from "@/components/livestream/LivesBar";
 import AuthPromptModal from "@/components/modals/AuthPromptModal";
 import { feedEvents } from "@/utils/feedEvents";
+import { useLiveSession } from "@/contexts/LiveSessionProvider";
 
 export default function FeedScreen() {
   const insets = useSafeAreaInsets();
   const { currentUser } = useUser();
+  const { setRestoreHandler } = useLiveSession();
   const { streamId: deepLinkedStreamId } = useLocalSearchParams<{ streamId?: string }>();
   const [showCreatePost, setShowCreatePost] = useState(false);
   const [showLive, setShowLive] = useState(false);
   const [selectedStreamId, setSelectedStreamId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [liveRefreshKey, setLiveRefreshKey] = useState(0);
   const [newPosts, setNewPosts] = useState<PostData[]>([]);
   const [loadingNewPosts, setLoadingNewPosts] = useState(true);
   const [visiblePostId, setVisiblePostId] = useState<string | null>(null);
@@ -103,10 +107,7 @@ export default function FeedScreen() {
     try {
       setLoadingNewPosts(true);
 
-      // Add a small delay to show skeleton
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      const { posts: fetchedPosts } = await fetchPosts(0, 50);
+      const { posts: fetchedPosts } = await fetchPosts(0, 15);
 
       // Add null check for fetchedPosts
       if (!fetchedPosts || !Array.isArray(fetchedPosts)) {
@@ -159,8 +160,11 @@ export default function FeedScreen() {
 
   // Load posts on mount
   useEffect(() => {
-    loadNewPosts();
-    loadReportedPosts();
+    const task = InteractionManager.runAfterInteractions(() => {
+      loadNewPosts();
+      loadReportedPosts();
+    });
+    return () => task.cancel();
   }, []);
 
   // Deep-link from notifications: /(users)/(tabs)/feed?streamId=xxx
@@ -199,6 +203,7 @@ export default function FeedScreen() {
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     await loadNewPosts(); // Reload posts from Supabase
+    setLiveRefreshKey((prev) => prev + 1);
     await refresh();
     setRefreshing(false);
   }, [refresh]);
@@ -320,8 +325,9 @@ export default function FeedScreen() {
       onJoin={handleJoinLive}
       onGoLive={handleGoLive}
       onCreatePost={handleCreatePost}
+      refreshKey={liveRefreshKey}
     />
-  ), [handleJoinLive, handleGoLive, handleCreatePost]);
+  ), [handleJoinLive, handleGoLive, handleCreatePost, liveRefreshKey]);
 
   const [showAuthModal, setShowAuthModal] = useState(false);
 
@@ -415,27 +421,35 @@ export default function FeedScreen() {
         </View>
       </Modal>
 
-      {/* Live Modal — TikTok-style endless scroll */}
-      <Modal
-        visible={showLive}
-        animationType="slide"
-        presentationStyle="fullScreen"
-        statusBarTranslucent={true}
-        onRequestClose={() => setShowLive(false)}
-      >
-        {LiveScrollScreen ? (
-          <LiveScrollScreen
-            initialStreamId={selectedStreamId ?? undefined}
-            openCreateOnMount={selectedStreamId === null}
-            onClose={() => setShowLive(false)}
-          />
-        ) : (
-          <View className="flex-1 bg-black items-center justify-center">
-            <ActivityIndicator size="large" color="white" />
-            <Text className="mt-4 text-white opacity-60">Loading…</Text>
-          </View>
-        )}
-      </Modal>
+      {/* Live Modal — TikTok-style endless scroll.
+          Only rendered when open: a hidden Modal on Android blocks all touches,
+          and keeping LiveScrollScreen mounted in the background wastes resources. */}
+      {showLive && (
+        <Modal
+          visible={true}
+          animationType="slide"
+          presentationStyle="fullScreen"
+          statusBarTranslucent={true}
+          onRequestClose={() => setShowLive(false)}
+        >
+          {LiveScrollScreen ? (
+            <LiveScrollScreen
+              initialStreamId={selectedStreamId ?? undefined}
+              openCreateOnMount={selectedStreamId === null}
+              onClose={() => setShowLive(false)}
+              onRestore={(streamId) => {
+                setSelectedStreamId(streamId);
+                setShowLive(true);
+              }}
+            />
+          ) : (
+            <View className="flex-1 bg-black items-center justify-center">
+              <ActivityIndicator size="large" color="white" />
+              <Text className="mt-4 text-white opacity-60">Loading…</Text>
+            </View>
+          )}
+        </Modal>
+      )}
 
     </View>
   );

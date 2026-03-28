@@ -1,6 +1,7 @@
 import { Entypo } from "@expo/vector-icons";
 import PopupMessage from "@/components/ui/PopupMessage";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useAppRouter } from "@/utils/navigation";
+import { useLocalSearchParams } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import { clamp, useResponsive } from "@/utils/responsive";
 import {
@@ -16,7 +17,7 @@ import {
 } from "react-native";
 
 export default function VerifyOTP() {
-  const router = useRouter();
+  const router = useAppRouter();
   const params = useLocalSearchParams();
   const { identifier, type, otp } = params;
   const { ms, vs, wp, hp } = useResponsive();

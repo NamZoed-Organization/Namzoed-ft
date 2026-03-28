@@ -3,10 +3,11 @@ import { Ionicons } from "@expo/vector-icons";
 import MaskedView from "@react-native-masked-view/masked-view";
 import { useCallStateHooks } from "@stream-io/video-react-native-sdk";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
+import { useAppRouter } from "@/utils/navigation";
 import { ShoppingBag } from "lucide-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
+    Animated as RNAnimated,
     FlatList,
     Image,
     Keyboard,
@@ -78,7 +79,7 @@ export const LiveChat = ({
   isHostView: boolean;
   onNavigate?: () => void;
 }) => {
-  const router = useRouter();
+  const router = useAppRouter();
   const insets = useSafeAreaInsets();
   const [comments, setComments] = useState<Comment[]>([]);
   const [systemMessages, setSystemMessages] = useState<SystemMessage[]>([]);
@@ -86,8 +87,11 @@ export const LiveChat = ({
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [sharedProducts, setSharedProducts] = useState<any[]>([]);
   const [showGuidelines, setShowGuidelines] = useState(true);
-  // Android: track keyboard height to push input above keyboard
+  // Track keyboard height for androidInputLift (FlatList padding)
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  // Animated bottom offset — updated directly (no re-render delay) so panel
+  // moves in the same frame the keyboard event fires on both iOS and Android.
+  const bottomAnim = useRef(new RNAnimated.Value(insets.bottom)).current;
   // Track participants seen so far to detect new joins
   const prevParticipantIdsRef = useRef<Set<string>>(new Set());
   const isParticipantFirstRenderRef = useRef(true);
@@ -98,21 +102,29 @@ export const LiveChat = ({
     Platform.OS === "android" && keyboardHeight > 0
       ? Math.min(40, Math.max(16, Math.round(keyboardHeight * 0.12)))
       : 0;
-  // Android keyboard listener — KeyboardAvoidingView is unreliable in
-  // absolute-positioned overlays on Android so we manually track keyboard height.
+  // Manually track keyboard on both platforms.
+  // bottomAnim is set via setValue() — no React re-render delay, panel moves
+  // in the exact same frame as the keyboard event fires.
+  // iOS: keyboardWillShow/Hide fires at animation start → panel moves with keyboard.
+  // Android: keyboardDidShow/Hide fires when keyboard is fully up → instant jump.
   useEffect(() => {
-    if (Platform.OS !== "android") return;
-    const showSub = Keyboard.addListener("keyboardDidShow", (e) => {
-      setKeyboardHeight(e.endCoordinates.height);
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const showSub = Keyboard.addListener(showEvent, (e) => {
+      const h = e.endCoordinates.height;
+      setKeyboardHeight(h);
+      // Add insets.bottom so the panel clears both the keyboard and the nav bar gap
+      bottomAnim.setValue(h + insets.bottom);
     });
-    const hideSub = Keyboard.addListener("keyboardDidHide", () => {
+    const hideSub = Keyboard.addListener(hideEvent, () => {
       setKeyboardHeight(0);
+      bottomAnim.setValue(insets.bottom);
     });
     return () => {
       showSub.remove();
       hideSub.remove();
     };
-  }, []);
+  }, [insets.bottom]);
 
   useEffect(() => {
     (async () => {
@@ -535,10 +547,10 @@ export const LiveChat = ({
       style={{ flex: 1 }}
       pointerEvents="auto"
     >
-      <View
+      <RNAnimated.View
         style={[
           styles.panelContainer,
-          { height: maxPanelHeight },
+          { height: maxPanelHeight, bottom: bottomAnim },
         ]}
         pointerEvents="auto"
       >
@@ -623,12 +635,7 @@ export const LiveChat = ({
           </Animated.View>
         )}
 
-        <View
-          style={[
-            styles.inputWrapper,
-            androidInputLift > 0 ? { marginBottom: androidInputLift } : null,
-          ]}
-        >
+        <View style={styles.inputWrapper}>
           <View style={styles.inputInner}>
             <TextInput
               style={styles.input}
@@ -653,7 +660,7 @@ export const LiveChat = ({
             )}
           </View>
         </View>
-      </View>
+      </RNAnimated.View>
     </KeyboardAvoidingView>
   );
 };

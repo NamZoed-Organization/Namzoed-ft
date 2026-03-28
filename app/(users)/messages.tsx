@@ -5,13 +5,13 @@ import TrackMongooseModal from "@/components/modals/TrackMongooseModal";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { useUnreadMessages } from "@/contexts/UnreadMessagesContext";
 import { useUser } from "@/contexts/UserContext";
-import userData17123456 from "@/data/17123456";
 import users from "@/data/UserData";
 import { supabase } from "@/lib/supabase";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useAppRouter } from "@/utils/navigation";
+import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import React, {
   useCallback,
@@ -25,6 +25,7 @@ import {
   Dimensions,
   FlatList,
   Image,
+  InteractionManager,
   Text,
   TextInput,
   TouchableOpacity,
@@ -70,19 +71,13 @@ interface IUserData {
   };
 }
 
-// Get user data based on phone number
-const getUserData = (phoneNumber: string): IUserData | null => {
-  // Clean phone number - remove +975 prefix if exists
-  const cleanPhone = phoneNumber?.replace("+975", "").replace(/\D/g, "");
-
-  switch (cleanPhone) {
-    case "17123456":
-      return userData17123456;
-    default:
-      // For demo purposes, always return the 17123456 data so messages show
-      return userData17123456;
-  }
-};
+const getUserData = (_phoneNumber: string): IUserData => ({
+  messages: {},
+  following: [],
+  followers: [],
+  requests: [],
+  userProfile: { phoneNumber: _phoneNumber, followingCount: 0, followersCount: 0, requestsCount: 0 },
+});
 
 /**
  * SwipeableConversationRow — iMessage-style left-swipe to reveal
@@ -312,7 +307,7 @@ export default function MessageScreen() {
       return () => setIsOnMessagesScreen(false);
     }, [setIsOnMessagesScreen]),
   );
-  const router = useRouter();
+  const router = useAppRouter();
   const { tab } = useLocalSearchParams();
   const [activeTab, setActiveTab] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
@@ -387,20 +382,26 @@ export default function MessageScreen() {
   // Load hidden/muted sets from AsyncStorage once the user key is known
   useEffect(() => {
     if (!hiddenKey) return;
-    AsyncStorage.getItem(hiddenKey).then((val) => {
-      if (val) {
-        setHiddenConversations(new Set(JSON.parse(val) as string[]));
-      }
+    const task = InteractionManager.runAfterInteractions(() => {
+      AsyncStorage.getItem(hiddenKey).then((val) => {
+        if (val) {
+          setHiddenConversations(new Set(JSON.parse(val) as string[]));
+        }
+      });
     });
+    return () => task.cancel();
   }, [hiddenKey]);
 
   useEffect(() => {
     if (!mutedKey) return;
-    AsyncStorage.getItem(mutedKey).then((val) => {
-      if (val) {
-        setMutedConversations(new Set(JSON.parse(val) as string[]));
-      }
+    const task = InteractionManager.runAfterInteractions(() => {
+      AsyncStorage.getItem(mutedKey).then((val) => {
+        if (val) {
+          setMutedConversations(new Set(JSON.parse(val) as string[]));
+        }
+      });
     });
+    return () => task.cancel();
   }, [mutedKey]);
 
   /** Hide a conversation for the current user only (soft-delete). */
@@ -504,10 +505,7 @@ export default function MessageScreen() {
     return date.toLocaleDateString();
   };
 
-  // Get userData - will be null if currentUser is null
-  const userData = currentUser
-    ? getUserData(currentUser.phone_number || "")
-    : null;
+  const userData = getUserData(currentUser?.phone_number || "");
 
   // Get follow requests (followers who user hasn't followed back)
   // Make conditional to avoid accessing userData when it's null
@@ -815,8 +813,10 @@ export default function MessageScreen() {
   );
 
   useEffect(() => {
-    // Fetch conversations from Supabase (prioritize database over local data)
-    fetchConversations(true);
+    const task = InteractionManager.runAfterInteractions(() => {
+      fetchConversations(true);
+    });
+    return () => task.cancel();
   }, [fetchConversations]);
 
   // Fetch mongoose users (users with email starting with mongoose@gmail.com)
@@ -844,8 +844,10 @@ export default function MessageScreen() {
   };
 
   useEffect(() => {
-    // Fetch mongoose users when component mounts
-    fetchMongooseUsers();
+    const task = InteractionManager.runAfterInteractions(() => {
+      fetchMongooseUsers();
+    });
+    return () => task.cancel();
   }, []);
 
   // Fetch ALL mongoose bookings to properly determine mongoose availability
@@ -871,10 +873,11 @@ export default function MessageScreen() {
   }, [currentUser?.id]);
 
   useEffect(() => {
-    // Fetch bookings when component mounts
-    if (currentUser?.id) {
+    if (!currentUser?.id) return;
+    const task = InteractionManager.runAfterInteractions(() => {
       fetchMongooseBookings();
-    }
+    });
+    return () => task.cancel();
   }, [currentUser?.id]);
 
   // Subscribe to real-time booking updates (listen to ALL bookings to detect when mongoose becomes available)

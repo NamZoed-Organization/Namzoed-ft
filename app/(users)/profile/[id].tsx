@@ -17,7 +17,8 @@ import {
     ProviderServiceWithDetails,
 } from "@/lib/servicesService";
 import * as Haptics from "expo-haptics";
-import { Redirect, Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { useAppRouter } from "@/utils/navigation";
+import { Redirect, Stack, useLocalSearchParams } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
 import {
     AlertCircle,
@@ -82,7 +83,7 @@ function VideoThumb({ uri }: { uri: string }) {
 export default function PublicProfileScreen() {
   const { id, tab } = useLocalSearchParams(); // Get user ID from route: /user/123
   const { currentUser } = useUser();
-  const router = useRouter();
+  const router = useAppRouter();
 
   // State - ALL hooks must be called before any conditional returns
   const [mainTab, setMainTab] = useState<"main" | "work">("main");
@@ -133,6 +134,7 @@ export default function PublicProfileScreen() {
 
   // Horizontal scroll ref
   const horizontalScrollRef = React.useRef<ScrollView>(null);
+  const isScrollingProgrammatically = React.useRef(false);
 
   // Guard: If viewing own profile, redirect to the main profile tab
   // MOVED AFTER all hooks to avoid hook order violations
@@ -288,6 +290,7 @@ export default function PublicProfileScreen() {
   const handleMainTabChange = (tab: "main" | "work") => {
     setMainTab(tab);
     if (horizontalScrollRef.current) {
+      isScrollingProgrammatically.current = true;
       const offset = tab === "main" ? 0 : SCREEN_WIDTH;
       horizontalScrollRef.current.scrollTo({ x: offset, animated: true });
     }
@@ -295,11 +298,25 @@ export default function PublicProfileScreen() {
 
   // Handle scroll event to update active tab
   const handleScroll = (event: any) => {
+    if (isScrollingProgrammatically.current) return;
+
     const offsetX = event.nativeEvent.contentOffset.x;
-    const newTab = offsetX > SCREEN_WIDTH / 2 ? "work" : "main";
+    const progress = offsetX / SCREEN_WIDTH;
+    const newTab = progress >= 0.2 ? "work" : "main";
     if (newTab !== mainTab) {
       setMainTab(newTab);
     }
+  };
+
+  const handleScrollBeginDrag = () => {
+    isScrollingProgrammatically.current = false;
+  };
+
+  const handleMomentumScrollEnd = (event: any) => {
+    const offsetX = event.nativeEvent.contentOffset.x;
+    const newTab = offsetX > SCREEN_WIDTH / 2 ? "work" : "main";
+    setMainTab(newTab);
+    isScrollingProgrammatically.current = false;
   };
 
   // Action Handlers
@@ -525,6 +542,8 @@ export default function PublicProfileScreen() {
           showsHorizontalScrollIndicator={false}
           scrollEventThrottle={16}
           onScroll={handleScroll}
+          onScrollBeginDrag={handleScrollBeginDrag}
+          onMomentumScrollEnd={handleMomentumScrollEnd}
           className="flex-1"
         >
           {/* Main Profile Page */}
@@ -1003,15 +1022,15 @@ export default function PublicProfileScreen() {
                           )}
                         </View>
 
-                        {serviceProvider.profiles?.email ? (
+                        {serviceProvider.email_active && serviceProvider.email ? (
                           <Text className="text-xs font-regular text-gray-500 mb-1" numberOfLines={1}>
-                            ✉  {serviceProvider.profiles.email}
+                            ✉  {serviceProvider.email}
                           </Text>
                         ) : null}
 
-                        {serviceProvider.profiles?.phone ? (
+                        {serviceProvider.contact_active && serviceProvider.contact ? (
                           <Text className="text-xs font-regular text-gray-500 mb-2" numberOfLines={1}>
-                            📞  {serviceProvider.profiles.phone}
+                            📞  {serviceProvider.contact}
                           </Text>
                         ) : null}
 

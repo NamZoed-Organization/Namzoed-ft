@@ -1,7 +1,7 @@
 import ImageCropperOverlay from "@/components/modals/ImageCropperOverlay";
 import ImagePickerSheet from "@/components/ui/ImagePickerSheet";
 import PopupMessage from "@/components/ui/PopupMessage";
-import { categories } from "@/data/categories";
+import { categories, categoryNames } from "@/data/categories";
 import { createProduct, uploadProductImages } from "@/lib/productsService";
 import { BlurView } from "expo-blur";
 import * as ImagePicker from "expo-image-picker";
@@ -437,7 +437,7 @@ export default function CreateProductModal({
                       }
                     >
                       {selectedCategory
-                        ? selectedCategory.replace("-", " & ")
+                        ? categoryNames[selectedCategory] || selectedCategory
                         : "Select a category"}
                     </Text>
                     <ReAnimated.View
@@ -500,7 +500,7 @@ export default function CreateProductModal({
                                     : "text-gray-700"
                                 }`}
                               >
-                                {cat.replace("-", " & ")}
+                                {categoryNames[cat] || cat}
                               </Text>
                             </TouchableOpacity>
                           );

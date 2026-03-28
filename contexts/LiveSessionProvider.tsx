@@ -18,6 +18,8 @@ import {
     useWindowDimensions,
     View,
 } from "react-native";
+import getStreamService from "@/services/getStreamService";
+import { teardownLiveAudioSession } from "@/utils/liveAudio";
 
 // PiP card size — portrait 9:16
 const PIP_W = 108;
@@ -171,11 +173,14 @@ export const LiveSessionProvider = ({
   };
 
   const clearSession = async () => {
-    try {
-      await session.call?.leave();
-    } catch {
-      /* ignore */
-    }
+    await teardownLiveAudioSession({
+      leaveCall: session.call ? () => session.call!.leave() : null,
+      disconnectClient: () => getStreamService.disconnect(),
+      details: {
+        role: session.role ?? null,
+      },
+      label: "pip live session",
+    });
     setSessionState({ call: null, client: null, streamMeta: null, role: null });
     setMinimized(false);
     setShowRestoredModal(false);
@@ -186,7 +191,12 @@ export const LiveSessionProvider = ({
   // always appears above all navigation screens.
   const restore = () => {
     setMinimized(false);
-    setShowRestoredModal(true);
+    if (restoreHandler) {
+      // Source registered a custom restore (e.g. LiveScrollScreen → reopen TikTok pager)
+      restoreHandler();
+    } else {
+      setShowRestoredModal(true);
+    }
   };
 
   const value = useMemo<LiveSessionContextValue>(
@@ -324,30 +334,35 @@ export const LiveSessionProvider = ({
       {children}
       {renderOverlay()}
       {/* Restore modal — rendered at root level so it always appears above all navigation screens */}
-      <Modal
-        visible={showRestoredModal}
-        animationType="slide"
-        presentationStyle="fullScreen"
-        statusBarTranslucent={true}
-        onRequestClose={() => { /* let Live.tsx handle its own close button */ }}
-      >
-        {(() => {
-          const LiveWrapperComp = getLiveWrapperComponent();
-          return LiveWrapperComp ? (
-            <LiveWrapperComp
-              onClose={clearSession}
-              onMinimize={() => {
-                setMinimized(true);
-                setShowRestoredModal(false);
-              }}
-            />
-          ) : (
-            <View style={{ flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' }}>
-              <ActivityIndicator color="#fff" size="large" />
-            </View>
-          );
-        })()}
-      </Modal>
+      {/* Only mount the Modal when actually restoring — a hidden Modal on Android
+          blocks all touches underneath it, and also causes Live.tsx to run in
+          the background (ExpoKeepAwake errors, Stream SDK lazy-load on startup). */}
+      {showRestoredModal && (
+        <Modal
+          visible={true}
+          animationType="slide"
+          presentationStyle="fullScreen"
+          statusBarTranslucent={true}
+          onRequestClose={() => { /* let Live.tsx handle its own close button */ }}
+        >
+          {(() => {
+            const LiveWrapperComp = getLiveWrapperComponent();
+            return LiveWrapperComp ? (
+              <LiveWrapperComp
+                onClose={clearSession}
+                onMinimize={() => {
+                  setMinimized(true);
+                  setShowRestoredModal(false);
+                }}
+              />
+            ) : (
+              <View style={{ flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' }}>
+                <ActivityIndicator color="#fff" size="large" />
+              </View>
+            );
+          })()}
+        </Modal>
+      )}
     </LiveSessionContext.Provider>
   );
 };

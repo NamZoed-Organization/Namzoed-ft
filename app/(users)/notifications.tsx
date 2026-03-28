@@ -13,12 +13,13 @@ import type {
   NotificationSection,
 } from "@/types/notification";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useAppRouter } from "@/utils/navigation";
 import { Bell, ChevronLeft } from "lucide-react-native";
 import React, { useCallback, useEffect, useMemo } from "react";
 import {
   ActivityIndicator,
   Image,
+  InteractionManager,
   SectionList,
   Text,
   TouchableOpacity,
@@ -273,7 +274,7 @@ function NotificationItem({
 // ─── screen ─────────────────────────────────────────────────────────
 
 export default function NotificationsScreen() {
-  const router = useRouter();
+  const router = useAppRouter();
   const insets = useSafeAreaInsets();
   const {
     notifications,
@@ -286,12 +287,18 @@ export default function NotificationsScreen() {
 
   // Mark all as read as soon as the screen opens (Instagram-style)
   useEffect(() => {
-    markAllAsRead();
+    const task = InteractionManager.runAfterInteractions(() => {
+      markAllAsRead();
+    });
+    return () => task.cancel();
   }, [markAllAsRead]);
 
   // Auto-refresh on mount
   useEffect(() => {
-    refresh();
+    const task = InteractionManager.runAfterInteractions(() => {
+      refresh();
+    });
+    return () => task.cancel();
   }, [refresh]);
 
   // ── sections ──

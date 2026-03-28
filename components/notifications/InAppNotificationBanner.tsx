@@ -2,7 +2,7 @@ import { useNotifications, type NotificationBanner } from "@/contexts/Notificati
 import { playSound } from "@/lib/soundUtils";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
-import { useRouter } from "expo-router";
+import { useAppRouter } from "@/utils/navigation";
 import React, { useEffect, useRef } from "react";
 import {
   Animated,
@@ -78,7 +78,7 @@ function typeLabel(type: string): string {
 
 export default function InAppNotificationBanner() {
   const { banner, dismissBanner } = useNotifications();
-  const router = useRouter();
+  const router = useAppRouter();
   const insets = useSafeAreaInsets();
   const translateY = useRef(new Animated.Value(-200)).current;
   const opacity = useRef(new Animated.Value(0)).current;

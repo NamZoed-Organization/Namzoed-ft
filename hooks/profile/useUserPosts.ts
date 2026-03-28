@@ -1,6 +1,7 @@
 import { useUser } from "@/contexts/UserContext";
 import { fetchUserPosts, Post } from "@/lib/postsService";
 import { useEffect, useState } from "react";
+import { InteractionManager } from "react-native";
 
 export interface PostThumbnail {
   postId: string;
@@ -49,7 +50,6 @@ export const useUserPosts = (
 
         posts.forEach((post) => {
           if (post.images && post.images.length > 0) {
-            // Build grouped thumbnails — one per post
             thumbnails.push({
               postId: post.id,
               thumbnailUrl: post.images[0],
@@ -58,7 +58,6 @@ export const useUserPosts = (
               post,
             });
 
-            // Keep flat list for backward compat
             post.images.forEach((imageUrl: string) => {
               allImages.push(imageUrl);
               postMap.set(imageUrl, post);
@@ -77,7 +76,10 @@ export const useUserPosts = (
       }
     };
 
-    loadPosts();
+    const task = InteractionManager.runAfterInteractions(() => {
+      loadPosts();
+    });
+    return () => task.cancel();
   }, [currentUser?.id, refreshKey]);
 
   return {

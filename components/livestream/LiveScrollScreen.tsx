@@ -17,6 +17,7 @@ import PopupMessage from "@/components/ui/PopupMessage";
 import getStreamService, {
   type StreamIdentity,
 } from "@/services/getStreamService";
+import { logLiveAudioMode, teardownLiveAudioSession } from "@/utils/liveAudio";
 import {
   cancelCoHostRequest,
   createCoHostRequest,
@@ -33,7 +34,7 @@ import {
   type Call,
   type StreamVideoClient,
 } from "@stream-io/video-react-native-sdk";
-import { useRouter } from "expo-router";
+import { useAppRouter } from "@/utils/navigation";
 import {
   Briefcase,
   ChevronLeft,
@@ -73,7 +74,8 @@ const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } =
   Dimensions.get("window");
 
 // ─── CallJoiner ──────────────────────────────────────────────────────────────
-// Zero-UI: auto-joins the call on mount, tracks viewer count.
+// Zero-UI: auto-joins the call on mount. Viewer count is managed separately
+// by LiveScrollScreen (increments only when user taps to enter interactive mode).
 function CallJoiner({ streamId }: { streamId: string }) {
   const call = useCall();
   const joiningRef = useRef(false);
@@ -84,13 +86,12 @@ function CallJoiner({ streamId }: { streamId: string }) {
 
     const tryJoin = () => {
       if (joiningRef.current) return;
-      if (backstageBlockedRef.current) return; // don't retry a backstage-blocked call
+      if (backstageBlockedRef.current) return;
       if (call.state.callingState !== "idle") return;
       joiningRef.current = true;
       call
         .join()
         .catch((err: any) => {
-          // 403 JoinBackstage — stream not live yet, stop retrying until backstage$ fires
           const msg: string = err?.message ?? err?.data?.message ?? "";
           if (msg.includes("JoinBackstage") || (err?.data?.StatusCode ?? err?.status) === 403) {
             backstageBlockedRef.current = true;
@@ -103,10 +104,9 @@ function CallJoiner({ streamId }: { streamId: string }) {
 
     tryJoin();
 
-    // If host goes live while we're waiting, retry join
     const sub = call.state.backstage$?.subscribe((backstage: boolean) => {
       if (!backstage && call.state.callingState !== "joined") {
-        backstageBlockedRef.current = false; // clear block — stream is now live
+        backstageBlockedRef.current = false;
         tryJoin();
       }
     });
@@ -115,15 +115,6 @@ function CallJoiner({ streamId }: { streamId: string }) {
       sub?.unsubscribe();
     };
   }, [call?.id]);
-
-  // Viewer count ±1
-  useEffect(() => {
-    if (!streamId) return;
-    incrementLivestreamViewerCountAtomic(streamId, 1).catch(() => {});
-    return () => {
-      incrementLivestreamViewerCountAtomic(streamId, -1).catch(() => {});
-    };
-  }, [streamId]);
 
   return null;
 }
@@ -163,35 +154,31 @@ function ActiveVideoContent({ stream }: { stream: Livestream }) {
     );
   }, [participants, stream.user_id]);
 
-  // Waiting for host
-  if (!isLive && callingState === "joined") {
+  // Host ended the stream
+  if (hostEnded) {
     return (
-      <View
-        style={{
-          flex: 1,
-          alignItems: "center",
-          justifyContent: "center",
-          backgroundColor: "#000",
-        }}
-      >
-        {hostEnded ? (
-          <Text style={{ color: "rgba(255,255,255,0.7)", fontSize: 14 }}>
-            The host has ended the livestream
-          </Text>
-        ) : (
-          <>
-            <ActivityIndicator color="white" size="small" />
-            <Text
-              style={{
-                color: "rgba(255,255,255,0.7)",
-                marginTop: 12,
-                fontSize: 13,
-              }}
-            >
-              Waiting for host to go live…
-            </Text>
-          </>
-        )}
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#000" }}>
+        <Text style={{ color: "rgba(255,255,255,0.7)", fontSize: 14 }}>
+          The host has ended the livestream
+        </Text>
+      </View>
+    );
+  }
+
+  // Before the call is joined, use the Supabase snapshot to decide.
+  // Once joined, trust the live backstage$ subscription (isLive) exclusively —
+  // the Supabase flag is a stale snapshot and won't update in real-time.
+  const hostHasStarted = Boolean((stream as any)?.external_metadata?.live_started);
+  const notLiveYet = callingState === "joined" ? !isLive : !hostHasStarted;
+  if (notLiveYet) {
+    return (
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#000" }}>
+        <Text style={{ color: "rgba(255,255,255,0.85)", fontSize: 16, fontWeight: "600" }}>
+          Stand by
+        </Text>
+        <Text style={{ color: "rgba(255,255,255,0.45)", marginTop: 6, fontSize: 13 }}>
+          Host is setting up the live…
+        </Text>
       </View>
     );
   }
@@ -259,24 +246,11 @@ function ActiveVideoContent({ stream }: { stream: Livestream }) {
     );
   }
 
-  // Connecting
+  // Host is live but viewer is still joining the WebRTC call
   return (
-    <View
-      style={{
-        flex: 1,
-        alignItems: "center",
-        justifyContent: "center",
-        backgroundColor: "#000",
-      }}
-    >
+    <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#000" }}>
       <ActivityIndicator color="white" size="small" />
-      <Text
-        style={{
-          color: "rgba(255,255,255,0.6)",
-          marginTop: 10,
-          fontSize: 13,
-        }}
-      >
+      <Text style={{ color: "rgba(255,255,255,0.6)", marginTop: 10, fontSize: 13 }}>
         Connecting…
       </Text>
     </View>
@@ -323,6 +297,26 @@ function LivePage({
     });
     return () => unsub();
   }, [stream.id]);
+
+  // Fetch from DB after showChat becomes true (user tapped = they joined, count was just incremented)
+  // Guards against the realtime subscription missing the update
+  useEffect(() => {
+    if (!stream.id || !isActive || !showChat) return;
+    const timer = setTimeout(() => {
+      supabase
+        .from("live_streams")
+        .select("viewer_count")
+        .eq("id", stream.id)
+        .single()
+        .then(({ data }) => {
+          if (data && typeof data.viewer_count === "number") {
+            setViewerCount(data.viewer_count);
+          }
+        })
+        .catch(() => {});
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [stream.id, isActive, showChat]);
 
   // ── Cohost request state ────────────────────────────────────────────────
   const [hasRequested, setHasRequested] = useState(false);
@@ -657,8 +651,8 @@ function LivePage({
           </View>
         )}
 
-        {/* ── Cohost request button — only in interactive mode ───────── */}
-        {showChat && currentUserId && currentUserId !== stream.user_id && (
+        {/* ── Cohost request button — HIDDEN pending further optimizations ── */}
+        {false && showChat && currentUserId && currentUserId !== stream.user_id && (
           <View
             style={{
               position: "absolute",
@@ -759,21 +753,52 @@ interface LiveScrollScreenProps {
   onClose: () => void;
   /** When true, immediately opens the "Create Live" modal on mount */
   openCreateOnMount?: boolean;
+  /** Called when the PiP card is tapped to restore — reopen this screen on the same stream */
+  onRestore?: (streamId: string) => void;
 }
 
 export default function LiveScrollScreen({
   initialStreamId,
   onClose,
   openCreateOnMount,
+  onRestore,
 }: LiveScrollScreenProps) {
   const { currentUser } = useUser();
-  const { setSession, minimize } = useLiveSession();
-  const router = useRouter();
+  const { setSession, minimize, setRestoreHandler, clearSession } = useLiveSession();
+  const router = useAppRouter();
   const insets = useSafeAreaInsets();
   const { livestreams, loading } = useLivestreams();
 
   const [activeIndex, setActiveIndex] = useState(0);
   const [showChat, setShowChat] = useState(false);
+
+  // Viewer count: only incremented when the user taps to enter interactive mode
+  const joinedStreamIdRef = useRef<string | null>(null);
+  // Stable refs so handleTap can read current values without stale closures
+  const livestreamsRef = useRef(livestreams);
+  const activeIndexRef = useRef(activeIndex);
+  useEffect(() => { livestreamsRef.current = livestreams; }, [livestreams]);
+  useEffect(() => { activeIndexRef.current = activeIndex; }, [activeIndex]);
+
+  // Decrement when user scrolls away from a joined stream
+  useEffect(() => {
+    if (joinedStreamIdRef.current) {
+      const currentId = livestreams[activeIndex]?.id;
+      if (joinedStreamIdRef.current !== currentId) {
+        incrementLivestreamViewerCountAtomic(joinedStreamIdRef.current, -1).catch(() => {});
+        joinedStreamIdRef.current = null;
+      }
+    }
+  }, [activeIndex]);
+
+  // Decrement on unmount (user closes the screen while still "joined")
+  useEffect(() => {
+    return () => {
+      if (joinedStreamIdRef.current) {
+        incrementLivestreamViewerCountAtomic(joinedStreamIdRef.current, -1).catch(() => {});
+      }
+    };
+  }, []);
 
   // Stream SDK state
   const [streamClient, setStreamClient] = useState<StreamVideoClient | null>(
@@ -792,7 +817,6 @@ export default function LiveScrollScreen({
     showCreateModalOnMount?: boolean;
   }> | null>(null);
   const [wrapperLoading, setWrapperLoading] = useState(false);
-  const [showHostCloseConfirm, setShowHostCloseConfirm] = useState(false);
   const shouldAutoOpenCreate =
     !!openCreateOnMount && !initialStreamId && livestreams.length > 0;
 
@@ -840,6 +864,7 @@ export default function LiveScrollScreen({
     // No valid call ID → clear
     if (!callId) {
       if (activeCallRef.current) {
+        logLiveAudioMode("scroll:leave — no callId, leaving call", { prev: activeCallRef.current.id });
         activeCallRef.current.leave().catch(() => {});
         activeCallRef.current = null;
       }
@@ -852,6 +877,7 @@ export default function LiveScrollScreen({
 
     // Leave old call
     if (activeCallRef.current) {
+      logLiveAudioMode("scroll:leave — switching stream", { from: activeCallRef.current.id, to: callId });
       activeCallRef.current.leave().catch(() => {});
     }
 
@@ -879,10 +905,15 @@ export default function LiveScrollScreen({
   // ── Cleanup on unmount ───────────────────────────────────────────────────
   useEffect(() => {
     return () => {
-      if (activeCallRef.current) {
-        activeCallRef.current.leave().catch(() => {});
-        activeCallRef.current = null;
-      }
+      const call = activeCallRef.current;
+      logLiveAudioMode("scroll:unmount", { hasCall: !!call, callId: call?.id ?? null });
+      activeCallRef.current = null;
+      teardownLiveAudioSession({
+        leaveCall: call ? () => call.leave() : null,
+        disconnectClient: () => getStreamService.disconnect(),
+        details: { role: "viewer" },
+        label: "live scroll screen",
+      }).catch(() => {});
     };
   }, []);
 
@@ -959,8 +990,19 @@ export default function LiveScrollScreen({
   // ── Handlers ─────────────────────────────────────────────────────────────
   // Only enter interactive mode on tap — exit only via back gesture / button
   const handleTap = useCallback(() => {
+    console.log("[ViewerCount] handleTap fired", { showChat, activeIndex: activeIndexRef.current, joinedStreamId: joinedStreamIdRef.current });
     if (!showChat) {
       setShowChat(true);
+      // Increment viewer count on first tap for this stream (user has "joined")
+      const stream = livestreamsRef.current[activeIndexRef.current] ?? null;
+      console.log("[ViewerCount] tap — stream:", stream?.id, "already joined:", joinedStreamIdRef.current);
+      if (stream?.id && joinedStreamIdRef.current !== stream.id) {
+        joinedStreamIdRef.current = stream.id;
+        console.log("[ViewerCount] incrementing for stream:", stream.id);
+        incrementLivestreamViewerCountAtomic(stream.id, 1)
+          .then(() => console.log("[ViewerCount] increment success"))
+          .catch((e) => console.log("[ViewerCount] increment failed", e));
+      }
     }
   }, [showChat]);
 
@@ -993,7 +1035,7 @@ export default function LiveScrollScreen({
 
   const handleHostClose = useCallback(() => {
     console.log("[LiveScroll] handleHostClose");
-    setShowHostCloseConfirm(true);
+    setHostMode(false);
   }, []);
 
   const handleCohostAccepted = useCallback(async (streamId: string) => {
@@ -1010,7 +1052,16 @@ export default function LiveScrollScreen({
     if (!userId) return;
     // Hand off call to PIP overlay
     if (activeCallRef.current && streamClient) {
+      logLiveAudioMode("scroll:navigate — handing off to PiP", { callId: activeCallRef.current.id, userId });
       const currentLivestream = livestreams[activeIndex] ?? null;
+      // Register restore handler so tapping the PiP card reopens LiveScrollScreen
+      if (onRestore && currentLivestream?.id) {
+        const streamId = currentLivestream.id;
+        setRestoreHandler(() => () => {
+          void clearSession();
+          onRestore(streamId);
+        });
+      }
       setSession({
         call: activeCallRef.current,
         client: streamClient,
@@ -1024,7 +1075,7 @@ export default function LiveScrollScreen({
     }
     router.push(`/(users)/profile/${userId}` as any);
     onClose();
-  }, [streamClient, livestreams, activeIndex, setSession, minimize, router, onClose]);
+  }, [streamClient, livestreams, activeIndex, setSession, minimize, setRestoreHandler, clearSession, onRestore, router, onClose]);
 
   // ── Continuous scroll tracking ───────────────────────────────────────────
   const handleScroll = useCallback(
@@ -1192,23 +1243,6 @@ export default function LiveScrollScreen({
               showCreateModalOnMount
             />
           )}
-        </Modal>
-        <Modal visible={showHostCloseConfirm} transparent animationType="fade" statusBarTranslucent>
-          <PopupMessage
-            visible={showHostCloseConfirm}
-            type="white"
-            title="Leave Livestream Setup?"
-            message="If you are already live, leaving now will end the livestream for everyone. If you are still setting up, your current live setup will be closed."
-            onHide={() => setShowHostCloseConfirm(false)}
-            actions={[
-              { label: "Stay Here", style: "cancel" },
-              {
-                label: "Leave",
-                style: "destructive",
-                onPress: () => setHostMode(false),
-              },
-            ]}
-          />
         </Modal>
       </View>
     );
@@ -1395,7 +1429,16 @@ export default function LiveScrollScreen({
             onNavigate={() => {
               // Hand off call to PIP so live stream continues while viewing profile
               if (activeCallRef.current && streamClient) {
+                logLiveAudioMode("scroll:chat-navigate — handing off to PiP", { callId: activeCallRef.current.id });
                 const current = livestreams[activeIndex] ?? null;
+                // Register restore handler so tapping the PiP card reopens LiveScrollScreen
+                if (onRestore && current?.id) {
+                  const streamId = current.id;
+                  setRestoreHandler(() => () => {
+                    void clearSession();
+                    onRestore(streamId);
+                  });
+                }
                 setSession({
                   call: activeCallRef.current,
                   client: streamClient,
@@ -1449,24 +1492,6 @@ export default function LiveScrollScreen({
           />
           )}
       </Modal>
-      <Modal visible={showHostCloseConfirm} transparent animationType="fade" statusBarTranslucent>
-        <PopupMessage
-          visible={showHostCloseConfirm}
-          type="white"
-          title="Leave Livestream Setup?"
-          message="If you are already live, leaving now will end the livestream for everyone. If you are still setting up, your current live setup will be closed."
-          onHide={() => setShowHostCloseConfirm(false)}
-          actions={[
-            { label: "Stay Here", style: "cancel" },
-            {
-              label: "Leave",
-              style: "destructive",
-              onPress: () => setHostMode(false),
-            },
-          ]}
-        />
-      </Modal>
-
       {/* ── Cohost modal (accepted request → full viewer+speaker) ──── */}
       <Modal
         visible={!!cohostStreamId && !!LiveWrapper}

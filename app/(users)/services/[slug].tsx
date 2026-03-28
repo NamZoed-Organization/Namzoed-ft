@@ -1,7 +1,8 @@
 import TopNavbar from "@/components/ui/TopNavbar";
 import { getServiceCategoryBySlug } from "@/data/servicecategory";
 import { fetchAllServiceProviders, fetchProviderServicesByCategory, ProviderServiceWithDetails } from "@/lib/servicesService";
-import { Href, router, useLocalSearchParams, useFocusEffect } from "expo-router";
+import { useAppRouter } from "@/utils/navigation";
+import { Href, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { User, ArrowUpDown, Shuffle, ChevronLeft, Verified } from "lucide-react-native";
 import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { ActivityIndicator, FlatList, Image, Text, TouchableOpacity, View, BackHandler } from "react-native";
@@ -11,6 +12,7 @@ import { useUser } from "@/contexts/UserContext";
 type SortOrder = 'latest' | 'oldest';
 
 export default function ServiceDetailScreen() {
+  const router = useAppRouter();
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const { currentUser } = useUser();
 

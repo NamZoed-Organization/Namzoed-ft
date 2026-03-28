@@ -223,6 +223,9 @@ export async function createLivestreamRecord(
     const base = payload.external_metadata
       ? { ...payload.external_metadata }
       : {};
+    if (typeof base.live_started !== "boolean") {
+      base.live_started = false;
+    }
 
     if (payload.call_id) {
       base.call_id = payload.call_id;
@@ -286,6 +289,52 @@ export async function createLivestreamRecord(
   })();
 
   return livestream;
+}
+
+export async function markLivestreamStarted(
+  id: string,
+  ownerId?: string | null
+): Promise<void> {
+  const now = new Date().toISOString();
+
+  const current = await supabase
+    .from(TABLE_NAME)
+    .select("external_metadata")
+    .eq("id", id)
+    .single();
+
+  if (current.error) {
+    console.error("Failed to fetch livestream metadata", current.error);
+    throw current.error;
+  }
+
+  const externalMetadata =
+    current.data?.external_metadata &&
+    typeof current.data.external_metadata === "object"
+      ? { ...(current.data.external_metadata as Record<string, unknown>) }
+      : {};
+
+  externalMetadata.live_started = true;
+
+  let query = supabase
+    .from(TABLE_NAME)
+    .update({
+      external_metadata: externalMetadata,
+      started_at: now,
+      updated_at: now,
+    })
+    .eq("id", id);
+
+  if (ownerId) {
+    query = query.eq("user_id", ownerId);
+  }
+
+  const { error } = await query;
+
+  if (error) {
+    console.error("Failed to mark livestream started", error);
+    throw error;
+  }
 }
 
 export async function endLivestreamRecord(

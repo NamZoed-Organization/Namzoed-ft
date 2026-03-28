@@ -2,8 +2,7 @@
 
 import Banner from "@/components/Banner";
 import ClosingSaleBanner from "@/components/ClosingSaleBanner";
-import FeaturedSellers from "@/components/FeaturedSellers";
-import { CARD_ESTIMATED_SIZE, CARD_LIST_HEIGHT, ForYouSection } from "@/components/ForYou";
+import { CARD_LIST_HEIGHT, ForYouSection } from "@/components/ForYou";
 import HomeCard from "@/components/HomeCard";
 import SearchBar from "@/components/modals/SearchBar";
 import TopNavbar from "@/components/ui/TopNavbar";
@@ -12,7 +11,7 @@ import { useLivestreams } from "@/hooks/useLivestreams";
 import { MarketplaceItem } from "@/lib/postMarketPlace";
 import { Product } from "@/lib/productsService";
 import { ProviderServiceWithDetails } from "@/lib/servicesService";
-import { useRouter } from "expo-router";
+import { useAppRouter } from "@/utils/navigation";
 import {
   ArrowUpDown,
   Briefcase,
@@ -25,11 +24,12 @@ import {
   Users,
   Video,
 } from "lucide-react-native";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
   Image,
+  InteractionManager,
   ListRenderItem,
   Modal,
   RefreshControl,
@@ -39,9 +39,8 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
 
-type TabType = "foryou" | "featured" | "live" | "lottery" | "norbu";
+type TabType = "foryou" | "featured" | "live" | "bidding" | "norbu";
 type LiveFilter = "all" | "business" | "entertainment";
 
 type PageItem =
@@ -55,6 +54,35 @@ type PageItem =
   | { key: "live" }
   | { key: "coming-soon"; label: string }
   | { key: "footer" };
+
+const SectionLoadingPlaceholder = React.memo(function SectionLoadingPlaceholder({
+  title,
+}: {
+  title: string;
+}) {
+  return (
+    <View className="px-4 py-4">
+      <Text className="text-base font-semibold text-gray-900 mb-3">{title}</Text>
+      <View className="bg-white rounded-2xl border border-gray-100 px-4 py-8 items-center">
+        <ActivityIndicator size="small" color="#094569" />
+        <Text className="text-sm text-gray-500 mt-3">Loading {title.toLowerCase()}...</Text>
+      </View>
+    </View>
+  );
+});
+
+const TabContentLoadingState = React.memo(function TabContentLoadingState({
+  label,
+}: {
+  label: string;
+}) {
+  return (
+    <View className="min-h-96 justify-center items-center px-6 py-12">
+      <ActivityIndicator size="small" color="#094569" />
+      <Text className="text-sm text-gray-500 mt-3">Loading {label.toLowerCase()}...</Text>
+    </View>
+  );
+});
 
 // ─── Memoised tab pills ───────────────────────────────────────────────────────
 const TabPills = React.memo(function TabPills({
@@ -72,7 +100,7 @@ const TabPills = React.memo(function TabPills({
           { key: "featured",  Icon: Users,  fill: false },
           { key: "live",      Icon: Radio,  fill: false },
           { key: "norbu",     Icon: Coins,  fill: false },
-          { key: "lottery",   Icon: Ticket, fill: false },
+          { key: "bidding",   Icon: Ticket, fill: false },
         ] as { key: TabType; Icon: any; fill: boolean }[]
       ).map(({ key, Icon, fill }) => (
         <TouchableOpacity
@@ -198,12 +226,15 @@ const LiveTab = React.memo(function LiveTab({
 // ─── Main screen ──────────────────────────────────────────────────────────────
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
-  const router = useRouter();
+  const router = useAppRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<TabType>("foryou");
+  const [renderedTab, setRenderedTab] = useState<TabType>("foryou");
+  const [isTabContentPending, setIsTabContentPending] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [showLive, setShowLive] = useState(false);
+  const [FeaturedSellersComponent, setFeaturedSellersComponent] = useState<React.ComponentType | null>(null);
   const [liveStreamId, setLiveStreamId] = useState<string | undefined>();
   const [LiveScrollScreen, setLiveScrollScreen] = useState<React.ComponentType<{
     initialStreamId?: string;
@@ -219,6 +250,44 @@ export default function HomeScreen() {
         .catch(() => setLiveScreenLoading(false));
     }
   }, [showLive, LiveScrollScreen, liveScreenLoading]);
+
+  useEffect(() => {
+    if (activeTab === renderedTab) {
+      setIsTabContentPending(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsTabContentPending(true);
+
+    const task = InteractionManager.runAfterInteractions(() => {
+      const loadTabDependencies = async () => {
+        if (activeTab === "featured" && !FeaturedSellersComponent) {
+          const module = await import("@/components/FeaturedSellers");
+          if (!cancelled) {
+            setFeaturedSellersComponent(() => module.default);
+          }
+        }
+      };
+
+      loadTabDependencies()
+        .catch((error) => {
+          console.error("Failed to prepare tab content:", error);
+        })
+        .finally(() => {
+          if (cancelled) return;
+          startTransition(() => {
+            setRenderedTab(activeTab);
+            setIsTabContentPending(false);
+          });
+        });
+    });
+
+    return () => {
+      cancelled = true;
+      task.cancel();
+    };
+  }, [activeTab, renderedTab, FeaturedSellersComponent]);
 
   const {
     products,
@@ -236,7 +305,9 @@ export default function HomeScreen() {
     reload,
   } = useForYouData();
 
-  const handleTabPress = useCallback((tab: TabType) => setActiveTab(tab), []);
+  const handleTabPress = useCallback((tab: TabType) => {
+    setActiveTab(tab);
+  }, []);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -330,7 +401,7 @@ export default function HomeScreen() {
   const goMarketplace = useCallback(() => router.push("/(users)/marketplace" as any), [router]);
 
   // ─── Flat items list ──────────────────────────────────────────────────────
-  const hasFlashDeals = loading || discountedProducts.length > 0;
+  const hasFlashDeals = !loading && discountedProducts.length > 0;
   const items = useMemo<PageItem[]>(() => {
     const result: PageItem[] = [{ key: "header" }];
     switch (activeTab) {
@@ -344,11 +415,10 @@ export default function HomeScreen() {
       case "featured": result.push({ key: "featured" }); break;
       case "live":     result.push({ key: "live" }); break;
       case "norbu":    result.push({ key: "coming-soon", label: "Norbu Coin" }); break;
-      case "lottery":  result.push({ key: "coming-soon", label: "Lottery" }); break;
+      case "bidding":  result.push({ key: "coming-soon", label: "Bidding" }); break;
     }
     result.push({ key: "footer" });
     return result;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, hasFlashDeals]);
 
   // Use ref to always have latest data in renderItem without changing its reference
@@ -356,25 +426,28 @@ export default function HomeScreen() {
     products, marketplaceItems, services, loading,
     isClosingSaleTime, sortOrder, showSortMenu,
     closingSaleFoodItems, discountedProducts,
-    activeTab, searchQuery, refreshKey,
+    activeTab, renderedTab, isTabContentPending, searchQuery, refreshKey,
     renderClosingSaleCard, renderFlashDealCard, renderProductCard,
     renderServiceCard, renderMarketplaceCard,
     goCategories, goServices, goMarketplace,
     toggleSortMenu, selectSort, getSortLabel,
+    FeaturedSellersComponent,
   });
   dataRef.current = {
     products, marketplaceItems, services, loading,
     isClosingSaleTime, sortOrder, showSortMenu,
     closingSaleFoodItems, discountedProducts,
-    activeTab, searchQuery, refreshKey,
+    activeTab, renderedTab, isTabContentPending, searchQuery, refreshKey,
     renderClosingSaleCard, renderFlashDealCard, renderProductCard,
     renderServiceCard, renderMarketplaceCard,
     goCategories, goServices, goMarketplace,
     toggleSortMenu, selectSort, getSortLabel,
+    FeaturedSellersComponent,
   };
 
   const renderItem = useCallback<ListRenderItem<PageItem>>(({ item }) => {
     const d = dataRef.current;
+    const isCurrentTabReady = !d.isTabContentPending && d.renderedTab === d.activeTab;
 
     switch (item.key) {
       case "header":
@@ -390,6 +463,9 @@ export default function HomeScreen() {
         );
 
       case "closing-sale":
+        if (!isCurrentTabReady) {
+          return <SectionLoadingPlaceholder title="Closing Sale" />;
+        }
         return (
           <View style={{ marginBottom: 16, paddingTop: 8 }}>
             {d.isClosingSaleTime ? (
@@ -467,6 +543,9 @@ export default function HomeScreen() {
         );
 
       case "flash-deals":
+        if (!isCurrentTabReady) {
+          return <SectionLoadingPlaceholder title="Flash Deals" />;
+        }
         return (
           <ForYouSection
             title="🔥 Flash Deals"
@@ -479,6 +558,9 @@ export default function HomeScreen() {
         );
 
       case "products":
+        if (!isCurrentTabReady) {
+          return <SectionLoadingPlaceholder title="Products" />;
+        }
         return (
           <ForYouSection
             title="Products"
@@ -492,6 +574,9 @@ export default function HomeScreen() {
         );
 
       case "services":
+        if (!isCurrentTabReady) {
+          return <SectionLoadingPlaceholder title="Services" />;
+        }
         return (
           <ForYouSection
             title="Services"
@@ -505,6 +590,9 @@ export default function HomeScreen() {
         );
 
       case "marketplace":
+        if (!isCurrentTabReady) {
+          return <SectionLoadingPlaceholder title="Marketplace" />;
+        }
         return (
           <ForYouSection
             title="Marketplace"
@@ -517,19 +605,30 @@ export default function HomeScreen() {
           />
         );
 
-      case "featured":
+      case "featured": {
+        if (!isCurrentTabReady || !d.FeaturedSellersComponent) {
+          return <TabContentLoadingState label="Featured sellers" />;
+        }
+        const FeaturedSellers = d.FeaturedSellersComponent;
         return (
           <View className="mt-2 px-4">
             <FeaturedSellers key={`featured-${d.refreshKey}`} />
           </View>
         );
+      }
 
       case "live":
+        if (!isCurrentTabReady) {
+          return <TabContentLoadingState label="Live streams" />;
+        }
         return (
           <LiveTab onOpen={(id) => { setLiveStreamId(id); setShowLive(true); }} />
         );
 
       case "coming-soon":
+        if (!isCurrentTabReady) {
+          return <TabContentLoadingState label={item.label} />;
+        }
         return (
           <View className="mt-6 min-h-96 justify-center items-center">
             <Text className="text-base font-semibold text-primary mb-2">
@@ -544,52 +643,34 @@ export default function HomeScreen() {
       default:
         return null;
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handleTabPress]);
   // renderItem is intentionally stable — it reads live data via dataRef
 
-  const HOME_TABS: TabType[] = ["foryou", "featured", "live", "norbu", "lottery"];
-
-  const swipeGesture = Gesture.Pan()
-    .runOnJS(true)
-    .activeOffsetX([-20, 20])
-    .failOffsetY([-15, 15])
-    .onEnd((e) => {
-      const idx = HOME_TABS.indexOf(activeTab);
-      if (e.translationX < -50 && idx < HOME_TABS.length - 1) {
-        handleTabPress(HOME_TABS[idx + 1]);
-      } else if (e.translationX > 50 && idx > 0) {
-        handleTabPress(HOME_TABS[idx - 1]);
-      }
-    });
-
   return (
     <>
-      <GestureDetector gesture={swipeGesture}>
-        <FlatList
-          data={items}
-          renderItem={renderItem}
-          keyExtractor={(item) => item.key}
-          className="flex-1 bg-background"
-          contentContainerStyle={{ paddingBottom: 72 + insets.bottom }}
-          showsVerticalScrollIndicator={false}
-          windowSize={2}
-          maxToRenderPerBatch={1}
-          initialNumToRender={2}
-          removeClippedSubviews={true}
-          overScrollMode="never"
-          bounces={true}
-          extraData={activeTab}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              colors={["#094569"]}
-              tintColor="#094569"
-            />
-          }
-        />
-      </GestureDetector>
+      <FlatList
+        data={items}
+        renderItem={renderItem}
+        keyExtractor={(item) => item.key}
+        className="flex-1 bg-background"
+        contentContainerStyle={{ paddingBottom: 72 + insets.bottom }}
+        showsVerticalScrollIndicator={false}
+        windowSize={2}
+        maxToRenderPerBatch={1}
+        initialNumToRender={2}
+        removeClippedSubviews={true}
+        overScrollMode="never"
+        bounces={true}
+        extraData={`${activeTab}-${renderedTab}-${isTabContentPending}-${refreshKey}`}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={["#094569"]}
+            tintColor="#094569"
+          />
+        }
+      />
 
       {showLive && (
         <Modal

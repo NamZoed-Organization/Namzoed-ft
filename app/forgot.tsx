@@ -1,7 +1,7 @@
 import { Entypo, MaterialIcons } from "@expo/vector-icons";
 import FormInput from "@/components/ui/FormInput";
 import { clamp, useResponsive } from "@/utils/responsive";
-import { useRouter } from "expo-router";
+import { useAppRouter } from "@/utils/navigation";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -21,7 +21,7 @@ export default function Forgot() {
   const [loading, setLoading] = useState(false);
   const [inputType, setInputType] = useState<"email" | "phone" | null>(null);
   const [popup, setPopup] = useState({ visible: false, type: 'error' as 'success' | 'error' | 'warning', title: '', message: '' });
-  const router = useRouter();
+  const router = useAppRouter();
   const { ms, vs, wp, hp } = useResponsive();
   const pagePaddingX = clamp(wp(10), 20, 44);
   const backTop = clamp(hp(5), 32, 54);

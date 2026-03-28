@@ -10,7 +10,8 @@ import FeedPost from "@/components/FeedPost";
 import { useUser } from "@/contexts/UserContext";
 import { fetchPostById, PostWithUser } from "@/lib/postsService";
 import { PostData } from "@/types/post";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useAppRouter } from "@/utils/navigation";
+import { useLocalSearchParams } from "expo-router";
 import { ChevronLeft } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
@@ -45,7 +46,7 @@ function toPostData(post: PostWithUser): PostData {
 
 export default function PostDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const router = useRouter();
+  const router = useAppRouter();
   const insets = useSafeAreaInsets();
   const { currentUser } = useUser();
 

@@ -1,5 +1,5 @@
 import { TaggedAccount, TaggedProduct } from '@/types/post';
-import { useRouter } from 'expo-router';
+import { useAppRouter } from '@/utils/navigation';
 import { ShoppingBag, User, X } from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
@@ -24,7 +24,7 @@ export default function TaggedItemsModal({
   products = [],
   accounts = [],
 }: TaggedItemsModalProps) {
-  const router = useRouter();
+  const router = useAppRouter();
   const hasProducts = products.length > 0;
   const hasAccounts = accounts.length > 0;
   const hasBoth = hasProducts && hasAccounts;

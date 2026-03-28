@@ -3,13 +3,16 @@ import AuthPromptModal from "@/components/modals/AuthPromptModal";
 import TopNavbar from "@/components/ui/TopNavbar";
 import { useUser } from "@/contexts/UserContext";
 import { serviceCategories } from "@/data/servicecategory";
-import { Href, router } from "expo-router";
+import { useAppRouter } from "@/utils/navigation";
+import { Href } from "expo-router";
 import {
+    BedDouble,
     Briefcase,
     Building,
     Car,
     Coffee,
     Gamepad2,
+    Goal,
     GraduationCap,
     Grid3x3,
     Home,
@@ -36,8 +39,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
-
 export default function ServiceScreen() {
+  const router = useAppRouter();
   const insets = useSafeAreaInsets();
   const { currentUser } = useUser();
   const [showAddModal, setShowAddModal] = useState(false);
@@ -60,8 +63,25 @@ export default function ServiceScreen() {
     };
   }, []);
 
+  const visibleCategories = useMemo(
+    () =>
+      serviceCategories.filter(
+        (category) =>
+          category.slug !== "gaming-sports" && category.slug !== "hotels"
+      ),
+    []
+  );
+
   const handleCategoryPress = (category: any) => {
     router.push(`/services/${category.slug}` as Href);
+  };
+
+  const handleGamesPress = () => {
+    router.push(`/services/ground-bookings/ground-booking` as Href);
+  };
+
+  const handleHotelsPress = () => {
+    router.push(`/services/room-booking/room-booking` as Href);
   };
 
   const getIconComponent = (iconName: string, size: number, color: string) => {
@@ -73,6 +93,8 @@ export default function ServiceScreen() {
       tent: Tent,
       "shopping-basket": ShoppingBasket,
       gamepad: Gamepad2,
+      ground: Goal,
+      room: BedDouble,
       "paw-print": PawPrint,
       home: Home,
       package: Package,
@@ -172,12 +194,95 @@ export default function ServiceScreen() {
         </View>
 
         <FlatList
-          data={serviceCategories}
+          data={visibleCategories}
           renderItem={renderCategoryItem}
           keyExtractor={(item) => item.id}
           numColumns={numColumns}
           key={numColumns}
           showsVerticalScrollIndicator={false}
+          ListHeaderComponent={
+              <View style={{ marginBottom: 20 }}>
+                <View className="flex-row gap-3">
+                  <TouchableOpacity
+                    onPress={handleGamesPress}
+                    activeOpacity={0.8}
+                    className="flex-1 rounded-2xl px-3 py-2.5 border border-primary bg-transparent"
+                  >
+                    <View className="flex-row items-center">
+                      <View
+                        style={{
+                          width: 42,
+                          height: 42,
+                          borderRadius: 14,
+                          backgroundColor: "transparent",
+                          borderWidth: 1.5,
+                          borderColor: "#094569",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          marginRight: 10,
+                        }}
+                      >
+                        {getIconComponent("ground", 22, "#094569")}
+                      </View>
+
+                      <Text className="text-black text-base font-msemibold flex-1">
+                        Ground Bookings
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={handleHotelsPress}
+                    activeOpacity={0.8}
+                    className="flex-1 rounded-2xl px-3 py-2.5 border border-primary bg-transparent"
+                  >
+                    <View className="flex-row items-center">
+                      <View
+                        style={{
+                          width: 42,
+                          height: 42,
+                          borderRadius: 14,
+                          backgroundColor: "transparent",
+                          borderWidth: 1.5,
+                          borderColor: "#094569",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          marginRight: 10,
+                        }}
+                      >
+                        {getIconComponent("room", 22, "#094569")}
+                      </View>
+
+                      <Text className="text-black text-base font-msemibold flex-1">
+                        Room{"\n"}Booking
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                </View>
+
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    marginTop: 18,
+                  }}
+                >
+                  <View style={{ flex: 1, height: 1, backgroundColor: "#D1D5DB" }} />
+                  <Text
+                    style={{
+                      marginHorizontal: 12,
+                      fontSize: 12,
+                      fontWeight: "700",
+                      color: "#6B7280",
+                      letterSpacing: 0.5,
+                    }}
+                  >
+                    ALL SERVICES
+                  </Text>
+                  <View style={{ flex: 1, height: 1, backgroundColor: "#D1D5DB" }} />
+                </View>
+              </View>
+          }
           contentContainerStyle={{
             paddingBottom: 72 + insets.bottom,
           }}

@@ -1,6 +1,6 @@
 // components/RequestMessages.tsx
 import users from "@/data/UserData";
-import { useRouter } from "expo-router";
+import { useAppRouter } from "@/utils/navigation";
 import React from "react";
 import { FlatList, Text, TouchableOpacity, View } from "react-native";
 
@@ -15,7 +15,7 @@ interface RequestMessagesProps {
 }
 
 export default function RequestMessages({ requests }: RequestMessagesProps) {
-  const router = useRouter();
+  const router = useAppRouter();
 
   const getUserByPhone = (phoneNumber: string) => {
     const cleanPhone = phoneNumber.replace('+975', '');

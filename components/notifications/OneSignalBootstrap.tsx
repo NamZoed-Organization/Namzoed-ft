@@ -9,12 +9,12 @@ import {
     logOneSignalDebugState,
     requestOneSignalPermissionIfNeeded,
 } from "@/services/oneSignalService";
-import { useRouter } from "expo-router";
+import { useAppRouter } from "@/utils/navigation";
 import { useEffect, useState } from "react";
 
 export default function OneSignalBootstrap() {
   const { currentUser } = useUser();
-  const router = useRouter();
+  const router = useAppRouter();
   const [authUserId, setAuthUserId] = useState<string | null>(null);
 
   useEffect(() => {

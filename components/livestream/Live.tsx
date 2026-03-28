@@ -1,6 +1,6 @@
 import { Camera } from "expo-camera";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
+import { useAppRouter } from "@/utils/navigation";
 import {
     Check,
     ChevronDown,
@@ -20,6 +20,7 @@ import React, {
 import PopupMessage from "@/components/ui/PopupMessage";
 import {
     ActivityIndicator,
+    BackHandler,
     FlatList,
     Image,
     ImageBackground,
@@ -60,6 +61,7 @@ import {
     fetchActiveLivestreams,
     fetchPendingCoHostRequests,
     incrementLivestreamViewerCountAtomic,
+    markLivestreamStarted,
     subscribeToCoHostRequests,
     subscribeToLivestreams,
     subscribeToViewerCount,
@@ -68,6 +70,7 @@ import {
     type Livestream,
     type LivestreamType,
 } from "@/services/livestreamService";
+import { logLiveAudioMode, teardownLiveAudioSession } from "@/utils/liveAudio";
 import { Ionicons } from "@expo/vector-icons";
 import {
     ParticipantView,
@@ -215,6 +218,8 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose, onMinimize, initialStr
   const [coHostRequests, setCoHostRequests] = useState<CoHostRequest[]>([]);
   const [hasRequestedCoHost, setHasRequestedCoHost] = useState(false);
   const [liveViewerCount, setLiveViewerCount] = useState(0);
+  const [showHardwareBackConfirm, setShowHardwareBackConfirm] = useState(false);
+  const [showCoHostLeaveConfirm, setShowCoHostLeaveConfirm] = useState(false);
   const [popup, setPopup] = useState<{
     visible: boolean;
     title: string;
@@ -306,23 +311,28 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose, onMinimize, initialStr
       // If minimizing (handing off to PiP overlay), skip all cleanup
       if (isMinimizedRef.current) return;
 
-      const viewer = viewerSessionRef.current;
-      if (viewer?.streamId) {
-        adjustLivestreamViewerCount(viewer.streamId, -1).catch(() => undefined);
-      }
+      void (async () => {
+        const viewer = viewerSessionRef.current;
+        if (viewer?.streamId) {
+          adjustLivestreamViewerCount(viewer.streamId, -1).catch(() => undefined);
+        }
 
-      const host = hostingRecordRef.current;
-      const ownerId = supabaseUserIdRef.current;
-      if (host?.id && ownerId) {
-        endLivestreamRecord(host.id, ownerId).catch(() => undefined);
-      }
+        const host = hostingRecordRef.current;
+        const ownerId = supabaseUserIdRef.current;
+        if (host?.id && ownerId) {
+          endLivestreamRecord(host.id, ownerId).catch(() => undefined);
+        }
 
-      const call = activeCallRef.current;
-      if (call) {
-        call.leave().catch(() => undefined);
-      }
-
-      getStreamService.disconnect().catch(() => undefined);
+        const call = activeCallRef.current;
+        await teardownLiveAudioSession({
+          leaveCall: call ? () => call.leave() : null,
+          disconnectClient: () => getStreamService.disconnect(),
+          details: {
+            role: callRoleRef.current,
+          },
+          label: "live call during unmount",
+        });
+      })();
     };
   }, []);
 
@@ -385,14 +395,15 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose, onMinimize, initialStr
   const cleanupActiveCall = useCallback(
     async (options: { keepSelection?: boolean } = {}) => {
       const call = activeCallRef.current;
-      if (call) {
-        try {
-          await call.leave();
-        } catch (error) {
-        }
-      }
-
-      await getStreamService.disconnect().catch(() => undefined);
+      await teardownLiveAudioSession({
+        leaveCall: call ? () => call.leave() : null,
+        disconnectClient: () => getStreamService.disconnect(),
+        details: {
+          role: callRoleRef.current,
+          keepSelection: !!options.keepSelection,
+        },
+        label: "active live call",
+      });
 
       if (!options.keepSelection) {
         setSelectedStream(null);
@@ -455,6 +466,11 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose, onMinimize, initialStr
         }
       );
       console.log('[Live] host call created, cid:', call?.cid);
+      logLiveAudioMode("host call created", {
+        callId: callIdentifier,
+        userId: identity.id,
+        role: "host",
+      });
 
       const record = await createLivestreamRecord({
         user_id: supabaseUserId,
@@ -540,6 +556,12 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose, onMinimize, initialStr
       try {
         const { identity, client } = await ensureStreamClient();
         const call = await getStreamService.prepareViewerCall(identity, callId);
+        logLiveAudioMode("viewer call prepared", {
+          callId,
+          userId: identity.id,
+          role: "viewer",
+          streamId: stream.id,
+        });
 
         setSelectedStream(stream);
         setViewerSession({ streamId: stream.id });
@@ -629,6 +651,24 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose, onMinimize, initialStr
     setLiveViewerCount((prev) => (activeViewerCount > 0 ? activeViewerCount : prev));
   }, [activeViewerCount]);
 
+  useEffect(() => {
+    if (!selectedStream?.id) return;
+    const updatedStream = livestreams.find((item) => item.id === selectedStream.id);
+    if (!updatedStream) return;
+
+    setSelectedStream((prev) => {
+      if (!prev || prev.id !== updatedStream.id) return prev;
+      return updatedStream;
+    });
+
+    if (callRoleRef.current === "host") {
+      setHostingRecord((prev) => {
+        if (!prev || prev.id !== updatedStream.id) return prev;
+        return updatedStream;
+      });
+    }
+  }, [livestreams, selectedStream?.id]);
+
   const handleViewerLeave = useCallback(async () => {
     if (viewerSession?.streamId) {
       await adjustLivestreamViewerCount(viewerSession.streamId, -1);
@@ -682,21 +722,60 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose, onMinimize, initialStr
       await handleHostStreamEnd();
       return;
     }
+    if (callRole === "cohost") {
+      // Show leave confirmation for co-hosts instead of immediately leaving
+      setShowCoHostLeaveConfirm(true);
+      return;
+    }
     await handleViewerLeave();
   }, [callRole, handleHostStreamEnd, handleViewerLeave]);
+
+  // Hardware back button — show confirmation when host/co-host is active
+  useEffect(() => {
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (callRole === "host" && selectedStream) {
+        setShowHardwareBackConfirm(true);
+        return true; // consume event — prevents LiveScrollScreen's BackHandler from firing
+      }
+      if (callRole === "cohost" && selectedStream) {
+        setShowCoHostLeaveConfirm(true);
+        return true;
+      }
+      return false;
+    });
+    return () => sub.remove();
+  }, [callRole, selectedStream]);
 
   const handleViewerCallStart = useCallback(() => {
     // no-op for now, placeholder for analytics
   }, []);
 
-  const handleHostCallStart = useCallback(() => {
+  const handleHostCallStart = useCallback(async () => {
+    const hostRecord = hostingRecordRef.current;
+    const ownerId = supabaseUserIdRef.current;
+    if (hostRecord?.id) {
+      try {
+        await markLivestreamStarted(hostRecord.id, ownerId);
+      } catch (error) {
+        console.error("Failed to mark livestream as started", error);
+      }
+    }
+
     setLivestreams((prev) => {
       if (!hostingRecordRef.current) {
         return prev;
       }
       return prev.map((item) =>
         item.id === hostingRecordRef.current?.id
-          ? { ...item, started_at: new Date().toISOString(), is_active: true }
+          ? {
+              ...item,
+              started_at: new Date().toISOString(),
+              is_active: true,
+              external_metadata: {
+                ...(item.external_metadata ?? {}),
+                live_started: true,
+              },
+            }
           : item
       );
     });
@@ -737,16 +816,6 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose, onMinimize, initialStr
                   streamType={(selectedStream as any)?.stream_type ?? "business"}
                   onMinimize={onMinimize ? handleMinimize : undefined}
                 />
-              ) : callRole === "cohost" ? (
-                <HostCallContainer
-                  onEndStream={handleViewerLeave}
-                  ending={endingStream}
-                  livestreamId={selectedStream?.id}
-                  hostId={selectedStream?.user_id}
-                  currentUserId={supabaseUserId}
-                  streamType={(selectedStream as any)?.stream_type ?? "business"}
-                  onMinimize={onMinimize ? handleMinimize : undefined}
-                />
               ) : (
                 <ViewerCallContainer
                   onLeaveStream={handleViewerLeave}
@@ -755,6 +824,7 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose, onMinimize, initialStr
                   livestreamId={selectedStream?.id}
                   hostId={selectedStream?.user_id}
                   streamType={(selectedStream as any)?.stream_type ?? "business"}
+                  streamStarted={Boolean(activeCall) || Boolean((selectedStream as any)?.external_metadata?.live_started)}
                   onNavigateAway={onMinimize ? handleMinimize : () => {
                     setSelectedStream(null);
                     setActiveCall(null);
@@ -801,6 +871,103 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose, onMinimize, initialStr
             </Text>
           </View>
         )}
+
+        {/* Hardware back — host end-stream confirmation modal */}
+        <Modal visible={showHardwareBackConfirm} transparent animationType="fade" statusBarTranslucent>
+          <PopupMessage
+            visible={showHardwareBackConfirm}
+            type="white"
+            title="End Livestream?"
+            message="Ending now will stop the livestream for everyone watching."
+            onHide={() => setShowHardwareBackConfirm(false)}
+            actions={[
+              { label: "Keep Live", style: "cancel" },
+              {
+                label: "End Live",
+                style: "destructive",
+                onPress: () => {
+                  setShowHardwareBackConfirm(false);
+                  void handleLeaveCurrentCall();
+                },
+              },
+            ]}
+          />
+        </Modal>
+
+        {/* Co-host leave confirmation modal */}
+        <Modal
+          visible={showCoHostLeaveConfirm}
+          transparent
+          animationType="fade"
+          statusBarTranslucent
+        >
+          <View
+            style={{
+              flex: 1,
+              backgroundColor: "rgba(0,0,0,0.6)",
+              justifyContent: "center",
+              alignItems: "center",
+              padding: 20,
+            }}
+          >
+            <View
+              style={{
+                width: "100%",
+                maxWidth: 340,
+                backgroundColor: "#1a1a1a",
+                borderRadius: 16,
+                padding: 20,
+              }}
+            >
+              <Text
+                style={{ fontSize: 17, fontWeight: "700", color: "#fff", marginBottom: 8 }}
+              >
+                Leave Livestream?
+              </Text>
+              <Text style={{ color: "#9CA3AF", fontSize: 14, lineHeight: 20 }}>
+                You will leave this livestream and stop co-hosting.
+              </Text>
+              <View style={{ flexDirection: "row", marginTop: 20, gap: 10 }}>
+                <TouchableOpacity
+                  onPress={() => setShowCoHostLeaveConfirm(false)}
+                  style={{
+                    flex: 1,
+                    paddingVertical: 12,
+                    borderRadius: 10,
+                    backgroundColor: "#374151",
+                    alignItems: "center",
+                  }}
+                >
+                  <Text style={{ color: "#fff", fontWeight: "600" }}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={async () => {
+                    setShowCoHostLeaveConfirm(false);
+                    // Clean up co-host status in DB
+                    if (selectedStream?.id && supabaseUserId) {
+                      await supabase
+                        .from("cohost_requests")
+                        .update({ status: "left" })
+                        .eq("livestream_id", selectedStream.id)
+                        .eq("user_id", supabaseUserId)
+                        .eq("status", "accepted");
+                    }
+                    await handleViewerLeave();
+                  }}
+                  style={{
+                    flex: 1,
+                    paddingVertical: 12,
+                    backgroundColor: "#DC2626",
+                    borderRadius: 10,
+                    alignItems: "center",
+                  }}
+                >
+                  <Text style={{ color: "#fff", fontWeight: "700" }}>Leave</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </View>
     );
   };
@@ -1370,7 +1537,7 @@ const ActiveCallHeader: React.FC<ActiveCallHeaderProps> = ({
 }) => {
   const insets = useSafeAreaInsets();
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
-  const router = useRouter();
+  const router = useAppRouter();
 
   // Viewer invite state (host-only) — ActiveCallHeader lives inside StreamCall so hooks work
   const call = useCall();
@@ -1475,6 +1642,14 @@ const ActiveCallHeader: React.FC<ActiveCallHeaderProps> = ({
   };
 
   const handleAvatarPress = () => {
+    if (role === "host") {
+      return;
+    }
+
+    if (showCloseConfirm) {
+      return;
+    }
+
     if (hostId) {
       // Navigate to profile first, then close the stream overlay
       router.push(`/(users)/profile/${hostId}` as any);
@@ -1486,11 +1661,13 @@ const ActiveCallHeader: React.FC<ActiveCallHeaderProps> = ({
   };
 
   const handleClosePress = useCallback(() => {
-    if (role !== "host") {
-      void onClose();
+    if (role === "host") {
+      setShowCloseConfirm(true);
       return;
     }
-    setShowCloseConfirm(true);
+    // For cohost, onClose triggers the leave confirmation in LiveScreen
+    // For viewer, onClose directly leaves
+    void onClose();
   }, [role, onClose]);
 
   return (
@@ -1806,7 +1983,7 @@ const HostCallContainer: React.FC<HostCallContainerProps> = ({
           String(currentUserId) === String(hostId) &&
           requests.length > previousRequestCountRef.current
         ) {
-          setShowRequestsModal(true);
+          // setShowRequestsModal(true); // Hidden pending further optimizations
         }
 
         previousRequestCountRef.current = requests.length;
@@ -2404,8 +2581,8 @@ const HostCallContainer: React.FC<HostCallContainerProps> = ({
                 />
               </TouchableOpacity>
 
-              {/* Co-host Requests Badge — positioned below the header */}
-              {pendingRequests.length > 0 && (
+              {/* Co-host Requests Badge — HIDDEN pending further optimizations */}
+              {false && pendingRequests.length > 0 && (
                 <TouchableOpacity
                   onPress={() => setShowRequestsModal(true)}
                   className="absolute right-3 bg-purple-500 px-3 py-2 rounded-full flex-row items-center"
@@ -2452,8 +2629,8 @@ const HostCallContainer: React.FC<HostCallContainerProps> = ({
             )}
           </View>
 
-          {/* Co-host Requests Modal */}
-          <Modal visible={showRequestsModal} transparent animationType="slide">
+          {/* Co-host Requests Modal — HIDDEN pending further optimizations */}
+          {false && <Modal visible={showRequestsModal} transparent animationType="slide">
             <View className="flex-1 justify-end bg-black/50">
               <View className="bg-white rounded-t-3xl p-6 max-h-[60%]">
                 <View className="flex-row items-center justify-between mb-4">
@@ -2522,7 +2699,7 @@ const HostCallContainer: React.FC<HostCallContainerProps> = ({
                 />
               </View>
             </View>
-          </Modal>
+          </Modal>}
 
           {/* BOTTOM SECTION */}
           <View
@@ -2950,6 +3127,7 @@ interface ViewerCallContainerProps {
   onMinimize?: () => void;
   streamType?: LivestreamType | null;
   onBecomeCoHost?: () => void;
+  streamStarted?: boolean;
 }
 
 const ViewerCallContainer: React.FC<ViewerCallContainerProps> = ({
@@ -2962,13 +3140,17 @@ const ViewerCallContainer: React.FC<ViewerCallContainerProps> = ({
   onMinimize,
   streamType = "business",
   onBecomeCoHost,
+  streamStarted = false,
 }) => {
   const call = useCall();
-  const router = useRouter();
+  const router = useAppRouter();
   const { currentUser } = useUser();
-  const { useParticipants, useCallCallingState } = useCallStateHooks();
+  const insets = useSafeAreaInsets();
+  const { useParticipants, useCallCallingState, useCameraState, useMicrophoneState } = useCallStateHooks();
   const participants = useParticipants();
   const callingState = useCallCallingState();
+  const { camera, isMute: isCameraMuted, direction } = useCameraState();
+  const { microphone, isMute: isMicMuted } = useMicrophoneState();
 
   // Enable auto-enter PiP on Android when the user leaves the app mid-stream
   useAutoEnterPiPEffect(false);
@@ -2989,6 +3171,22 @@ const ViewerCallContainer: React.FC<ViewerCallContainerProps> = ({
   const REQUEST_COOLDOWN_SECONDS = 30; // Cooldown after rejection
   const REQUEST_RATE_LIMIT_MS = 5000; // Minimum 5 seconds between requests
 
+  // Local popup state for ViewerCallContainer (not shared with LiveScreen)
+  const [popup, setPopup] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+    type: "success" | "error" | "warning" | "white";
+  }>({ visible: false, title: "", message: "", type: "white" });
+  const showPopup = (
+    title: string,
+    message: string,
+    type: "success" | "error" | "warning" | "white" = "white"
+  ) => setPopup({ visible: true, title, message, type });
+
+  // Co-host leave confirmation
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+
   const joinPromiseRef = useRef<Promise<any> | null>(null);
 
   // Get current user ID
@@ -3000,6 +3198,10 @@ const ViewerCallContainer: React.FC<ViewerCallContainerProps> = ({
 
   // Swipe gesture to navigate to host profile
   const navigateToHostProfile = () => {
+    if (showHostEndedModal) {
+      return;
+    }
+
     if (hostId) {
       router.push(`/(users)/profile/${hostId}` as any);
       // Close the stream overlay
@@ -3107,17 +3309,28 @@ const ViewerCallContainer: React.FC<ViewerCallContainerProps> = ({
     return () => clearInterval(timer);
   }, [requestCooldown]);
 
+  // Camera permission helper for viewer-side co-host promotion
+  const ensureCameraPermission = useCallback(async () => {
+    const { status, canAskAgain } = await Camera.requestCameraPermissionsAsync();
+    if (status === "granted") return true;
+
+    if (!canAskAgain) {
+      showPopup("Camera Blocked", "Camera access has been denied. Please enable it in your device settings.", "warning");
+      return false;
+    }
+
+    showPopup("Camera Access Needed", "Please allow camera access to join as co-host.", "warning");
+    return false;
+  }, []);
+
   // Enable camera and microphone when becoming a co-host/speaker
   const enableSpeakerMode = async () => {
     if (!call) return;
 
     try {
-      // First, try to re-join the call with publishing capabilities
-      // This may be needed because viewers join without publish rights
       const currentState = call.state.callingState;
 
       if (currentState === "joined") {
-        // Try enabling camera and microphone
         try {
           const cameraGranted = await ensureCameraPermission();
           if (cameraGranted) {
@@ -3135,6 +3348,31 @@ const ViewerCallContainer: React.FC<ViewerCallContainerProps> = ({
     } catch (error) {
       console.error("Failed to enable speaker mode:", error);
     }
+  };
+
+  // Handle co-host leaving the stream entirely
+  const handleCoHostLeave = async () => {
+    setShowLeaveConfirm(false);
+    try {
+      // Disable camera and mic before leaving
+      try { await call?.camera.disable(); } catch {}
+      try { await call?.microphone.disable(); } catch {}
+
+      // Clean up the co-host request in DB
+      if (livestreamId && currentUserId) {
+        await supabase
+          .from("cohost_requests")
+          .update({ status: "left" })
+          .eq("livestream_id", livestreamId)
+          .eq("user_id", currentUserId)
+          .eq("status", "accepted");
+      }
+    } catch (error) {
+      console.error("Error leaving co-host:", error);
+    }
+
+    // Fully leave the stream
+    await onLeaveStream();
   };
 
   // Subscribe to request status changes
@@ -3364,6 +3602,8 @@ const ViewerCallContainer: React.FC<ViewerCallContainerProps> = ({
   const isSpeaker =
     requestStatus === "accepted" ||
     allSpeakers.some((p) => p.userId === currentUserId);
+  const showViewerStandby = !streamStarted;
+  const showViewerConnecting = streamStarted && (callingState === "joining" || allSpeakers.length === 0);
 
   const handleLeaveAfterHostEnd = async () => {
     setShowHostEndedModal(false);
@@ -3371,11 +3611,15 @@ const ViewerCallContainer: React.FC<ViewerCallContainerProps> = ({
       await onLeaveStream();
     } catch {
       // fallback: try leaving the call directly
-      try {
-        await call?.leave();
-      } catch {
-        /* ignore */
-      }
+      await teardownLiveAudioSession({
+        leaveCall: call ? () => call.leave() : null,
+        disconnectClient: () => getStreamService.disconnect(),
+        details: {
+          role: "viewer",
+          reason: "host-ended-fallback",
+        },
+        label: "viewer fallback live call",
+      });
     }
   };
 
@@ -3455,7 +3699,7 @@ const ViewerCallContainer: React.FC<ViewerCallContainerProps> = ({
             <View className="flex-1 bg-black">
               {/* LAYER 1: VIDEO (Absolute Fill) */}
               <View className="absolute inset-0">
-                {!isLive ? (
+                {showViewerStandby ? (
                   <View className="flex-1 items-center justify-center">
                     {hostEnded ? (
                       <View className="items-center px-6">
@@ -3472,9 +3716,14 @@ const ViewerCallContainer: React.FC<ViewerCallContainerProps> = ({
                         </TouchableOpacity>
                       </View>
                     ) : (
-                      <Text className="text-white/80 text-center px-6">
-                        Waiting for the host to start the livestream...
-                      </Text>
+                      <View className="items-center px-6">
+                        <Text className="text-white text-center text-lg font-semibold mb-2">
+                          Stand by
+                        </Text>
+                        <Text className="text-white/75 text-center">
+                          The host is getting ready. You will be connected when the livestream starts.
+                        </Text>
+                      </View>
                     )}
                   </View>
                 ) : allSpeakers.length > 0 ? (
@@ -3550,15 +3799,25 @@ const ViewerCallContainer: React.FC<ViewerCallContainerProps> = ({
                       });
                     })()}
                   </View>
-                ) : (
+                ) : showViewerConnecting ? (
                   <View className="flex-1 items-center justify-center">
                     {callingState === "joining" ? (
                       <ActivityIndicator color="white" />
                     ) : (
-                      <Text className="text-white mt-4">
-                        Connecting to the stream…
-                      </Text>
+                      <Ionicons name="radio-outline" size={34} color="white" />
                     )}
+                    <Text className="text-white mt-4 text-base font-semibold">
+                      Connecting to live...
+                    </Text>
+                    <Text className="text-white/70 mt-2 text-center px-6">
+                      The livestream just started. We are connecting you now.
+                    </Text>
+                  </View>
+                ) : (
+                  <View className="flex-1 items-center justify-center">
+                    <Text className="text-white/80 text-center px-6">
+                      Waiting for video from the livestream...
+                    </Text>
                   </View>
                 )}
               </View>
@@ -3582,157 +3841,86 @@ const ViewerCallContainer: React.FC<ViewerCallContainerProps> = ({
               {/* LAYER 3: TOP UI — hidden while in PiP */}
               {/* LIVE/SHOP badges are now shown in ActiveCallHeader */}
 
-              {/* LAYER 4: REQUEST TO JOIN BUTTON — hidden while in PiP */}
+              {/* LAYER 4: CO-HOST REQUEST UI — disabled for now */}
               {!isInPiP && (<>
-              {(!hasRequestedJoin ||
-                (requestStatus === "rejected" && requestCooldown === 0)) &&
-                requestStatus !== "accepted" && (
-                  <TouchableOpacity
-                    onPress={handleRequestToJoin}
-                    className="absolute right-4 bg-purple-600 px-4 py-3 rounded-full flex-row items-center"
-                    style={{
-                      bottom: "37%",
-                      shadowColor: "#9333EA",
-                      shadowOffset: { width: 0, height: 4 },
-                      shadowOpacity: 0.5,
-                      shadowRadius: 8,
-                      zIndex: 100,
-                      elevation: 10,
-                    }}
-                  >
-                    <Ionicons name="hand-left" size={18} color="white" />
-                    <Text className="text-white font-semibold ml-2">
-                      Request
-                    </Text>
-                  </TouchableOpacity>
-                )}
-
-              {hasRequestedJoin && requestStatus === "pending" && (
-                <TouchableOpacity
-                  onPress={handleCancelRequest}
-                  className="absolute right-4 bg-yellow-600/90 px-4 py-3 rounded-full flex-row items-center"
-                  style={{ bottom: "37%", zIndex: 100, elevation: 10 }}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="time" size={18} color="white" />
-                  <Text className="text-white font-medium ml-2">Requested</Text>
-                  <View className="ml-2 bg-white/20 rounded-full px-2 py-0.5">
-                    <Text className="text-white text-xs font-medium">
-                      Cancel
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              )}
-
-              {requestStatus === "rejected" && requestCooldown > 0 && (
-                <View
-                  className="absolute right-4 bg-red-600/80 px-4 py-3 rounded-full flex-row items-center"
-                  style={{ bottom: "37%", zIndex: 100, elevation: 10 }}
-                >
-                  <Ionicons name="close-circle" size={18} color="white" />
-                  <Text className="text-white font-medium ml-2">
-                    Declined · {requestCooldown}s
-                  </Text>
-                </View>
-              )}
-
-              {requestStatus === "accepted" && (
-                <View
-                  className="absolute right-4 bg-green-600 px-4 py-3 rounded-full flex-row items-center"
-                  style={{ bottom: "37%", zIndex: 100, elevation: 10 }}
-                >
-                  <Ionicons name="mic" size={18} color="white" />
-                  <Text className="text-white font-semibold ml-2">
-                    You're a Speaker
-                  </Text>
-                </View>
-              )}
-
-              {/* Co-host invitation prompt — shown when host invites this viewer */}
-              {requestStatus === "invited" && (
-                <View
-                  className="absolute left-4 right-4"
-                  style={{ bottom: "38%", zIndex: 200 }}
-                >
-                  <View
-                    style={{
-                      backgroundColor: "rgba(0,0,0,0.88)",
-                      borderRadius: 16,
-                      padding: 16,
-                      borderWidth: 1,
-                      borderColor: "rgba(139,92,246,0.5)",
-                    }}
-                  >
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        marginBottom: 8,
-                      }}
-                    >
-                      <Ionicons name="mic" size={18} color="#A78BFA" />
-                      <Text
-                        style={{
-                          color: "#A78BFA",
-                          fontWeight: "700",
-                          fontSize: 14,
-                          marginLeft: 8,
-                        }}
-                      >
-                        Co-host Invitation
-                      </Text>
-                    </View>
-                    <Text
-                      style={{
-                        color: "#E5E7EB",
-                        fontSize: 13,
-                        marginBottom: 14,
-                      }}
-                    >
-                      The host has invited you to join as a co-host!
-                    </Text>
-                    <View style={{ flexDirection: "row" }}>
-                      <TouchableOpacity
-                        onPress={handleDeclineInvite}
-                        style={{
-                          flex: 1,
-                          backgroundColor: "rgba(255,255,255,0.15)",
-                          borderRadius: 24,
-                          paddingVertical: 10,
-                          alignItems: "center",
-                          marginRight: 8,
-                        }}
-                      >
-                        <Text style={{ color: "#fff", fontWeight: "600" }}>
-                          Decline
-                        </Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        onPress={handleAcceptInvite}
-                        style={{
-                          flex: 2,
-                          backgroundColor: "#7C3AED",
-                          borderRadius: 24,
-                          paddingVertical: 10,
-                          alignItems: "center",
-                        }}
-                      >
-                        <Text style={{ color: "#fff", fontWeight: "700" }}>
-                          🎤 Join as Co-host
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                </View>
-              )}
               </>)}
             </View>
           </View>
         </TouchableWithoutFeedback>
+
+        {/* Leave co-host confirmation modal */}
+        <Modal
+          visible={showLeaveConfirm}
+          transparent
+          animationType="fade"
+        >
+          <View
+            style={{
+              flex: 1,
+              backgroundColor: "rgba(0,0,0,0.6)",
+              justifyContent: "center",
+              alignItems: "center",
+              padding: 20,
+            }}
+          >
+            <View
+              style={{
+                width: "100%",
+                maxWidth: 340,
+                backgroundColor: "#1a1a1a",
+                borderRadius: 16,
+                padding: 20,
+              }}
+            >
+              <Text
+                style={{ fontSize: 17, fontWeight: "700", color: "#fff", marginBottom: 8 }}
+              >
+                Leave Livestream?
+              </Text>
+              <Text style={{ color: "#9CA3AF", fontSize: 14, lineHeight: 20 }}>
+                You will leave this livestream and stop co-hosting.
+              </Text>
+
+              <View
+                style={{
+                  flexDirection: "row",
+                  marginTop: 20,
+                  gap: 10,
+                }}
+              >
+                <TouchableOpacity
+                  onPress={() => setShowLeaveConfirm(false)}
+                  style={{
+                    flex: 1,
+                    paddingVertical: 12,
+                    borderRadius: 10,
+                    backgroundColor: "#374151",
+                    alignItems: "center",
+                  }}
+                >
+                  <Text style={{ color: "#fff", fontWeight: "600" }}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleCoHostLeave}
+                  style={{
+                    flex: 1,
+                    paddingVertical: 12,
+                    backgroundColor: "#DC2626",
+                    borderRadius: 10,
+                    alignItems: "center",
+                  }}
+                >
+                  <Text style={{ color: "#fff", fontWeight: "700" }}>Leave</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal visible={popup.visible} transparent animationType="none" statusBarTranslucent>
+          <PopupMessage visible={popup.visible} type={popup.type} title={popup.title} message={popup.message} onHide={() => setPopup(p => ({...p, visible: false}))} />
+        </Modal>
       </View>
-      <Modal visible={popup.visible} transparent animationType="none" statusBarTranslucent>
-        <PopupMessage visible={popup.visible} type={popup.type} title={popup.title} message={popup.message} onHide={() => setPopup(p => ({...p, visible: false}))} />
-      </Modal>
     </GestureDetector>
   );
 };

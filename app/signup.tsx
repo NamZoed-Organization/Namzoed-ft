@@ -5,7 +5,8 @@ import {
 import FormInput from "@/components/ui/FormInput";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { clamp, useResponsive } from "@/utils/responsive";
-import { Link, useRouter } from "expo-router";
+import { useAppRouter } from "@/utils/navigation";
+import { Link } from "expo-router";
 import React, { useRef, useState } from "react";
 import {
   Alert,
@@ -22,7 +23,7 @@ import { supabase } from '../lib/supabase';
 import { sendWelcomeSMS } from '../services/smsService';
 
 export default function SignupTab2() {
-  const router = useRouter();
+  const router = useAppRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

@@ -29,7 +29,9 @@ interface ServiceProviderSectionProps {
   providerFormData: {
     businessName: string;
     email: string;
-    phone: string;
+    contact: string;
+    emailActive: boolean;
+    contactActive: boolean;
     bio: string;
   };
   licenseImageUrl: string | null;
@@ -39,6 +41,7 @@ interface ServiceProviderSectionProps {
   isServiceSelectionMode: boolean;
   selectedServiceIds: string[];
   onEditWork: () => void;
+  onViewProviderImage: () => void;
   onShowProviderAvatarMenu: () => void;
   onEditProviderProfile: () => void;
   onUploadLicense: () => void;
@@ -63,6 +66,7 @@ export default function ServiceProviderSection({
   isServiceSelectionMode,
   selectedServiceIds,
   onEditWork,
+  onViewProviderImage,
   onShowProviderAvatarMenu,
   onEditProviderProfile,
   onUploadLicense,
@@ -89,7 +93,7 @@ export default function ServiceProviderSection({
         {/* Top row: info left, avatar right */}
         <View className="flex-row items-start">
 
-          {/* Left: name, bio, email, phone */}
+          {/* Left: name and bio */}
           <View className="flex-1 pr-4">
             <View className="flex-row items-center gap-1.5 mb-0.5">
               <Text
@@ -105,20 +109,6 @@ export default function ServiceProviderSection({
                 </View>
               )}
             </View>
-
-            {/* Email */}
-            {providerFormData.email ? (
-              <Text className="text-xs font-regular text-gray-500 mb-1" numberOfLines={1}>
-                ✉  {providerFormData.email}
-              </Text>
-            ) : null}
-
-            {/* Phone */}
-            {providerFormData.phone ? (
-              <Text className="text-xs font-regular text-gray-500 mb-2" numberOfLines={1}>
-                📞  {providerFormData.phone}
-              </Text>
-            ) : null}
 
             {/* Bio */}
             {providerFormData.bio ? (
@@ -138,7 +128,8 @@ export default function ServiceProviderSection({
           {/* Right: avatar */}
           <View className="relative">
             <TouchableOpacity
-              onPress={onShowProviderAvatarMenu}
+              onPress={providerImageUri ? onViewProviderImage : onShowProviderAvatarMenu}
+              onLongPress={onShowProviderAvatarMenu}
               className="w-[86px] h-[86px] rounded-full bg-gray-200 overflow-hidden border-2 border-gray-100"
             >
               {providerImageUri ? (

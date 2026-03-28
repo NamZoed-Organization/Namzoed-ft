@@ -37,6 +37,9 @@ export default function AddServicesModal({
   userId,
   onSuccess,
 }: AddServicesModalProps) {
+  const selectableCategories = serviceCategories.filter(
+    (category) => category.slug !== "government-services",
+  );
   const [loading, setLoading] = useState(false);
 
   // Popup states
@@ -309,7 +312,7 @@ export default function AddServicesModal({
                   {isCategoryExpanded && (
                     <View className="mt-3 bg-gray-50 rounded-xl p-3 border border-gray-200">
                       <View className="flex-row flex-wrap gap-2">
-                        {serviceCategories.map((category) => (
+                        {selectableCategories.map((category) => (
                           <TouchableOpacity
                             key={category.id}
                             onPress={() => {

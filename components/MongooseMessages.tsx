@@ -1,7 +1,7 @@
 // components/MongooseMessages.tsx
 import { useUser } from "@/contexts/UserContext";
 import mongooses from "@/data/mongoose";
-import { useRouter } from "expo-router";
+import { useAppRouter } from "@/utils/navigation";
 import React from "react";
 import { FlatList, Text, TouchableOpacity, View } from "react-native";
 
@@ -10,7 +10,7 @@ interface MongooseMessagesProps {
 }
 
 export default function MongooseMessages({ mongooseChats }: MongooseMessagesProps) {
-  const router = useRouter();
+  const router = useAppRouter();
   const { currentUser } = useUser();
 
   // Get all mongoose names from data

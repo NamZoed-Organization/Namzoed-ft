@@ -12,7 +12,7 @@ import {
 } from "@/lib/postMarketPlace";
 import { supabase } from "@/lib/supabase";
 import { Picker } from "@react-native-picker/picker";
-import { useRouter } from "expo-router";
+import { useAppRouter } from "@/utils/navigation";
 import {
   Briefcase,
   Filter,
@@ -43,7 +43,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 export default function MarketplaceScreen() {
   const insets = useSafeAreaInsets();
   const { currentUser } = useUser();
-  const router = useRouter();
+  const router = useAppRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("job_vacancy");
   const [showFilters, setShowFilters] = useState(false);

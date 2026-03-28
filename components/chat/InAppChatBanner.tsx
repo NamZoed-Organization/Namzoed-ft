@@ -2,7 +2,7 @@ import { useUnreadMessages } from "@/contexts/UnreadMessagesContext";
 import { playReceiveSound, triggerReceiveHaptic } from "@/utils/chatSounds";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
-import { useRouter } from "expo-router";
+import { useAppRouter } from "@/utils/navigation";
 import React, { useEffect, useRef } from "react";
 import { Animated, Image, PanResponder, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -44,7 +44,7 @@ function stripReplyMeta(content: string): string {
 
 export default function InAppChatBanner() {
   const { banner, dismissBanner } = useUnreadMessages();
-  const router = useRouter();
+  const router = useAppRouter();
   const insets = useSafeAreaInsets();
   const translateY = useRef(new Animated.Value(-120)).current;
   const opacity = useRef(new Animated.Value(0)).current;

@@ -1,7 +1,8 @@
 // app/categories.tsx
 
 import { LinearGradient } from "expo-linear-gradient";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useAppRouter } from "@/utils/navigation";
+import { useFocusEffect } from "expo-router";
 import { Plus } from "lucide-react-native";
 import React, {
     useCallback,
@@ -27,19 +28,21 @@ import SearchBar from "@/components/modals/SearchBar";
 import CategorySkeleton from "@/components/ui/CategorySkeleton";
 import TopNavbar from "@/components/ui/TopNavbar";
 import { useUser } from "@/contexts/UserContext";
-import { categories as categoryData } from "@/data/categories";
+import { categories as categoryData, categoryNames } from "@/data/categories";
 import { supabase } from "@/lib/supabase";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const slugify = (str: string): string => str;
 
 const categoryImages: Record<string, ImageSourcePropType> = {
-  fashion: require("@/assets/category/fashion_category.png"),
+  "fashion-and-jewelry": require("@/assets/category/fashion_category.png"),
   food: require("@/assets/category/food_category.png"),
   beauty: require("@/assets/category/beauty_category.png"),
   "kids-and-toys": require("@/assets/category/kids_category.png"),
   electronics: require("@/assets/category/electronics_category.png"),
   "home-and-living": require("@/assets/category/home_category.png"),
+  "real-estate-and-properties": require("@/assets/category/real_estate.png"),
+  "gifts-books-flowers-and-arts": require("@/assets/category/gifts_books_category.png"),
 };
 
 interface ProductSummary {
@@ -49,7 +52,7 @@ interface ProductSummary {
 
 export default function CategoriesScreen() {
   const insets = useSafeAreaInsets();
-  const router = useRouter();
+  const router = useAppRouter();
   const { currentUser } = useUser();
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -388,7 +391,7 @@ export default function CategoriesScreen() {
                                 }}
                                 className="capitalize"
                               >
-                                {cat.key.replace("-", " & ")}
+                                {categoryNames[cat.key] || cat.key}
                               </Text>
 
                               <Text
@@ -530,7 +533,7 @@ export default function CategoriesScreen() {
                                     letterSpacing: 0.5,
                                   }}
                                 >
-                                  {cat.key.replace("-", " & ")}
+                                  {categoryNames[cat.key] || cat.key}
                                 </Text>
                               </View>
 

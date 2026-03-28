@@ -34,7 +34,8 @@ import * as FileSystem from "expo-file-system/legacy";
 import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useAppRouter } from "@/utils/navigation";
+import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import { Bike, Verified } from "lucide-react-native";
 
 import React, {
@@ -537,7 +538,7 @@ export default function ChatScreen() {
     markConversationAsRead,
     currentUserUUID: contextUserUUID,
   } = useUnreadMessages();
-  const router = useRouter();
+  const router = useAppRouter();
   const [messageText, setMessageText] = useState("");
   const [messages, setMessages] = useState<any[]>([]);
   const [localMessages, setLocalMessages] = useState<any[]>([]);

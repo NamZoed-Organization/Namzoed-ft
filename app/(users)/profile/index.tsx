@@ -23,78 +23,74 @@ import ServiceProviderSection from "@/components/profile/ServiceProviderSection"
 import BottomNavBar from "@/components/ui/BottomNavBar";
 import PopupMessage from "@/components/ui/PopupMessage";
 import {
-    deleteAvatar,
-    updateUserProfile,
-    uploadAvatar,
+  deleteAvatar,
+  updateUserProfile,
+  uploadAvatar,
 } from "@/lib/profileService";
 import {
-    deleteLicenseImage,
-    deleteProviderAvatar,
-    deleteProviderService,
-    ProviderServiceWithDetails,
-    toggleServiceStatus,
-    updateServiceProviderLicense,
-    updateServiceProviderProfile,
-    uploadLicenseImage,
-    uploadProviderAvatar,
+  deleteLicenseImage,
+  deleteProviderAvatar,
+  deleteProviderService,
+  ProviderServiceWithDetails,
+  toggleServiceStatus,
+  updateServiceProviderLicense,
+  updateServiceProviderProfile,
+  uploadLicenseImage,
+  uploadProviderAvatar,
 } from "@/lib/servicesService";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
 import { ImpactFeedbackStyle, NotificationFeedbackType } from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useAppRouter } from "@/utils/navigation";
+import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import {
-    Camera,
-    CheckCircle2,
-    Verified,
-    Copy,
-    Eye,
-    GalleryHorizontal,
-    Grid,
-    ImageIcon,
-    Package,
-    Play,
-    Settings,
-    ShoppingBag,
-    Trash2,
-    Upload,
-    User,
-    UserPlus,
-    Wrench
+  Camera,
+  Copy,
+  Eye,
+  GalleryHorizontal,
+  Grid,
+  ImageIcon,
+  Package,
+  Play,
+  Settings,
+  ShoppingBag,
+  Trash2,
+  Upload,
+  User,
+  UserPlus,
+  Verified,
+  Wrench,
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useState } from "react";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-    ActivityIndicator,
-    Alert,
-    Dimensions,
-    Image,
-    InteractionManager,
-    Modal,
-    Platform,
-    RefreshControl,
-    ScrollView,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  Image,
+  InteractionManager,
+  Modal,
+  Platform,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 // --- Reanimated & Gesture Handler ---
 import { useVideoPlayer, VideoView } from "expo-video";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
-    FadeIn,
-    FadeInDown,
-    FadeOut,
-    FadeOutDown,
-    runOnJS,
-    SlideInDown,
-    SlideOutDown,
-    useAnimatedStyle,
-    useSharedValue,
-    withSpring,
-    withTiming,
+  FadeIn,
+  FadeInDown,
+  FadeOut,
+  FadeOutDown,
+  SlideInDown,
+  SlideOutDown,
 } from "react-native-reanimated";
 
 // Helper to check if URL is a video
@@ -125,7 +121,8 @@ function VideoThumb({ uri }: { uri: string }) {
 
 export default function ProfileScreen() {
   const { currentUser, setCurrentUser, logout } = useUser();
-  const router = useRouter();
+  const router = useAppRouter();
+  const insets = useSafeAreaInsets();
   const { tab } = useLocalSearchParams<{ tab?: string }>();
   const [mainTab, setMainTab] = useState<"main" | "work">(
     tab === "work" ? "work" : "main",
@@ -147,7 +144,9 @@ export default function ProfileScreen() {
   const [showProviderAvatarMenu, setShowProviderAvatarMenu] = useState(false);
   const [showAddServiceModal, setShowAddServiceModal] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [settingsInitialModal, setSettingsInitialModal] = useState<string | undefined>(undefined);
+  const [settingsInitialModal, setSettingsInitialModal] = useState<
+    string | undefined
+  >(undefined);
   const [showFollowRequests, setShowFollowRequests] = useState(false);
   const [showPendingRequests, setShowPendingRequests] = useState(false);
   const [followRequestsTab, setFollowRequestsTab] = useState<
@@ -156,6 +155,10 @@ export default function ProfileScreen() {
   const [showManageListings, setShowManageListings] = useState(false);
   const [showCropOverlay, setShowCropOverlay] = useState(false);
   const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
+  const [selectedImageDims, setSelectedImageDims] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
 
   // Service management state (kept here, not in provider hook)
   const [isEditingProvider, setIsEditingProvider] = useState(false);
@@ -246,8 +249,14 @@ export default function ProfileScreen() {
   } = useServiceProvider(refreshKey);
 
   // User posts hook
-  const { userPosts, setUserPosts, loadingPosts, userImages, imagePostMap, postThumbnails } =
-    useUserPosts(refreshKey, showErrorPopup);
+  const {
+    userPosts,
+    setUserPosts,
+    loadingPosts,
+    userImages,
+    imagePostMap,
+    postThumbnails,
+  } = useUserPosts(refreshKey, showErrorPopup);
 
   // User products hook
   const { userProducts, setUserProducts, loadingProducts } = useUserProducts(
@@ -255,51 +264,7 @@ export default function ProfileScreen() {
     showErrorPopup,
   );
 
-  // ------------------------------------------------------
-  // 1. SMOOTH ANIMATION LOGIC (Reanimated)
-  // ------------------------------------------------------
-
-  const pickerTranslateY = useSharedValue(0);
-  const pickerContext = useSharedValue({ y: 0 });
-
-  // --- Gesture for Image Picker ---
-  const pickerGesture = Gesture.Pan()
-    .onStart(() => {
-      pickerContext.value = { y: pickerTranslateY.value };
-    })
-    .onUpdate((e) => {
-      // Only allow drag down
-      if (e.translationY > 0)
-        pickerTranslateY.value = e.translationY + pickerContext.value.y;
-    })
-    .onEnd((e) => {
-      if (pickerTranslateY.value > 100 || e.velocityY > 500) {
-        pickerTranslateY.value = withTiming(
-          1000,
-          { duration: 250 },
-          (finished) => {
-            if (finished) runOnJS(setShowImagePicker)(false);
-          },
-        );
-      } else {
-        pickerTranslateY.value = withSpring(0, { damping: 15, stiffness: 150 });
-      }
-    });
-
-  useEffect(() => {
-    if (showImagePicker) pickerTranslateY.value = 0;
-  }, [showImagePicker]);
-
-  const rPickerStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: pickerTranslateY.value }],
-  }));
-  const rPickerBackdrop = useAnimatedStyle(() => ({
-    opacity: Math.max(0, Math.min(1, 1 - pickerTranslateY.value / 500)),
-  }));
-
-  // ------------------------------------------------------
-  // END ANIMATION LOGIC
-  // ------------------------------------------------------
+  // (Animation logic for avatar/picker modals removed — using native Modal animations now)
 
   // Scroll to Work tab if tab parameter is "work"
   useEffect(() => {
@@ -362,10 +327,10 @@ export default function ProfileScreen() {
       ]);
       return;
     }
-    setShowImagePicker(true);
+    setShowMainAvatarMenu(true);
   };
   const handleEditProviderProfile = () => setShowProviderImagePicker(true);
-  const handleSettings = () => setShowSettings(true);
+  const handleSettings = () => { if (!showSettings) setShowSettings(true); };
   const handleFollowRequests = () => setShowPendingRequests(true);
   const handleManageListings = () => setShowManageListings(true);
 
@@ -409,14 +374,28 @@ export default function ProfileScreen() {
       await updateServiceProviderProfile(currentUser.id, {
         name: providerFormData.businessName,
         master_bio: providerFormData.bio,
+        email: providerFormData.email.trim() || null,
+        contact: providerFormData.contact.trim() || null,
+        email_active: providerFormData.email.trim()
+          ? providerFormData.emailActive
+          : false,
+        contact_active: providerFormData.contact.trim()
+          ? providerFormData.contactActive
+          : false,
       });
 
       setIsEditingProvider(false);
       setRefreshKey((prev) => prev + 1);
-      showSuccessPopup("Service provider profile updated successfully", "Profile Updated!");
+      showSuccessPopup(
+        "Service provider profile updated successfully",
+        "Profile Updated!",
+      );
     } catch (error) {
       console.error("Failed to update service provider profile:", error);
-      showErrorPopup("Failed to update profile. Please try again.", "Update Failed");
+      showErrorPopup(
+        "Failed to update profile. Please try again.",
+        "Update Failed",
+      );
     }
   };
 
@@ -427,8 +406,10 @@ export default function ProfileScreen() {
       if (serviceProvider) {
         setProviderFormData({
           businessName: serviceProvider.name || "",
-          email: serviceProvider.profiles?.email || "",
-          phone: serviceProvider.profiles?.phone || "",
+          email: serviceProvider.email || "",
+          contact: serviceProvider.contact || "",
+          emailActive: serviceProvider.email_active || false,
+          contactActive: serviceProvider.contact_active || false,
           bio: serviceProvider.master_bio || "",
         });
       }
@@ -444,6 +425,7 @@ export default function ProfileScreen() {
     setProfileImage(croppedUri);
     setShowCropOverlay(false);
     setSelectedImageUri(null);
+    setSelectedImageDims(null);
 
     try {
       // 2. Upload to Supabase Storage
@@ -458,10 +440,16 @@ export default function ProfileScreen() {
       await AsyncStorage.setItem("currentUser", JSON.stringify(updatedUser));
       setCurrentUser(updatedUser);
 
-      showSuccessPopup("Profile has been changed successfully", "Profile Saved!");
+      showSuccessPopup(
+        "Profile has been changed successfully",
+        "Profile Saved!",
+      );
     } catch (error) {
       console.error("Failed to save profile image:", error);
-      showErrorPopup("Failed to save profile image. Please try again.", "Save Failed");
+      showErrorPopup(
+        "Failed to save profile image. Please try again.",
+        "Save Failed",
+      );
       // Optional: Revert profileImage state here if needed
     }
   };
@@ -469,7 +457,7 @@ export default function ProfileScreen() {
   const handleCropCancel = () => {
     setShowCropOverlay(false);
     setSelectedImageUri(null);
-    setRefreshKey((prev) => prev + 1);
+    setSelectedImageDims(null);
   };
 
   const handleMediaClick = (imageUrl: string) => {
@@ -481,7 +469,9 @@ export default function ProfileScreen() {
     setShowImageViewer(true);
   };
 
-  const ensureCameraPermission = async (message = "Camera access is needed.") => {
+  const ensureCameraPermission = async (
+    message = "Camera access is needed.",
+  ) => {
     const cameraPermission = await ImagePicker.requestCameraPermissionsAsync();
     if (!cameraPermission.granted) {
       showErrorPopup(message, "Permission Denied");
@@ -509,7 +499,7 @@ export default function ProfileScreen() {
       let result;
       if (option === "camera") {
         const cameraGranted = await ensureCameraPermission(
-          "Camera access is needed."
+          "Camera access is needed.",
         );
         if (!cameraGranted) return;
         result = await ImagePicker.launchCameraAsync({
@@ -534,13 +524,19 @@ export default function ProfileScreen() {
       }
 
       if (!result.canceled && result.assets[0]) {
-        const pickedUri = result.assets[0].uri;
+        const asset = result.assets[0];
         if (useNativeEditor) {
           // iOS: use native editor result directly to avoid custom crop overlay
           // modal interactions that can leave touches blocked after camera return.
-          await handleCropSave(pickedUri);
+          await handleCropSave(asset.uri);
         } else {
-          setSelectedImageUri(pickedUri);
+          setSelectedImageUri(asset.uri);
+          // Pass actual picker dimensions to avoid EXIF orientation issues with Image.getSize
+          if (asset.width && asset.height) {
+            setSelectedImageDims({ width: asset.width, height: asset.height });
+          } else {
+            setSelectedImageDims(null);
+          }
           setShowCropOverlay(true);
         }
       }
@@ -557,7 +553,7 @@ export default function ProfileScreen() {
       let result;
       if (option === "camera") {
         const cameraGranted = await ensureCameraPermission(
-          "Camera access is needed."
+          "Camera access is needed.",
         );
         if (!cameraGranted) return;
         result = await ImagePicker.launchCameraAsync({
@@ -597,10 +593,16 @@ export default function ProfileScreen() {
             profile_url: publicUrl,
           });
 
-          showSuccessPopup("Service provider avatar updated successfully", "Avatar Updated!");
+          showSuccessPopup(
+            "Service provider avatar updated successfully",
+            "Avatar Updated!",
+          );
         } catch (uploadError) {
           console.error("Failed to upload provider avatar:", uploadError);
-          showErrorPopup("Failed to upload avatar. Please try again.", "Upload Failed");
+          showErrorPopup(
+            "Failed to upload avatar. Please try again.",
+            "Upload Failed",
+          );
           // Revert to previous image on error
           if (serviceProvider?.profile_url) {
             setProviderImageUri(serviceProvider.profile_url);
@@ -617,8 +619,8 @@ export default function ProfileScreen() {
 
   const handleImageOption = (option: "camera" | "gallery") => {
     setPendingImageOption(option);
+    setShowMainAvatarMenu(false);
     setShowImagePicker(false);
-    pickerTranslateY.value = 0;
   };
 
   const handleProviderImageOption = (option: "camera" | "gallery") => {
@@ -627,7 +629,7 @@ export default function ProfileScreen() {
   };
 
   useEffect(() => {
-    if (showImagePicker || !pendingImageOption) return;
+    if (showImagePicker || showMainAvatarMenu || !pendingImageOption) return;
 
     let cancelled = false;
     (async () => {
@@ -641,7 +643,7 @@ export default function ProfileScreen() {
     return () => {
       cancelled = true;
     };
-  }, [showImagePicker, pendingImageOption]);
+  }, [showImagePicker, showMainAvatarMenu, pendingImageOption]);
 
   useEffect(() => {
     if (showProviderImagePicker || !pendingProviderImageOption) return;
@@ -685,12 +687,12 @@ export default function ProfileScreen() {
               Haptics.notificationAsync(NotificationFeedbackType.Success);
               showSuccessPopup(
                 `Service ${newStatus ? "activated" : "deactivated"} successfully`,
-                newStatus ? "Activated!" : "Deactivated!"
+                newStatus ? "Activated!" : "Deactivated!",
               );
             } catch (error: any) {
               showErrorPopup(
                 error.message || "Failed to update service status",
-                "Update Failed"
+                "Update Failed",
               );
             }
           },
@@ -749,7 +751,10 @@ export default function ProfileScreen() {
               Haptics.notificationAsync(NotificationFeedbackType.Success);
               showSuccessPopup("Services deleted successfully", "Removed!");
             } catch (error: any) {
-              showErrorPopup(error.message || "Failed to delete services", "Deletion Failed");
+              showErrorPopup(
+                error.message || "Failed to delete services",
+                "Deletion Failed",
+              );
             }
           },
         },
@@ -771,7 +776,10 @@ export default function ProfileScreen() {
       const galleryPermission =
         await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!galleryPermission.granted) {
-        showErrorPopup("Gallery access is needed to upload license.", "Permission Denied");
+        showErrorPopup(
+          "Gallery access is needed to upload license.",
+          "Permission Denied",
+        );
         return;
       }
 
@@ -850,11 +858,14 @@ export default function ProfileScreen() {
       Haptics.notificationAsync(NotificationFeedbackType.Success);
       showSuccessPopup(
         "License document uploaded successfully. Pending verification.",
-        "Uploaded!"
+        "Uploaded!",
       );
     } catch (uploadError) {
       console.error("Failed to upload license:", uploadError);
-      showErrorPopup("Failed to upload license. Please try again.", "Upload Failed");
+      showErrorPopup(
+        "Failed to upload license. Please try again.",
+        "Upload Failed",
+      );
     } finally {
       setUploadingLicense(false);
     }
@@ -906,12 +917,15 @@ export default function ProfileScreen() {
               setCurrentUser(updatedUser);
 
               Haptics.notificationAsync(NotificationFeedbackType.Success);
-              showSuccessPopup("Profile picture removed successfully", "Removed!");
+              showSuccessPopup(
+                "Profile picture removed successfully",
+                "Removed!",
+              );
             } catch (error) {
               console.error("Failed to remove profile picture:", error);
               showErrorPopup(
                 "Failed to remove profile picture. Please try again.",
-                "Removal Failed"
+                "Removal Failed",
               );
             }
           },
@@ -956,7 +970,10 @@ export default function ProfileScreen() {
               showSuccessPopup("Avatar removed successfully", "Removed!");
             } catch (error) {
               console.error("Failed to remove provider avatar:", error);
-              showErrorPopup("Failed to remove avatar. Please try again.", "Removal Failed");
+              showErrorPopup(
+                "Failed to remove avatar. Please try again.",
+                "Removal Failed",
+              );
             }
           },
         },
@@ -1005,7 +1022,10 @@ export default function ProfileScreen() {
               showSuccessPopup("License removed successfully", "Removed!");
             } catch (error) {
               console.error("Failed to remove license:", error);
-              showErrorPopup("Failed to remove license. Please try again.", "Removal Failed");
+              showErrorPopup(
+                "Failed to remove license. Please try again.",
+                "Removal Failed",
+              );
             }
           },
         },
@@ -1039,18 +1059,15 @@ export default function ProfileScreen() {
         <View className="h-12 bg-transparent" />
 
         {/* Header */}
-        <View className="flex-row items-center justify-between px-4 py-3 bg-transparent border-b border-gray-100">
+        <View className="flex-row items-center justify-between px-4 pb-3 bg-transparent ">
           {/* Left Icons */}
           <View className="flex-row items-center gap-2">
-            {/* Follow Requests Icon */}
             <TouchableOpacity
               onPress={handleFollowRequests}
               className="w-10 h-10 items-center justify-center"
             >
               <UserPlus size={24} strokeWidth={1.5} className="text-primary" />
             </TouchableOpacity>
-
-            {/* Manage Listings Icon */}
             <TouchableOpacity
               onPress={handleManageListings}
               className="w-10 h-10 items-center justify-center"
@@ -1059,22 +1076,10 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Settings Icon on Right */}
-          <View className="flex-row items-center">
+          {/* Main/Work Tabs — center of topbar */}
+          <View className="flex-row gap-2">
             <TouchableOpacity
-              onPress={handleSettings}
-              className="w-10 h-10 items-center justify-center"
-            >
-              <Settings size={24} strokeWidth={1.5} className="text-gray-700" />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Main/Work Tabs - Floating Bubbles */}
-        <View className="bg-transparent px-4 py-2">
-          <View className="flex-row gap-2 justify-center">
-            <TouchableOpacity
-              className={`px-8 py-1.5 items-center rounded-full ${mainTab === "main" ? "bg-primary" : "bg-gray-100"}`}
+              className={`px-6 py-1.5 items-center rounded-full ${mainTab === "main" ? "bg-primary" : "bg-gray-100"}`}
               onPress={() => handleMainTabChange("main")}
             >
               <Text
@@ -1084,7 +1089,7 @@ export default function ProfileScreen() {
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
-              className={`px-8 py-1.5 items-center rounded-full ${mainTab === "work" ? "bg-primary" : "bg-gray-100"}`}
+              className={`px-6 py-1.5 items-center rounded-full ${mainTab === "work" ? "bg-primary" : "bg-gray-100"}`}
               onPress={() => handleMainTabChange("work")}
             >
               <Text
@@ -1094,11 +1099,19 @@ export default function ProfileScreen() {
               </Text>
             </TouchableOpacity>
           </View>
+
+          {/* Settings Icon on Right */}
+          <TouchableOpacity
+            onPress={handleSettings}
+            className="w-10 h-10 items-center justify-center"
+          >
+            <Settings size={24} strokeWidth={1.5} className="text-gray-700" />
+          </TouchableOpacity>
         </View>
       </View>
 
       {/* Content with Top Padding for Fixed Header */}
-      <View style={{ paddingTop: 120 }} className="flex-1">
+      <View style={{ paddingTop: 84 }} className="flex-1">
         {/* Horizontal Scrollable Content */}
         <ScrollView
           ref={horizontalScrollRef}
@@ -1112,7 +1125,7 @@ export default function ProfileScreen() {
           className="flex-1"
         >
           {/* Main Profile Page */}
-          <View style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT - 120 }}>
+          <View style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT - 84 }}>
             <ScrollView
               style={{ flex: 1 }}
               showsVerticalScrollIndicator={false}
@@ -1165,57 +1178,58 @@ export default function ProfileScreen() {
 
                   {/* Stats row + Badge */}
                   <View className="flex-1 ml-4">
-                  <View className="flex-row items-center justify-around">
-                    <View className="items-center">
-                      <Text className="text-lg font-mbold text-gray-900">
-                        {userPosts.length}
-                      </Text>
-                      <Text className="text-xs font-regular text-gray-500">
-                        Posts
-                      </Text>
+                    <View className="flex-row items-center justify-around">
+                      <View className="items-center">
+                        <Text className="text-lg font-mbold text-gray-900">
+                          {userPosts.length}
+                        </Text>
+                        <Text className="text-xs font-regular text-gray-500">
+                          Posts
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        className="items-center"
+                        onPress={() => {
+                          setFollowRequestsTab("followers");
+                          setShowFollowRequests(true);
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <Text className="text-lg font-mbold text-gray-900">
+                          {followerCount}
+                        </Text>
+                        <Text className="text-xs font-regular text-gray-500">
+                          Followers
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        className="items-center"
+                        onPress={() => {
+                          setFollowRequestsTab("following");
+                          setShowFollowRequests(true);
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <Text className="text-lg font-mbold text-gray-900">
+                          {followingCount}
+                        </Text>
+                        <Text className="text-xs font-regular text-gray-500">
+                          Following
+                        </Text>
+                      </TouchableOpacity>
                     </View>
-                    <TouchableOpacity
-                      className="items-center"
-                      onPress={() => {
-                        setFollowRequestsTab("followers");
-                        setShowFollowRequests(true);
-                      }}
-                      activeOpacity={0.8}
-                    >
-                      <Text className="text-lg font-mbold text-gray-900">
-                        {followerCount}
-                      </Text>
-                      <Text className="text-xs font-regular text-gray-500">
-                        Followers
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      className="items-center"
-                      onPress={() => {
-                        setFollowRequestsTab("following");
-                        setShowFollowRequests(true);
-                      }}
-                      activeOpacity={0.8}
-                    >
-                      <Text className="text-lg font-mbold text-gray-900">
-                        {followingCount}
-                      </Text>
-                      <Text className="text-xs font-regular text-gray-500">
-                        Following
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                  {badgeType && (
-                    <TouchableOpacity
-                      style={{ marginTop: 10 }}
-                      onPress={() => {
-                        setSettingsInitialModal("appearance");
-                        setShowSettings(true);
-                      }}
-                    >
-                      <EarlyAccessBadge badgeType={badgeType} size="sm" />
-                    </TouchableOpacity>
-                  )}
+                    {badgeType && (
+                      <TouchableOpacity
+                        style={{ marginTop: 10 }}
+                        onPress={() => {
+                          if (showSettings) return;
+                          setSettingsInitialModal("appearance");
+                          setShowSettings(true);
+                        }}
+                      >
+                        <EarlyAccessBadge badgeType={badgeType} size="sm" />
+                      </TouchableOpacity>
+                    )}
                   </View>
                 </View>
 
@@ -1227,7 +1241,9 @@ export default function ProfileScreen() {
                   {verificationStatus === "verified" && (
                     <View className="flex-row items-center bg-blue-50 border border-[#094569] rounded-full px-2 py-0.5 gap-1">
                       <Verified size={11} color="#094569" />
-                      <Text className="text-[10px] font-msemibold text-[#094569] leading-none">Verified</Text>
+                      <Text className="text-[10px] font-msemibold text-[#094569] leading-none">
+                        Verified
+                      </Text>
                     </View>
                   )}
                 </View>
@@ -1240,7 +1256,11 @@ export default function ProfileScreen() {
                 {/* Action Buttons */}
                 <View className="flex-row gap-2 mt-2">
                   <TouchableOpacity
-                    onPress={() => { setSettingsInitialModal('editProfile'); setShowSettings(true); }}
+                    onPress={() => {
+                      if (showSettings) return;
+                      setSettingsInitialModal("editProfile");
+                      setShowSettings(true);
+                    }}
                     className="flex-1 py-[9px] rounded-lg flex-row items-center justify-center bg-gray-100 border border-gray-300"
                   >
                     <Text className="text-sm font-semibold text-gray-800">
@@ -1384,13 +1404,21 @@ export default function ProfileScreen() {
                               {/* Stacked icon for multi-image posts */}
                               {thumb.mediaCount > 1 && (
                                 <View className="absolute top-1.5 right-1.5">
-                                  <Copy size={14} color="#fff" strokeWidth={2} />
+                                  <Copy
+                                    size={14}
+                                    color="#fff"
+                                    strokeWidth={2}
+                                  />
                                 </View>
                               )}
                               {/* Video indicator */}
                               {thumb.isVideo && thumb.mediaCount <= 1 && (
                                 <View className="absolute top-1.5 right-1.5">
-                                  <Play size={14} color="#fff" strokeWidth={1.5} />
+                                  <Play
+                                    size={14}
+                                    color="#fff"
+                                    strokeWidth={1.5}
+                                  />
                                 </View>
                               )}
                             </TouchableOpacity>
@@ -1409,10 +1437,14 @@ export default function ProfileScreen() {
                           Your posts and media will show up here
                         </Text>
                         <TouchableOpacity
-                          onPress={() => router.push("/(users)/(tabs)/feed" as any)}
+                          onPress={() =>
+                            router.push("/(users)/(tabs)/feed" as any)
+                          }
                           className="mt-4 bg-primary px-5 py-2.5 rounded-full"
                         >
-                          <Text className="text-white text-sm font-semibold">Create a Post</Text>
+                          <Text className="text-white text-sm font-semibold">
+                            Create a Post
+                          </Text>
                         </TouchableOpacity>
                       </View>
                     )}
@@ -1446,7 +1478,11 @@ export default function ProfileScreen() {
                               />
                             ) : (
                               <View className="w-full h-40 bg-gray-100 items-center justify-center">
-                                <ShoppingBag size={32} strokeWidth={1.5} className="text-gray-300" />
+                                <ShoppingBag
+                                  size={32}
+                                  strokeWidth={1.5}
+                                  className="text-gray-300"
+                                />
                               </View>
                             )}
                             <View className="p-3">
@@ -1472,7 +1508,11 @@ export default function ProfileScreen() {
                     ) : (
                       <View className="w-full py-16 items-center px-6">
                         <View className="w-14 h-14 rounded-full bg-emerald-50 items-center justify-center mb-3">
-                          <ShoppingBag size={26} strokeWidth={1.5} color="#059669" />
+                          <ShoppingBag
+                            size={26}
+                            strokeWidth={1.5}
+                            color="#059669"
+                          />
                         </View>
                         <Text className="text-sm font-semibold text-gray-700">
                           Start selling on Namzoed
@@ -1481,10 +1521,14 @@ export default function ProfileScreen() {
                           List your first product and reach buyers nearby
                         </Text>
                         <TouchableOpacity
-                          onPress={() => router.push("/(users)/(tabs)/categories" as any)}
+                          onPress={() =>
+                            router.push("/(users)/(tabs)/categories" as any)
+                          }
                           className="mt-4 bg-emerald-600 px-5 py-2.5 rounded-full"
                         >
-                          <Text className="text-white text-sm font-semibold">List a Product</Text>
+                          <Text className="text-white text-sm font-semibold">
+                            List a Product
+                          </Text>
                         </TouchableOpacity>
                       </View>
                     )}
@@ -1497,7 +1541,11 @@ export default function ProfileScreen() {
                       providerServices.map((service) => (
                         <View key={service.id} className="w-[50%] p-2">
                           <TouchableOpacity
-                            onPress={() => router.push(`/(users)/servicedetail/${service.id}` as any)}
+                            onPress={() =>
+                              router.push(
+                                `/(users)/servicedetail/${service.id}` as any,
+                              )
+                            }
                             className="bg-transparent rounded-xl overflow-hidden border border-gray-100"
                           >
                             {service.images && service.images.length > 0 ? (
@@ -1508,15 +1556,25 @@ export default function ProfileScreen() {
                               />
                             ) : (
                               <View className="w-full h-40 bg-gray-100 items-center justify-center">
-                                <Wrench size={32} strokeWidth={1.5} color="#9CA3AF" />
+                                <Wrench
+                                  size={32}
+                                  strokeWidth={1.5}
+                                  color="#9CA3AF"
+                                />
                               </View>
                             )}
                             <View className="p-3">
-                              <Text className="text-sm font-msemibold text-gray-900" numberOfLines={2}>
+                              <Text
+                                className="text-sm font-msemibold text-gray-900"
+                                numberOfLines={2}
+                              >
                                 {service.name}
                               </Text>
                               {service.service_categories?.name && (
-                                <Text className="text-xs font-regular text-gray-500 mt-1" numberOfLines={1}>
+                                <Text
+                                  className="text-xs font-regular text-gray-500 mt-1"
+                                  numberOfLines={1}
+                                >
                                   {service.service_categories.name}
                                 </Text>
                               )}
@@ -1544,7 +1602,7 @@ export default function ProfileScreen() {
           </View>
 
           {/* Work Profile Page (Service Provider) */}
-          <View style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT - 120 }}>
+          <View style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT - 84 }}>
             <ScrollView
               style={{ flex: 1 }}
               showsVerticalScrollIndicator={false}
@@ -1572,7 +1630,8 @@ export default function ProfileScreen() {
                 isServiceSelectionMode={isServiceSelectionMode}
                 selectedServiceIds={selectedServiceIds}
                 onEditWork={() => {
-                  setSettingsInitialModal('editWorkProfile');
+                  if (showSettings) return;
+                  setSettingsInitialModal("editWorkProfile");
                   setShowSettings(true);
                 }}
                 onShowProviderAvatarMenu={() => {
@@ -1629,205 +1688,85 @@ export default function ProfileScreen() {
                   </View>
                 </Animated.View>
               )}
-
             </ScrollView>
           </View>
         </ScrollView>
       </View>
 
       {/* ------------------------------------------------------ */}
-      {/* SMOOTH IMAGE PICKER MODAL */}
-      {/* ------------------------------------------------------ */}
-      {showImagePicker && (
-        <Modal
-          transparent
-          statusBarTranslucent
-          animationType="none"
-          visible={showImagePicker}
-          onRequestClose={() => setShowImagePicker(false)}
-        >
-          <View className="flex-1 justify-end">
-            <Animated.View
-              entering={FadeIn}
-              exiting={FadeOut}
-              style={[
-                {
-                  position: "absolute",
-                  top: 0,
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  backgroundColor: "rgba(0,0,0,0.5)",
-                },
-                rPickerBackdrop,
-              ]}
-            >
-              <TouchableOpacity
-                style={{ flex: 1 }}
-                activeOpacity={1}
-                onPress={() => setShowImagePicker(false)}
-              />
-            </Animated.View>
-
-            <Animated.View
-              entering={SlideInDown.springify()}
-              exiting={SlideOutDown}
-              style={[
-                {
-                  backgroundColor: "white",
-                  borderTopLeftRadius: 24,
-                  borderTopRightRadius: 24,
-                },
-                rPickerStyle,
-              ]}
-            >
-              {/* --- DRAG HANDLE START --- */}
-              <GestureDetector gesture={pickerGesture}>
-                <View className="w-full items-center pt-5 pb-4 bg-white rounded-t-3xl">
-                  <View className="w-12 h-1.5 bg-gray-300 rounded-full" />
-                </View>
-              </GestureDetector>
-              {/* --- DRAG HANDLE END --- */}
-
-              <View className="px-6 pb-6">
-                <Text className="text-xl font-mbold text-gray-900 mb-6 text-center">
-                  Change Profile Picture
-                </Text>
-
-                <TouchableOpacity
-                  onPress={() => handleImageOption("camera")}
-                  className="flex-row items-center bg-gray-50 rounded-xl px-4 py-4 mb-3"
-                >
-                  <Camera size={24} className="text-gray-700 mr-4" />
-                  <View>
-                    <Text className="text-base font-msemibold text-gray-900">
-                      Take Photo
-                    </Text>
-                    <Text className="text-sm font-regular text-gray-500">
-                      Use camera to take a new photo
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={() => handleImageOption("gallery")}
-                  className="flex-row items-center bg-gray-50 rounded-xl px-4 py-4 mb-6"
-                >
-                  <ImageIcon size={24} className="text-gray-700 mr-4" />
-                  <View>
-                    <Text className="text-base font-msemibold text-gray-900">
-                      Choose from Gallery
-                    </Text>
-                    <Text className="text-sm font-regular text-gray-500">
-                      Select from your photo library
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  className="bg-gray-100 rounded-xl py-4 items-center"
-                  onPress={() => {
-                    pickerTranslateY.value = withTiming(1000, {}, () => {
-                      runOnJS(setShowImagePicker)(false);
-                      runOnJS(setRefreshKey)((prev: number) => prev + 1);
-                    });
-                  }}
-                >
-                  <Text className="text-gray-600 font-msemibold">Cancel</Text>
-                </TouchableOpacity>
-              </View>
-            </Animated.View>
-          </View>
-        </Modal>
-      )}
-
-      {/* ------------------------------------------------------ */}
-      {/* MAIN PROFILE AVATAR ACTION MENU MODAL */}
+      {/* MAIN PROFILE AVATAR ACTION MENU MODAL (merged) */}
       {/* ------------------------------------------------------ */}
       {showMainAvatarMenu && (
         <Modal
           transparent
           statusBarTranslucent
-          animationType="none"
+          animationType="fade"
           visible={showMainAvatarMenu}
           onRequestClose={() => setShowMainAvatarMenu(false)}
         >
-          <View className="flex-1 justify-end">
-            <Animated.View entering={FadeIn} exiting={FadeOut}>
-              <TouchableOpacity
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  backgroundColor: "rgba(0,0,0,0.5)",
-                }}
-                activeOpacity={1}
-                onPress={() => setShowMainAvatarMenu(false)}
-              />
-            </Animated.View>
-
-            <Animated.View
-              entering={SlideInDown.springify()}
-              exiting={SlideOutDown}
+          <Pressable
+            style={{
+              flex: 1,
+              backgroundColor: "rgba(0,0,0,0.45)",
+              justifyContent: "flex-end",
+            }}
+            onPress={() => setShowMainAvatarMenu(false)}
+          >
+            <Pressable
+              onPress={(e) => e.stopPropagation()}
               style={{
                 backgroundColor: "white",
-                borderTopLeftRadius: 24,
-                borderTopRightRadius: 24,
+                borderRadius: 24,
+                marginHorizontal: 12,
+                marginBottom: 12 + insets.bottom,
               }}
             >
-              <View className="w-full items-center pt-5 pb-4 bg-white rounded-t-3xl">
-                <View className="w-12 h-1.5 bg-gray-300 rounded-full" />
-              </View>
+              <View className="px-4 pt-4 pb-4">
+                <View className="flex-row gap-x-3 mb-3">
+                  <TouchableOpacity
+                    onPress={() => handleImageOption("camera")}
+                    className="flex-1 items-center bg-gray-50 rounded-xl py-2"
+                  >
+                    <Camera size={18} color="#374151" />
+                    <Text className="text-[10px] font-msemibold text-gray-900 mt-1">
+                      Take Photo
+                    </Text>
+                  </TouchableOpacity>
 
-              <View className="px-6 pb-6">
-                <Text className="text-xl font-mbold text-gray-900 mb-6 text-center">
-                  Profile Picture Options
-                </Text>
+                  <TouchableOpacity
+                    onPress={() => handleImageOption("gallery")}
+                    className="flex-1 items-center bg-gray-50 rounded-xl py-2"
+                  >
+                    <ImageIcon size={18} color="#374151" />
+                    <Text className="text-[10px] font-msemibold text-gray-900 mt-1">
+                      Choose Gallery
+                    </Text>
+                  </TouchableOpacity>
 
-                <TouchableOpacity
-                  onPress={() => {
-                    setShowMainAvatarMenu(false);
-                    setTimeout(() => handleEditProfile(), 300);
-                  }}
-                  className="flex-row items-center bg-gray-50 rounded-xl px-4 py-4 mb-3"
-                >
-                  <Camera size={24} className="text-gray-700 mr-4" />
-                  <View>
-                    <Text className="text-base font-msemibold text-gray-900">
-                      Change Photo
-                    </Text>
-                    <Text className="text-sm font-regular text-gray-500">
-                      Take a new photo or choose from gallery
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={handleRemoveMainAvatar}
-                  className="flex-row items-center bg-red-50 rounded-xl px-4 py-4 mb-6"
-                >
-                  <Trash2 size={24} className="text-red-600 mr-4" />
-                  <View>
-                    <Text className="text-base font-msemibold text-red-600">
-                      Remove Photo
-                    </Text>
-                    <Text className="text-sm font-regular text-red-400">
-                      Delete your profile picture
-                    </Text>
-                  </View>
-                </TouchableOpacity>
+                  {profileImage && (
+                    <TouchableOpacity
+                      onPress={handleRemoveMainAvatar}
+                      className="flex-1 items-center bg-red-50 rounded-xl py-2"
+                    >
+                      <Trash2 size={18} color="#dc2626" />
+                      <Text className="text-[10px] font-msemibold text-red-600 mt-1">
+                        Remove
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
 
                 <TouchableOpacity
-                  className="bg-gray-100 rounded-xl py-4 items-center"
+                  className="bg-gray-100 rounded-2xl py-3 items-center"
                   onPress={() => setShowMainAvatarMenu(false)}
                 >
-                  <Text className="text-gray-600 font-msemibold">Cancel</Text>
+                  <Text className="text-gray-500 font-msemibold text-sm">
+                    Cancel
+                  </Text>
                 </TouchableOpacity>
               </View>
-            </Animated.View>
-          </View>
+            </Pressable>
+          </Pressable>
         </Modal>
       )}
 
@@ -2013,20 +1952,16 @@ export default function ProfileScreen() {
           statusBarTranslucent
           animationType="none"
           visible={showSettings}
-          onRequestClose={() => setShowSettings(false)}
+          onRequestClose={() => {
+            /* handled inside ProfileSettings */
+          }}
         >
-          <Animated.View
-            entering={SlideInDown.springify()}
-            exiting={SlideOutDown}
-            style={{
-              height: "100%",
-              borderTopLeftRadius: 24,
-              borderTopRightRadius: 24,
-              overflow: "hidden",
-            }}
-          >
+          <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.35)" }}>
             <ProfileSettings
-              onClose={() => { setShowSettings(false); setSettingsInitialModal(undefined); }}
+              onClose={() => {
+                setShowSettings(false);
+                setSettingsInitialModal(undefined);
+              }}
               currentUser={currentUser}
               initialModal={settingsInitialModal}
               onLogout={async () => {
@@ -2036,7 +1971,7 @@ export default function ProfileScreen() {
                 router.replace("/login");
               }}
             />
-          </Animated.View>
+          </View>
         </Modal>
       )}
 
@@ -2054,12 +1989,7 @@ export default function ProfileScreen() {
           <Animated.View
             entering={SlideInDown.springify()}
             exiting={SlideOutDown}
-            style={{
-              height: "100%",
-              borderTopLeftRadius: 24,
-              borderTopRightRadius: 24,
-              overflow: "hidden",
-            }}
+            style={{ flex: 1 }}
           >
             <FollowRequestsOverlay
               onClose={() => {
@@ -2088,12 +2018,7 @@ export default function ProfileScreen() {
           <Animated.View
             entering={SlideInDown.springify()}
             exiting={SlideOutDown}
-            style={{
-              height: "100%",
-              borderTopLeftRadius: 24,
-              borderTopRightRadius: 24,
-              overflow: "hidden",
-            }}
+            style={{ flex: 1 }}
           >
             <FollowRequests
               onClose={() => {
@@ -2145,6 +2070,8 @@ export default function ProfileScreen() {
         >
           <ImageCropOverlay
             imageUri={selectedImageUri}
+            imageWidth={selectedImageDims?.width}
+            imageHeight={selectedImageDims?.height}
             onSave={handleCropSave}
             onCancel={handleCropCancel}
           />
@@ -2158,7 +2085,6 @@ export default function ProfileScreen() {
           initialIndex={selectedMediaIndex}
           onClose={() => {
             setShowImageViewer(false);
-            setRefreshKey((prev) => prev + 1);
           }}
           postContent={selectedPost.content}
           username={currentUser?.name || "User"}
@@ -2176,7 +2102,6 @@ export default function ProfileScreen() {
           imageUri={profileImage}
           onClose={() => {
             setShowProfileImageViewer(false);
-            setRefreshKey((prev) => prev + 1);
           }}
         />
       )}

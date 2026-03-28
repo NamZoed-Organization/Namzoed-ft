@@ -15,7 +15,6 @@ import { Check, Trash2, Upload, X } from "lucide-react-native";
 import React, { useState } from "react";
 import {
     ActivityIndicator,
-    Alert,
     Image,
     KeyboardAvoidingView,
     Modal,
@@ -89,6 +88,7 @@ export default function EditServicesModal({
     [],
   );
   const [isImageSelectionMode, setIsImageSelectionMode] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // Image picker and crop states
   const [showPickerSheet, setShowPickerSheet] = useState(false);
@@ -188,25 +188,17 @@ export default function EditServicesModal({
   };
 
   const handleDeleteSelectedImages = () => {
-    Alert.alert(
-      "Delete Images",
-      `Remove ${selectedImageIndices.length} image(s)?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: () => {
-            setExistingImages((prev) =>
-              prev.filter((_, i) => !selectedImageIndices.includes(i)),
-            );
-            setIsImageSelectionMode(false);
-            setSelectedImageIndices([]);
-            Haptics.notificationAsync(NotificationFeedbackType.Success);
-          },
-        },
-      ],
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDeleteSelectedImages = () => {
+    setExistingImages((prev) =>
+      prev.filter((_, i) => !selectedImageIndices.includes(i)),
     );
+    setIsImageSelectionMode(false);
+    setSelectedImageIndices([]);
+    setShowDeleteConfirm(false);
+    Haptics.notificationAsync(NotificationFeedbackType.Success);
   };
 
   const handleCancelImageSelection = () => {
@@ -513,6 +505,40 @@ export default function EditServicesModal({
           message={popupMessage}
         />
         <PopupMessage visible={showError} type="error" message={popupMessage} />
+
+        <Modal
+          transparent
+          visible={showDeleteConfirm}
+          animationType="fade"
+          onRequestClose={() => setShowDeleteConfirm(false)}
+        >
+          <View className="flex-1 bg-black/50 items-center justify-center px-6">
+            <View className="w-full max-w-sm bg-white rounded-3xl p-6">
+              <Text className="text-xl font-mbold text-gray-900 mb-2">
+                Delete Images
+              </Text>
+              <Text className="text-sm text-gray-500 mb-6">
+                Remove {selectedImageIndices.length} selected image
+                {selectedImageIndices.length === 1 ? "" : "s"} from this service?
+              </Text>
+
+              <View className="flex-row gap-3">
+                <TouchableOpacity
+                  onPress={() => setShowDeleteConfirm(false)}
+                  className="flex-1 bg-gray-100 rounded-2xl py-3 items-center"
+                >
+                  <Text className="text-gray-700 font-msemibold">Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={confirmDeleteSelectedImages}
+                  className="flex-1 bg-red-500 rounded-2xl py-3 items-center"
+                >
+                  <Text className="text-white font-msemibold">Delete</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
 
         {/* Image Picker Sheet */}
         <ImagePickerSheet

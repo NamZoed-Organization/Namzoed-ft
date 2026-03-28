@@ -24,7 +24,37 @@
       "Bash(grep -E \"\\\\.\\(sql|ts|tsx\\)$\")",
       "Bash(grep -l \"LiveSessionProvider\\\\|useLiveSession\" \"c:\\\\Users\\\\sonam\\\\Desktop\\\\namzoed\\\\Namzoed-ft/contexts\"/*.tsx)",
       "Read(//c/Users/sonam/Desktop/namzoed/**)",
-      "Bash(keytool -list -v -keystore \"C:/Users/sonam/Desktop/namzoed/build khatara/android/app/release.keystore\" -alias my-key-alias)"
+      "Bash(keytool -list -v -keystore \"C:/Users/sonam/Desktop/namzoed/build khatara/android/app/release.keystore\" -alias my-key-alias)",
+      "Bash(find /c/Users/sonam/Desktop/namzoed/Namzoed-ft/app /c/Users/sonam/Desktop/namzoed/Namzoed-ft/components -name *live* -o -name *Live*)",
+      "Bash(find /c/Users/sonam/Desktop/namzoed/Namzoed-ft -name useLivestreams* -o -name livestreamService*)",
+      "Bash(xargs grep:*)",
+      "Bash(grep -v \"//.*use[A-Z]\")",
+      "Read(//c/Users/sonam/Desktop/namzoed/Namzoed-ft/**)",
+      "Bash(grep -rn \"InCallManager\\\\|setAudioMode\\\\|setAudioRoute\\\\|start\\(\\)\" /c/Users/sonam/Desktop/namzoed/Namzoed-ft --include=*.tsx --include=*.ts)",
+      "Bash(ls -la /c/Users/sonam/Desktop/namzoed/Namzoed-ft/app/\"\\(users\\)\"/)",
+      "Bash(find /c/Users/sonam/Desktop/namzoed/Namzoed-ft/app/\"\\(users\\)\" -type f \\\\\\( -name \"*.tsx\" -o -name \"*.ts\" -o -name \"*.jsx\" -o -name \"*.js\" \\\\\\))",
+      "Bash(ls -la /c/Users/sonam/Desktop/namzoed/Namzoed-ft/app/\"\\(users\\)\"/profile/)",
+      "Read(//c/Users/sonam/AppData/Local/Temp/claude/c--Users-sonam-Desktop-namzoed-Namzoed-ft/6aca4776-fecd-4fd1-bf98-6e70f734068b/tasks/**)",
+      "Bash(grep -r \"deleteProviderService\\\\|deletePost\\\\|deleteProduct\\\\|deleteMarketplace\" /c/Users/sonam/Desktop/namzoed/Namzoed-ft/lib --include=*.ts --include=*.tsx)",
+      "Bash(head -50 \"c:/Users/sonam/Desktop/namzoed/Namzoed-ft/app/\\(users\\)/profile/index.tsx\")",
+      "Bash(ls -la \"/c/Users/sonam/Desktop/namzoed/Namzoed-ft/app/\\(users\\)/\")",
+      "Bash(ls -la \"/c/Users/sonam/Desktop/namzoed/Namzoed-ft/app/\\(users\\)/\\(tabs\\)/\")",
+      "Bash(find /c/Users/sonam/Desktop/namzoed/Namzoed-ft/components -type f -name *NavBar* -o -name *Navbar* -o -name *topnav*)",
+      "Bash(find /c/Users/sonam/Desktop/namzoed/Namzoed-ft -type f \\\\\\(-name app.json -o -name expo.config.* -o -name *routing* -o -name *navigation* \\\\\\))",
+      "Bash(find /c/Users/sonam/Desktop/namzoed/Namzoed-ft -type f -name *feedEvents* -o -name *linking*)",
+      "Bash(grep -rn \"useLinking\\\\|linking\\\\|deeplink\" /c/Users/sonam/Desktop/namzoed/Namzoed-ft/app --include=*.ts --include=*.tsx)",
+      "Bash(find /c/Users/sonam/Desktop/namzoed/Namzoed-ft/contexts -type f -name *.ts -o -name *.tsx)",
+      "Bash(npx tsc:*)",
+      "Read(//c/Users/sonam/AppData/Local/Temp/claude/c--Users-sonam-Desktop-namzoed-Namzoed-ft/33b2bbb3-c47f-45dd-8534-a9b25bbcd076/tasks/**)",
+      "Bash(ls \"c:/Users/sonam/Desktop/namzoed/Namzoed-ft/app/\\(users\\)/product/\")",
+      "Bash(ls \"c:/Users/sonam/Desktop/namzoed/Namzoed-ft/app/\\(users\\)/servicedetail/\" \"c:/Users/sonam/Desktop/namzoed/Namzoed-ft/app/\\(users\\)/marketplace/\")",
+      "Bash(grep -rn \"LiveWrapper\\\\|onMinimize\" /c/Users/sonam/Desktop/namzoed/Namzoed-ft --include=\"*.tsx\" --include=\"*.ts\" ! -path \"*/node_modules/*\" ! -path \"*/.expo/*\")",
+      "Bash(ls \"c:/Users/sonam/Desktop/namzoed/Namzoed-ft/app/\\(users\\)/services/\")",
+      "Bash(ls \"c:/Users/sonam/Desktop/namzoed/Namzoed-ft/app/\\(users\\)/services/room-booking/\")",
+      "Bash(ls \"c:/Users/sonam/Desktop/namzoed/Namzoed-ft/app/\\(users\\)/services/ground-bookings/\")"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\sonam\\Desktop\\namzoed\\Namzoed-ft\\app\\(users)"
     ]
   }
 }

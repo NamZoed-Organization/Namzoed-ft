@@ -2,12 +2,13 @@
 import ProductGrid from "@/components/ProductGrid";
 import SearchBar from "@/components/modals/SearchBar";
 import TopNavbar from "@/components/ui/TopNavbar";
-import { categories as categoryData, SubCategory } from "@/data/categories";
+import { categories as categoryData, categoryNames, SubCategory } from "@/data/categories";
 import {
   fetchProductsByCategory,
   ProductWithUser,
 } from "@/lib/productsService";
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useAppRouter } from "@/utils/navigation";
+import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import { ArrowUpDown, ChevronLeft } from "lucide-react-native";
 import React, {
   useCallback,
@@ -27,7 +28,7 @@ import {
 } from "react-native";
 
 export default function CategoryDetailScreen() {
-  const router = useRouter();
+  const router = useAppRouter();
   const { slug, filter } = useLocalSearchParams<{
     slug: string;
     filter?: string;
@@ -50,12 +51,14 @@ export default function CategoryDetailScreen() {
 
   // Category taglines
   const categoryTaglines: Record<string, string> = {
-    fashion: "Dress to impress. Style that speaks.",
+    "fashion-and-jewelry": "Dress to impress. Style that speaks.",
     food: "Fresh flavors, local taste. Eat well, live well.",
     beauty: "Glow different. Be unapologetically you.",
     "kids-and-toys": "Play, learn, grow. Joy in every moment.",
     electronics: "Smart tech for smarter lives.",
     "home-and-living": "Make your space truly yours.",
+    "real-estate-and-properties": "Find your perfect space.",
+    "gifts-books-flowers-and-arts": "Share joy, express creativity.",
   };
   const tagline =
     categoryTaglines[categoryKey] || "Discover something amazing.";
@@ -230,7 +233,7 @@ export default function CategoryDetailScreen() {
           {/* Category Header */}
           <View className="mb-4">
             <Text className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-1">
-              {categoryKey.replace(/-/g, " ")}
+              {categoryNames[categoryKey] || categoryKey.replace(/-/g, " ")}
             </Text>
             <Text className="text-xl font-bold text-gray-900">{tagline}</Text>
           </View>

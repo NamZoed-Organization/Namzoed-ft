@@ -28,7 +28,7 @@ import {
   Video,
   X,
 } from "lucide-react-native";
-import { useRouter } from "expo-router";
+import { useAppRouter } from "@/utils/navigation";
 import { useUser } from "@/contexts/UserContext";
 import * as ImagePicker from "expo-image-picker";
 import { createPost, uploadImages, uploadVideos } from "@/lib/postsService";
@@ -50,7 +50,7 @@ interface CreatePostProps {
 }
 
 export default function CreatePost({ onClose }: CreatePostProps) {
-  const router = useRouter();
+  const router = useAppRouter();
   const { currentUser } = useUser();
   const [postText, setPostText] = useState("");
   const [postMedia, setPostMedia] = useState<MediaItem[]>([]);

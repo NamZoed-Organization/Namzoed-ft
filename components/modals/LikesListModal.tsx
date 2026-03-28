@@ -1,7 +1,7 @@
 import { useUser } from '@/contexts/UserContext';
 import { isFollowing } from '@/lib/followService';
 import { getPostLikes } from '@/lib/likesService';
-import { useRouter } from 'expo-router';
+import { useAppRouter } from '@/utils/navigation';
 import { X } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
@@ -33,7 +33,7 @@ export default function LikesListModal({
   postId,
 }: LikesListModalProps) {
   const { currentUser } = useUser();
-  const router = useRouter();
+  const router = useAppRouter();
   const [users, setUsers] = useState<LikeUser[]>([]);
   const [loading, setLoading] = useState(true);
 

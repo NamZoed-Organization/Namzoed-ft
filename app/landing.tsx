@@ -1,11 +1,11 @@
 // app/landing.tsx
 // animation here
-import { useRouter } from 'expo-router';
+import { useAppRouter } from '@/utils/navigation';
 import { useEffect } from 'react';
 import { Image, StyleSheet, View } from 'react-native';
 
 export default function Landing() {
-  const router = useRouter();
+  const router = useAppRouter();
 
   useEffect(() => {
     const timeout = setTimeout(() => {

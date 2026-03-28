@@ -7,7 +7,7 @@ import { hasUserBookmarkedPost, togglePostBookmark } from "@/lib/bookmarkService
 import { getPostLikeCount, hasUserLikedPost, togglePostLike } from "@/lib/likesService";
 import { deletePost } from "@/lib/postsService";
 import { feedEvents } from "@/utils/feedEvents";
-import { useRouter } from "expo-router";
+import { useAppRouter } from "@/utils/navigation";
 import { VideoView, useVideoPlayer } from "expo-video";
 import { Bookmark, Heart, MessageCircle, MoreHorizontal, X } from "lucide-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -226,7 +226,7 @@ export default function ImageViewer({
   const [showReportModal, setShowReportModal] = useState(false);
   const { currentUser } = useUser();
   const insets = useSafeAreaInsets();
-  const router = useRouter();
+  const router = useAppRouter();
 
   const [carouselScrollEnabled, setCarouselScrollEnabled] = useState(true);
 

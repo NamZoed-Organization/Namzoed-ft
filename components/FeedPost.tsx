@@ -24,7 +24,7 @@ import { playSound } from "@/lib/soundUtils";
 import { PostData } from "@/types/post";
 import { feedEvents } from "@/utils/feedEvents";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
+import { useAppRouter } from "@/utils/navigation";
 import { useVideoPlayer, VideoView } from "expo-video";
 import {
     Bookmark,
@@ -660,7 +660,7 @@ export default function FeedPost({ post, isVisible = true }: FeedPostProps) {
   const hasTaggedAccounts = (post.tagged_accounts?.length ?? 0) > 0;
   const hasTaggedItems = hasTaggedProducts || hasTaggedAccounts;
   const { currentUser } = useUser();
-  const router = useRouter();
+  const router = useAppRouter();
 
   const isOwnPost = currentUser?.id === post.userId;
   const { getLivestreamForUser } = useLivestreams();

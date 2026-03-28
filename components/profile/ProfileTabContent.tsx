@@ -12,7 +12,7 @@ import {
   View,
 } from "react-native";
 import { Product } from "@/lib/productsService";
-import { useRouter } from "expo-router";
+import { useAppRouter } from "@/utils/navigation";
 
 interface ProfileTabContentProps {
   activeTab: "images" | "products" | "services";
@@ -35,7 +35,7 @@ export default function ProfileTabContent({
   loadingProducts,
   userProducts,
 }: ProfileTabContentProps) {
-  const router = useRouter();
+  const router = useAppRouter();
 
   if (activeTab === "images") {
     return (

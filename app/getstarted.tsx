@@ -1,4 +1,4 @@
-import { useRouter } from "expo-router";
+import { useAppRouter } from "@/utils/navigation";
 import React, { useRef, useState } from "react";
 import { clamp, useResponsive } from "@/utils/responsive";
 import {
@@ -41,7 +41,7 @@ export default function GetStarted() {
   const scrollX = useRef(new Animated.Value(0)).current;
   const animatedIndex = useRef(new Animated.Value(0)).current;
   const flatListRef = useRef<Animated.FlatList<any>>(null);
-  const router = useRouter();
+  const router = useAppRouter();
   const headerPaddingX = clamp(wp(6), 16, 28);
   const headerTop = clamp(hp(8), 52, 96);
   const headerBottom = clamp(vs(16), 10, 20);

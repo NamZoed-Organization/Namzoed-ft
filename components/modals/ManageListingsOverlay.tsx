@@ -3,15 +3,16 @@ import EditMarketplaceModal from "@/components/modals/EditMarketplaceModal";
 import EditProductModal from "@/components/modals/EditProductModal";
 import ImageViewer from "@/components/modals/ImageViewer";
 import ImageWithFallback from "@/components/ui/ImageWithFallback";
+import PopupMessage from "@/components/ui/PopupMessage";
 import {
   fetchUserMarketplaceItems,
   MarketplaceItem,
 } from "@/lib/postMarketPlace";
 import { fetchUserProducts, Product } from "@/lib/productsService";
 import { supabase } from "@/lib/supabase";
+import { useAppRouter } from "@/utils/navigation";
 import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
-import { useRouter } from "expo-router";
 import {
   ArrowLeft,
   ArrowUpDown,
@@ -26,23 +27,17 @@ import {
   Trash2,
   X,
 } from "lucide-react-native";
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState
-} from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   RefreshControl,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
-import Animated, { FadeInDown, FadeOutDown } from "react-native-reanimated";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Animated, { FadeInDown, FadeOutDown } from "react-native-reanimated";
 
 interface BookmarkedItem {
   id: string;
@@ -96,7 +91,7 @@ export default function ManageListingsOverlay({
   onClose,
   userId,
 }: ManageListingsOverlayProps) {
-  const router = useRouter();
+  const router = useAppRouter();
 
   // States
   const [activeTab, setActiveTab] = useState<TabType>("products");
@@ -123,17 +118,24 @@ export default function ManageListingsOverlay({
   const [showImageViewer, setShowImageViewer] = useState(false);
   const [selectedPost, setSelectedPost] = useState<any | null>(null);
 
+  // Delete confirm popup
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
   // Collapsible sections state for Saves tab (all collapsed by default)
   const [collapsedSections, setCollapsedSections] = useState<{
+    posts: boolean;
     products: boolean;
     marketplace: boolean;
     services: boolean;
-  }>({ products: true, marketplace: true, services: true });
+  }>({ posts: true, products: true, marketplace: true, services: true });
 
-  const toggleSection = useCallback((section: "products" | "marketplace" | "services") => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setCollapsedSections((prev) => ({ ...prev, [section]: !prev[section] }));
-  }, []);
+  const toggleSection = useCallback(
+    (section: "posts" | "products" | "marketplace" | "services") => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      setCollapsedSections((prev) => ({ ...prev, [section]: !prev[section] }));
+    },
+    [],
+  );
 
   useEffect(() => {
     loadData();
@@ -194,14 +196,17 @@ export default function ManageListingsOverlay({
   const loadData = async () => {
     try {
       if (!refreshing) setLoading(true);
-      const [productsData, marketplaceData, { data: bookmarksData, error: bookmarksError }] =
-        await Promise.all([
-          fetchUserProducts(userId),
-          fetchUserMarketplaceItems(userId),
-          supabase
-            .from("user_bookmarks")
-            .select(
-              `
+      const [
+        productsData,
+        marketplaceData,
+        { data: bookmarksData, error: bookmarksError },
+      ] = await Promise.all([
+        fetchUserProducts(userId),
+        fetchUserMarketplaceItems(userId),
+        supabase
+          .from("user_bookmarks")
+          .select(
+            `
             id,
             product_id,
             marketplace_id,
@@ -213,10 +218,10 @@ export default function ManageListingsOverlay({
             posts (id, content, images, likes, comments, user_id, profiles:user_id (name)),
             provider_services (id, name, images, service_categories (name))
           `,
-            )
-            .eq("user_id", userId)
-            .order("created_at", { ascending: false }),
-        ]);
+          )
+          .eq("user_id", userId)
+          .order("created_at", { ascending: false }),
+      ]);
 
       // Debug logging
       setProducts(productsData || []);
@@ -226,20 +231,32 @@ export default function ManageListingsOverlay({
         .map((item) => ({
           ...item,
           products: item.products
-            ? Array.isArray(item.products) ? item.products[0] : item.products
+            ? Array.isArray(item.products)
+              ? item.products[0]
+              : item.products
             : null,
           marketplace: item.marketplace
-            ? Array.isArray(item.marketplace) ? item.marketplace[0] : item.marketplace
+            ? Array.isArray(item.marketplace)
+              ? item.marketplace[0]
+              : item.marketplace
             : null,
           posts: item.posts
-            ? Array.isArray(item.posts) ? item.posts[0] : item.posts
+            ? Array.isArray(item.posts)
+              ? item.posts[0]
+              : item.posts
             : null,
           provider_services: item.provider_services
-            ? Array.isArray(item.provider_services) ? item.provider_services[0] : item.provider_services
+            ? Array.isArray(item.provider_services)
+              ? item.provider_services[0]
+              : item.provider_services
             : null,
         }))
         .filter(
-          (item) => item.products || item.marketplace || item.posts || item.provider_services,
+          (item) =>
+            item.products ||
+            item.marketplace ||
+            item.posts ||
+            item.provider_services,
         ) as BookmarkedItem[];
 
       setBookmarks(formattedBookmarks || []);
@@ -274,129 +291,133 @@ export default function ManageListingsOverlay({
   };
 
   const handleDeleteSelected = () => {
-    const tabName =
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDelete = async () => {
+    const table =
       activeTab === "products"
-        ? "Products"
+        ? "products"
         : activeTab === "marketplace"
-          ? "Listings"
-          : "Bookmarks";
+          ? "marketplace"
+          : "user_bookmarks";
 
-    Alert.alert(
-      `Delete ${tabName}`,
-      `Are you sure you want to remove ${selectedIds.length} items? This cannot be undone.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            const table =
-              activeTab === "products"
-                ? "products"
-                : activeTab === "marketplace"
-                  ? "marketplace"
-                  : "user_bookmarks";
+    const { error } = await supabase.from(table).delete().in("id", selectedIds);
 
-            const { error } = await supabase
-              .from(table)
-              .delete()
-              .in("id", selectedIds);
+    if (!error) {
+      if (activeTab === "products")
+        setProducts((p) => p.filter((i) => !selectedIds.includes(i.id)));
+      if (activeTab === "marketplace")
+        setMarketplaceItems((m) =>
+          m.filter((i) => !selectedIds.includes(i.id)),
+        );
+      if (activeTab === "bookmarks")
+        setBookmarks((b) => b.filter((i) => !selectedIds.includes(i.id)));
 
-            if (!error) {
-              if (activeTab === "products")
-                setProducts((p) =>
-                  p.filter((i) => !selectedIds.includes(i.id)),
-                );
-              if (activeTab === "marketplace")
-                setMarketplaceItems((m) =>
-                  m.filter((i) => !selectedIds.includes(i.id)),
-                );
-              if (activeTab === "bookmarks")
-                setBookmarks((b) =>
-                  b.filter((i) => !selectedIds.includes(i.id)),
-                );
-
-              setIsSelectionMode(false);
-              setSelectedIds([]);
-              Haptics.notificationAsync(
-                Haptics.NotificationFeedbackType.Success,
-              );
-            }
-          },
-        },
-      ],
-    );
+      setIsSelectionMode(false);
+      setSelectedIds([]);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
   };
 
   // --- RENDER ITEM ---
 
   // Memoized ListItem component to prevent unnecessary re-renders
-  const ListItem = React.memo(({
-    item,
-    isSelected,
-    onLongPress,
-    onPress
-  }: {
-    item: any;
-    isSelected: boolean;
-    onLongPress: () => void;
-    onPress: () => void;
-  }) => {
-    // Handle category headers (Products/Marketplace tabs)
-    if (item.type === "category_header") {
-      return (
-        <View className="px-4 py-3 mt-2">
-          <Text className="text-sm font-mbold text-gray-700 uppercase tracking-wider">
-            {item.category.replace("-", " & ")}
-          </Text>
-        </View>
-      );
-    }
-
-    // Handle collapsible section headers (Saves tab)
-    if (item.type === "section_header") {
-      const isCollapsed = collapsedSections[item.section as "products" | "marketplace" | "services"];
-      return (
-        <TouchableOpacity
-          onPress={onPress}
-          className="px-4 py-3 mt-3 flex-row items-center justify-between"
-          activeOpacity={0.7}
-        >
-          <View className="flex-row items-center gap-x-2">
-            <Text className="text-base font-mbold text-gray-900">{item.title}</Text>
-            <View className="bg-primary/10 px-2 py-0.5 rounded-full">
-              <Text className="text-xs font-mbold text-primary">{item.count}</Text>
-            </View>
+  const ListItem = React.memo(
+    ({
+      item,
+      isSelected,
+      onLongPress,
+      onPress,
+    }: {
+      item: any;
+      isSelected: boolean;
+      onLongPress: () => void;
+      onPress: () => void;
+    }) => {
+      // Handle category headers (Products/Marketplace tabs)
+      if (item.type === "category_header") {
+        return (
+          <View className="px-4 py-3 mt-2">
+            <Text className="text-sm font-mbold text-gray-700 uppercase tracking-wider">
+              {item.category.replace("-", " & ")}
+            </Text>
           </View>
-          {isCollapsed ? (
-            <ChevronRight size={18} color="#6B7280" />
-          ) : (
-            <ChevronDown size={18} color="#6B7280" />
-          )}
-        </TouchableOpacity>
-      );
-    }
+        );
+      }
 
-    // Normalize data
-    const isPost = !!item.posts || !!item.post_id;
-    const isService = !!item.provider_services || !!item.service_id;
-    const title = item.name || item.title || item.products?.name || item.marketplace?.title ||
-                  item.provider_services?.name ||
-                  (item.posts?.content ? item.posts.content.substring(0, 50) + (item.posts.content.length > 50 ? "..." : "") : "Post");
-    const price = item.price || item.products?.price || item.marketplace?.price;
-    const image = item.images?.[0] || item.products?.images?.[0] || item.marketplace?.images?.[0] || item.posts?.images?.[0] || item.provider_services?.images?.[0];
-    const hasActiveDiscount = activeTab === "products" && item.is_currently_active;
-    const isFood = item.category === "food";
-    const postUsername = item.posts?.profiles?.name || "Unknown User";
+      // Handle collapsible section headers (Saves tab)
+      if (item.type === "section_header") {
+        const isCollapsed =
+          collapsedSections[
+            item.section as "posts" | "products" | "marketplace" | "services"
+          ];
+        return (
+          <TouchableOpacity
+            onPress={onPress}
+            className="px-4 py-2 mt-0.5 flex-row items-center justify-between"
+            activeOpacity={0.7}
+          >
+            <View className="flex-row items-center gap-x-2">
+              <Text className="text-base font-mbold text-gray-900">
+                {item.title}
+              </Text>
+              <View className="bg-primary/10 px-2 py-0.5 rounded-full">
+                <Text className="text-xs font-mbold text-primary">
+                  {item.count}
+                </Text>
+              </View>
+            </View>
+            {isCollapsed ? (
+              <ChevronRight size={18} color="#6B7280" />
+            ) : (
+              <ChevronDown size={18} color="#6B7280" />
+            )}
+          </TouchableOpacity>
+        );
+      }
 
-    // Category badge for Saves tab
-    const categoryTag = activeTab === "bookmarks"
-      ? (item.products?.category || item.marketplace?.type || item.provider_services?.service_categories?.name)
-      : null;
-    // Category badge for Products/Marketplace tabs
-    const typeLabel = activeTab === "marketplace" ? (item.type || item.marketplace?.type) : null;
+      // Normalize data
+      const isPost = !!item.posts || !!item.post_id;
+      const isService = !!item.provider_services || !!item.service_id;
+      const title =
+        item.name ||
+        item.title ||
+        item.products?.name ||
+        item.marketplace?.title ||
+        item.provider_services?.name ||
+        (item.posts?.content
+          ? item.posts.content.substring(0, 50) +
+            (item.posts.content.length > 50 ? "..." : "")
+          : "Post");
+      const price =
+        item.price || item.products?.price || item.marketplace?.price;
+      const image =
+        item.images?.[0] ||
+        item.products?.images?.[0] ||
+        item.marketplace?.images?.[0] ||
+        item.posts?.images?.[0] ||
+        item.provider_services?.images?.[0];
+      const hasActiveDiscount =
+        activeTab === "products" && item.is_currently_active;
+      const isFood = item.category === "food";
+      const postUsername = item.posts?.profiles?.name || "Unknown User";
 
-    return (
+      // Category badge for Saves tab
+      const categoryTag =
+        activeTab === "bookmarks"
+          ? item.products?.category ||
+            item.marketplace?.type ||
+            item.provider_services?.service_categories?.name
+          : null;
+      // Category badge for Products/Marketplace tabs
+      const typeLabel =
+        activeTab === "marketplace"
+          ? item.type || item.marketplace?.type
+          : null;
+
+      return (
       <View className="px-4 mb-3">
         <TouchableOpacity
           activeOpacity={0.7}
@@ -413,138 +434,165 @@ export default function ManageListingsOverlay({
               className="w-full h-full"
               resizeMode="cover"
             />
-            {isSelected && (
-              <View className="absolute inset-0 bg-primary/30 items-center justify-center">
-                <CheckCircle2 color="white" size={28} strokeWidth={3} />
-              </View>
-            )}
+              {isSelected && (
+                <View className="absolute inset-0 bg-primary/30 items-center justify-center">
+                  <CheckCircle2 color="white" size={28} strokeWidth={3} />
+                </View>
+              )}
           </View>
 
           {/* Details */}
           <View className="flex-1 ml-4">
-            {/* Type label for marketplace tab */}
-            {!isPost && typeLabel && activeTab === "marketplace" ? (
-              <Text className="text-[10px] font-mbold text-primary uppercase tracking-tighter mb-0.5">
-                {typeLabel}
-              </Text>
-            ) : null}
-
-            <Text className="text-gray-900 font-msemibold text-lg" numberOfLines={1}>
-              {title}
-            </Text>
-
-            {/* Category tag pill for Saves tab */}
-            {categoryTag && activeTab === "bookmarks" && (
-              <View className={`self-start px-2 py-0.5 rounded-full mt-1 mb-0.5 ${
-                isService ? "bg-purple-100" : isPost ? "bg-pink-100" : "bg-gray-100"
-              }`}>
-                <Text className={`text-[10px] font-mbold capitalize ${
-                  isService ? "text-purple-700" : isPost ? "text-pink-700" : "text-gray-600"
-                }`}>
-                  {categoryTag}
+              {/* Type label for marketplace tab */}
+              {!isPost && typeLabel && activeTab === "marketplace" ? (
+                <Text className="text-[10px] font-mbold text-primary uppercase tracking-tighter mb-0.5">
+                  {typeLabel}
                 </Text>
-              </View>
-            )}
+              ) : null}
 
-            {/* Price with Discount Info or Post Info */}
-            {isPost ? (
-              <Text className="text-gray-500 text-sm mt-0.5">
-                by {postUsername}
+              <Text
+                className="text-gray-900 font-msemibold text-lg"
+                numberOfLines={1}
+              >
+                {title}
               </Text>
-            ) : hasActiveDiscount ? (
-              <View className="gap-1">
-                {/* Badge */}
-                <View className={`${isFood ? "bg-amber-500" : "bg-green-500"} px-1.5 py-0.5 rounded self-start ${isFood ? "flex-row items-center gap-1" : ""}`}>
-                  {isFood && <Text className="text-white text-[10px]">🌙</Text>}
-                  <Text className="text-white text-[10px] font-bold">
-                    {isFood ? `CLOSING SALE -${item.discount_percent}%` : `-${item.discount_percent}% OFF`}
+
+              {/* Category tag pill for Saves tab */}
+              {categoryTag && activeTab === "bookmarks" && (
+                <View
+                  className={`self-start px-2 py-0.5 rounded-full mt-1 mb-0.5 ${
+                    isService
+                      ? "bg-purple-100"
+                      : isPost
+                        ? "bg-pink-100"
+                        : "bg-gray-100"
+                  }`}
+                >
+                  <Text
+                    className={`text-[10px] font-mbold capitalize ${
+                      isService
+                        ? "text-purple-700"
+                        : isPost
+                          ? "text-pink-700"
+                          : "text-gray-600"
+                    }`}
+                  >
+                    {categoryTag}
                   </Text>
                 </View>
+              )}
 
-                {/* Prices */}
-                <View className="flex-row items-center gap-2">
-                  <Text className="text-xs text-gray-400 line-through">
-                    Nu. {item.price?.toLocaleString()}
-                  </Text>
-                  <Text className={`text-base font-mbold ${isFood ? "text-amber-600" : "text-primary"}`}>
-                    Nu. {item.current_price?.toLocaleString()}
-                  </Text>
+              {/* Price with Discount Info or Post Info */}
+              {isPost ? (
+                <Text className="text-gray-500 text-sm mt-0.5">
+                  by {postUsername}
+                </Text>
+              ) : hasActiveDiscount ? (
+                <View className="gap-1">
+                  {/* Badge */}
+                  <View
+                    className={`${isFood ? "bg-amber-500" : "bg-green-500"} px-1.5 py-0.5 rounded self-start ${isFood ? "flex-row items-center gap-1" : ""}`}
+                  >
+                    {isFood && (
+                      <Text className="text-white text-[10px]">🌙</Text>
+                    )}
+                    <Text className="text-white text-[10px] font-bold">
+                      {isFood
+                        ? `CLOSING SALE -${item.discount_percent}%`
+                        : `-${item.discount_percent}% OFF`}
+                    </Text>
+                  </View>
+
+                  {/* Prices */}
+                  <View className="flex-row items-center gap-2">
+                    <Text className="text-xs text-gray-400 line-through">
+                      Nu. {item.price?.toLocaleString()}
+                    </Text>
+                    <Text
+                      className={`text-base font-mbold ${isFood ? "text-amber-600" : "text-primary"}`}
+                    >
+                      Nu. {item.current_price?.toLocaleString()}
+                    </Text>
+                  </View>
+
+                  {/* Countdown - Isolated to prevent re-render cascade */}
+                  <CountdownTimer
+                    endsAt={item.discount_ends_at}
+                    compact={true}
+                  />
                 </View>
-
-                {/* Countdown - Isolated to prevent re-render cascade */}
-                <CountdownTimer endsAt={item.discount_ends_at} compact={true} />
-              </View>
-            ) : (
-              <Text className="text-primary font-mbold text-lg">
-                {price ? `Nu. ${price?.toLocaleString()}` : ""}
-              </Text>
-            )}
-          </View>
+              ) : (
+                <Text className="text-primary font-mbold text-lg">
+                  {price ? `Nu. ${price?.toLocaleString()}` : ""}
+                </Text>
+              )}
+            </View>
 
           {/* Action Buttons */}
           {!isSelectionMode && (
             <View className="flex-row items-center gap-x-2">
-              <TouchableOpacity
-                onPress={() => {
-                  // Handle posts differently - open ImageViewer
-                  if (isPost && item.posts) {
-                    setSelectedPost({
-                      id: item.posts.id,
-                      user_id: item.posts.user_id,
-                      content: item.posts.content,
-                      images: item.posts.images || [],
-                      likes: item.posts.likes || 0,
-                      comments: item.posts.comments || 0,
-                      userName: postUsername,
-                    });
-                    setShowImageViewer(true);
-                    return;
-                  }
-
-                  // Handle products and marketplace items
-                  onClose();
-                  let path;
-                  if (activeTab === "marketplace") {
-                    path = `/(users)/marketplace/${item.id}`;
-                  } else if (activeTab === "bookmarks") {
-                    if (item.product_id) {
-                      path = `/(users)/product/${item.product_id}`;
-                    } else if (item.marketplace_id) {
-                      path = `/(users)/marketplace/${item.marketplace_id}`;
-                    } else if (item.service_id) {
-                      path = `/(users)/servicedetail/${item.service_id}`;
+                <TouchableOpacity
+                  onPress={() => {
+                    // Handle posts differently - open ImageViewer
+                    if (isPost && item.posts) {
+                      setSelectedPost({
+                        id: item.posts.id,
+                        user_id: item.posts.user_id,
+                        content: item.posts.content,
+                        images: item.posts.images || [],
+                        likes: item.posts.likes || 0,
+                        comments: item.posts.comments || 0,
+                        userName: postUsername,
+                      });
+                      setShowImageViewer(true);
+                      return;
                     }
-                  } else {
-                    path = `/(users)/product/${item.id}`;
-                  }
-                  router.push(path as any);
-                }}
-                className="w-9 h-9 bg-gray-50 items-center justify-center rounded-full border border-gray-100"
-              >
-                <Eye size={16} color="#4B5563" />
-              </TouchableOpacity>
-              {activeTab === "products" && (
-                <TouchableOpacity
-                  onPress={() => handleEditProduct(item)}
+
+                    // Handle products and marketplace items
+                    onClose();
+                    let path;
+                    if (activeTab === "marketplace") {
+                      path = `/(users)/marketplace/${item.id}`;
+                    } else if (activeTab === "bookmarks") {
+                      if (item.product_id) {
+                        path = `/(users)/product/${item.product_id}`;
+                      } else if (item.marketplace_id) {
+                        path = `/(users)/marketplace/${item.marketplace_id}`;
+                      } else if (item.service_id) {
+                        path = `/(users)/servicedetail/${item.service_id}`;
+                      }
+                    } else {
+                      path = `/(users)/product/${item.id}`;
+                    }
+                    router.push(path as any);
+                  }}
                   className="w-9 h-9 bg-gray-50 items-center justify-center rounded-full border border-gray-100"
                 >
-                  <Edit3 size={16} color="#4B5563" />
+                  <Eye size={16} color="#4B5563" />
                 </TouchableOpacity>
-              )}
-              {activeTab === "marketplace" && (
-                <TouchableOpacity
-                  onPress={() => handleEditMarketplaceItem(item)}
-                  className="w-9 h-9 bg-gray-50 items-center justify-center rounded-full border border-gray-100"
-                >
-                  <Edit3 size={16} color="#4B5563" />
-                </TouchableOpacity>
-              )}
-            </View>
-          )}
-        </TouchableOpacity>
-      </View>
-    );
-  });
+                {activeTab === "products" && (
+                  <TouchableOpacity
+                    onPress={() => handleEditProduct(item)}
+                    className="w-9 h-9 bg-gray-50 items-center justify-center rounded-full border border-gray-100"
+                  >
+                    <Edit3 size={16} color="#4B5563" />
+                  </TouchableOpacity>
+                )}
+                {activeTab === "marketplace" && (
+                  <TouchableOpacity
+                    onPress={() => handleEditMarketplaceItem(item)}
+                    className="w-9 h-9 bg-gray-50 items-center justify-center rounded-full border border-gray-100"
+                  >
+                    <Edit3 size={16} color="#4B5563" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
+      );
+    },
+  );
 
   const renderItem = useCallback(
     ({ item }: { item: any }) => {
@@ -666,11 +714,29 @@ export default function ManageListingsOverlay({
           return sortOrder === "latest" ? dateB - dateA : dateA - dateB;
         });
 
+      const postBookmarks = sortItems(bookmarks.filter((b) => b.posts));
       const productBookmarks = sortItems(bookmarks.filter((b) => b.products));
-      const marketplaceBookmarks = sortItems(bookmarks.filter((b) => b.marketplace));
-      const serviceBookmarks = sortItems(bookmarks.filter((b) => b.provider_services));
+      const marketplaceBookmarks = sortItems(
+        bookmarks.filter((b) => b.marketplace),
+      );
+      const serviceBookmarks = sortItems(
+        bookmarks.filter((b) => b.provider_services),
+      );
 
       const flatData: any[] = [];
+
+      if (postBookmarks.length > 0) {
+        flatData.push({
+          type: "section_header",
+          section: "posts",
+          title: "Posts",
+          count: postBookmarks.length,
+          id: "section-posts",
+        });
+        if (!collapsedSections.posts) {
+          flatData.push(...postBookmarks);
+        }
+      }
 
       if (productBookmarks.length > 0) {
         flatData.push({
@@ -722,7 +788,14 @@ export default function ManageListingsOverlay({
       const dateB = new Date(b.created_at).getTime();
       return sortOrder === "latest" ? dateB - dateA : dateA - dateB;
     });
-  }, [activeTab, products, marketplaceItems, bookmarks, sortOrder, collapsedSections]);
+  }, [
+    activeTab,
+    products,
+    marketplaceItems,
+    bookmarks,
+    sortOrder,
+    collapsedSections,
+  ]);
 
   return (
     <View style={{ flex: 1, backgroundColor: "#F8FAFC" }}>
@@ -746,18 +819,31 @@ export default function ManageListingsOverlay({
             )}
           </View>
           <View className="flex-row items-center gap-x-2">
-            {!isSelectionMode && (
-              <TouchableOpacity
-                onPress={toggleSortOrder}
-                className="bg-white p-2 rounded-full shadow-sm border border-gray-100"
-              >
-                <View className="flex-row items-center gap-x-1">
-                  <ArrowUpDown size={16} color="#1F2937" />
-                  <Text className="text-xs font-msemibold text-gray-700">
-                    {sortOrder === "latest" ? "Latest" : "Oldest"}
-                  </Text>
-                </View>
-              </TouchableOpacity>
+            {!isSelectionMode && activeTab !== "edit" && (
+              <>
+                <TouchableOpacity
+                  onPress={toggleSortOrder}
+                  className="bg-white p-2 rounded-full shadow-sm border border-gray-100"
+                >
+                  <View className="flex-row items-center gap-x-1">
+                    <ArrowUpDown size={16} color="#1F2937" />
+                    <Text className="text-xs font-msemibold text-gray-700">
+                      {sortOrder === "latest" ? "Latest" : "Oldest"}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => {
+                    Haptics.notificationAsync(
+                      Haptics.NotificationFeedbackType.Success,
+                    );
+                    setIsSelectionMode(true);
+                  }}
+                  className="bg-white p-2 rounded-full shadow-sm border border-gray-100"
+                >
+                  <Trash2 size={16} color="#EF4444" />
+                </TouchableOpacity>
+              </>
             )}
             <TouchableOpacity
               onPress={
@@ -841,46 +927,49 @@ export default function ManageListingsOverlay({
       {/* Main List - hidden when editing */}
       {activeTab !== "edit" && (
         <GestureDetector gesture={swipeGesture}>
-        <View className="flex-1">
-          {loading ? (
-            <View className="flex-1 items-center justify-center">
-              <ActivityIndicator size="large" color="#094569" />
-            </View>
-          ) : (
-            <FlatList
+          <View className="flex-1">
+            {loading ? (
+              <View className="flex-1 items-center justify-center">
+                <ActivityIndicator size="large" color="#094569" />
+              </View>
+            ) : (
+              <FlatList
               data={currentListData}
               renderItem={renderItem}
               keyExtractor={(item) => item.id}
               showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingTop: 20, paddingBottom: 150 }}
+              contentContainerStyle={{
+                paddingTop: activeTab === "bookmarks" ? 8 : 20,
+                paddingBottom: 150,
+              }}
               refreshControl={
                 <RefreshControl
                   refreshing={refreshing}
-                  onRefresh={onRefresh}
-                  tintColor="#094569"
-                  progressViewOffset={20}
-                />
-              }
-              ListEmptyComponent={
-                <View className="flex-1 items-center justify-center pt-32 px-10">
-                  <View className="w-16 h-16 bg-gray-100 rounded-full items-center justify-center mb-4">
-                    <Package size={28} color="#94A3B8" />
+                    onRefresh={onRefresh}
+                    tintColor="#094569"
+                    progressViewOffset={20}
+                  />
+                }
+                ListEmptyComponent={
+                  <View className="flex-1 items-center justify-center pt-32 px-10">
+                    <View className="w-16 h-16 bg-gray-100 rounded-full items-center justify-center mb-4">
+                      <Package size={28} color="#94A3B8" />
+                    </View>
+                    <Text className="text-gray-800 font-mbold text-lg">
+                      Nothing here yet
+                    </Text>
+                    <Text className="text-gray-500 text-center mt-2 font-mregular">
+                      Items in this category will appear here.
+                    </Text>
                   </View>
-                  <Text className="text-gray-800 font-mbold text-lg">
-                    Nothing here yet
-                  </Text>
-                  <Text className="text-gray-500 text-center mt-2 font-mregular">
-                    Items in this category will appear here.
-                  </Text>
-                </View>
-              }
-              removeClippedSubviews={true}
-              maxToRenderPerBatch={10}
-              windowSize={10}
-              initialNumToRender={8}
-            />
-          )}
-        </View>
+                }
+                removeClippedSubviews={true}
+                maxToRenderPerBatch={10}
+                windowSize={10}
+                initialNumToRender={8}
+              />
+            )}
+          </View>
         </GestureDetector>
       )}
 
@@ -957,6 +1046,29 @@ export default function ManageListingsOverlay({
           username={selectedPost.userName}
           likes={selectedPost.likes}
           comments={selectedPost.comments}
+        />
+      )}
+
+      {/* Delete Confirm Popup */}
+      {showDeleteConfirm && (
+        <PopupMessage
+          visible={showDeleteConfirm}
+          type="warning"
+          title={`Delete ${selectedIds.length} item${selectedIds.length !== 1 ? "s" : ""}?`}
+          message="This cannot be undone."
+          onHide={() => setShowDeleteConfirm(false)}
+          actions={[
+            {
+              label: "Cancel",
+              style: "cancel",
+              onPress: () => setShowDeleteConfirm(false),
+            },
+            {
+              label: "Delete",
+              style: "destructive",
+              onPress: confirmDelete,
+            },
+          ]}
         />
       )}
     </View>

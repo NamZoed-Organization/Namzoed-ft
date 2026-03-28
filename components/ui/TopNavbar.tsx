@@ -6,7 +6,8 @@ import { useNotifications } from "@/contexts/NotificationsContext";
 import { useUnreadMessages } from "@/contexts/UnreadMessagesContext";
 import { useUser } from "@/contexts/UserContext";
 import { clamp, useResponsive } from "@/utils/responsive";
-import { useRouter } from "expo-router";
+import { useAppRouter } from "@/utils/navigation";
+import { usePathname } from "expo-router";
 import { Bell, Send, UserCircle } from "lucide-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Animated, Image, Platform, Text, View } from "react-native";
@@ -106,7 +107,8 @@ function AnimatedBadge({
 }
 
 export default function TopNavbar() {
-  const router = useRouter();
+  const router = useAppRouter();
+  const pathname = usePathname();
   const { currentUser } = useUser();
   const { unreadCount } = useUnreadMessages();
   const { unseenCount: notifUnseenCount } = useNotifications();
@@ -135,6 +137,25 @@ export default function TopNavbar() {
   useEffect(() => {
     setImageLoadError(false);
   }, [currentUser?.avatar_url]);
+
+  const handleHeaderPress = useCallback(
+    ({
+      signedOutMessage,
+      route,
+    }: {
+      signedOutMessage: string;
+      route: "/messages" | "/notifications" | "/profile";
+    }) => {
+      if (!currentUser) {
+        setAuthMessage(signedOutMessage);
+        setShowAuthModal(true);
+        return;
+      }
+
+      router.push(route as any);
+    },
+    [currentUser, router],
+  );
 
   return (
     <View
@@ -173,10 +194,12 @@ export default function TopNavbar() {
           <DetectDzongkhag />
 
           <TabBarButton
-            onPress={() => {
-              if (!currentUser) { setAuthMessage("Sign in to view your messages"); setShowAuthModal(true); return; }
-              router.push("/messages");
-            }}
+            onPress={() =>
+              handleHeaderPress({
+                signedOutMessage: "Sign in to view your messages",
+                route: "/messages",
+              })
+            }
             android_ripple={null}
           >
             <View style={{ overflow: "visible" }}>
@@ -186,10 +209,12 @@ export default function TopNavbar() {
           </TabBarButton>
 
           <TabBarButton
-            onPress={() => {
-              if (!currentUser) { setAuthMessage("Sign in to view your notifications"); setShowAuthModal(true); return; }
-              router.push("/notifications" as any);
-            }}
+            onPress={() =>
+              handleHeaderPress({
+                signedOutMessage: "Sign in to view your notifications",
+                route: "/notifications",
+              })
+            }
             android_ripple={null}
           >
             <View style={{ overflow: "visible" }}>
@@ -199,10 +224,12 @@ export default function TopNavbar() {
           </TabBarButton>
 
           <TabBarButton
-            onPress={() => {
-              if (!currentUser) { setAuthMessage("Sign in to access your profile"); setShowAuthModal(true); return; }
-              router.push("/profile");
-            }}
+            onPress={() =>
+              handleHeaderPress({
+                signedOutMessage: "Sign in to access your profile",
+                route: "/profile",
+              })
+            }
             android_ripple={null}
           >
             {currentUser?.avatar_url && !imageLoadError ? (

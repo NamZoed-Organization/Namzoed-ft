@@ -1,7 +1,7 @@
 // components/ProductCard.tsx
 import { ProductWithUser } from "@/lib/productsService";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useAppRouter } from "@/utils/navigation";
 import React from "react";
 import { Image, Text, TouchableOpacity, View } from "react-native";
 import CountdownTimer from "./CountdownTimer";
@@ -12,7 +12,7 @@ interface Props {
 }
 
 export default function ProductCard({ product, isLeftColumn = true }: Props) {
-  const router = useRouter();
+  const router = useAppRouter();
 
   const hasImages = product.images && product.images.length > 0;
   const mainImage = hasImages ? { uri: product.images[0] } : null;

@@ -9,10 +9,10 @@ import {
 import { supabase } from "@/lib/supabase";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
+import { useAppRouter } from "@/utils/navigation";
 import {
   useFocusEffect,
   useLocalSearchParams,
-  useRouter,
 } from "expo-router";
 import {
   ArrowLeft,
@@ -40,7 +40,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
-const IMAGE_HEIGHT = SCREEN_HEIGHT * 0.45;
+const IMAGE_HEIGHT = SCREEN_HEIGHT * 0.5;
 
 function DetailSkeleton() {
   const shimmerAnim = useRef(new RNAnimated.Value(0)).current;
@@ -62,7 +62,7 @@ function DetailSkeleton() {
     <View className="flex-1 bg-[#FAFBFC]">
       <StatusBar barStyle="light-content" />
       <RNAnimated.View style={{ opacity, height: IMAGE_HEIGHT }} className="w-full bg-gray-200" />
-      <View className="bg-white -mt-8 rounded-t-[32px] flex-1 px-6 pt-8">
+      <View className="bg-white flex-1 px-6 pt-8">
         <RNAnimated.View style={{ opacity }} className="h-8 bg-gray-100 rounded-2xl w-3/4 mb-4" />
         <RNAnimated.View style={{ opacity }} className="h-10 bg-gray-100 rounded-2xl w-1/2 mb-6" />
         <RNAnimated.View style={{ opacity }} className="h-20 bg-gray-50 rounded-3xl w-full mb-6" />
@@ -76,7 +76,7 @@ function DetailSkeleton() {
 
 export default function MarketplaceDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const router = useRouter();
+  const router = useAppRouter();
   const { currentUser } = useUser();
   const insets = useSafeAreaInsets();
 
@@ -84,6 +84,7 @@ export default function MarketplaceDetailScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [showImageViewer, setShowImageViewer] = useState(false);
+  const imageScrollRef = useRef<ScrollView>(null);
   const [showReportModal, setShowReportModal] = useState(false);
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -245,6 +246,12 @@ export default function MarketplaceDetailScreen() {
   }
 
   const images = item.images || [];
+
+  const scrollToImage = (index: number) => {
+    setActiveImageIndex(index);
+    imageScrollRef.current?.scrollTo({ x: index * SCREEN_WIDTH, animated: true });
+  };
+
   const sellerName = item.profiles?.name || "Anonymous";
   const sellerInitial = sellerName.charAt(0).toUpperCase();
 
@@ -267,22 +274,46 @@ export default function MarketplaceDetailScreen() {
       >
         {/* Hero Image */}
         <View style={{ height: IMAGE_HEIGHT }}>
-          <TouchableOpacity activeOpacity={0.95} onPress={() => setShowImageViewer(true)}>
-            {images.length > 0 ? (
-              <Image
-                source={{ uri: images[activeImageIndex] }}
-                style={{ width: SCREEN_WIDTH, height: IMAGE_HEIGHT }}
-                resizeMode="cover"
-              />
-            ) : (
-              <View
-                style={{ width: SCREEN_WIDTH, height: IMAGE_HEIGHT }}
-                className="bg-gray-200 items-center justify-center"
-              >
-                <Tag size={64} color="#D1D5DB" />
-              </View>
-            )}
-          </TouchableOpacity>
+          {images.length > 0 ? (
+            <ScrollView
+              ref={imageScrollRef}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              onMomentumScrollEnd={(e) => {
+                const idx = Math.round(
+                  e.nativeEvent.contentOffset.x / SCREEN_WIDTH,
+                );
+                setActiveImageIndex(idx);
+              }}
+              scrollEventThrottle={16}
+              style={{ width: SCREEN_WIDTH, height: IMAGE_HEIGHT }}
+            >
+              {images.map((imageUrl, index) => (
+                <TouchableOpacity
+                  key={index}
+                  activeOpacity={0.95}
+                  onPress={() => {
+                    setActiveImageIndex(index);
+                    setShowImageViewer(true);
+                  }}
+                >
+                  <Image
+                    source={{ uri: imageUrl }}
+                    style={{ width: SCREEN_WIDTH, height: IMAGE_HEIGHT }}
+                    resizeMode="cover"
+                  />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          ) : (
+            <View
+              style={{ width: SCREEN_WIDTH, height: IMAGE_HEIGHT }}
+              className="bg-gray-200 items-center justify-center"
+            >
+              <Tag size={64} color="#D1D5DB" />
+            </View>
+          )}
 
           <LinearGradient
             colors={["rgba(0,0,0,0.5)", "transparent", "transparent", "rgba(0,0,0,0.3)"]}
@@ -331,42 +362,55 @@ export default function MarketplaceDetailScreen() {
             </View>
           </View>
 
-          {/* Pagination Dots */}
+          {/* Image Pagination: Dots + Counter */}
           {images.length > 1 && (
-            <View className="absolute bottom-6 left-0 right-0 flex-row justify-center gap-2">
-              {images.map((_, index) => (
-                <TouchableOpacity
-                  key={index}
-                  onPress={() => setActiveImageIndex(index)}
-                  activeOpacity={0.8}
-                >
-                  <View
-                    className={`h-2 rounded-full ${
-                      activeImageIndex === index ? "bg-white w-6" : "bg-white/40 w-2"
-                    }`}
-                  />
-                </TouchableOpacity>
-              ))}
+            <View
+              style={{
+                position: "absolute",
+                bottom: 16,
+                left: 0,
+                right: 0,
+                alignItems: "center",
+                gap: 10,
+              }}
+            >
+              <View
+                style={{
+                  backgroundColor: "rgba(0,0,0,0.5)",
+                  borderRadius: 999,
+                  paddingHorizontal: 10,
+                  paddingVertical: 3,
+                }}
+              >
+                <Text style={{ color: "#fff", fontSize: 11, fontWeight: "600" }}>
+                  {activeImageIndex + 1} / {images.length}
+                </Text>
+              </View>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                {images.map((_, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    onPress={() => scrollToImage(index)}
+                    activeOpacity={0.8}
+                  >
+                    <View
+                      style={{
+                        height: 7,
+                        borderRadius: 999,
+                        width: activeImageIndex === index ? 22 : 7,
+                        backgroundColor: activeImageIndex === index ? "#fff" : "rgba(255,255,255,0.4)",
+                      }}
+                    />
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
           )}
         </View>
 
         {/* Content Card */}
-        <View
-          className="bg-white -mt-8 rounded-t-[32px] min-h-screen"
-          style={{
-            shadowColor: "#000",
-            shadowOffset: { width: 0, height: -4 },
-            shadowOpacity: 0.1,
-            shadowRadius: 20,
-            elevation: 20,
-          }}
-        >
-          <View className="items-center pt-3 pb-2">
-            <View className="w-10 h-1 bg-gray-200 rounded-full" />
-          </View>
-
-          <View className="px-6 pt-4 pb-32">
+        <View className="bg-white min-h-screen">
+          <View className="px-6 pt-6 pb-32">
             {/* Type badge + first 2 tags */}
             <View className="flex-row flex-wrap gap-2 mb-4">
               <View className="bg-primary/10 px-4 py-1.5 rounded-full flex-row items-center gap-1.5">

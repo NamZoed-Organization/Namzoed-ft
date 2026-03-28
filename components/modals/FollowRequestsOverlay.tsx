@@ -1,7 +1,7 @@
 import { FlashList } from "@shopify/flash-list";
 import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
-import { useRouter } from 'expo-router';
+import { useAppRouter } from '@/utils/navigation';
 import { ArrowDownAZ, ArrowUpAZ, UserCheck, Users, X } from 'lucide-react-native';
 import PopupMessage from '@/components/ui/PopupMessage';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -23,6 +23,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { useUser } from "@/contexts/UserContext";
 import { fetchFollowers, fetchFollowing, followUser, FollowUser, unfollowUser } from '@/lib/followService';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface FollowRequestsOverlayProps {
   onClose: () => void;
@@ -41,8 +42,9 @@ export default function FollowRequestsOverlay({
   initialTab = 'following',
 }: FollowRequestsOverlayProps) {
   // States
-  const router = useRouter();
+  const router = useAppRouter();
   const { currentUser } = useUser();
+  const insets = useSafeAreaInsets();
   const resolvedActorUserId = actorUserId || currentUser?.id || userId;
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
   const [followers, setFollowers] = useState<FollowUser[]>([]);
@@ -268,7 +270,7 @@ export default function FollowRequestsOverlay({
   };
 
   return (
-    <View className="flex-1 bg-[#F8FAFC]">
+    <View className="flex-1 bg-[#F8FAFC]" style={{ marginBottom: -insets.bottom, paddingBottom: insets.bottom }}>
       {/* Premium Header with BlurView */}
       <BlurView intensity={90} tint="light" className="pt-14 pb-2 z-10 border-b border-gray-200/50">
         <View className="flex-row items-center justify-between px-6 mb-4">

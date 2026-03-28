@@ -6,7 +6,7 @@ import { MarketplaceItem } from "@/lib/postMarketPlace";
 import { Product } from "@/lib/productsService";
 import { ProviderServiceWithDetails } from "@/lib/servicesService";
 import { FlashList } from "@shopify/flash-list";
-import { useRouter } from "expo-router";
+import { useAppRouter } from "@/utils/navigation";
 import { ArrowUpDown } from "lucide-react-native";
 import React, { useCallback } from "react";
 import {
@@ -134,7 +134,7 @@ export const ForYouSection = React.memo(function ForYouSection({
 
 // Default export kept for any existing usages
 export default function ForYou() {
-  const router = useRouter();
+  const router = useAppRouter();
   const {
     products,
     marketplaceItems,

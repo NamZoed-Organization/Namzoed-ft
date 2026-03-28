@@ -16,7 +16,7 @@ import { useCallback, useEffect, useState } from "react";
  * This eliminates the "polling" feel caused by re-fetching on every
  * viewer_count UPDATE event.
  */
-export function useLivestreams() {
+export function useLivestreams(refreshKey?: number) {
   const [livestreams, setLivestreams] = useState<Livestream[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -79,6 +79,11 @@ export function useLivestreams() {
     };
   }, [load]);
 
+  useEffect(() => {
+    if (refreshKey === undefined) return;
+    load(false);
+  }, [refreshKey, load]);
+
   /** Returns true if the given Supabase user UUID has an active live stream */
   const isUserLive = useCallback(
     (userId: string | null | undefined): boolean => {
@@ -99,5 +104,5 @@ export function useLivestreams() {
     [livestreams],
   );
 
-  return { livestreams, loading, isUserLive, getLivestreamForUser };
+  return { livestreams, loading, isUserLive, getLivestreamForUser, reload: load };
 }

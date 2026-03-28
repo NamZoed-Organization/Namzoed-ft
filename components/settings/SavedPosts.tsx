@@ -1,6 +1,6 @@
 import { getUserBookmarks } from '@/lib/bookmarkService';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useAppRouter } from '@/utils/navigation';
 import { ArrowLeft, Bookmark, FileText, Play, ShoppingBag, Store } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
@@ -85,7 +85,7 @@ const MARKETPLACE_TYPE_LABELS: Record<string, string> = {
 };
 
 export default function SavedPosts({ onClose, userId }: SavedPostsProps) {
-  const router = useRouter();
+  const router = useAppRouter();
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);

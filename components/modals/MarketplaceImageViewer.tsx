@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { View, TouchableOpacity, Modal, Dimensions } from "react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { View, TouchableOpacity, Modal, Dimensions, FlatList } from "react-native";
 import { X, ChevronLeft, ChevronRight } from "lucide-react-native";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
 import Animated, { useSharedValue, useAnimatedStyle, withSpring } from "react-native-reanimated";
@@ -72,18 +72,59 @@ export default function MarketplaceImageViewer({
   onClose,
 }: MarketplaceImageViewerProps) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
+  const flatListRef = useRef<FlatList>(null);
+
+  // Sync index when modal opens with a different image
+  useEffect(() => {
+    if (visible) {
+      setCurrentIndex(initialIndex);
+      // Small delay to ensure FlatList is mounted before scrolling
+      setTimeout(() => {
+        flatListRef.current?.scrollToIndex({ index: initialIndex, animated: false });
+      }, 50);
+    }
+  }, [visible, initialIndex]);
 
   const handlePrevious = () => {
     if (currentIndex > 0) {
-      setCurrentIndex(currentIndex - 1);
+      const newIndex = currentIndex - 1;
+      setCurrentIndex(newIndex);
+      flatListRef.current?.scrollToIndex({ index: newIndex, animated: true });
     }
   };
 
   const handleNext = () => {
     if (currentIndex < images.length - 1) {
-      setCurrentIndex(currentIndex + 1);
+      const newIndex = currentIndex + 1;
+      setCurrentIndex(newIndex);
+      flatListRef.current?.scrollToIndex({ index: newIndex, animated: true });
     }
   };
+
+  const onViewableItemsChanged = useCallback(
+    ({ viewableItems }: { viewableItems: Array<{ index: number | null }> }) => {
+      if (viewableItems.length > 0 && viewableItems[0].index != null) {
+        setCurrentIndex(viewableItems[0].index);
+      }
+    },
+    [],
+  );
+
+  const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 50 }).current;
+
+  const getItemLayout = useCallback(
+    (_: any, index: number) => ({
+      length: screenWidth,
+      offset: screenWidth * index,
+      index,
+    }),
+    [],
+  );
+
+  const renderItem = useCallback(
+    ({ item }: { item: string }) => <ZoomableImage uri={item} />,
+    [],
+  );
 
   return (
     <Modal
@@ -110,8 +151,20 @@ export default function MarketplaceImageViewer({
             </Animated.Text>
           </View>
 
-          {/* Zoomable Image */}
-          <ZoomableImage uri={images[currentIndex]} />
+          {/* Swipeable Image List */}
+          <FlatList
+            ref={flatListRef}
+            data={images}
+            renderItem={renderItem}
+            keyExtractor={(_, index) => index.toString()}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            getItemLayout={getItemLayout}
+            initialScrollIndex={initialIndex}
+            onViewableItemsChanged={onViewableItemsChanged}
+            viewabilityConfig={viewabilityConfig}
+          />
 
           {/* Navigation Arrows */}
           {images.length > 1 && (

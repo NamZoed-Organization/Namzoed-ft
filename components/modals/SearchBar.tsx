@@ -2,7 +2,7 @@ import ImageViewer from "@/components/modals/ImageViewer";
 import { useUser } from "@/contexts/UserContext";
 import { searchAll, SearchResult, SearchResults } from "@/lib/searchService";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useAppRouter } from "@/utils/navigation";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -48,7 +48,7 @@ export default function SearchBar({
   const tabLayouts = useRef<{ [key: string]: { x: number; width: number } }>({});
   const tabBarVisibleWidth = useRef(0);
 
-  const router = useRouter();
+  const router = useAppRouter();
   const { currentUser } = useUser();
 
   useEffect(() => {

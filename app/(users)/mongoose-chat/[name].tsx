@@ -13,7 +13,8 @@ import {
     type AudioStatus,
 } from 'expo-audio';
 import * as Location from 'expo-location';
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useAppRouter } from "@/utils/navigation";
+import { useLocalSearchParams } from "expo-router";
 import { MapPin, Mic, Pause, Play, Send, Trash2 } from "lucide-react-native";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -238,7 +239,7 @@ const TypingIndicator = () => {
 
 export default function MongooseChatScreen() {
   const { currentUser } = useUser();
-  const router = useRouter();
+  const router = useAppRouter();
   const insets = useSafeAreaInsets();
   const { name } = useLocalSearchParams();
   const [messageText, setMessageText] = useState("");

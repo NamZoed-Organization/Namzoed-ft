@@ -3,7 +3,7 @@ import { useUser } from '@/contexts/UserContext';
 import { followUser, getFollowingIds, unfollowUser } from '@/lib/followService';
 import { FeaturedSellerProfile, fetchFeaturedSellers, fetchRandomSellers } from '@/lib/profileService';
 import * as Haptics from 'expo-haptics';
-import { router } from 'expo-router';
+import { useAppRouter } from "@/utils/navigation";
 import { Clock, MapPin, Package, Search, User as UserIcon, X } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
@@ -107,6 +107,7 @@ const UserCard = ({ user, onPress, onFollow, onUnfollow, isFollowed }: {
 );
 
 const FeaturedSellers = () => {
+  const router = useAppRouter();
   const { currentUser } = useUser();
   const [searchQuery, setSearchQuery] = useState('');
   const [users, setUsers] = useState<FeaturedSellerProfile[]>([]);

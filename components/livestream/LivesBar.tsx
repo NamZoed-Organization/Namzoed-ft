@@ -30,6 +30,8 @@ interface LivesBarProps {
   onGoLive: () => void;
   /** Called when the user picks Create Post from the Create menu */
   onCreatePost: () => void;
+  /** Changes when the parent wants to force a live list refresh */
+  refreshKey?: number;
 }
 
 /** Pulsing ring wrapper around a live avatar */
@@ -135,8 +137,8 @@ const LiveRingAvatar = React.memo(function LiveRingAvatar({
   );
 });
 
-export default function LivesBar({ onJoin, onGoLive, onCreatePost }: LivesBarProps) {
-  const { livestreams, loading } = useLivestreams();
+export default function LivesBar({ onJoin, onGoLive, onCreatePost, refreshKey }: LivesBarProps) {
+  const { livestreams, loading } = useLivestreams(refreshKey);
   const [showMenu, setShowMenu] = useState(false);
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
   const buttonRef = useRef<View>(null);

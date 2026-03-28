@@ -25,6 +25,10 @@ export interface ProviderServiceWithDetails extends ProviderService {
     name?: string;
     master_bio?: string;
     profile_url?: string;
+    email?: string;
+    contact?: string;
+    email_active?: boolean;
+    contact_active?: boolean;
     verification_status?: string;
     profiles?: {
       name?: string;
@@ -162,6 +166,10 @@ export const fetchUserProviderServices = async (userId: string): Promise<Provide
         master_bio,
         profile_url,
         name,
+        email,
+        contact,
+        email_active,
+        contact_active,
         verification_status,
         profiles (
           name,
@@ -199,6 +207,10 @@ export const fetchProviderServicesByCategory = async (categorySlug: string): Pro
         master_bio,
         profile_url,
         name,
+        email,
+        contact,
+        email_active,
+        contact_active,
         verification_status,
         profiles (
           name,
@@ -236,6 +248,10 @@ export const fetchProviderServiceById = async (serviceId: string): Promise<Provi
         master_bio,
         profile_url,
         name,
+        email,
+        contact,
+        email_active,
+        contact_active,
         verification_status,
         profiles (
           name,
@@ -374,6 +390,10 @@ export const fetchAllProviderServices = async (page: number = 0, pageSize: numbe
         master_bio,
         profile_url,
         name,
+        email,
+        contact,
+        email_active,
+        contact_active,
         verification_status,
         profiles (
           name,
@@ -404,6 +424,10 @@ export const fetchAllServiceProviders = async (): Promise<any[]> => {
       name,
       master_bio,
       profile_url,
+      email,
+      contact,
+      email_active,
+      contact_active,
       verification_status,
       profiles (
         name,
@@ -450,6 +474,10 @@ export const fetchServiceProviderProfile = async (userId: string): Promise<any |
       identification,
       master_bio,
       profile_url,
+      email,
+      contact,
+      email_active,
+      contact_active,
       verification_status,
       profiles (
         name,
@@ -496,6 +524,10 @@ export const updateServiceProviderProfile = async (
     name?: string;
     master_bio?: string;
     profile_url?: string;
+    email?: string | null;
+    contact?: string | null;
+    email_active?: boolean;
+    contact_active?: boolean;
     identification?: any;
     verification_status?: 'verified' | 'not_verified' | 'pending';
   }

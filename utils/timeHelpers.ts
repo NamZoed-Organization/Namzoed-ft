@@ -147,7 +147,7 @@ export function getCountdownDisplayText(): { title: string; subtitle: string } {
       };
     case "after":
       return {
-        title: "🌙 Next Closing Sale Tomorrow",
+        title: "Next Closing Sale Tomorrow",
         subtitle: "Starts in",
       };
     default:

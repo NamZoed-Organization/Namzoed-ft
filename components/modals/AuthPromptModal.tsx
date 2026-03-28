@@ -1,4 +1,4 @@
-import { useRouter } from "expo-router";
+import { useAppRouter } from "@/utils/navigation";
 import React from "react";
 import { Modal, Text, TouchableOpacity } from "react-native";
 
@@ -13,7 +13,7 @@ export default function AuthPromptModal({
   onClose,
   message = "Sign in to access this feature",
 }: AuthPromptModalProps) {
-  const router = useRouter();
+  const router = useAppRouter();
 
   return (
     <Modal

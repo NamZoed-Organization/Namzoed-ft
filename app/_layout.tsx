@@ -1,8 +1,10 @@
 // app/_layout.tsx
+import { enableScreens } from "react-native-screens";
+enableScreens(true);
 
+import "@/utils/silenceLogs";
 import CustomFlashMessage from "@/components/CustomFlashMessage";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { NavigationLogger } from "@/components/NavigationLogger";
 import InAppChatBanner from "@/components/chat/InAppChatBanner";
 import InAppNotificationBanner from "@/components/notifications/InAppNotificationBanner";
 import OneSignalBootstrap from "@/components/notifications/OneSignalBootstrap";
@@ -13,7 +15,6 @@ import {
     DefaultTheme,
     ThemeProvider,
 } from "@react-navigation/native";
-import * as Font from "expo-font";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
@@ -60,12 +61,7 @@ export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts(fontMap);
 
   useEffect(() => {
-    console.log('[Fonts] loaded:', fontsLoaded, '| error:', fontError?.message ?? null);
     if (fontsLoaded || fontError) {
-      console.log('[Fonts] ionicons loaded:', Font.isLoaded('ionicons'));
-      console.log('[Fonts] material loaded:', Font.isLoaded('material'));
-      console.log('[Fonts] entypo loaded:', Font.isLoaded('entypo'));
-      console.log('[Fonts] feather loaded:', Font.isLoaded('feather'));
       SplashScreen.hideAsync();
     }
   }, [fontsLoaded, fontError]);
@@ -96,12 +92,11 @@ export default function RootLayout() {
                             gestureEnabled: true,
                             fullScreenGestureEnabled: true,
                             gestureDirection: "horizontal",
-                            animation: "default",
+                            animation: "none",
                           }}
                         />
                         <InAppChatBanner />
                         <InAppNotificationBanner />
-                        <NavigationLogger />
                         <StatusBar style="dark" />
                         <FlashMessage
                           position="top"

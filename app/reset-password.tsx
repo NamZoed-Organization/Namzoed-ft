@@ -2,7 +2,8 @@ import { Entypo, Ionicons } from "@expo/vector-icons";
 import FormInput from "@/components/ui/FormInput";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { clamp, useResponsive } from "@/utils/responsive";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useAppRouter } from "@/utils/navigation";
+import { useLocalSearchParams } from "expo-router";
 import React, { useState } from "react";
 import {
     ActivityIndicator,
@@ -16,7 +17,7 @@ import {
 import { supabase } from '../lib/supabase';
 
 export default function ResetPassword() {
-  const router = useRouter();
+  const router = useAppRouter();
   const params = useLocalSearchParams();
   const { identifier, type } = params;
   const { ms, vs, wp, hp } = useResponsive();

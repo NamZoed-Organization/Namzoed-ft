@@ -5,6 +5,7 @@ import {
   ProviderServiceWithDetails,
 } from "@/lib/servicesService";
 import { useEffect, useState } from "react";
+import { InteractionManager } from "react-native";
 
 export const useServiceProvider = (refreshKey: number) => {
   const { currentUser } = useUser();
@@ -13,7 +14,9 @@ export const useServiceProvider = (refreshKey: number) => {
   const [providerFormData, setProviderFormData] = useState({
     businessName: "",
     email: "",
-    phone: "",
+    contact: "",
+    emailActive: false,
+    contactActive: false,
     bio: "",
   });
   const [providerImageUri, setProviderImageUri] = useState<string | null>(null);
@@ -26,7 +29,6 @@ export const useServiceProvider = (refreshKey: number) => {
   >([]);
   const [loadingProviderServices, setLoadingProviderServices] = useState(false);
 
-  // Load service provider profile
   useEffect(() => {
     const loadServiceProvider = async () => {
       if (!currentUser?.id) return;
@@ -36,23 +38,21 @@ export const useServiceProvider = (refreshKey: number) => {
         const providerData = await fetchServiceProviderProfile(currentUser.id);
         setServiceProvider(providerData);
 
-        // Populate form data and avatar
         if (providerData) {
           setProviderFormData({
             businessName: providerData.name || "",
-            email: providerData.profiles?.email || "",
-            phone: providerData.profiles?.phone || "",
+            email: providerData.email || "",
+            contact: providerData.contact || "",
+            emailActive: providerData.email_active || false,
+            contactActive: providerData.contact_active || false,
             bio: providerData.master_bio || "",
           });
-          // Load provider avatar
           if (providerData.profile_url) {
             setProviderImageUri(providerData.profile_url);
           }
-          // Load license URL from identification jsonb
           if (providerData.identification?.licenseUrl) {
             setLicenseImageUrl(providerData.identification.licenseUrl);
           }
-          // Load verification status
           setVerificationStatus(
             providerData.verification_status || "not_verified",
           );
@@ -64,10 +64,12 @@ export const useServiceProvider = (refreshKey: number) => {
       }
     };
 
-    loadServiceProvider();
+    const task = InteractionManager.runAfterInteractions(() => {
+      loadServiceProvider();
+    });
+    return () => task.cancel();
   }, [currentUser?.id, refreshKey]);
 
-  // Load user's provider services
   useEffect(() => {
     const loadProviderServices = async () => {
       if (!currentUser?.id) return;
@@ -83,7 +85,10 @@ export const useServiceProvider = (refreshKey: number) => {
       }
     };
 
-    loadProviderServices();
+    const task = InteractionManager.runAfterInteractions(() => {
+      loadProviderServices();
+    });
+    return () => task.cancel();
   }, [currentUser?.id, refreshKey]);
 
   return {

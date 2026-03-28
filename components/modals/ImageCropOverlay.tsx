@@ -7,6 +7,7 @@ import {
   Alert,
   Dimensions,
   Image,
+  Pressable,
   StatusBar,
   Text,
   TouchableOpacity,
@@ -22,11 +23,13 @@ import Animated, {
 
 interface ImageCropOverlayProps {
   imageUri: string;
+  imageWidth?: number;
+  imageHeight?: number;
   onSave: (croppedUri: string) => void;
   onCancel: () => void;
 }
 
-export default function ImageCropOverlay({ imageUri, onSave, onCancel }: ImageCropOverlayProps) {
+export default function ImageCropOverlay({ imageUri, imageWidth, imageHeight, onSave, onCancel }: ImageCropOverlayProps) {
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
   const [displayedImageSize, setDisplayedImageSize] = useState({ width: 0, height: 0 });
   const [isSaving, setIsSaving] = useState(false);
@@ -57,31 +60,35 @@ export default function ImageCropOverlay({ imageUri, onSave, onCancel }: ImageCr
   useEffect(() => {
     if (!imageUri) return;
 
-    Image.getSize(imageUri, (w, h) => {
+    const initWithSize = (w: number, h: number) => {
       setImageSize({ width: w, height: h });
 
       const aspectRatio = w / h;
-      
-      // Calculate dimensions to ensure the image covers the crop area completely
+
       let renderWidth, renderHeight;
       if (w >= h) {
-         // Landscape or Square: Height determines scale
-         renderHeight = cropSize;
-         renderWidth = cropSize * aspectRatio;
+        renderHeight = cropSize;
+        renderWidth = cropSize * aspectRatio;
       } else {
-         // Portrait: Width determines scale
-         renderWidth = cropSize;
-         renderHeight = cropSize / aspectRatio;
+        renderWidth = cropSize;
+        renderHeight = cropSize / aspectRatio;
       }
 
       setDisplayedImageSize({ width: renderWidth, height: renderHeight });
       setReady(true);
-    }, (error) => {
+    };
+
+    // Use passed dimensions if available (avoids EXIF orientation issues with Image.getSize)
+    if (imageWidth && imageHeight) {
+      initWithSize(imageWidth, imageHeight);
+    } else {
+      Image.getSize(imageUri, initWithSize, (error) => {
         console.error("Failed to get image size", error);
         showPopup("error", "Load Failed", "Could not load image.");
         onCancel();
-    });
-  }, [imageUri]);
+      });
+    }
+  }, [imageUri, imageWidth, imageHeight]);
 
   // Helper to clamp values
   const clamp = (val: number, min: number, max: number) => {
@@ -214,29 +221,34 @@ export default function ImageCropOverlay({ imageUri, onSave, onCancel }: ImageCr
       <View style={{ flex: 1, backgroundColor: 'white' }}>
         <StatusBar barStyle="dark-content" />
         
-        {/* Header */}
-        <View className="flex-row items-center justify-between px-4 pt-12 pb-4 bg-white z-20 border-b border-gray-100 shadow-sm">
-          <TouchableOpacity onPress={onCancel} className="p-2">
+        {/* Header — uses Pressable + explicit zIndex/elevation to avoid gesture handler stealing touches */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 48, paddingBottom: 16, backgroundColor: 'white', zIndex: 50, elevation: 10, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' }}>
+          <Pressable
+            onPress={onCancel}
+            hitSlop={16}
+            style={{ padding: 10 }}
+          >
             <X size={24} color="#374151" />
-          </TouchableOpacity>
+          </Pressable>
           <Text className="text-gray-900 font-semibold text-lg">Edit Photo</Text>
-          <TouchableOpacity
+          <Pressable
             onPress={handleSave}
             disabled={isSaving}
-            className="p-2"
+            hitSlop={16}
+            style={{ padding: 10 }}
           >
             {isSaving ? (
               <ActivityIndicator size="small" color="#22c55e" />
             ) : (
               <Check size={24} color="#22c55e" />
             )}
-          </TouchableOpacity>
+          </Pressable>
         </View>
 
         {/* Content Area */}
         <GestureDetector gesture={composedGesture}>
-          <View style={{ flex: 1, backgroundColor: 'white', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }}>
-            
+          <Animated.View style={{ flex: 1, backgroundColor: 'white', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }}>
+
             {/* The Image (Visible everywhere) */}
             <Animated.View style={animatedStyle}>
                 <Image
@@ -285,7 +297,7 @@ export default function ImageCropOverlay({ imageUri, onSave, onCancel }: ImageCr
                 Pinch to zoom • Drag to move
             </Text>
 
-          </View>
+          </Animated.View>
         </GestureDetector>
       </View>
 

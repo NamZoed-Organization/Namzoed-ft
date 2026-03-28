@@ -8,9 +8,9 @@ import {
 } from "@/lib/servicesService";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
+import { useAppRouter } from "@/utils/navigation";
 import {
     Href,
-    router,
     useFocusEffect,
     useLocalSearchParams,
 } from "expo-router";
@@ -77,7 +77,7 @@ function DetailSkeleton() {
         style={{ opacity, height: IMAGE_HEIGHT }}
         className="w-full bg-gray-200"
       />
-      <View className="bg-white -mt-8 rounded-t-[32px] flex-1 px-6 pt-8">
+      <View className="bg-white flex-1 px-6 pt-8">
         <RNAnimated.View
           style={{ opacity }}
           className="h-8 bg-gray-100 rounded-2xl w-3/4 mb-4"
@@ -108,6 +108,7 @@ function DetailSkeleton() {
 }
 
 export default function ServiceDetail() {
+  const router = useAppRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { currentUser } = useUser();
   const insets = useSafeAreaInsets();
@@ -116,6 +117,7 @@ export default function ServiceDetail() {
   );
   const [loading, setLoading] = useState(true);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const imageScrollRef = useRef<ScrollView>(null);
   const [showImageViewer, setShowImageViewer] = useState(false);
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -316,10 +318,11 @@ export default function ServiceDetail() {
         <View style={{ height: IMAGE_HEIGHT }}>
           {hasImages ? (
             <ScrollView
+              ref={imageScrollRef}
               horizontal
               pagingEnabled
               showsHorizontalScrollIndicator={false}
-              onScroll={(event) => {
+              onMomentumScrollEnd={(event) => {
                 const slideIndex = Math.round(
                   event.nativeEvent.contentOffset.x / SCREEN_WIDTH,
                 );
@@ -404,45 +407,58 @@ export default function ServiceDetail() {
             </View>
           </View>
 
-          {/* Image Pagination Dots */}
+          {/* Image Pagination: Dots + Counter */}
           {images.length > 1 && (
-            <View className="absolute bottom-6 left-0 right-0 flex-row justify-center gap-2">
-              {images.map((_, index) => (
-                <TouchableOpacity
-                  key={index}
-                  onPress={() => setActiveImageIndex(index)}
-                  activeOpacity={0.8}
-                >
-                  <View
-                    className={`h-2 rounded-full ${
-                      activeImageIndex === index
-                        ? "bg-white w-6"
-                        : "bg-white/40 w-2"
-                    }`}
-                  />
-                </TouchableOpacity>
-              ))}
+            <View
+              style={{
+                position: "absolute",
+                bottom: 16,
+                left: 0,
+                right: 0,
+                alignItems: "center",
+                gap: 10,
+              }}
+            >
+              <View
+                style={{
+                  backgroundColor: "rgba(0,0,0,0.5)",
+                  borderRadius: 999,
+                  paddingHorizontal: 10,
+                  paddingVertical: 3,
+                }}
+              >
+                <Text style={{ color: "#fff", fontSize: 11, fontWeight: "600" }}>
+                  {activeImageIndex + 1} / {images.length}
+                </Text>
+              </View>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                {images.map((_, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    onPress={() => {
+                      setActiveImageIndex(index);
+                      imageScrollRef.current?.scrollTo({ x: index * SCREEN_WIDTH, animated: true });
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <View
+                      style={{
+                        height: 7,
+                        borderRadius: 999,
+                        width: activeImageIndex === index ? 22 : 7,
+                        backgroundColor: activeImageIndex === index ? "#fff" : "rgba(255,255,255,0.4)",
+                      }}
+                    />
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
           )}
         </View>
 
         {/* Content Card */}
-        <View
-          className="bg-white -mt-8 rounded-t-[32px] min-h-screen"
-          style={{
-            shadowColor: "#000",
-            shadowOffset: { width: 0, height: -4 },
-            shadowOpacity: 0.1,
-            shadowRadius: 20,
-            elevation: 20,
-          }}
-        >
-          {/* Drag Indicator */}
-          <View className="items-center pt-3 pb-2">
-            <View className="w-10 h-1 bg-gray-200 rounded-full" />
-          </View>
-
-          <View className="px-6 pt-4 pb-32">
+        <View className="bg-white min-h-screen">
+          <View className="px-6 pt-6 pb-32">
             {/* Category Badge */}
             <View
               className="flex-row flex-wrap gap-2 mb-4"
@@ -501,6 +517,18 @@ export default function ServiceDetail() {
                   <Text className="text-xs text-gray-500 mt-1">
                     Service Provider
                   </Text>
+                  {service.service_providers?.email_active &&
+                  service.service_providers?.email ? (
+                    <Text className="text-xs text-gray-500 mt-1" numberOfLines={1}>
+                      ✉ {service.service_providers.email}
+                    </Text>
+                  ) : null}
+                  {service.service_providers?.contact_active &&
+                  service.service_providers?.contact ? (
+                    <Text className="text-xs text-gray-500 mt-1" numberOfLines={1}>
+                      📞 {service.service_providers.contact}
+                    </Text>
+                  ) : null}
                 </View>
 
                 {/* View Profile Arrow */}
