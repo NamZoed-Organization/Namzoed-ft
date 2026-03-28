@@ -1426,6 +1426,7 @@ export default function LiveScrollScreen({
             liveStreamId={currentStream.id}
             hostId={currentStream.user_id}
             isHostView={false}
+            isFullScreenOverlay={true}
             onNavigate={() => {
               // Hand off call to PIP so live stream continues while viewing profile
               if (activeCallRef.current && streamClient) {

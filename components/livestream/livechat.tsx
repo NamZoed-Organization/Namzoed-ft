@@ -72,11 +72,16 @@ export const LiveChat = ({
   liveStreamId,
   hostId,
   isHostView = false,
+  isFullScreenOverlay = false,
   onNavigate,
 }: {
   liveStreamId: string | null | undefined;
   hostId?: string | null;
   isHostView: boolean;
+  /** True when the chat panel overlays the full screen (viewer mode or host full-width).
+   *  False when the chat is a side column inside a partial-height container (host split mode).
+   *  Only full-screen overlays need the keyboard bottom-lift animation. */
+  isFullScreenOverlay?: boolean;
   onNavigate?: () => void;
 }) => {
   const router = useAppRouter();
@@ -113,8 +118,9 @@ export const LiveChat = ({
     const showSub = Keyboard.addListener(showEvent, (e) => {
       const h = e.endCoordinates.height;
       setKeyboardHeight(h);
-      // Add insets.bottom so the panel clears both the keyboard and the nav bar gap
-      bottomAnim.setValue(h + insets.bottom);
+      // Only lift when the panel sits at the actual screen bottom (full-screen overlay).
+      // In host split mode the chat column ends well above the keyboard, so no lift needed.
+      bottomAnim.setValue(isFullScreenOverlay ? h + insets.bottom : insets.bottom);
     });
     const hideSub = Keyboard.addListener(hideEvent, () => {
       setKeyboardHeight(0);

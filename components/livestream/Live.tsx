@@ -89,7 +89,7 @@ import Animated, {
     runOnJS,
     useAnimatedStyle,
     useSharedValue,
-    withSpring,
+    withTiming,
 } from "react-native-reanimated";
 import { LiveChat } from "./livechat";
 
@@ -1916,10 +1916,7 @@ const HostCallContainer: React.FC<HostCallContainerProps> = ({
 
   const toggleLayout = () => {
     const nextValue = isFullWidth ? 0 : 1;
-    layoutAnim.value = withSpring(nextValue, {
-      damping: 15,
-      stiffness: 90,
-    });
+    layoutAnim.value = withTiming(nextValue, { duration: 200 });
     setIsFullWidth(!isFullWidth);
   };
 
@@ -1929,6 +1926,7 @@ const HostCallContainer: React.FC<HostCallContainerProps> = ({
 
   const animatedChatStyle = useAnimatedStyle<ViewStyle>(() => ({
     width: `${interpolate(layoutAnim.value, [0, 1], [50, 100], "clamp")}%`,
+    opacity: interpolate(layoutAnim.value, [0, 0.3, 1], [1, 0, 1], "clamp"),
     position:
       layoutAnim.value > 0.5 ? ("absolute" as const) : ("relative" as const),
     right: 0,
@@ -2622,6 +2620,7 @@ const HostCallContainer: React.FC<HostCallContainerProps> = ({
                   liveStreamId={livestreamId}
                   hostId={hostId}
                   isHostView={true}
+                  isFullScreenOverlay={isFullWidth}
                   onNavigate={onMinimize}
                 />
               </View>
@@ -3833,6 +3832,7 @@ const ViewerCallContainer: React.FC<ViewerCallContainerProps> = ({
                   liveStreamId={livestreamId ?? null}
                   hostId={hostParticipant?.userId}
                   isHostView={false}
+                  isFullScreenOverlay={true}
                   onNavigate={onMinimize}
                 />
               </View>
