@@ -51,7 +51,8 @@
       "Bash(grep -rn \"LiveWrapper\\\\|onMinimize\" /c/Users/sonam/Desktop/namzoed/Namzoed-ft --include=\"*.tsx\" --include=\"*.ts\" ! -path \"*/node_modules/*\" ! -path \"*/.expo/*\")",
       "Bash(ls \"c:/Users/sonam/Desktop/namzoed/Namzoed-ft/app/\\(users\\)/services/\")",
       "Bash(ls \"c:/Users/sonam/Desktop/namzoed/Namzoed-ft/app/\\(users\\)/services/room-booking/\")",
-      "Bash(ls \"c:/Users/sonam/Desktop/namzoed/Namzoed-ft/app/\\(users\\)/services/ground-bookings/\")"
+      "Bash(ls \"c:/Users/sonam/Desktop/namzoed/Namzoed-ft/app/\\(users\\)/services/ground-bookings/\")",
+      "Bash(npx expo:*)"
     ],
     "additionalDirectories": [
       "c:\\Users\\sonam\\Desktop\\namzoed\\Namzoed-ft\\app\\(users)"

@@ -1,6 +1,6 @@
 // Path: app/(users)/index.tsx
 
-import Banner from "@/components/Banner";
+import StaticBanner from "@/components/StaticBanner";
 import ClosingSaleBanner from "@/components/ClosingSaleBanner";
 import { CARD_LIST_HEIGHT, ForYouSection } from "@/components/ForYou";
 import HomeCard from "@/components/HomeCard";
@@ -456,7 +456,7 @@ export default function HomeScreen() {
             <TopNavbar />
             <View className="px-4 gap-2">
               <SearchBar value={d.searchQuery} onChangeText={(t) => setSearchQuery(t)} />
-              <Banner />
+              <StaticBanner />
               <TabPills activeTab={d.activeTab} onTabPress={handleTabPress} />
             </View>
           </View>
@@ -494,44 +494,52 @@ export default function HomeScreen() {
 
                 {/* Bottom: sort + cards — no background, shares the border */}
                 <View style={{ paddingBottom: 14 }}>
-                  <View style={{ paddingHorizontal: 14, marginTop: 10, marginBottom: 8 }}>
-                    <TouchableOpacity
-                      onPress={d.toggleSortMenu}
-                      className="bg-white/90 px-3 py-2 rounded-xl shadow-sm border border-white/50 flex-row items-center self-start"
-                      style={{ backgroundColor: "rgba(255,255,255,0.9)" }}
-                    >
-                      <ArrowUpDown size={16} color="#1F2937" />
-                      <Text className="ml-1.5 text-xs font-semibold text-gray-700">
-                        {d.getSortLabel(d.sortOrder)}
-                      </Text>
-                    </TouchableOpacity>
-                    {d.showSortMenu && (
-                      <View className="mt-2 bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-                        {(["latest","oldest","high_discount","low_discount","high_price","low_price"] as SortOrder[]).map((sort) => (
-                          <TouchableOpacity
-                            key={sort}
-                            onPress={() => d.selectSort(sort)}
-                            className={`p-3 border-b border-gray-100 ${d.sortOrder === sort ? "bg-primary/10" : ""}`}
-                          >
-                            <Text className={`text-sm font-medium ${d.sortOrder === sort ? "text-primary" : "text-gray-700"}`}>
-                              {d.getSortLabel(sort)}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
+                  {d.closingSaleFoodItems.length > 0 ? (
+                    <>
+                      <View style={{ paddingHorizontal: 14, marginTop: 10, marginBottom: 8 }}>
+                        <TouchableOpacity
+                          onPress={d.toggleSortMenu}
+                          className="bg-white/90 px-3 py-2 rounded-xl shadow-sm border border-white/50 flex-row items-center self-start"
+                          style={{ backgroundColor: "rgba(255,255,255,0.9)" }}
+                        >
+                          <ArrowUpDown size={16} color="#1F2937" />
+                          <Text className="ml-1.5 text-xs font-semibold text-gray-700">
+                            {d.getSortLabel(d.sortOrder)}
+                          </Text>
+                        </TouchableOpacity>
+                        {d.showSortMenu && (
+                          <View className="mt-2 bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+                            {(["latest","oldest","high_discount","low_discount","high_price","low_price"] as SortOrder[]).map((sort) => (
+                              <TouchableOpacity
+                                key={sort}
+                                onPress={() => d.selectSort(sort)}
+                                className={`p-3 border-b border-gray-100 ${d.sortOrder === sort ? "bg-primary/10" : ""}`}
+                              >
+                                <Text className={`text-sm font-medium ${d.sortOrder === sort ? "text-primary" : "text-gray-700"}`}>
+                                  {d.getSortLabel(sort)}
+                                </Text>
+                              </TouchableOpacity>
+                            ))}
+                          </View>
+                        )}
                       </View>
-                    )}
-                  </View>
-                  {d.closingSaleFoodItems.length > 0 && (
-                    <ScrollView
-                      horizontal showsHorizontalScrollIndicator={false}
-                      contentContainerStyle={{ paddingLeft: 14, paddingRight: 14 }}
-                      style={{ height: CARD_LIST_HEIGHT }}
-                      bounces={false} overScrollMode="never" decelerationRate="fast"
-                    >
-                      {d.closingSaleFoodItems.map((c) => (
-                        <View key={c.id}>{d.renderClosingSaleCard(c)}</View>
-                      ))}
-                    </ScrollView>
+                      <ScrollView
+                        horizontal showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={{ paddingLeft: 14, paddingRight: 14 }}
+                        style={{ height: CARD_LIST_HEIGHT }}
+                        bounces={false} overScrollMode="never" decelerationRate="fast"
+                      >
+                        {d.closingSaleFoodItems.map((c) => (
+                          <View key={c.id}>{d.renderClosingSaleCard(c)}</View>
+                        ))}
+                      </ScrollView>
+                    </>
+                  ) : (
+                    <View style={{ paddingHorizontal: 14, paddingVertical: 20, alignItems: "center" }}>
+                      <Text style={{ fontSize: 13, fontWeight: "600", color: "#9CA3AF" }}>
+                        No items on sale right now
+                      </Text>
+                    </View>
                   )}
                 </View>
               </View>
