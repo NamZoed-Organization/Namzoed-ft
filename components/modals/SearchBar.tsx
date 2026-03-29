@@ -425,9 +425,9 @@ export default function SearchBar({
     if (activeTab === "all") {
       // Posts only show in "All" tab
       return [
-        ...searchResults.users,
-        ...searchResults.services,
         ...searchResults.products,
+        ...searchResults.services,
+        ...searchResults.users,
         ...searchResults.marketplace,
         ...searchResults.posts,
       ];
@@ -576,8 +576,6 @@ export default function SearchBar({
             <ScrollView
               className="flex-1 px-2"
               showsVerticalScrollIndicator={false}
-              onTouchStart={handleTouchStart}
-              onTouchEnd={handleTouchEnd}
             >
               {/* Loading State */}
               {isSearching && (

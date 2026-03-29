@@ -62,6 +62,45 @@ export const fetchPosts = async (page: number = 0, pageSize: number = 10) => {
   return { posts: postsWithLikeCounts, totalCount: count || 0 };
 };
 
+// Cursor-based fetch for infinite scroll (no count query, O(1) pagination)
+export const fetchPostsCursor = async (
+  cursor: string | null,
+  pageSize: number = 15
+): Promise<PostWithUser[]> => {
+  let query = supabase
+    .from('posts')
+    .select(`
+      *,
+      profiles:user_id (
+        name,
+        email,
+        phone,
+        avatar_url
+      ),
+      post_likes (
+        id
+      )
+    `)
+    .order('created_at', { ascending: false })
+    .limit(pageSize);
+
+  if (cursor) {
+    query = query.lt('created_at', cursor);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    console.error('Error fetching posts (cursor):', error);
+    throw error;
+  }
+
+  return (data || []).map((post: any) => ({
+    ...post,
+    likes: post.post_likes?.length || 0,
+  })) as PostWithUser[];
+};
+
 // Fetch a single post by ID with profile data
 export const fetchPostById = async (postId: string): Promise<PostWithUser | null> => {
   const { data, error } = await supabase

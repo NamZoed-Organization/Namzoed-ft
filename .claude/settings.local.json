@@ -52,7 +52,11 @@
       "Bash(ls \"c:/Users/sonam/Desktop/namzoed/Namzoed-ft/app/\\(users\\)/services/\")",
       "Bash(ls \"c:/Users/sonam/Desktop/namzoed/Namzoed-ft/app/\\(users\\)/services/room-booking/\")",
       "Bash(ls \"c:/Users/sonam/Desktop/namzoed/Namzoed-ft/app/\\(users\\)/services/ground-bookings/\")",
-      "Bash(npx expo:*)"
+      "Bash(npx expo:*)",
+      "Bash(find /c/Users/sonam/Desktop/namzoed/Namzoed-ft -type f \\\\\\(-name *search* -o -name *Search* \\\\\\))",
+      "Bash(xargs cat:*)",
+      "Bash(grep -r \"FlatList\\\\|FlashList\\\\|ScrollView\" /c/Users/sonam/Desktop/namzoed/Namzoed-ft/components/*.tsx)",
+      "Bash(grep -r \"Image\\\\|expo-image\\\\|FastImage\" /c/Users/sonam/Desktop/namzoed/Namzoed-ft/components/*.tsx)"
     ],
     "additionalDirectories": [
       "c:\\Users\\sonam\\Desktop\\namzoed\\Namzoed-ft\\app\\(users)"

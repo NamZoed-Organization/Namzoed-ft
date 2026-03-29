@@ -2,10 +2,7 @@ import { PostSkeleton } from "@/components/FeedPost";
 import CreatePost from "@/components/modals/CreatePost";
 import { VideoErrorBoundary } from "@/components/VideoErrorBoundary";
 import { useUser } from "@/contexts/UserContext";
-import { useFeedPagination } from "@/hooks/usePagination";
-import { useVirtualizedList } from "@/hooks/useVirtualizedList";
-import { fetchPosts, PostWithUser } from "@/lib/postsService";
-import { supabase } from "@/lib/supabase";
+import { useFeedInfiniteScroll } from "@/hooks/useFeedInfiniteScroll";
 import { getReportedPostIds } from "@/lib/reportService";
 import { PostData } from "@/types/post";
 import { useLocalSearchParams } from "expo-router";
@@ -20,7 +17,6 @@ import React, {
 import {
     ActivityIndicator,
     FlatList,
-    InteractionManager,
     Modal,
     RefreshControl,
     Text,
@@ -33,6 +29,7 @@ import LivesBar from "@/components/livestream/LivesBar";
 import AuthPromptModal from "@/components/modals/AuthPromptModal";
 import { feedEvents } from "@/utils/feedEvents";
 import { useLiveSession } from "@/contexts/LiveSessionProvider";
+import { useLivestreams } from "@/hooks/useLivestreams";
 
 export default function FeedScreen() {
   const insets = useSafeAreaInsets();
@@ -42,12 +39,27 @@ export default function FeedScreen() {
   const [showCreatePost, setShowCreatePost] = useState(false);
   const [showLive, setShowLive] = useState(false);
   const [selectedStreamId, setSelectedStreamId] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
   const [liveRefreshKey, setLiveRefreshKey] = useState(0);
-  const [newPosts, setNewPosts] = useState<PostData[]>([]);
-  const [loadingNewPosts, setLoadingNewPosts] = useState(true);
   const [visiblePostId, setVisiblePostId] = useState<string | null>(null);
   const [reportedPostIds, setReportedPostIds] = useState<string[]>([]);
+  const { getLivestreamForUser } = useLivestreams();
+
+  // Infinite scroll hook — cursor-based pagination from Supabase
+  const {
+    posts: allPosts,
+    loading: postsLoading,
+    refreshing,
+    hasMore,
+    loadMore,
+    refresh,
+    removePost,
+  } = useFeedInfiniteScroll();
+
+  // Filter out reported posts
+  const filteredPosts = useMemo(() => {
+    if (reportedPostIds.length === 0) return allPosts;
+    return allPosts.filter(post => !reportedPostIds.includes(post.id));
+  }, [allPosts, reportedPostIds]);
 
   // Dynamic import for LiveScrollScreen
   const [LiveScrollScreen, setLiveScrollScreen] = useState<React.ComponentType<{
@@ -60,14 +72,9 @@ export default function FeedScreen() {
   // Dynamically import LiveScrollScreen only when user opens live
   useEffect(() => {
     if (showLive && !LiveScrollScreen && !liveScreenLoading) {
-      console.log("[FeedLive] Opening live modal, importing LiveScrollScreen", {
-        selectedStreamId,
-        openCreateOnMount: selectedStreamId === null,
-      });
       setLiveScreenLoading(true);
       import("@/components/livestream/LiveScrollScreen")
         .then((module) => {
-          console.log("[FeedLive] LiveScrollScreen imported successfully");
           setLiveScrollScreen(() => module.default);
           setLiveScreenLoading(false);
         })
@@ -76,96 +83,16 @@ export default function FeedScreen() {
           setLiveScreenLoading(false);
         });
     }
-  }, [showLive, LiveScrollScreen, liveScreenLoading, selectedStreamId]);
-
-  // Convert Supabase post to PostData format
-  const convertToPostData = (post: PostWithUser): PostData => {
-    // Extract username from profiles data (prefer name, then email prefix)
-    const username =
-      post.profiles?.name ||
-      post.profiles?.email?.split("@")[0] ||
-      "Unknown User";
-
-    return {
-      id: post.id,
-      userId: post.user_id,
-      username: username,
-      profilePic: post.profiles?.avatar_url || undefined,
-      content: post.content,
-      images: post.images,
-      date: new Date(post.created_at),
-      likes: post.likes,
-      comments: post.comments,
-      shares: post.shares,
-      tagged_products: (post as any).tagged_products ?? undefined,
-      tagged_accounts: (post as any).tagged_accounts ?? undefined,
-    };
-  };
-
-  // Load new posts from Supabase
-  const loadNewPosts = async () => {
-    try {
-      setLoadingNewPosts(true);
-
-      const { posts: fetchedPosts } = await fetchPosts(0, 15);
-
-      // Add null check for fetchedPosts
-      if (!fetchedPosts || !Array.isArray(fetchedPosts)) {
-        setNewPosts([]);
-        return;
-      }
-
-      // Batch-fetch verified service providers for all post authors
-      const userIds = [...new Set(fetchedPosts.map((p) => p.user_id))];
-      const { data: spData } = await supabase
-        .from("service_providers")
-        .select("user_id, verification_status")
-        .in("user_id", userIds);
-      const verifiedIds = new Set(
-        (spData || [])
-          .filter((sp) => sp.verification_status === "verified")
-          .map((sp) => sp.user_id)
-      );
-
-      const convertedPosts = fetchedPosts.map((post) => ({
-        ...convertToPostData(post),
-        isVerified: verifiedIds.has(post.user_id),
-      }));
-
-      // Sort by date (newest first)
-      const sortedNewPosts = convertedPosts.sort(
-        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
-      );
-
-      setNewPosts(sortedNewPosts);
-    } catch (error) {
-      console.error("Error loading new posts:", error);
-      setNewPosts([]); // Set empty array on error to prevent crashes
-    } finally {
-      setLoadingNewPosts(false);
-    }
-  };
+  }, [showLive, LiveScrollScreen, liveScreenLoading]);
 
   // Load reported posts from the current user
-  const loadReportedPosts = async () => {
-    if (currentUser?.id) {
-      try {
-        const ids = await getReportedPostIds(currentUser.id);
-        setReportedPostIds(ids);
-      } catch (error) {
-        console.error('Error loading reported posts:', error);
-      }
-    }
-  };
-
-  // Load posts on mount
   useEffect(() => {
-    const task = InteractionManager.runAfterInteractions(() => {
-      loadNewPosts();
-      loadReportedPosts();
-    });
-    return () => task.cancel();
-  }, []);
+    if (currentUser?.id) {
+      getReportedPostIds(currentUser.id)
+        .then(setReportedPostIds)
+        .catch((error) => console.error('Error loading reported posts:', error));
+    }
+  }, [currentUser?.id]);
 
   // Deep-link from notifications: /(users)/(tabs)/feed?streamId=xxx
   useEffect(() => {
@@ -175,41 +102,19 @@ export default function FeedScreen() {
     }
   }, [deepLinkedStreamId]);
 
-  // Use only Supabase posts and filter out reported posts
-  const allPosts = useMemo(() => {
-    return newPosts.filter(post => !reportedPostIds.includes(post.id));
-  }, [newPosts, reportedPostIds]);
+  const flatListRef = useRef<FlatList<PostData>>(null);
 
-  // Use pagination for feed posts - increased to 15 items per page
-  const {
-    items: paginatedPosts,
-    loading: postsLoading,
-    hasMore,
-    loadMore,
-    refresh,
-  } = useFeedPagination({ data: allPosts, pageSize: 15, bufferSize: 10 });
+  const scrollToTop = useCallback((animated = true) => {
+    flatListRef.current?.scrollToOffset({ offset: 0, animated });
+  }, []);
 
-  // Use virtualized list for performance
-  const {
-    flatListRef,
-    state: virtualState,
-    onLayout,
-    onScroll,
-    scrollToTop,
-    visibleRange,
-  } = useVirtualizedList({ estimatedItemSize: 400, overscan: 3 });
-
-  // Handle pull to refresh - use useCallback to maintain stable reference
+  // Handle pull to refresh
   const handleRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await loadNewPosts(); // Reload posts from Supabase
     setLiveRefreshKey((prev) => prev + 1);
     await refresh();
-    setRefreshing(false);
   }, [refresh]);
 
   // Listen for double-tap events from the feed tab button
-  // Use useCallback to maintain stable reference and prevent listener leaks
   const handleScrollToTop = useCallback(() => {
     scrollToTop(true);
     handleRefresh();
@@ -217,7 +122,6 @@ export default function FeedScreen() {
 
   useEffect(() => {
     feedEvents.on("scrollToTop", handleScrollToTop);
-
     return () => {
       feedEvents.off("scrollToTop", handleScrollToTop);
     };
@@ -226,7 +130,7 @@ export default function FeedScreen() {
   // Listen for post deletion and report events
   useEffect(() => {
     const handlePostDeleted = (postId: string) => {
-      setNewPosts(prev => prev.filter(p => p.id !== postId));
+      removePost(postId);
     };
 
     const handlePostReported = (postId: string) => {
@@ -240,14 +144,14 @@ export default function FeedScreen() {
       feedEvents.off('postDeleted', handlePostDeleted);
       feedEvents.off('postReported', handlePostReported);
     };
-  }, []);
+  }, [removePost]);
 
   // Handle end of list reached
-  const handleEndReached = () => {
+  const handleEndReached = useCallback(() => {
     if (hasMore && !postsLoading) {
       loadMore();
     }
-  };
+  }, [hasMore, postsLoading, loadMore]);
 
   // TikTok-style viewability handler - only visible post gets to play videos
   const onViewableItemsChanged = useCallback(({ viewableItems }: any) => {
@@ -273,22 +177,16 @@ export default function FeedScreen() {
     { viewabilityConfig, onViewableItemsChanged },
   ]).current;
 
-  const renderPost = ({ item, index }: { item: PostData; index: number }) => {
-    // Show skeleton while loading new posts for the first few items
-    if (loadingNewPosts && index < 3) {
-      return <PostSkeleton />;
-    }
-
-    // Wrap FeedPost in VideoErrorBoundary to prevent crashes from bad video URIs
-    // Pass isVisible prop - only the visible post will play videos
+  const renderPost = useCallback(({ item }: { item: PostData }) => {
     const isVisible = visiblePostId === item.id;
+    const isAuthorLive = !!getLivestreamForUser(item.userId);
 
     return (
       <VideoErrorBoundary>
-        <FeedPost post={item} isVisible={isVisible} />
+        <FeedPost post={item} isVisible={isVisible} isAuthorLive={isAuthorLive} />
       </VideoErrorBoundary>
     );
-  };
+  }, [visiblePostId, getLivestreamForUser]);
 
   // Footer component for loading more posts
   const renderFooter = () => {
@@ -367,11 +265,11 @@ export default function FeedScreen() {
       {/* Feed Content */}
       <FlatList
         ref={flatListRef}
-        data={paginatedPosts}
+        data={filteredPosts}
         renderItem={renderPost}
         keyExtractor={(item) => item.id}
         ListHeaderComponent={renderHeader}
-        ListEmptyComponent={loadingNewPosts ? (
+        ListEmptyComponent={postsLoading ? (
           <>
             <PostSkeleton />
             <PostSkeleton />
@@ -380,16 +278,12 @@ export default function FeedScreen() {
         ) : null}
         ListFooterComponent={renderFooter}
         showsVerticalScrollIndicator={false}
-        className="flex-1"
         contentContainerStyle={{ paddingBottom: 72 + insets.bottom }}
-        onLayout={onLayout}
-        onScroll={onScroll}
-        scrollEventThrottle={16}
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
-        removeClippedSubviews={false}
-        maxToRenderPerBatch={3}
-        windowSize={5}
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={5}
+        windowSize={51}
         initialNumToRender={5}
         viewabilityConfigCallbackPairs={viewabilityConfigCallbackPairs}
         refreshControl={
@@ -414,8 +308,7 @@ export default function FeedScreen() {
           <CreatePost
             onClose={() => {
               setShowCreatePost(false);
-              // Reload posts after creating a new one
-              loadNewPosts();
+              refresh();
             }}
           />
         </View>

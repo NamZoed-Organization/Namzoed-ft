@@ -7,7 +7,6 @@ import ReportPostModal from "@/components/modals/ReportPostModal";
 import TaggedItemsModal from "@/components/modals/TaggedItemsModal";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { useUser } from "@/contexts/UserContext";
-import { useLivestreams } from "@/hooks/useLivestreams";
 import {
     hasUserBookmarkedPost,
     togglePostBookmark,
@@ -39,14 +38,14 @@ import {
     Volume2,
     VolumeX,
 } from "lucide-react-native";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Image } from "expo-image";
 import {
     Animated,
     Dimensions,
     Easing,
     FlatList,
     GestureResponderEvent,
-    Image,
     Modal,
     NativeScrollEvent,
     NativeSyntheticEvent,
@@ -59,9 +58,19 @@ import {
 
 export { default as PostSkeleton } from "@/components/ui/PostSkeleton";
 
+// Module-level cache for post interaction data so re-mounts don't re-fetch
+const interactionCache = new Map<string, {
+  isLiked: boolean;
+  isBookmarked: boolean;
+  likesCount: number;
+  commentsCount: number;
+  followedLikers: Array<{ id: string; name: string; avatar_url?: string | null }>;
+}>();
+
 interface FeedPostProps {
   post: PostData;
   isVisible?: boolean;
+  isAuthorLive?: boolean;
 }
 
 const formatDate = (date: Date): string => {
@@ -166,7 +175,7 @@ interface InlineVideoPlayerProps {
   onDoubleTapAt?: (x: number, y: number) => void;
 }
 
-function InlineVideoPlayer({ uri, isVisible, onDoubleTapAt }: InlineVideoPlayerProps) {
+const InlineVideoPlayer = React.memo(function InlineVideoPlayer({ uri, isVisible, onDoubleTapAt }: InlineVideoPlayerProps) {
   const [isHolding, setIsHolding] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
@@ -224,14 +233,14 @@ function InlineVideoPlayer({ uri, isVisible, onDoubleTapAt }: InlineVideoPlayerP
   }, [isVisible, isHolding, player]);
 
   useEffect(() => {
-    if (!player) return;
+    if (!player || !isVisible) return;
     const interval = setInterval(() => {
       setCurrentTime(player.currentTime ?? 0);
       setDuration(player.duration ?? 0);
       setIsLoading(player.status === 'idle' || player.status === 'loading');
     }, 250);
     return () => clearInterval(interval);
-  }, [player]);
+  }, [player, isVisible]);
 
   // Show timer for 3s on each visibility entry, then fade out
   useEffect(() => {
@@ -356,7 +365,7 @@ function InlineVideoPlayer({ uri, isVisible, onDoubleTapAt }: InlineVideoPlayerP
       </TouchableWithoutFeedback>
     </View>
   );
-}
+});
 
 const MediaCarousel = React.memo(
   ({ images, onDoubleTapAt, onImagePress, isVisible = true, hasTaggedItems, onTagPress }: MediaCarouselProps) => {
@@ -416,7 +425,9 @@ const MediaCarousel = React.memo(
             <Image
               source={{ uri: item }}
               style={{ width: "100%", height: "100%", backgroundColor: "#F3F4F6" }}
-              resizeMode="cover"
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              transition={150}
             />
           </TouchableOpacity>
         );
@@ -574,7 +585,7 @@ interface MiniAvatarRowProps {
   onPress: () => void;
 }
 
-const MiniAvatarRow = ({ users, totalLikes, onPress }: MiniAvatarRowProps) => {
+const MiniAvatarRow = React.memo(({ users, totalLikes, onPress }: MiniAvatarRowProps) => {
   if (users.length === 0 || totalLikes === 0) return null;
 
   const remaining = totalLikes - users.length;
@@ -602,7 +613,7 @@ const MiniAvatarRow = ({ users, totalLikes, onPress }: MiniAvatarRowProps) => {
             }}
           >
             {u.avatar_url ? (
-              <Image source={{ uri: u.avatar_url }} style={{ width: "100%", height: "100%" }} />
+              <Image source={{ uri: u.avatar_url }} style={{ width: "100%", height: "100%" }} cachePolicy="memory-disk" />
             ) : (
               <View
                 style={{
@@ -634,9 +645,9 @@ const MiniAvatarRow = ({ users, totalLikes, onPress }: MiniAvatarRowProps) => {
       </Text>
     </TouchableOpacity>
   );
-};
+});
 
-export default function FeedPost({ post, isVisible = true }: FeedPostProps) {
+function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: FeedPostProps) {
   const [isLiked, setIsLiked] = useState(false);
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [likesCount, setLikesCount] = useState(post.likes);
@@ -663,22 +674,43 @@ export default function FeedPost({ post, isVisible = true }: FeedPostProps) {
   const router = useAppRouter();
 
   const isOwnPost = currentUser?.id === post.userId;
-  const { getLivestreamForUser } = useLivestreams();
-  const isAuthorLive = !!getLivestreamForUser(post.userId);
+  const isAuthorLive = isAuthorLiveProp ?? false;
 
-  const showErrorPopup = (message: string) => {
+  const formattedDate = useMemo(() => formatDate(post.date), [post.date]);
+
+  // Keep interaction cache in sync when user interacts
+  const updateCache = useCallback((updates: Partial<NonNullable<ReturnType<typeof interactionCache.get>>>) => {
+    const existing = interactionCache.get(post.id);
+    if (existing) {
+      interactionCache.set(post.id, { ...existing, ...updates });
+    }
+  }, [post.id]);
+
+  const showErrorPopup = useCallback((message: string) => {
     setPopupMessage(message);
     setShowError(true);
     setTimeout(() => setShowError(false), 2500);
-  };
+  }, []);
 
   useEffect(() => {
-    const load = async () => {
-      if (!currentUser?.id) return;
+    const userId = currentUser?.id;
+    if (!userId) return;
 
+    // Use cached data if available (avoids re-fetching on FlashList remount)
+    const cached = interactionCache.get(post.id);
+    if (cached) {
+      setIsBookmarked(cached.isBookmarked);
+      setIsLiked(cached.isLiked);
+      setLikesCount(cached.likesCount);
+      setCommentsCount(cached.commentsCount);
+      setFollowedLikers(cached.followedLikers);
+      return;
+    }
+
+    const load = async () => {
       const [bookmarked, liked, likeCount, commentCount] = await Promise.all([
-        hasUserBookmarkedPost(post.id, currentUser.id),
-        hasUserLikedPost(post.id, currentUser.id),
+        hasUserBookmarkedPost(post.id, userId),
+        hasUserLikedPost(post.id, userId),
         getPostLikeCount(post.id),
         getPostCommentCount(post.id),
       ]);
@@ -687,8 +719,17 @@ export default function FeedPost({ post, isVisible = true }: FeedPostProps) {
       setLikesCount(likeCount);
       setCommentsCount(commentCount);
 
-      const fLikers = await getFollowedLikers(post.id, currentUser.id, 3);
+      const fLikers = await getFollowedLikers(post.id, userId, 3);
       setFollowedLikers(fLikers);
+
+      // Cache the result
+      interactionCache.set(post.id, {
+        isLiked: liked,
+        isBookmarked: bookmarked,
+        likesCount: likeCount,
+        commentsCount: commentCount,
+        followedLikers: fLikers,
+      });
     };
 
     load();
@@ -715,6 +756,7 @@ export default function FeedPost({ post, isVisible = true }: FeedPostProps) {
       } else {
         setIsLiked(result.isLiked);
         setLikesCount(result.likeCount);
+        updateCache({ isLiked: result.isLiked, likesCount: result.likeCount });
       }
     } catch {
       setIsLiked(previousLiked);
@@ -736,6 +778,7 @@ export default function FeedPost({ post, isVisible = true }: FeedPostProps) {
       } else {
         setIsLiked(result.isLiked);
         setLikesCount(result.likeCount);
+        updateCache({ isLiked: result.isLiked, likesCount: result.likeCount });
       }
     } catch {
       setIsLiked(false);
@@ -769,6 +812,7 @@ export default function FeedPost({ post, isVisible = true }: FeedPostProps) {
         showErrorPopup("Failed to save post. Please try again.");
       } else {
         setIsBookmarked(result.isBookmarked);
+        updateCache({ isBookmarked: result.isBookmarked });
       }
     } catch {
       setIsBookmarked(previousBookmarked);
@@ -823,7 +867,7 @@ export default function FeedPost({ post, isVisible = true }: FeedPostProps) {
             >
               <View style={styles.liveAvatarInner}>
                 {post.profilePic ? (
-                  <Image source={{ uri: post.profilePic }} style={styles.avatarImg} />
+                  <Image source={{ uri: post.profilePic }} style={styles.avatarImg} cachePolicy="memory-disk" />
                 ) : (
                   <Text style={styles.avatarFallback}>
                     {post.username?.charAt(0) || "U"}
@@ -837,7 +881,7 @@ export default function FeedPost({ post, isVisible = true }: FeedPostProps) {
           ) : (
             <View style={styles.avatar}>
               {post.profilePic ? (
-                <Image source={{ uri: post.profilePic }} style={styles.avatarImg} />
+                <Image source={{ uri: post.profilePic }} style={styles.avatarImg} cachePolicy="memory-disk" />
               ) : (
                 <Text style={styles.avatarFallback}>
                   {post.username?.charAt(0) || "U"}
@@ -850,7 +894,7 @@ export default function FeedPost({ post, isVisible = true }: FeedPostProps) {
               <Text style={styles.username}>{post.username || "Unknown"}</Text>
               {post.isVerified && <Verified size={14} color="#094569" />}
             </View>
-            <Text style={styles.timestamp}>{formatDate(post.date)}</Text>
+            <Text style={styles.timestamp}>{formattedDate}</Text>
           </View>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => setShowActionSheet(true)}>
@@ -1003,44 +1047,54 @@ export default function FeedPost({ post, isVisible = true }: FeedPostProps) {
 
       <View style={styles.separator} />
 
-      {/* Modals */}
-      <TaggedItemsModal
-        visible={showTaggedItems}
-        onClose={() => setShowTaggedItems(false)}
-        products={post.tagged_products}
-        accounts={post.tagged_accounts}
-      />
+      {/* Modals — lazy-rendered to avoid mounting heavy components in every post */}
+      {showTaggedItems && (
+        <TaggedItemsModal
+          visible={showTaggedItems}
+          onClose={() => setShowTaggedItems(false)}
+          products={post.tagged_products}
+          accounts={post.tagged_accounts}
+        />
+      )}
 
-      <CommentsModal
-        visible={showComments}
-        onClose={() => setShowComments(false)}
-        postId={post.id}
-        postOwnerId={post.userId}
-        onCommentCountChange={(count) => setCommentsCount(count)}
-      />
+      {showComments && (
+        <CommentsModal
+          visible={showComments}
+          onClose={() => setShowComments(false)}
+          postId={post.id}
+          postOwnerId={post.userId}
+          onCommentCountChange={(count) => { setCommentsCount(count); updateCache({ commentsCount: count }); }}
+        />
+      )}
 
-      <LikesListModal
-        visible={showLikesList}
-        onClose={() => setShowLikesList(false)}
-        postId={post.id}
-      />
+      {showLikesList && (
+        <LikesListModal
+          visible={showLikesList}
+          onClose={() => setShowLikesList(false)}
+          postId={post.id}
+        />
+      )}
 
-      <PostActionSheet
-        visible={showActionSheet}
-        onClose={() => setShowActionSheet(false)}
-        isOwnPost={isOwnPost}
-        onDelete={handleDeletePress}
-        onReport={handleReportPress}
-      />
+      {showActionSheet && (
+        <PostActionSheet
+          visible={showActionSheet}
+          onClose={() => setShowActionSheet(false)}
+          isOwnPost={isOwnPost}
+          onDelete={handleDeletePress}
+          onReport={handleReportPress}
+        />
+      )}
 
-      <DeleteConfirmationModal
-        visible={showDeleteConfirmation}
-        onClose={() => setShowDeleteConfirmation(false)}
-        onConfirm={handleConfirmDelete}
-        postContent={post.content}
-      />
+      {showDeleteConfirmation && (
+        <DeleteConfirmationModal
+          visible={showDeleteConfirmation}
+          onClose={() => setShowDeleteConfirmation(false)}
+          onConfirm={handleConfirmDelete}
+          postContent={post.content}
+        />
+      )}
 
-      {currentUser?.id && post.userId && (
+      {showReportModal && currentUser?.id && post.userId && (
         <ReportPostModal
           visible={showReportModal}
           onClose={() => setShowReportModal(false)}
@@ -1055,18 +1109,20 @@ export default function FeedPost({ post, isVisible = true }: FeedPostProps) {
         />
       )}
 
-      <Modal
-        visible={showError}
-        transparent={true}
-        animationType="none"
-        statusBarTranslucent={true}
-      >
-        <TouchableWithoutFeedback onPress={() => setShowError(false)}>
-          <View style={{ flex: 1 }}>
-            <PopupMessage visible={showError} type="error" message={popupMessage} />
-          </View>
-        </TouchableWithoutFeedback>
-      </Modal>
+      {showError && (
+        <Modal
+          visible={showError}
+          transparent={true}
+          animationType="none"
+          statusBarTranslucent={true}
+        >
+          <TouchableWithoutFeedback onPress={() => setShowError(false)}>
+            <View style={{ flex: 1 }}>
+              <PopupMessage visible={showError} type="error" message={popupMessage} />
+            </View>
+          </TouchableWithoutFeedback>
+        </Modal>
+      )}
       {flyingHearts.map(h => (
         <FlyingHeart key={h.id} startX={h.x} startY={h.y} onDone={() => removeFlyingHeart(h.id)} />
       ))}
@@ -1087,6 +1143,12 @@ export default function FeedPost({ post, isVisible = true }: FeedPostProps) {
     </View>
   );
 }
+
+export default React.memo(FeedPost, (prev, next) =>
+  prev.post.id === next.post.id &&
+  prev.isVisible === next.isVisible &&
+  prev.isAuthorLive === next.isAuthorLive
+);
 
 const styles = StyleSheet.create({
   header: {

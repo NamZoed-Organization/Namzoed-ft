@@ -63,14 +63,7 @@ export default function ServiceScreen() {
     };
   }, []);
 
-  const visibleCategories = useMemo(
-    () =>
-      serviceCategories.filter(
-        (category) =>
-          category.slug !== "gaming-sports" && category.slug !== "hotels"
-      ),
-    []
-  );
+  const visibleCategories = useMemo(() => serviceCategories, []);
 
   const handleCategoryPress = (category: any) => {
     router.push(`/services/${category.slug}` as Href);

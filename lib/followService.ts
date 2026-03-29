@@ -7,6 +7,12 @@ export const followUser = async (
   followingId: string
 ): Promise<{ success: boolean; error?: string }> => {
   try {
+    // Ensure Supabase auth session is active — auth.uid() must match follower_id for RLS
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      return { success: false, error: 'Session expired. Please log in again.' };
+    }
+
     // Insert into follows table (counts update automatically via Supabase triggers)
     const { error: insertError } = await supabase
       .from('follows')
@@ -39,6 +45,12 @@ export const unfollowUser = async (
   followingId: string
 ): Promise<{ success: boolean; error?: string }> => {
   try {
+    // Ensure Supabase auth session is active
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      return { success: false, error: 'Session expired. Please log in again.' };
+    }
+
     // Delete from follows table (counts update automatically via Supabase triggers)
     const { error: deleteError } = await supabase
       .from('follows')
