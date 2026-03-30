@@ -29,6 +29,16 @@ export default function UsersTabsLayout() {
   const plusSize = clamp(ms(28), 24, 32);
   const sideIconSize = clamp(ms(22), 20, 26);
 
+  const tabBarBottomPad = Math.max(
+    Math.round(
+      Math.max(
+        insets.bottom,
+        Platform.OS === "android" ? 12 : 8,
+      ) / 2,
+    ),
+    4,
+  );
+
   return (
     <View className="flex-1 bg-background">
       <Tabs
@@ -50,10 +60,7 @@ export default function UsersTabsLayout() {
               right: 0,
               width: "100%",
               zIndex: 100,
-              paddingBottom:
-                Platform.OS === "android"
-                  ? Math.max(insets.bottom, 12)
-                  : Math.max(insets.bottom, 10),
+              paddingBottom: tabBarBottomPad,
               paddingTop: 5,
             }}
           >
