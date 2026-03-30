@@ -1,4 +1,5 @@
 import { getFollowerIdsOf } from '@/lib/followService';
+import type { PostMediaDisplay } from '@/lib/postMediaDisplay';
 import { notifyNewPost } from '@/services/notificationService';
 import { supabase } from './supabase';
 import { uploadFileToSupabase } from './uploadFile';
@@ -12,8 +13,12 @@ export interface Post {
   likes: number;
   comments: number;
   shares: number;
+  media_display?: PostMediaDisplay | null;
   tagged_products?: Array<{ id: string; name: string; price: number; image?: string; current_price?: number; is_currently_active?: boolean; discount_percent?: number }>;
   tagged_accounts?: Array<{ id: string; name: string; avatar_url?: string | null }>;
+  location_name?: string | null;
+  location_lat?: number | null;
+  location_lng?: number | null;
 }
 
 // Extended post interface with user profile data
@@ -164,14 +169,36 @@ export const createPost = async (postData: {
   content: string;
   images: string[];
   userId: string;
+  mediaDisplay?: PostMediaDisplay;
   tagged_products?: Array<{ id: string; name: string; price: number; image?: string; current_price?: number; is_currently_active?: boolean; discount_percent?: number }>;
   tagged_accounts?: Array<{ id: string; name: string; avatar_url?: string | null }>;
+  locationName?: string;
+  locationLat?: number;
+  locationLng?: number;
 }) => {
   const insertPayload: Record<string, unknown> = {
     user_id: postData.userId,
     content: postData.content,
     images: postData.images,
   };
+
+  const loc = postData.locationName?.trim();
+  if (loc) {
+    insertPayload.location_name = loc;
+    if (
+      postData.locationLat != null &&
+      postData.locationLng != null &&
+      Number.isFinite(postData.locationLat) &&
+      Number.isFinite(postData.locationLng)
+    ) {
+      insertPayload.location_lat = postData.locationLat;
+      insertPayload.location_lng = postData.locationLng;
+    }
+  }
+
+  if (postData.mediaDisplay) {
+    insertPayload.media_display = postData.mediaDisplay;
+  }
 
   if (postData.tagged_products && postData.tagged_products.length > 0) {
     insertPayload.tagged_products = postData.tagged_products;

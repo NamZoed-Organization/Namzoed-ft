@@ -1,5 +1,3 @@
-import { Audio } from "expo-av";
-
 const SOUND_SOURCES = {
   comment:      require("@/assets/sounds/comment.mp3"),
   like:         require("@/assets/sounds/like.mp3"),
@@ -12,6 +10,7 @@ type SoundName = keyof typeof SOUND_SOURCES;
 /** Fire-and-forget sound player. Silently no-ops on any error. */
 export async function playSound(name: SoundName): Promise<void> {
   try {
+    const { Audio } = await import("expo-av");
     await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
     const { sound } = await Audio.Sound.createAsync(SOUND_SOURCES[name], {
       shouldPlay: true,
@@ -22,5 +21,7 @@ export async function playSound(name: SoundName): Promise<void> {
         sound.unloadAsync().catch(() => {});
       }
     });
-  } catch {}
+  } catch {
+    // e.g. native module missing (Expo Go mismatch), web, or playback failure
+  }
 }

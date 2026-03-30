@@ -1,13 +1,11 @@
 import FollowRequests from "@/components/modals/FollowRequests";
 import FollowRequestsOverlay from "@/components/modals/FollowRequestsOverlay";
 import ImageCropOverlay from "@/components/modals/ImageCropOverlay";
-import ImageViewer from "@/components/modals/ImageViewer";
 import LicenseViewerOverlay from "@/components/modals/LicenseViewerOverlay";
 import ManageListingsOverlay from "@/components/modals/ManageListingsOverlay";
 import ProfileImageViewer from "@/components/modals/ProfileImageViewer";
 import ProfileSettings from "@/components/modals/ProfileSettings";
 import { useUser } from "@/contexts/UserContext";
-import { Post } from "@/lib/postsService";
 // Added import for profile services
 import AddServicesModal from "@/components/modals/AddServicesModal";
 import EditServicesModal from "@/components/modals/EditServicesModal";
@@ -19,6 +17,7 @@ import { useUserProducts } from "@/hooks/profile/useUserProducts";
 import { useEarlyAccessBadge } from "@/hooks/useEarlyAccessBadge";
 // Profile components
 import EarlyAccessBadge from "@/components/EarlyAccessBadge";
+import ProfilePostGridItem from "@/components/profile/ProfilePostGridItem";
 import ServiceProviderSection from "@/components/profile/ServiceProviderSection";
 import BottomNavBar from "@/components/ui/BottomNavBar";
 import PopupMessage from "@/components/ui/PopupMessage";
@@ -38,21 +37,19 @@ import {
   uploadLicenseImage,
   uploadProviderAvatar,
 } from "@/lib/servicesService";
+import { useAppRouter } from "@/utils/navigation";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
 import { ImpactFeedbackStyle, NotificationFeedbackType } from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
-import { useAppRouter } from "@/utils/navigation";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import {
   Camera,
-  Copy,
   Eye,
   GalleryHorizontal,
   Grid,
   ImageIcon,
   Package,
-  Play,
   Settings,
   ShoppingBag,
   Trash2,
@@ -63,7 +60,6 @@ import {
   Wrench,
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useState } from "react";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   ActivityIndicator,
   Alert,
@@ -79,11 +75,11 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 // --- Reanimated & Gesture Handler ---
-import { useVideoPlayer, VideoView } from "expo-video";
 import Animated, {
   FadeIn,
   FadeInDown,
@@ -92,32 +88,6 @@ import Animated, {
   SlideInDown,
   SlideOutDown,
 } from "react-native-reanimated";
-
-// Helper to check if URL is a video
-const isVideoUrl = (url: string): boolean => {
-  const videoExtensions = [".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"];
-  const lowerUrl = url.toLowerCase();
-  return (
-    videoExtensions.some((ext) => lowerUrl.includes(ext)) ||
-    lowerUrl.includes("post-videos")
-  );
-};
-
-// Video thumbnail component – renders the first frame via expo-video
-function VideoThumb({ uri }: { uri: string }) {
-  const player = useVideoPlayer(uri, (p) => {
-    p.muted = true;
-    p.loop = false;
-  });
-  return (
-    <VideoView
-      player={player}
-      style={{ width: "100%", height: "100%" }}
-      nativeControls={false}
-      contentFit="cover"
-    />
-  );
-}
 
 export default function ProfileScreen() {
   const { currentUser, setCurrentUser, logout } = useUser();
@@ -179,13 +149,10 @@ export default function ProfileScreen() {
   // Ref to track programmatic scrolling (tap) vs user swiping
   const isScrollingProgrammatically = React.useRef(false);
 
-  // ImageViewer state
-  const [showImageViewer, setShowImageViewer] = useState(false);
-  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
-  const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
-
   // Profile image viewer state
   const [showProfileImageViewer, setShowProfileImageViewer] = useState(false);
+  const [showProviderWorkImageViewer, setShowProviderWorkImageViewer] =
+    useState(false);
 
   // License viewer state
   const [showLicenseViewer, setShowLicenseViewer] = useState(false);
@@ -253,8 +220,6 @@ export default function ProfileScreen() {
     userPosts,
     setUserPosts,
     loadingPosts,
-    userImages,
-    imagePostMap,
     postThumbnails,
   } = useUserPosts(refreshKey, showErrorPopup);
 
@@ -294,8 +259,8 @@ export default function ProfileScreen() {
         setShowProviderAvatarMenu(false);
         setShowManageListings(false);
         setShowCropOverlay(false);
-        setShowImageViewer(false);
         setShowProfileImageViewer(false);
+        setShowProviderWorkImageViewer(false);
         setShowLicenseViewer(false);
         setShowLicenseMenu(false);
       };
@@ -458,15 +423,6 @@ export default function ProfileScreen() {
     setShowCropOverlay(false);
     setSelectedImageUri(null);
     setSelectedImageDims(null);
-  };
-
-  const handleMediaClick = (imageUrl: string) => {
-    const post = imagePostMap.get(imageUrl);
-    if (!post) return;
-    const mediaIndex = post.images.findIndex((img: string) => img === imageUrl);
-    setSelectedPost(post);
-    setSelectedMediaIndex(mediaIndex >= 0 ? mediaIndex : 0);
-    setShowImageViewer(true);
   };
 
   const ensureCameraPermission = async (
@@ -1059,7 +1015,7 @@ export default function ProfileScreen() {
         <View className="h-12 bg-transparent" />
 
         {/* Header */}
-        <View className="flex-row items-center justify-between px-4 pb-3 bg-transparent ">
+        <View className="flex-row items-center justify-between px-4 pb-3 pt-2 bg-transparent ">
           {/* Left Icons */}
           <View className="flex-row items-center gap-2">
             <TouchableOpacity
@@ -1378,53 +1334,19 @@ export default function ProfileScreen() {
                         className="py-12 w-full"
                       />
                     ) : postThumbnails.length > 0 ? (
-                      postThumbnails.map((thumb) => {
-                        return (
-                          <View
-                            key={thumb.postId}
-                            className="w-[33.33%] aspect-[9/12] p-[1px]"
-                          >
-                            <TouchableOpacity
-                              className="flex-1 bg-gray-100 relative"
-                              onPress={() => {
-                                setSelectedPost(thumb.post);
-                                setSelectedMediaIndex(0);
-                                setShowImageViewer(true);
-                              }}
-                            >
-                              {thumb.isVideo ? (
-                                <VideoThumb uri={thumb.thumbnailUrl} />
-                              ) : (
-                                <Image
-                                  source={{ uri: thumb.thumbnailUrl }}
-                                  className="w-full h-full"
-                                  resizeMode="cover"
-                                />
-                              )}
-                              {/* Stacked icon for multi-image posts */}
-                              {thumb.mediaCount > 1 && (
-                                <View className="absolute top-1.5 right-1.5">
-                                  <Copy
-                                    size={14}
-                                    color="#fff"
-                                    strokeWidth={2}
-                                  />
-                                </View>
-                              )}
-                              {/* Video indicator */}
-                              {thumb.isVideo && thumb.mediaCount <= 1 && (
-                                <View className="absolute top-1.5 right-1.5">
-                                  <Play
-                                    size={14}
-                                    color="#fff"
-                                    strokeWidth={1.5}
-                                  />
-                                </View>
-                              )}
-                            </TouchableOpacity>
-                          </View>
-                        );
-                      })
+                      postThumbnails.map((thumb) => (
+                        <ProfilePostGridItem
+                          key={thumb.postId}
+                          thumbnailUrl={thumb.thumbnailUrl}
+                          isVideo={thumb.isVideo}
+                          mediaCount={thumb.mediaCount}
+                          onPress={() =>
+                            router.push(
+                              `/(users)/post/${thumb.postId}` as any,
+                            )
+                          }
+                        />
+                      ))
                     ) : (
                       <View className="w-full py-16 items-center px-6">
                         <View className="w-14 h-14 rounded-full bg-blue-50 items-center justify-center mb-3">
@@ -1637,6 +1559,10 @@ export default function ProfileScreen() {
                 onShowProviderAvatarMenu={() => {
                   Haptics.impactAsync(ImpactFeedbackStyle.Light);
                   setShowProviderAvatarMenu(true);
+                }}
+                onViewProviderImage={() => {
+                  Haptics.impactAsync(ImpactFeedbackStyle.Light);
+                  setShowProviderWorkImageViewer(true);
                 }}
                 onEditProviderProfile={() => {
                   Haptics.impactAsync(ImpactFeedbackStyle.Light);
@@ -2078,23 +2004,6 @@ export default function ProfileScreen() {
         </Modal>
       )}
 
-      {showImageViewer && selectedPost && (
-        <ImageViewer
-          visible={showImageViewer}
-          images={selectedPost.images}
-          initialIndex={selectedMediaIndex}
-          onClose={() => {
-            setShowImageViewer(false);
-          }}
-          postContent={selectedPost.content}
-          username={currentUser?.name || "User"}
-          likes={selectedPost.likes}
-          comments={selectedPost.comments}
-          postId={selectedPost.id}
-          postUserId={selectedPost.user_id}
-        />
-      )}
-
       {/* Profile Image Viewer */}
       {showProfileImageViewer && profileImage && (
         <ProfileImageViewer
@@ -2103,6 +2012,14 @@ export default function ProfileScreen() {
           onClose={() => {
             setShowProfileImageViewer(false);
           }}
+        />
+      )}
+
+      {showProviderWorkImageViewer && providerImageUri && (
+        <ProfileImageViewer
+          visible={showProviderWorkImageViewer}
+          imageUri={providerImageUri}
+          onClose={() => setShowProviderWorkImageViewer(false)}
         />
       )}
 

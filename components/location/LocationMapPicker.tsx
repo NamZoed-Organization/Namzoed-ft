@@ -1,15 +1,18 @@
+import MapPinMarker from "@/components/maps/MapPinMarker";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { Ionicons } from "@expo/vector-icons";
 import React, { useState } from "react";
 import {
     ActivityIndicator,
+    Dimensions,
     Modal,
     Pressable,
     Text,
     View,
 } from "react-native";
 import { Platform } from "react-native";
-import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
+import { androidMapProvider } from "@/utils/mapProvider";
+import MapView from "react-native-maps";
 
 interface Location {
   latitude: number;
@@ -46,7 +49,6 @@ export default function LocationMapPicker({
   const [deliveryLocation, setDeliveryLocation] = useState<Location | null>(
     initialDeliveryLocation || null
   );
-  const [mapRegion, setMapRegion] = useState(defaultRegion);
   const [loadingAddress, setLoadingAddress] = useState(false);
   const [mapType, setMapType] = useState<'standard' | 'satellite' | 'hybrid'>('standard');
   const [popup, setPopup] = useState<{visible: boolean; type: 'success'|'warning'|'white'; title: string; message: string}>({visible: false, type: 'white', title: '', message: ''});
@@ -112,6 +114,19 @@ export default function LocationMapPicker({
     }
   };
 
+  const applyPinDrag = async (
+    kind: "pickup" | "delivery",
+    latitude: number,
+    longitude: number,
+  ) => {
+    const address = await getAddressFromCoordinates(latitude, longitude);
+    if (kind === "pickup") {
+      setPickupLocation({ latitude, longitude, address });
+    } else {
+      setDeliveryLocation({ latitude, longitude, address });
+    }
+  };
+
   const handleConfirm = () => {
     if (!pickupLocation || !deliveryLocation) {
       showPopup("warning", "Locations Missing", "Please set both pickup and delivery locations on the map.");
@@ -140,7 +155,8 @@ export default function LocationMapPicker({
       onRequestClose={handleClose}
     >
       <View className="flex-1 bg-black/50">
-        <View className="flex-1 bg-white mt-12 rounded-t-3xl overflow-hidden">
+        {/* Avoid overflow-hidden with MapView on Android (grey map + logo only). */}
+        <View className="flex-1 bg-white mt-12 rounded-t-3xl">
           {/* Header */}
           <View className="bg-white border-b border-gray-200 p-4">
             <View className="flex-row justify-between items-center mb-3">
@@ -243,55 +259,64 @@ export default function LocationMapPicker({
           </View>
 
           {/* Map */}
-          <View className="flex-1 relative">
+          <View
+            className="flex-1 relative"
+            style={
+              Platform.OS === "android"
+                ? {
+                    minHeight: Math.max(280, Dimensions.get("window").height * 0.38),
+                  }
+                : undefined
+            }
+            collapsable={false}
+          >
             <MapView
-              provider={Platform.OS === "android" ? PROVIDER_GOOGLE : undefined}
+              key={Platform.OS === "android" ? `loc-${visible}` : "loc-map"}
+              provider={androidMapProvider()}
               mapType={mapType}
               style={{ flex: 1 }}
-              region={mapRegion}
-              onRegionChangeComplete={setMapRegion}
+              initialRegion={defaultRegion}
               onPress={handleMapPress}
+              onLongPress={handleMapPress}
+              moveOnMarkerPress={false}
+              toolbarEnabled={false}
               showsUserLocation
               showsMyLocationButton
             >
-              {/* Green marker for pickup location (seller) */}
               {pickupLocation && (
-                <Marker
+                <MapPinMarker
                   coordinate={{
                     latitude: pickupLocation.latitude,
                     longitude: pickupLocation.longitude,
                   }}
-                  pinColor="green"
-                  title="Pickup Location (Seller)"
-                  description={pickupLocation.address || "Tap to set pickup point"}
-                >
-                  <View className="items-center">
-                    <View className="bg-green-600 w-10 h-10 rounded-full items-center justify-center border-4 border-white shadow-lg">
-                      <Ionicons name="location" size={24} color="white" />
-                    </View>
-                    <View className="w-0 h-0 border-l-8 border-r-8 border-t-8 border-transparent border-t-green-600 -mt-1" />
-                  </View>
-                </Marker>
+                  preset="pickup"
+                  size={44}
+                  title="Pickup (seller)"
+                  description={pickupLocation.address || "Drag pin or tap map"}
+                  draggable
+                  onDragEnd={(e) => {
+                    const { latitude, longitude } = e.nativeEvent.coordinate;
+                    void applyPinDrag("pickup", latitude, longitude);
+                  }}
+                />
               )}
 
-              {/* Blue marker for delivery location (buyer) */}
               {deliveryLocation && (
-                <Marker
+                <MapPinMarker
                   coordinate={{
                     latitude: deliveryLocation.latitude,
                     longitude: deliveryLocation.longitude,
                   }}
-                  pinColor="blue"
-                  title="Delivery Location (Buyer)"
-                  description={deliveryLocation.address || "Tap to set delivery point"}
-                >
-                  <View className="items-center">
-                    <View className="bg-blue-600 w-10 h-10 rounded-full items-center justify-center border-4 border-white shadow-lg">
-                      <Ionicons name="location" size={24} color="white" />
-                    </View>
-                    <View className="w-0 h-0 border-l-8 border-r-8 border-t-8 border-transparent border-t-blue-600 -mt-1" />
-                  </View>
-                </Marker>
+                  preset="delivery"
+                  size={44}
+                  title="Delivery (buyer)"
+                  description={deliveryLocation.address || "Drag pin or tap map"}
+                  draggable
+                  onDragEnd={(e) => {
+                    const { latitude, longitude } = e.nativeEvent.coordinate;
+                    void applyPinDrag("delivery", latitude, longitude);
+                  }}
+                />
               )}
             </MapView>
 

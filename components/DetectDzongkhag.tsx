@@ -1,11 +1,13 @@
 import { useDzongkhag } from "@/contexts/DzongkhagContext";
 import { useUser } from "@/contexts/UserContext";
 import { dzongkhagCenters } from "@/data/dzongkhag";
+import { androidMapProvider } from "@/utils/mapProvider";
 import { clamp, useResponsive } from "@/utils/responsive";
 import { BlurView } from "expo-blur";
 import { MapPin, RefreshCw, Settings, X } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
 import {
+  Dimensions,
   Image,
   Linking,
   Modal,
@@ -15,11 +17,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import MapView, {
-  Marker,
-  PROVIDER_DEFAULT,
-  PROVIDER_GOOGLE,
-} from "react-native-maps";
+import MapView, { Marker, PROVIDER_DEFAULT } from "react-native-maps";
 
 export default function DetectDzongkhag() {
   const {
@@ -48,6 +46,8 @@ export default function DetectDzongkhag() {
   const floatingButtonsGap = clamp(ms(24), 16, 28);
   const floatingButtonsMarginBottom = clamp(vs(24), 18, 30);
   const modalHeight = clamp(hp(74), 460, 700);
+  const mapSectionHeight = Math.round(modalHeight * 0.9);
+  const footerSectionHeight = modalHeight - mapSectionHeight;
   const modalRadius = clamp(ms(40), 28, 46);
   const modalBottomPaddingX = clamp(wp(4), 12, 20);
   const dzongkhagTextSize = clamp(ms(18), 16, 22);
@@ -213,36 +213,64 @@ export default function DetectDzongkhag() {
               </TouchableOpacity>
             </View>
 
-            {/* MAIN SOLID MODAL */}
+            {/* MAIN SOLID MODAL — overflow-hidden breaks Google Map tiles on Android */}
             <View
-              className="bg-white w-full overflow-hidden shadow-2xl border border-gray-50"
-              style={{ height: modalHeight, borderRadius: modalRadius }}
+              className="bg-white w-full shadow-2xl border border-gray-50"
+              style={{
+                height: modalHeight,
+                borderRadius: modalRadius,
+                ...Platform.select({
+                  android: { overflow: "visible" },
+                  default: { overflow: "hidden" },
+                }),
+              }}
             >
-              {/* MAP VIEW - 90% */}
-              <View style={{ height: "90%" }} className="w-full bg-gray-200">
+              {/* MAP VIEW - 90% (explicit height: % height is unreliable for MapView on Android) */}
+              <View
+                style={{
+                  height: mapSectionHeight,
+                  width: "100%",
+                  backgroundColor: "#e5e7eb",
+                  minHeight:
+                    Platform.OS === "android"
+                      ? Math.max(320, Dimensions.get("window").height * 0.45)
+                      : undefined,
+                }}
+                className="w-full"
+                collapsable={false}
+              >
                 {location || currentLocation || loading ? (
                   <MapView
+                    key={
+                      Platform.OS === "android"
+                        ? showOverlay
+                          ? "dz-map-visible"
+                          : "dz-map-hidden"
+                        : "dz-map"
+                    }
                     ref={mapRef}
                     provider={
                       Platform.OS === "android"
-                        ? PROVIDER_GOOGLE
+                        ? androidMapProvider()
                         : PROVIDER_DEFAULT
                     }
                     style={{ flex: 1 }}
                     showsUserLocation={true}
-                    followsUserLocation={true}
+                    followsUserLocation={false}
                     showsMyLocationButton={false}
                     showsCompass={true}
                     showsScale={true}
-                    region={currentLocation ? {
-                      latitude: currentLocation.latitude,
-                      longitude: currentLocation.longitude,
-                      latitudeDelta: 0.05,
-                      longitudeDelta: 0.05,
-                    } : undefined}
+                    toolbarEnabled={false}
+                    moveOnMarkerPress={false}
                     initialRegion={{
-                      latitude: currentLocation?.latitude || location?.latitude || 27.4728,
-                      longitude: currentLocation?.longitude || location?.longitude || 89.6393,
+                      latitude:
+                        currentLocation?.latitude ||
+                        location?.latitude ||
+                        27.4728,
+                      longitude:
+                        currentLocation?.longitude ||
+                        location?.longitude ||
+                        89.6393,
                       latitudeDelta: 0.5,
                       longitudeDelta: 0.5,
                     }}
@@ -286,26 +314,29 @@ export default function DetectDzongkhag() {
                           latitude: currentLocation.latitude,
                           longitude: currentLocation.longitude,
                         }}
+                        anchor={{ x: 0.5, y: 1 }}
                         title={dzongkhag || "Your Location"}
                         description="Current detected location"
                       >
                         <View style={styles.markerContainer}>
-                          <View style={styles.pinBackground}>
-                            <View style={styles.profileContainer}>
-                              {currentUser?.avatar_url ? (
-                                <Image
-                                  source={{ uri: currentUser.avatar_url }}
-                                  style={styles.profileImage}
-                                  resizeMode="cover"
-                                />
-                              ) : (
-                                <View style={styles.defaultAvatar}>
-                                  <Text style={styles.avatarText}>
-                                    {currentUser?.name?.charAt(0).toUpperCase() ||
-                                      "?"}
-                                  </Text>
-                                </View>
-                              )}
+                          <View style={styles.markerShadow}>
+                            <View style={styles.pinBackground}>
+                              <View style={styles.profileContainer}>
+                                {currentUser?.avatar_url ? (
+                                  <Image
+                                    source={{ uri: currentUser.avatar_url }}
+                                    style={styles.profileImage}
+                                    resizeMode="cover"
+                                  />
+                                ) : (
+                                  <View style={styles.defaultAvatar}>
+                                    <Text style={styles.avatarText}>
+                                      {currentUser?.name?.charAt(0).toUpperCase() ||
+                                        "?"}
+                                    </Text>
+                                  </View>
+                                )}
+                              </View>
                             </View>
                           </View>
                           <View style={styles.markerPointer} />
@@ -322,10 +353,15 @@ export default function DetectDzongkhag() {
                 )}
               </View>
 
-              {/* DZONGKHAG DISPLAY - 10% */}
+              {/* DZONGKHAG DISPLAY */}
               <View
-                className="justify-center items-center"
-                style={{ height: "10%", paddingHorizontal: modalBottomPaddingX }}
+                className="justify-center items-center bg-white"
+                style={{
+                  height: footerSectionHeight,
+                  paddingHorizontal: modalBottomPaddingX,
+                  borderBottomLeftRadius: modalRadius,
+                  borderBottomRightRadius: modalRadius,
+                }}
               >
                 {accessDenied ? (
                   <TouchableOpacity
@@ -368,23 +404,33 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  markerShadow: {
+    backgroundColor: "transparent",
+    ...Platform.select({
+      ios: {
+        shadowColor: "#0f172a",
+        shadowOffset: { width: 0, height: 5 },
+        shadowOpacity: 0.35,
+        shadowRadius: 10,
+      },
+      android: { elevation: 12 },
+      default: {},
+    }),
+  },
   pinBackground: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: "#3b82f6",
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: "#094569",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
+    borderWidth: 3,
+    borderColor: "#FFFFFF",
   },
   profileContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     overflow: "hidden",
     backgroundColor: "#fff",
     alignItems: "center",
@@ -393,32 +439,32 @@ const styles = StyleSheet.create({
   profileImage: {
     width: "100%",
     height: "100%",
-    borderRadius: 24,
+    borderRadius: 23,
   },
   defaultAvatar: {
     width: "100%",
     height: "100%",
-    borderRadius: 24,
-    backgroundColor: "#e5e7eb",
+    borderRadius: 23,
+    backgroundColor: "#EDE9E2",
     alignItems: "center",
     justifyContent: "center",
   },
   avatarText: {
     fontSize: 18,
-    fontWeight: "bold",
-    color: "#3b82f6",
+    fontWeight: "700",
+    color: "#094569",
   },
   markerPointer: {
     width: 0,
     height: 0,
     backgroundColor: "transparent",
     borderStyle: "solid",
-    borderLeftWidth: 10,
-    borderRightWidth: 10,
-    borderTopWidth: 15,
+    borderLeftWidth: 9,
+    borderRightWidth: 9,
+    borderTopWidth: 12,
     borderLeftColor: "transparent",
     borderRightColor: "transparent",
-    borderTopColor: "#3b82f6",
-    marginTop: -2,
+    borderTopColor: "#094569",
+    marginTop: -3,
   },
 });

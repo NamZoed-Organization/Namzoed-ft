@@ -1,15 +1,12 @@
 // components/ui/TabBarButton.tsx
+import { PlatformPressable } from "@react-navigation/elements";
 import React from "react";
-import { TouchableOpacity } from "react-native-gesture-handler";
 
-// use any to avoid ref mismatch with React Navigation
-const TabBarButton = React.forwardRef<any, any>((props, ref) => {
-  return (
-    <TouchableOpacity ref={ref} activeOpacity={0.7} {...props}>
-      {props.children}
-    </TouchableOpacity>
-  );
-});
+// Match React Navigation default tab button (PlatformPressable) so flex:1 / alignment stay correct.
+// RNGH TouchableOpacity missed presses on iOS; plain Pressable + style callback broke horizontal flex.
+const TabBarButton = React.forwardRef<any, any>((props, ref) => (
+  <PlatformPressable ref={ref} {...props} />
+));
 
 TabBarButton.displayName = "TabBarButton";
 

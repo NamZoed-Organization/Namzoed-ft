@@ -1,4 +1,7 @@
 // app/(users)/chat/[id].tsx
+import MongooseWorkerNavBar, {
+  MONGOOSE_WORKER_NAV_BAR_HEIGHT,
+} from "@/components/ui/MongooseWorkerNavBar";
 import PopupMessage from "@/components/ui/PopupMessage";
 import MongooseInitiatorModal from "@/components/MongooseInitiatorModal";
 import MongooseInviteCard, {
@@ -9,6 +12,7 @@ import AudioMessagePlayer from "@/components/chat/AudioMessagePlayer";
 import ChatImagePicker from "@/components/chat/ChatImagePicker";
 import ChatImageViewer from "@/components/chat/ChatImageViewer";
 import SingleLocationPicker from "@/components/location/SingleLocationPicker";
+import MapPinMarker from "@/components/maps/MapPinMarker";
 import TrackMongooseModal from "@/components/modals/TrackMongooseModal";
 import { useAppearance } from "@/contexts/AppearanceContext";
 import { useUnreadMessages } from "@/contexts/UnreadMessagesContext";
@@ -35,6 +39,7 @@ import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
 import { useAppRouter } from "@/utils/navigation";
+import { isMongooseUser } from "@/utils/roleCheck";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import { Bike, Verified } from "lucide-react-native";
 
@@ -48,6 +53,7 @@ import React, {
 import {
     ActivityIndicator,
     Animated,
+    Dimensions,
     Easing,
     FlatList,
     Image,
@@ -65,7 +71,8 @@ import {
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Gesture, GestureDetector, ScrollView as GestureScrollView } from "react-native-gesture-handler";
-import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
+import { androidMapProvider } from "@/utils/mapProvider";
+import MapView from "react-native-maps";
 import Reanimated, {
   Extrapolation,
   interpolate,
@@ -533,6 +540,7 @@ function ReactionPill({
 
 export default function ChatScreen() {
   const { currentUser } = useUser();
+  const showMongooseWorkerNav = isMongooseUser(currentUser?.email);
   const {
     setActiveChatPartnerId,
     markConversationAsRead,
@@ -1113,11 +1121,13 @@ export default function ChatScreen() {
   useEffect(() => {
     if (!chatPartnerId) return;
     getEarlyAccessBadge(String(chatPartnerId)).then(setChatPartnerBadgeType).catch(() => {});
-    supabase
-      .from("service_providers")
-      .select("verification_status")
-      .eq("user_id", String(chatPartnerId))
-      .maybeSingle()
+    Promise.resolve(
+      supabase
+        .from("service_providers")
+        .select("verification_status")
+        .eq("user_id", String(chatPartnerId))
+        .maybeSingle()
+    )
       .then(({ data }) => setPartnerVerified(data?.verification_status === "verified"))
       .catch(() => {});
   }, [chatPartnerId]);
@@ -2156,7 +2166,7 @@ export default function ChatScreen() {
     // Update the invite message content: mark as confirmed
     const updatedContent = JSON.stringify({
       ...data,
-      status: "confirmed",
+      status: "awaiting_mongoose",
       bookingRequestId,
     });
 
@@ -2173,13 +2183,14 @@ export default function ChatScreen() {
       ),
     );
 
-    // Send a plain-text success message into the chat
+    // Notify both sides: booking is submitted; track only after Mongoose accepts
+    const submittedNotice =
+      "Your Mongoose delivery request has been sent. Wait for Mongoose to confirm—you’ll be able to use Check status & track on the booking card once they accept.";
     await supabase.from("messages").insert([
       {
         sender_id: effectiveCurrentUserUUID,
         receiver_id: chatPartnerId,
-        content:
-          " Mongoose delivery booking confirmed! Use the 'Check Status & Track' button to follow your delivery.",
+        content: submittedNotice,
         is_read: false,
       },
     ]);
@@ -2470,24 +2481,33 @@ export default function ChatScreen() {
               } ${isOptimistic ? "opacity-70" : ""}`}
               style={[bubbleRadiusStyle, { maxWidth: screenWidth * 0.72 }]}
             >
-              <MapView
+              <View
                 style={{ width: 250, height: 150 }}
-                provider={
-                  Platform.OS === "android" ? PROVIDER_GOOGLE : undefined
-                }
-                initialRegion={{
-                  latitude: coordinates.latitude,
-                  longitude: coordinates.longitude,
-                  latitudeDelta: 0.01,
-                  longitudeDelta: 0.01,
-                }}
-                scrollEnabled={false}
-                zoomEnabled={false}
-                rotateEnabled={false}
-                pitchEnabled={false}
+                collapsable={false}
               >
-                <Marker coordinate={coordinates} title="Shared Location" />
-              </MapView>
+                <MapView
+                  style={{ width: 250, height: 150 }}
+                  provider={androidMapProvider()}
+                  initialRegion={{
+                    latitude: coordinates.latitude,
+                    longitude: coordinates.longitude,
+                    latitudeDelta: 0.01,
+                    longitudeDelta: 0.01,
+                  }}
+                  scrollEnabled={false}
+                  zoomEnabled={false}
+                  rotateEnabled={false}
+                  pitchEnabled={false}
+                  toolbarEnabled={false}
+                >
+                  <MapPinMarker
+                    coordinate={coordinates}
+                    preset="shared"
+                    size={34}
+                    title="Shared location"
+                  />
+                </MapView>
+              </View>
               <View
                 className={`px-3 py-2 ${
                   isCurrentUser ? "bg-primary" : "bg-gray-200"
@@ -2779,10 +2799,14 @@ export default function ChatScreen() {
     () => ({
       paddingHorizontal: 16,
       paddingVertical: 8,
-      paddingTop: chatBottomPadding,
+      paddingTop:
+        chatBottomPadding +
+        (showMongooseWorkerNav && !isKeyboardVisible
+          ? MONGOOSE_WORKER_NAV_BAR_HEIGHT
+          : 0),
       flexGrow: 1,
     }),
-    [chatBottomPadding],
+    [chatBottomPadding, showMongooseWorkerNav, isKeyboardVisible],
   );
   const typingHeaderComponent = useMemo(
     () => (isPartnerTyping ? <TypingIndicator /> : null),
@@ -3005,7 +3029,11 @@ export default function ChatScreen() {
         <View
           className={`flex-row items-center px-4 pt-2`}
           style={{
-            paddingBottom: isKeyboardVisible ? 8 : Math.max(insets.bottom, 12),
+            paddingBottom:
+              (isKeyboardVisible ? 8 : Math.max(insets.bottom, 12)) +
+              (showMongooseWorkerNav && !isKeyboardVisible
+                ? MONGOOSE_WORKER_NAV_BAR_HEIGHT
+                : 0),
           }}
           onLayout={(e) => {
             const measured = Math.round(e.nativeEvent.layout.height);
@@ -3257,22 +3285,37 @@ export default function ChatScreen() {
 
           {/* Full Map */}
           {selectedLocation && (
-            <MapView
-              style={{ flex: 1 }}
-              provider={Platform.OS === "android" ? PROVIDER_GOOGLE : undefined}
-              initialRegion={{
-                latitude: selectedLocation.latitude,
-                longitude: selectedLocation.longitude,
-                latitudeDelta: 0.01,
-                longitudeDelta: 0.01,
+            <View
+              style={{
+                flex: 1,
+                minHeight:
+                  Platform.OS === "android"
+                    ? Math.max(320, Dimensions.get("window").height * 0.55)
+                    : 0,
               }}
+              collapsable={false}
             >
-              <Marker
-                coordinate={selectedLocation}
-                title="Shared Location"
-                description="Tap navigate icon to open in Maps app"
-              />
-            </MapView>
+              <MapView
+                style={{ flex: 1 }}
+                provider={androidMapProvider()}
+                initialRegion={{
+                  latitude: selectedLocation.latitude,
+                  longitude: selectedLocation.longitude,
+                  latitudeDelta: 0.01,
+                  longitudeDelta: 0.01,
+                }}
+                toolbarEnabled={false}
+                moveOnMarkerPress={false}
+              >
+                <MapPinMarker
+                  coordinate={selectedLocation}
+                  preset="shared"
+                  size={44}
+                  title="Shared location"
+                  description="Tap navigate icon to open in Maps app"
+                />
+              </MapView>
+            </View>
           )}
         </View>
       </Modal>
@@ -3758,6 +3801,8 @@ export default function ChatScreen() {
           </View>
         </View>
       )}
+
+      <MongooseWorkerNavBar />
     </View>
   );
 }

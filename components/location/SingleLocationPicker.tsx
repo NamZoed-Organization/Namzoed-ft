@@ -3,17 +3,20 @@
  * Full-screen modal that lets the user place a single pin on the map and confirm it.
  * The address is reverse-geocoded via OpenStreetMap Nominatim.
  */
+import MapPinMarker from "@/components/maps/MapPinMarker";
 import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
 import {
     ActivityIndicator,
+    Dimensions,
     Modal,
     Platform,
     Text,
     TouchableOpacity,
     View,
 } from "react-native";
-import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
+import { androidMapProvider } from "@/utils/mapProvider";
+import MapView from "react-native-maps";
 
 export interface PickedLocation {
   latitude: number;
@@ -62,10 +65,7 @@ export default function SingleLocationPicker({
         longitudeDelta: 0.05,
       };
 
-  const handleMapPress = async (e: any) => {
-    const { latitude, longitude } = e.nativeEvent.coordinate;
-    // Optimistic pin placement
-    setSelected({ latitude, longitude });
+  const reverseGeocode = async (latitude: number, longitude: number) => {
     setGeocoding(true);
     try {
       const resp = await fetch(
@@ -79,10 +79,21 @@ export default function SingleLocationPicker({
         address: data?.display_name ?? undefined,
       });
     } catch {
-      // Keep coords without address — that's fine
+      setSelected({ latitude, longitude });
     } finally {
       setGeocoding(false);
     }
+  };
+
+  const handleMapPress = async (e: any) => {
+    const { latitude, longitude } = e.nativeEvent.coordinate;
+    setSelected({ latitude, longitude });
+    await reverseGeocode(latitude, longitude);
+  };
+
+  const handleMarkerDragEnd = (e: any) => {
+    const { latitude, longitude } = e.nativeEvent.coordinate;
+    void reverseGeocode(latitude, longitude);
   };
 
   const handleConfirm = () => {
@@ -175,28 +186,42 @@ export default function SingleLocationPicker({
             </Text>
           ) : (
             <Text style={{ fontSize: 13, color: "#9ca3af" }}>
-              Tap anywhere on the map to place your pin
+              Tap or long-press the map to place your pin (you can drag the pin after)
             </Text>
           )}
         </View>
 
-        {/* Map */}
-        <MapView
-          style={{ flex: 1 }}
-          provider={Platform.OS === "android" ? PROVIDER_GOOGLE : undefined}
-          initialRegion={initialRegion}
-          onPress={handleMapPress}
+        {/* Map — avoid controlled region; remount on Android; explicit min height avoids blank map */}
+        <View
+          style={{ flex: 1, minHeight: Platform.OS === "android" ? Math.max(280, Dimensions.get("window").height * 0.42) : 0 }}
+          collapsable={false}
         >
-          {selected && (
-            <Marker
-              coordinate={{
-                latitude: selected.latitude,
-                longitude: selected.longitude,
-              }}
-              pinColor="#2563eb"
-            />
-          )}
-        </MapView>
+          <MapView
+            key={Platform.OS === "android" ? `single-loc-${visible}` : "single-loc"}
+            style={{ flex: 1 }}
+            provider={androidMapProvider()}
+            initialRegion={initialRegion}
+            onPress={handleMapPress}
+            onLongPress={handleMapPress}
+            moveOnMarkerPress={false}
+            toolbarEnabled={false}
+          >
+            {selected && (
+              <MapPinMarker
+                coordinate={{
+                  latitude: selected.latitude,
+                  longitude: selected.longitude,
+                }}
+                preset="selected"
+                size={46}
+                title="Selected location"
+                description={selected.address}
+                draggable
+                onDragEnd={handleMarkerDragEnd}
+              />
+            )}
+          </MapView>
+        </View>
 
         {/* Bottom confirm bar */}
         {selected && (

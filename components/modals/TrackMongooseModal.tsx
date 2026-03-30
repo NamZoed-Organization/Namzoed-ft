@@ -1,36 +1,25 @@
+import MapPinMarker from "@/components/maps/MapPinMarker";
 import { supabase } from "@/lib/supabase";
 import { Ionicons } from "@expo/vector-icons";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
+    Dimensions,
     Modal,
     Platform,
     Pressable,
     Text,
     View,
 } from "react-native";
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
+import { androidMapProvider } from "@/utils/mapProvider";
+import MapView, { Polyline } from "react-native-maps";
+import {
+  fetchDrivingRoute,
+  type LatLng,
+} from "@/utils/drivingRoute";
 
-type LatLng = { latitude: number; longitude: number };
-
-/** Fetch a road-following route from OSRM (free, no API key). Falls back to straight line. */
-async function fetchOSRMRoute(from: LatLng, to: LatLng): Promise<LatLng[]> {
-  try {
-    const url =
-      `https://router.project-osrm.org/route/v1/driving/` +
-      `${from.longitude},${from.latitude};${to.longitude},${to.latitude}` +
-      `?overview=full&geometries=geojson`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-    const data = await res.json();
-    if (data.code === 'Ok' && data.routes?.[0]?.geometry?.coordinates?.length > 0) {
-      return data.routes[0].geometry.coordinates.map(
-        ([lon, lat]: [number, number]) => ({ latitude: lat, longitude: lon }),
-      );
-    }
-  } catch (e) {
-  }
-  return [from, to];
-}
+/** Fallback poll if Realtime misses an update; align ~with driver heartbeat (see LocationTrackingControl). */
+const TRACK_LOCATION_POLL_MS = 8000;
 
 interface TrackMongooseModalProps {
   visible: boolean;
@@ -54,6 +43,15 @@ interface MongooseLocation {
   timestamp: string;
 }
 
+function parseMapCoord(v: unknown): number | null {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string") {
+    const n = parseFloat(v);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
 export default function TrackMongooseModal({
   visible,
   onClose,
@@ -64,98 +62,26 @@ export default function TrackMongooseModal({
   const [routeToPickup, setRouteToPickup] = useState<LatLng[]>([]);
   const [routePickupToDelivery, setRoutePickupToDelivery] = useState<LatLng[]>([]);
   const mapRef = useRef<MapView>(null);
+  const routeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const pickup: LatLng = {
-    latitude: booking.pickup_latitude,
-    longitude: booking.pickup_longitude,
-  };
-  const delivery: LatLng = {
-    latitude: booking.delivery_latitude,
-    longitude: booking.delivery_longitude,
-  };
+  const pickup: LatLng = useMemo(
+    () => ({
+      latitude: booking.pickup_latitude,
+      longitude: booking.pickup_longitude,
+    }),
+    [booking.pickup_latitude, booking.pickup_longitude],
+  );
+  const delivery: LatLng = useMemo(
+    () => ({
+      latitude: booking.delivery_latitude,
+      longitude: booking.delivery_longitude,
+    }),
+    [booking.delivery_latitude, booking.delivery_longitude],
+  );
 
-  // Fetch the static pickup→delivery road route once when the modal opens
-  useEffect(() => {
-    if (!visible) return;
-    fetchOSRMRoute(pickup, delivery).then(setRoutePickupToDelivery);
-  }, [visible, booking.id]);
-
-  // Re-fetch mongoose→pickup road route whenever mongoose moves
-  useEffect(() => {
-    if (!mongooseLocation) return;
-    const mongoosePt: LatLng = {
-      latitude: mongooseLocation.latitude,
-      longitude: mongooseLocation.longitude,
-    };
-    fetchOSRMRoute(mongoosePt, pickup).then(setRouteToPickup);
-  }, [mongooseLocation]);
-
-  // Real-time location subscription + initial fetch
-  useEffect(() => {
-    if (!visible) return;
-    fetchMongooseLocation();
-
-    const channel = supabase
-      .channel(`mongoose_location:${booking.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'mongoose_locations',
-          filter: `booking_id=eq.${booking.id}`,
-        },
-        (payload) => {
-          if (payload.new) {
-            setMongooseLocation({
-              latitude: (payload.new as any).latitude,
-              longitude: (payload.new as any).longitude,
-              timestamp: (payload.new as any).updated_at,
-            });
-          }
-        },
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [visible, booking.id]);
-
-  const fetchMongooseLocation = async () => {
-    try {
-      setLoading(true);
-      const { data } = await supabase
-        .from('mongoose_locations')
-        .select('*')
-        .eq('booking_id', booking.id)
-        .order('updated_at', { ascending: false })
-        .limit(1)
-        .single();
-
-      if (data) {
-        setMongooseLocation({
-          latitude: data.latitude,
-          longitude: data.longitude,
-          timestamp: data.updated_at,
-        });
-      } else {
-        setMongooseLocation(null);
-      }
-    } catch {
-      setMongooseLocation(null);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const getMapRegion = () => {
-    const pts: LatLng[] = [pickup, delivery];
-    if (mongooseLocation) {
-      pts.push({ latitude: mongooseLocation.latitude, longitude: mongooseLocation.longitude });
-    }
-    const lats = pts.map((p) => p.latitude);
-    const lngs = pts.map((p) => p.longitude);
+  const initialRegion = useMemo(() => {
+    const lats = [pickup.latitude, delivery.latitude];
+    const lngs = [pickup.longitude, delivery.longitude];
     const minLat = Math.min(...lats);
     const maxLat = Math.max(...lats);
     const minLng = Math.min(...lngs);
@@ -163,10 +89,175 @@ export default function TrackMongooseModal({
     return {
       latitude: (minLat + maxLat) / 2,
       longitude: (minLng + maxLng) / 2,
-      latitudeDelta: Math.max((maxLat - minLat) * 1.6, 0.02),
-      longitudeDelta: Math.max((maxLng - minLng) * 1.6, 0.02),
+      latitudeDelta: Math.max((maxLat - minLat) * 1.8, 0.02),
+      longitudeDelta: Math.max((maxLng - minLng) * 1.8, 0.02),
     };
-  };
+  }, [pickup, delivery]);
+
+  const fetchMongooseLocation = useCallback(
+    async (silent = false) => {
+      try {
+        if (!silent) setLoading(true);
+        const { data, error } = await supabase
+          .from("mongoose_locations")
+          .select("*")
+          .eq("booking_id", booking.id)
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (error) {
+          if (__DEV__) {
+            console.warn(
+              "[TrackMongoose] mongoose_locations fetch failed:",
+              error.code,
+              error.message,
+            );
+          }
+          if (!silent) setMongooseLocation(null);
+        } else if (data) {
+          const lat = parseMapCoord(data.latitude);
+          const lng = parseMapCoord(data.longitude);
+          if (lat == null || lng == null) {
+            if (!silent) setMongooseLocation(null);
+          } else {
+            setMongooseLocation((prev) => {
+              if (
+                prev &&
+                prev.latitude === lat &&
+                prev.longitude === lng
+              ) {
+                return prev;
+              }
+              return {
+                latitude: lat,
+                longitude: lng,
+                timestamp: data.updated_at,
+              };
+            });
+          }
+        } else if (!silent) {
+          setMongooseLocation(null);
+        }
+      } catch {
+        if (!silent) setMongooseLocation(null);
+      } finally {
+        if (!silent) setLoading(false);
+      }
+    },
+    [booking.id],
+  );
+
+  useEffect(() => {
+    if (!visible) return;
+    fetchDrivingRoute(pickup, delivery).then(setRoutePickupToDelivery);
+  }, [visible, booking.id, pickup, delivery]);
+
+  useEffect(() => {
+    if (!visible || !mongooseLocation) return;
+    if (routeDebounceRef.current) clearTimeout(routeDebounceRef.current);
+    routeDebounceRef.current = setTimeout(() => {
+      routeDebounceRef.current = null;
+      fetchDrivingRoute(
+        {
+          latitude: mongooseLocation.latitude,
+          longitude: mongooseLocation.longitude,
+        },
+        pickup,
+      ).then(setRouteToPickup);
+    }, 2500);
+    return () => {
+      if (routeDebounceRef.current) {
+        clearTimeout(routeDebounceRef.current);
+        routeDebounceRef.current = null;
+      }
+    };
+    // Lat/lng deps only: full mongooseLocation would reset debounce on timestamp-only churn.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
+  }, [
+    visible,
+    mongooseLocation?.latitude,
+    mongooseLocation?.longitude,
+    pickup,
+  ]);
+
+  useEffect(() => {
+    if (!visible) return;
+
+    void fetchMongooseLocation(false);
+
+    const poll = setInterval(() => {
+      void fetchMongooseLocation(true);
+    }, TRACK_LOCATION_POLL_MS);
+
+    const channel = supabase
+      .channel(`mongoose_location_track:${booking.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "mongoose_locations",
+          filter: `booking_id=eq.${booking.id}`,
+        },
+        (payload) => {
+          const row = payload.new as Record<string, unknown> | null;
+          if (!row) return;
+          const lat = parseMapCoord(row.latitude);
+          const lng = parseMapCoord(row.longitude);
+          if (lat == null || lng == null) return;
+          setMongooseLocation((prev) => {
+            if (
+              prev &&
+              prev.latitude === lat &&
+              prev.longitude === lng
+            ) {
+              return prev;
+            }
+            return {
+              latitude: lat,
+              longitude: lng,
+              timestamp:
+                typeof row.updated_at === "string"
+                  ? row.updated_at
+                  : new Date().toISOString(),
+            };
+          });
+        },
+      )
+      .subscribe();
+
+    return () => {
+      clearInterval(poll);
+      supabase.removeChannel(channel);
+    };
+  }, [visible, booking.id, fetchMongooseLocation]);
+
+  useEffect(() => {
+    if (!visible || loading) return;
+    const coords: LatLng[] = [pickup, delivery];
+    if (mongooseLocation) {
+      coords.push({
+        latitude: mongooseLocation.latitude,
+        longitude: mongooseLocation.longitude,
+      });
+    }
+    const id = requestAnimationFrame(() => {
+      mapRef.current?.fitToCoordinates(coords, {
+        edgePadding: { top: 90, right: 44, bottom: 200, left: 44 },
+        animated: mongooseLocation != null,
+      });
+    });
+    return () => cancelAnimationFrame(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- lat/lng scalars track driver moves without object churn
+  }, [
+    visible,
+    loading,
+    mongooseLocation?.latitude,
+    mongooseLocation?.longitude,
+    pickup,
+    delivery,
+  ]);
 
   const formatTimestamp = (ts: string) =>
     new Date(ts).toLocaleTimeString('en-US', {
@@ -191,7 +282,6 @@ export default function TrackMongooseModal({
             marginTop: 48,
             borderTopLeftRadius: 24,
             borderTopRightRadius: 24,
-            overflow: 'hidden',
           }}
         >
           {/* ── Header ──────────────────────────────────────── */}
@@ -249,26 +339,29 @@ export default function TrackMongooseModal({
             {/* Legend */}
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: '#16a34a', marginRight: 5 }} />
+                <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: '#1C1614', marginRight: 5 }} />
                 <Text style={{ fontSize: 11, color: '#374151' }}>Pickup</Text>
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: '#1d4ed8', marginRight: 5 }} />
+                <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: '#094569', marginRight: 5 }} />
                 <Text style={{ fontSize: 11, color: '#374151' }}>Delivery</Text>
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: '#f97316', marginRight: 5 }} />
+                <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: '#EA580C', marginRight: 5 }} />
                 <Text style={{ fontSize: 11, color: '#374151' }}>Mongoose</Text>
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <View style={{ width: 16, height: 3, backgroundColor: '#f97316', borderRadius: 2, marginRight: 5 }} />
+                <View style={{ width: 16, height: 3, backgroundColor: '#EA580C', borderRadius: 2, marginRight: 5 }} />
                 <Text style={{ fontSize: 11, color: '#374151' }}>Live route</Text>
               </View>
             </View>
           </View>
 
           {/* ── Map ─────────────────────────────────────────── */}
-          <View style={{ flex: 1, position: 'relative' }}>
+          <View
+            style={{ flex: 1, position: 'relative' }}
+            collapsable={false}
+          >
             {loading ? (
               <View
                 style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f9fafb' }}
@@ -279,81 +372,49 @@ export default function TrackMongooseModal({
             ) : (
               <MapView
                 ref={mapRef}
-                provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
-                style={{ flex: 1 }}
-                region={getMapRegion()}
+                provider={androidMapProvider()}
+                style={
+                  Platform.OS === 'android'
+                    ? {
+                        flex: 1,
+                        minHeight: Math.max(
+                          320,
+                          Dimensions.get('window').height * 0.38,
+                        ),
+                      }
+                    : { flex: 1, minHeight: 280 }
+                }
+                initialRegion={initialRegion}
                 showsUserLocation
                 showsMyLocationButton
               >
-                {/* Pickup marker — green */}
-                <Marker
+                <MapPinMarker
                   coordinate={pickup}
-                  title="Pickup Location"
+                  preset="pickup"
+                  size={44}
+                  title="Pickup location"
                   description={booking.pickup_address}
-                >
-                  <View
-                    style={{
-                      width: 38,
-                      height: 38,
-                      borderRadius: 19,
-                      backgroundColor: '#16a34a',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      borderWidth: 3,
-                      borderColor: 'white',
-                    }}
-                  >
-                    <Ionicons name="arrow-up-circle" size={20} color="white" />
-                  </View>
-                </Marker>
-
-                {/* Delivery marker — blue */}
-                <Marker
+                />
+                <MapPinMarker
                   coordinate={delivery}
-                  title="Delivery Location"
+                  preset="delivery"
+                  size={44}
+                  title="Delivery location"
                   description={booking.delivery_address}
-                >
-                  <View
-                    style={{
-                      width: 38,
-                      height: 38,
-                      borderRadius: 19,
-                      backgroundColor: '#1d4ed8',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      borderWidth: 3,
-                      borderColor: 'white',
-                    }}
-                  >
-                    <Ionicons name="flag" size={18} color="white" />
-                  </View>
-                </Marker>
-
-                {/* Mongoose marker — orange bike */}
+                />
                 {mongooseLocation && (
-                  <Marker
+                  <MapPinMarker
+                    key="mongoose-driver"
                     coordinate={{
                       latitude: mongooseLocation.latitude,
                       longitude: mongooseLocation.longitude,
                     }}
+                    preset="driver"
+                    size={48}
                     title="Mongoose"
                     description={`Updated: ${formatTimestamp(mongooseLocation.timestamp)}`}
-                  >
-                    <View
-                      style={{
-                        width: 44,
-                        height: 44,
-                        borderRadius: 22,
-                        backgroundColor: '#f97316',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        borderWidth: 3,
-                        borderColor: 'white',
-                      }}
-                    >
-                      <Ionicons name="bicycle" size={22} color="white" />
-                    </View>
-                  </Marker>
+                    tracksViewChanges={false}
+                  />
                 )}
 
                 {/* Road route: mongoose → pickup (orange solid) */}
@@ -362,6 +423,9 @@ export default function TrackMongooseModal({
                     coordinates={routeToPickup}
                     strokeColor="#f97316"
                     strokeWidth={4}
+                    lineCap="round"
+                    lineJoin="round"
+                    geodesic={false}
                   />
                 )}
 
@@ -372,6 +436,9 @@ export default function TrackMongooseModal({
                     strokeColor="#1d4ed8"
                     strokeWidth={3}
                     lineDashPattern={[8, 5]}
+                    lineCap="round"
+                    lineJoin="round"
+                    geodesic={false}
                   />
                 )}
               </MapView>
@@ -413,7 +480,7 @@ export default function TrackMongooseModal({
                       </Text>
                     </View>
                     <Pressable
-                      onPress={fetchMongooseLocation}
+                      onPress={() => void fetchMongooseLocation(false)}
                       style={{
                         backgroundColor: '#f0f9ff',
                         padding: 8,
@@ -442,7 +509,7 @@ export default function TrackMongooseModal({
                         Waiting for mongoose…
                       </Text>
                       <Text style={{ fontSize: 11, color: '#b45309', marginTop: 2 }}>
-                        Mongoose hasn't started sharing location yet
+                        Mongoose has not started sharing location yet
                       </Text>
                     </View>
                   </View>

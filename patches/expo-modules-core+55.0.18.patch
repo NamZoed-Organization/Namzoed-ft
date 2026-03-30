@@ -1,0 +1,14 @@
+diff --git a/node_modules/expo-modules-core/src/sweet/setUpJsLogger.fx.ts b/node_modules/expo-modules-core/src/sweet/setUpJsLogger.fx.ts
+index bda3440..8a06317 100644
+--- a/node_modules/expo-modules-core/src/sweet/setUpJsLogger.fx.ts
++++ b/node_modules/expo-modules-core/src/sweet/setUpJsLogger.fx.ts
+@@ -12,7 +12,8 @@ if (
+   (process.env.EXPO_OS === 'android' || process.env.EXPO_OS === 'ios')
+ ) {
+   const NativeJSLogger = requireOptionalNativeModule('ExpoModulesCoreJSLogger');
+-  if (NativeJSLogger) {
++  // Stub or older native builds may return an object without addListener — guard to avoid startup crash.
++  if (NativeJSLogger && typeof NativeJSLogger.addListener === 'function') {
+     const onNewException: LogListener = {
+       eventName: 'ExpoModulesCoreJSLogger.onNewError',
+       action: console.error,

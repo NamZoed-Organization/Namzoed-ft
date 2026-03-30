@@ -4,12 +4,33 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import React, { useEffect, useRef, useState } from "react";
 import {
+    Alert,
     Modal,
     Pressable,
     Switch,
     Text,
     View,
 } from "react-native";
+
+/** Heartbeat: still refresh in traffic when movement is tiny. */
+const DRIVER_TRACK_MIN_INTERVAL_MS = 8000;
+/** Skip redundant DB writes when GPS jitters but driver hasn’t really moved. */
+const DRIVER_TRACK_MIN_MOVE_M = 25;
+
+function metersBetween(
+  a: { latitude: number; longitude: number },
+  b: { latitude: number; longitude: number },
+): number {
+  const R = 6371000;
+  const dLat = ((b.latitude - a.latitude) * Math.PI) / 180;
+  const dLon = ((b.longitude - a.longitude) * Math.PI) / 180;
+  const lat1 = (a.latitude * Math.PI) / 180;
+  const lat2 = (b.latitude * Math.PI) / 180;
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
 
 interface LocationTrackingControlProps {
   bookingId: string;
@@ -30,6 +51,11 @@ export default function LocationTrackingControl({
   const [lastUpdateTime, setLastUpdateTime] = useState<string>("");
   const [showModal, setShowModal] = useState(false);
   const locationSubscription = useRef<Location.LocationSubscription | null>(null);
+  const lastDbPushRef = useRef<{
+    t: number;
+    lat: number;
+    lng: number;
+  } | null>(null);
   const [popup, setPopup] = useState<{visible: boolean; type: 'success'|'warning'|'error'|'white'; title: string; message: string}>({visible: false, type: 'white', title: '', message: ''});
   const showPopup = (type: 'success'|'warning'|'error'|'white', title: string, message: string) => setPopup({visible: true, type, title, message});
 
@@ -53,7 +79,7 @@ export default function LocationTrackingControl({
         .eq('booking_id', bookingId)
         .order('updated_at', { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
 
       if (!error && data) {
         // Check if last update was within the last 5 minutes (still active)
@@ -89,39 +115,65 @@ export default function LocationTrackingControl({
         accuracy: Location.Accuracy.High,
       });
 
-      // Save initial location
-      await updateLocationInDatabase(
+      // Save initial location — buyers/sellers only see updates if this succeeds (RLS + accepted booking).
+      const synced = await updateLocationInDatabase(
         location.coords.latitude,
         location.coords.longitude
       );
+      if (!synced) {
+        showPopup(
+          'error',
+          'Could not share location',
+          'Your position was not saved. Check you are signed in as Mongoose and the booking is accepted, then try again.',
+        );
+        return;
+      }
+
+      const lat0 = location.coords.latitude;
+      const lng0 = location.coords.longitude;
+      lastDbPushRef.current = { t: Date.now(), lat: lat0, lng: lng0 };
 
       setCurrentLocation({
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
+        latitude: lat0,
+        longitude: lng0,
       });
       setLastUpdateTime(new Date().toISOString());
 
-      // Start watching location updates (every 30 seconds or when moved 50 meters)
+      // OS hints: ~8s or ~20m — we still throttle DB writes so buyers get “moved or heartbeat” updates.
       const subscription = await Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.High,
-          timeInterval: 30000, // Update every 30 seconds
-          distanceInterval: 50, // Or when moved 50 meters
+          timeInterval: DRIVER_TRACK_MIN_INTERVAL_MS,
+          distanceInterval: 20,
         },
         async (newLocation) => {
-          setCurrentLocation({
-            latitude: newLocation.coords.latitude,
-            longitude: newLocation.coords.longitude,
-          });
-          
-          const now = new Date().toISOString();
-          setLastUpdateTime(now);
+          const lat = newLocation.coords.latitude;
+          const lng = newLocation.coords.longitude;
+          setCurrentLocation({ latitude: lat, longitude: lng });
+          setLastUpdateTime(new Date().toISOString());
 
-          // Update database
-          await updateLocationInDatabase(
-            newLocation.coords.latitude,
-            newLocation.coords.longitude
-          );
+          const now = Date.now();
+          const prev = lastDbPushRef.current;
+          if (prev) {
+            const elapsed = now - prev.t;
+            const moved = metersBetween(
+              { latitude: prev.lat, longitude: prev.lng },
+              { latitude: lat, longitude: lng },
+            );
+            if (
+              elapsed < DRIVER_TRACK_MIN_INTERVAL_MS &&
+              moved < DRIVER_TRACK_MIN_MOVE_M
+            ) {
+              return;
+            }
+          }
+
+          const prevSnap = lastDbPushRef.current;
+          lastDbPushRef.current = { t: now, lat, lng };
+          const ok = await updateLocationInDatabase(lat, lng);
+          if (!ok) {
+            lastDbPushRef.current = prevSnap;
+          }
         }
       );
 
@@ -152,6 +204,7 @@ export default function LocationTrackingControl({
               locationSubscription.current.remove();
               locationSubscription.current = null;
             }
+            lastDbPushRef.current = null;
             setIsTracking(false);
             setCurrentLocation(null);
             showPopup('white', 'Tracking Off', 'Location sharing has been disabled.');
@@ -161,19 +214,20 @@ export default function LocationTrackingControl({
     );
   };
 
-  const updateLocationInDatabase = async (latitude: number, longitude: number) => {
+  const updateLocationInDatabase = async (
+    latitude: number,
+    longitude: number,
+  ): Promise<boolean> => {
     try {
-      // First, try to update existing location
-      const { data: existingData, error: fetchError } = await supabase
+      const { data: existingData } = await supabase
         .from('mongoose_locations')
         .select('id')
         .eq('booking_id', bookingId)
         .limit(1)
-        .single();
+        .maybeSingle();
 
       if (existingData) {
-        // Update existing record
-        const { data: updateData, error: updateError } = await supabase
+        const { error: updateError } = await supabase
           .from('mongoose_locations')
           .update({
             latitude,
@@ -185,27 +239,34 @@ export default function LocationTrackingControl({
 
         if (updateError) {
           console.error('❌ Error updating location:', updateError);
-        } else {
+          if (__DEV__) {
+            console.warn('[mongoose_locations]', updateError.code, updateError.message);
+          }
+          return false;
         }
-      } else {
-        // Insert new record
-        const { data: insertData, error: insertError } = await supabase
-          .from('mongoose_locations')
-          .insert({
-            booking_id: bookingId,
-            latitude,
-            longitude,
-          })
-          .select();
-
-        if (insertError) {
-          console.error('❌ Error inserting location:', insertError);
-          showPopup('error', 'Sync Error', `Could not save your location: ${insertError.message}`);
-        } else {
-        }
+        return true;
       }
+
+      const { error: insertError } = await supabase
+        .from('mongoose_locations')
+        .insert({
+          booking_id: bookingId,
+          latitude,
+          longitude,
+        })
+        .select();
+
+      if (insertError) {
+        console.error('❌ Error inserting location:', insertError);
+        if (__DEV__) {
+          console.warn('[mongoose_locations]', insertError.code, insertError.message);
+        }
+        return false;
+      }
+      return true;
     } catch (error) {
       console.error('❌ Error updating location in database:', error);
+      return false;
     }
   };
 
@@ -255,7 +316,7 @@ export default function LocationTrackingControl({
                   Location Tracking
                 </Text>
                 <Text className="text-sm text-gray-600 mt-1">
-                  For {bookingUserName}'s delivery
+                  {`For ${bookingUserName}'s delivery`}
                 </Text>
               </View>
               <Pressable
@@ -326,7 +387,7 @@ export default function LocationTrackingControl({
                     How it works:
                   </Text>
                   <Text className="text-xs text-blue-800">
-                    • Your location updates every 30 seconds or when you move 50+ meters{'\n'}
+                    • Your location updates about every 8 seconds or when you move 20+ meters{'\n'}
                     • Customer sees your live location on their map{'\n'}
                     • Tracking continues in the background{'\n'}
                     • Turn off when delivery is complete

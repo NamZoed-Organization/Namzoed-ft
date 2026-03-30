@@ -1,3 +1,4 @@
+import { parseMediaDisplay } from "@/lib/postMediaDisplay";
 import { fetchPostsCursor, PostWithUser } from "@/lib/postsService";
 import { supabase } from "@/lib/supabase";
 import { PostData } from "@/types/post";
@@ -24,6 +25,8 @@ function convertToPostData(
     post.profiles?.email?.split("@")[0] ||
     "Unknown User";
 
+  const mediaDisplay = parseMediaDisplay((post as any).media_display);
+
   return {
     id: post.id,
     userId: post.user_id,
@@ -35,6 +38,8 @@ function convertToPostData(
     likes: post.likes,
     comments: post.comments,
     shares: post.shares,
+    mediaDisplay,
+    locationName: (post as any).location_name ?? undefined,
     tagged_products: (post as any).tagged_products ?? undefined,
     tagged_accounts: (post as any).tagged_accounts ?? undefined,
     isVerified: verifiedIds.has(post.user_id),

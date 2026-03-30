@@ -1,6 +1,9 @@
 import { CategoriesIcon, HomeIcon } from "@/components/icons/index";
+import MongooseWorkerNavBar from "@/components/ui/MongooseWorkerNavBar";
+import { useUser } from "@/contexts/UserContext";
 import { clamp, useResponsive } from "@/utils/responsive";
 import { useAppRouter } from "@/utils/navigation";
+import { isMongooseUser } from "@/utils/roleCheck";
 import { usePathname } from "expo-router";
 import { Plus, Store, Wrench } from "lucide-react-native";
 import React from "react";
@@ -8,10 +11,15 @@ import { Platform, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function BottomNavBar() {
+  const { currentUser } = useUser();
   const router = useAppRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const { ms, vs } = useResponsive();
+
+  if (isMongooseUser(currentUser?.email)) {
+    return <MongooseWorkerNavBar />;
+  }
 
   const fabSize = clamp(ms(62), 56, 70);
   const fabOffset = clamp(vs(24), 20, 30);

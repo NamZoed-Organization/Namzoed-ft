@@ -18,9 +18,10 @@ import {
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
+import * as SystemUI from "expo-system-ui";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect } from "react";
-import { View } from "react-native";
+import { Platform, View } from "react-native";
 import FlashMessage from "react-native-flash-message";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "../global.css";
@@ -66,6 +67,11 @@ export default function RootLayout() {
     }
   }, [fontsLoaded, fontError]);
 
+  // Light app shell behind edge-to-edge status bar when the OS draws a light strip.
+  useEffect(() => {
+    void SystemUI.setBackgroundColorAsync("#f8f9fa");
+  }, []);
+
   if (!fontsLoaded && !fontError) return null;
 
   return (
@@ -97,7 +103,18 @@ export default function RootLayout() {
                         />
                         <InAppChatBanner />
                         <InAppNotificationBanner />
-                        <StatusBar style="dark" />
+                        {/* Android: many devices paint a dark status bar under edge-to-edge; `dark` here
+                            means dark *icons* (RN dark-content) → invisible on black. Use `light` =
+                            light-content (white icons). iOS: follow system appearance. */}
+                        <StatusBar
+                          style={
+                            Platform.OS === "android"
+                              ? "light"
+                              : colorScheme === "dark"
+                                ? "light"
+                                : "dark"
+                          }
+                        />
                         <FlashMessage
                           position="top"
                           renderCustomContent={(msg) => (

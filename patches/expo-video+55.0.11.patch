@@ -1,0 +1,36 @@
+diff --git a/node_modules/expo-video/build/VideoPlayer.js b/node_modules/expo-video/build/VideoPlayer.js
+index 5d14763..6ad79d5 100644
+--- a/node_modules/expo-video/build/VideoPlayer.js
++++ b/node_modules/expo-video/build/VideoPlayer.js
+@@ -13,6 +13,13 @@ const replaceAsync = NativeVideoModule.VideoPlayer.prototype.replaceAsync;
+ NativeVideoModule.VideoPlayer.prototype.replaceAsync = function (source) {
+     return replaceAsync.call(this, parseSource(source));
+ };
++/** Avoid passing a third `undefined` — older Expo Go native expects only 2 args. */
++function createNativeVideoPlayer(parsedSource, useSynchronousReplace, playerBuilderOptions) {
++    if (playerBuilderOptions != null) {
++        return new NativeVideoModule.VideoPlayer(parsedSource, useSynchronousReplace, playerBuilderOptions);
++    }
++    return new NativeVideoModule.VideoPlayer(parsedSource, useSynchronousReplace);
++}
+ /**
+  * Creates a direct instance of `VideoPlayer` that doesn't release automatically.
+  *
+@@ -22,7 +29,7 @@ NativeVideoModule.VideoPlayer.prototype.replaceAsync = function (source) {
+  */
+ export function createVideoPlayer(source, playerBuilderOptions) {
+     const parsedSource = parseSource(source);
+-    return new NativeVideoModule.VideoPlayer(parsedSource, false, playerBuilderOptions);
++    return createNativeVideoPlayer(parsedSource, false, playerBuilderOptions);
+ }
+ /**
+  * Creates a `VideoPlayer`, which will be automatically cleaned up when the component is unmounted.
+@@ -33,7 +40,7 @@ export function createVideoPlayer(source, playerBuilderOptions) {
+ export function useVideoPlayer(source, setup, playerBuilderOptions) {
+     const parsedSource = parseSource(source);
+     return useReleasingSharedObject(() => {
+-        const player = new NativeVideoModule.VideoPlayer(parsedSource, false, playerBuilderOptions);
++        const player = createNativeVideoPlayer(parsedSource, false, playerBuilderOptions);
+         setup?.(player);
+         return player;
+     }, [JSON.stringify(parsedSource), JSON.stringify(playerBuilderOptions)]);

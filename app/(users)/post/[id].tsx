@@ -8,6 +8,7 @@
 
 import FeedPost from "@/components/FeedPost";
 import { useUser } from "@/contexts/UserContext";
+import { parseMediaDisplay } from "@/lib/postMediaDisplay";
 import { fetchPostById, PostWithUser } from "@/lib/postsService";
 import { PostData } from "@/types/post";
 import { useAppRouter } from "@/utils/navigation";
@@ -39,6 +40,8 @@ function toPostData(post: PostWithUser): PostData {
     likes: post.likes,
     comments: post.comments,
     shares: post.shares,
+    mediaDisplay: parseMediaDisplay((post as any).media_display),
+    locationName: (post as any).location_name ?? undefined,
     tagged_products: (post as any).tagged_products ?? undefined,
     tagged_accounts: (post as any).tagged_accounts ?? undefined,
   };

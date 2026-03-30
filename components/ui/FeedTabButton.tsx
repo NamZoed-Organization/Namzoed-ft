@@ -1,37 +1,23 @@
+import { PlatformPressable } from "@react-navigation/elements";
 import React, { useRef } from "react";
-import { TouchableOpacity } from "react-native-gesture-handler";
+import type { GestureResponderEvent } from "react-native";
 import { feedEvents } from "@/utils/feedEvents";
 
-// Custom tab button for feed that handles double-tap
+// Feed tab: double-tap scroll-to-top, same press handling as default tab bar for layout.
 const FeedTabButton = React.forwardRef<any, any>((props, ref) => {
-  const lastTapTime = useRef<number>(0);
+  const lastTapTime = useRef(0);
+  const { onPress, ...rest } = props;
 
-  const handlePress = () => {
-    const currentTime = Date.now();
-    
-    if (currentTime - lastTapTime.current < 300) {
-      // Double tap detected - emit scroll to top event
-      feedEvents.emit('scrollToTop');
+  const handlePress = (e: GestureResponderEvent) => {
+    const now = Date.now();
+    if (now - lastTapTime.current < 300) {
+      feedEvents.emit("scrollToTop");
     }
-    
-    lastTapTime.current = currentTime;
-    
-    // Call the original onPress
-    if (props.onPress) {
-      props.onPress();
-    }
+    lastTapTime.current = now;
+    onPress?.(e);
   };
 
-  return (
-    <TouchableOpacity
-      ref={ref}
-      activeOpacity={0.7}
-      {...props}
-      onPress={handlePress}
-    >
-      {props.children}
-    </TouchableOpacity>
-  );
+  return <PlatformPressable ref={ref} {...rest} onPress={handlePress} />;
 });
 
 FeedTabButton.displayName = "FeedTabButton";

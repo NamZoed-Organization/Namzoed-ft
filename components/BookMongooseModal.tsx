@@ -35,6 +35,8 @@ export default function BookMongooseModal({
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [message, setMessage] = useState("");
+  const [buyerPhone, setBuyerPhone] = useState("");
+  const [sellerPhone, setSellerPhone] = useState("");
   const [showMapPicker, setShowMapPicker] = useState(false);
   const [pickupLocation, setPickupLocation] = useState<{
     latitude: number;
@@ -56,8 +58,11 @@ export default function BookMongooseModal({
   useEffect(() => {
     if (visible) {
       checkAvailability();
+      setBuyerPhone(
+        (currentUser?.phone && String(currentUser.phone).trim()) || "",
+      );
     }
-  }, [visible]);
+  }, [visible, currentUser?.phone]);
 
   const checkAvailability = async () => {
     try {
@@ -86,6 +91,19 @@ export default function BookMongooseModal({
 
     if (!currentUser) {
       showPopup("error", "Login Required", "You must be logged in to book.");
+      return;
+    }
+
+    const buyer =
+      buyerPhone.trim() ||
+      (currentUser.phone && String(currentUser.phone).trim()) ||
+      "";
+    if (!buyer) {
+      showPopup(
+        "warning",
+        "Phone required",
+        "Add your phone number so Mongoose can reach you for delivery.",
+      );
       return;
     }
 
@@ -118,11 +136,15 @@ export default function BookMongooseModal({
         hour12: true,
       });
 
+      const seller = sellerPhone.trim() || null;
+
       const bookingData = {
         user_id: authUser.id, // Use authenticated user's ID from Supabase auth
         user_name: currentUser.name || "Unknown",
         user_email: currentUser.email || authUser.email,
-        user_phone: currentUser.phone || null,
+        user_phone: buyer,
+        buyer_phone: buyer,
+        seller_phone: seller,
         mongoose_email: "mongoose@gmail.com",
         booking_date: formattedDate,
         booking_time: formattedTime,
@@ -166,6 +188,8 @@ export default function BookMongooseModal({
     setBookingDate(new Date());
     setBookingTime(new Date());
     setMessage("");
+    setBuyerPhone("");
+    setSellerPhone("");
     setShowDatePicker(false);
     setShowTimePicker(false);
     setPickupLocation(null);
@@ -329,6 +353,34 @@ export default function BookMongooseModal({
                       numberOfLines={4}
                       className="border border-gray-300 rounded-lg px-4 py-3 text-base"
                       style={{ textAlignVertical: "top" }}
+                      editable={!submitting}
+                    />
+                  </View>
+
+                  <View className="mt-4">
+                    <Text className="text-sm font-medium text-gray-700 mb-2">
+                      Your phone (buyer / delivery) *
+                    </Text>
+                    <TextInput
+                      value={buyerPhone}
+                      onChangeText={setBuyerPhone}
+                      placeholder="e.g. +975 17 123 456"
+                      keyboardType="phone-pad"
+                      className="border border-gray-300 rounded-lg px-4 py-3 text-base"
+                      editable={!submitting}
+                    />
+                  </View>
+
+                  <View className="mt-4">
+                    <Text className="text-sm font-medium text-gray-700 mb-2">
+                      Pickup / seller phone (optional)
+                    </Text>
+                    <TextInput
+                      value={sellerPhone}
+                      onChangeText={setSellerPhone}
+                      placeholder="Contact at pickup location"
+                      keyboardType="phone-pad"
+                      className="border border-gray-300 rounded-lg px-4 py-3 text-base"
                       editable={!submitting}
                     />
                   </View>

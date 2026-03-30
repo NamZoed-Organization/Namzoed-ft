@@ -12,16 +12,22 @@ import {
   Dimensions,
   KeyboardAvoidingView,
   Platform,
+  Switch,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
+import * as Location from "expo-location";
+import FeedAspectReframeOverlay from "@/components/modals/FeedAspectReframeOverlay";
 import PopupMessage from "@/components/ui/PopupMessage";
+import { LinearGradient } from "expo-linear-gradient";
 import {
   ArrowLeft,
   Camera,
   Check,
   ChevronRight,
+  Crop,
   ImageIcon,
+  MapPin,
   Plus,
+  Ratio,
   Search,
   ShoppingBag,
   UserPlus,
@@ -31,6 +37,20 @@ import {
 import { useAppRouter } from "@/utils/navigation";
 import { useUser } from "@/contexts/UserContext";
 import * as ImagePicker from "expo-image-picker";
+import {
+  clampMediaRatio,
+  type PostMediaDisplay,
+  type PostMediaDisplayMode,
+  RATIO_LANDSCAPE,
+  RATIO_MAX,
+  RATIO_MIN,
+  RATIO_PORTRAIT,
+  RATIO_SQUARE,
+  RATIO_VIDEO_DEFAULT,
+  ratioForUniformMode,
+  slideHeight,
+} from "@/lib/postMediaDisplay";
+import Slider from "@react-native-community/slider";
 import { createPost, uploadImages, uploadVideos } from "@/lib/postsService";
 import { fetchUserProducts, Product } from "@/lib/productsService";
 import { supabase } from "@/lib/supabase";
@@ -43,6 +63,26 @@ interface MediaItem {
   uri: string;
   type: "image" | "video";
   id: string;
+  width?: number;
+  height?: number;
+  /** Mixed mode: feed width÷height override; omit to use file dimensions. */
+  displayRatio?: number;
+}
+
+function naturalMediaRatio(m: MediaItem): number {
+  if (m.width && m.height && m.height > 0) {
+    return clampMediaRatio(m.width / m.height);
+  }
+  return m.type === "video" ? RATIO_VIDEO_DEFAULT : RATIO_PORTRAIT;
+}
+
+function ratioPresetLabel(r: number): string {
+  const tol = 0.04;
+  if (Math.abs(r - RATIO_PORTRAIT) < tol) return "4:5";
+  if (Math.abs(r - RATIO_SQUARE) < tol) return "1:1";
+  if (Math.abs(r - RATIO_LANDSCAPE) < tol) return "16:9";
+  if (Math.abs(r - 9 / 16) < tol) return "9:16";
+  return `${r.toFixed(2)} (w÷h)`;
 }
 
 interface CreatePostProps {
@@ -54,7 +94,17 @@ export default function CreatePost({ onClose }: CreatePostProps) {
   const { currentUser } = useUser();
   const [postText, setPostText] = useState("");
   const [postMedia, setPostMedia] = useState<MediaItem[]>([]);
+  const [mediaAspectMode, setMediaAspectMode] =
+    useState<PostMediaDisplayMode>("portrait");
   const [isUploading, setIsUploading] = useState(false);
+
+  const [addPostLocation, setAddPostLocation] = useState(false);
+  const [locationLabel, setLocationLabel] = useState("");
+  const [locationCoords, setLocationCoords] = useState<{
+    lat: number;
+    lng: number;
+  } | null>(null);
+  const [resolvingLocation, setResolvingLocation] = useState(false);
 
   // Product tagging
   const [showProductPicker, setShowProductPicker] = useState(false);
@@ -84,6 +134,43 @@ export default function CreatePost({ onClose }: CreatePostProps) {
 
   // Active media preview index (for carousel indicator)
   const [activeMediaIndex, setActiveMediaIndex] = useState(0);
+  const [frameAdjustMediaId, setFrameAdjustMediaId] = useState<string | null>(null);
+  const [draftFrameRatio, setDraftFrameRatio] = useState(RATIO_PORTRAIT);
+  const [reframeMediaId, setReframeMediaId] = useState<string | null>(null);
+  const [reframeAspectOverride, setReframeAspectOverride] = useState<
+    number | null
+  >(null);
+
+  useEffect(() => {
+    setActiveMediaIndex((i) =>
+      postMedia.length === 0 ? 0 : Math.min(i, postMedia.length - 1),
+    );
+  }, [postMedia.length]);
+
+  useEffect(() => {
+    if (
+      frameAdjustMediaId &&
+      !postMedia.some((m) => m.id === frameAdjustMediaId)
+    ) {
+      setFrameAdjustMediaId(null);
+    }
+  }, [postMedia, frameAdjustMediaId]);
+
+  useEffect(() => {
+    if (reframeMediaId && !postMedia.some((m) => m.id === reframeMediaId)) {
+      setReframeMediaId(null);
+      setReframeAspectOverride(null);
+    }
+  }, [postMedia, reframeMediaId]);
+
+  useEffect(() => {
+    if (!frameAdjustMediaId) return;
+    const item = postMedia.find((m) => m.id === frameAdjustMediaId);
+    if (!item) return;
+    setDraftFrameRatio(
+      clampMediaRatio(item.displayRatio ?? naturalMediaRatio(item)),
+    );
+  }, [frameAdjustMediaId, postMedia]);
 
   const userId = (currentUser as any)?.id;
   const username =
@@ -131,6 +218,8 @@ export default function CreatePost({ onClose }: CreatePostProps) {
           uri: asset.uri,
           type: asset.type === "video" ? "video" : ("image" as const),
           id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          width: asset.width ?? undefined,
+          height: asset.height ?? undefined,
         }));
         setPostMedia((prev) => [...prev, ...newItems].slice(0, 10));
       }
@@ -163,6 +252,8 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                   ? ("video" as const)
                   : ("image" as const),
               id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              width: asset.width ?? undefined,
+              height: asset.height ?? undefined,
             },
           ].slice(0, 10)
         );
@@ -175,6 +266,72 @@ export default function CreatePost({ onClose }: CreatePostProps) {
   const removeMedia = (id: string) => {
     setPostMedia((prev) => prev.filter((item) => item.id !== id));
   };
+
+  const formatAddressFromGeo = (
+    geo: Location.LocationGeocodedAddress | undefined,
+    coords: { latitude: number; longitude: number },
+  ): string => {
+    if (!geo) {
+      return `${coords.latitude.toFixed(3)}°, ${coords.longitude.toFixed(3)}°`;
+    }
+    const parts = [
+      geo.name,
+      geo.street,
+      geo.district,
+      geo.city,
+      geo.subregion,
+      geo.region,
+      geo.country,
+    ].filter((p): p is string => Boolean(p && String(p).trim()));
+    const seen = new Set<string>();
+    const uniq: string[] = [];
+    for (const p of parts) {
+      const k = p.trim().toLowerCase();
+      if (!seen.has(k)) {
+        seen.add(k);
+        uniq.push(p.trim());
+      }
+    }
+    return (
+      uniq.slice(0, 4).join(", ") ||
+      `${coords.latitude.toFixed(3)}°, ${coords.longitude.toFixed(3)}°`
+    );
+  };
+
+  const handleUseCurrentLocation = useCallback(async () => {
+    try {
+      setResolvingLocation(true);
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        showErrorPopup(
+          "Location permission is needed to tag this post.",
+          "Permission denied",
+        );
+        return;
+      }
+      const pos = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      const results = await Location.reverseGeocodeAsync({
+        latitude: pos.coords.latitude,
+        longitude: pos.coords.longitude,
+      });
+      const label = formatAddressFromGeo(results[0], pos.coords);
+      setLocationLabel(label);
+      setLocationCoords({
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude,
+      });
+      setAddPostLocation(true);
+    } catch {
+      showErrorPopup(
+        "Could not read your location. Try typing a place instead.",
+        "Location",
+      );
+    } finally {
+      setResolvingLocation(false);
+    }
+  }, []);
 
   // --- Product tagging ---
   const loadUserProducts = useCallback(async () => {
@@ -342,21 +499,60 @@ export default function CreatePost({ onClose }: CreatePostProps) {
         }
       }
 
+      const imageItems = postMedia.filter((m) => m.type === "image");
+      const videoItems = postMedia.filter((m) => m.type === "video");
+      let mediaDisplay: PostMediaDisplay | undefined;
+      if (uploadedMediaUrls.length > 0) {
+        if (mediaAspectMode === "mixed") {
+          const ratios = [
+            ...imageItems.map((m) =>
+              clampMediaRatio(m.displayRatio ?? naturalMediaRatio(m)),
+            ),
+            ...videoItems.map((m) =>
+              clampMediaRatio(m.displayRatio ?? naturalMediaRatio(m)),
+            ),
+          ];
+          mediaDisplay = { mode: "mixed", ratios };
+        } else {
+          mediaDisplay = { mode: mediaAspectMode };
+        }
+      }
+
+      const trimmedLocation =
+        addPostLocation && locationLabel.trim() ? locationLabel.trim() : "";
+
       try {
         await createPost({
           content: postText.trim(),
           images: uploadedMediaUrls,
           userId,
+          mediaDisplay,
           tagged_products:
             taggedProducts.length > 0 ? taggedProducts : undefined,
           tagged_accounts:
             taggedAccounts.length > 0 ? taggedAccounts : undefined,
+          locationName: trimmedLocation || undefined,
+          locationLat:
+            trimmedLocation && locationCoords
+              ? locationCoords.lat
+              : undefined,
+          locationLng:
+            trimmedLocation && locationCoords
+              ? locationCoords.lng
+              : undefined,
         });
         showSuccessPopup("Your post has been published!", "Posted!", () => {
           setPostText("");
           setPostMedia([]);
+          setMediaAspectMode("portrait");
           setTaggedProducts([]);
           setTaggedAccounts([]);
+          setAddPostLocation(false);
+          setLocationLabel("");
+          setLocationCoords(null);
+          setFrameAdjustMediaId(null);
+          setReframeMediaId(null);
+          setReframeAspectOverride(null);
           onClose?.();
         });
       } catch (err: any) {
@@ -376,6 +572,40 @@ export default function CreatePost({ onClose }: CreatePostProps) {
   };
 
   const canShare = postText.trim().length > 0 || postMedia.length > 0;
+
+  const previewWidth = SCREEN_WIDTH - 32;
+  const previewIdx =
+    postMedia.length === 0
+      ? 0
+      : Math.min(activeMediaIndex, postMedia.length - 1);
+  const previewItem =
+    postMedia.length > 0 ? (postMedia[previewIdx] ?? null) : null;
+  const previewFrameRatio =
+    previewItem == null
+      ? RATIO_PORTRAIT
+      : mediaAspectMode === "mixed"
+        ? clampMediaRatio(
+            previewItem.displayRatio ?? naturalMediaRatio(previewItem),
+          )
+        : ratioForUniformMode(mediaAspectMode);
+  const previewHeight = slideHeight(previewWidth, previewFrameRatio);
+
+  const reframeItem = reframeMediaId
+    ? (postMedia.find((m) => m.id === reframeMediaId) ?? null)
+    : null;
+
+  const reframeAspectForOverlay = reframeItem
+    ? clampMediaRatio(
+        reframeAspectOverride ??
+          (mediaAspectMode === "mixed"
+            ? (reframeItem.displayRatio ?? naturalMediaRatio(reframeItem))
+            : ratioForUniformMode(mediaAspectMode)),
+      )
+    : RATIO_PORTRAIT;
+
+  const frameAdjustItem = frameAdjustMediaId
+    ? (postMedia.find((m) => m.id === frameAdjustMediaId) ?? null)
+    : null;
 
   // --- Render ---
   return (
@@ -461,6 +691,326 @@ export default function CreatePost({ onClose }: CreatePostProps) {
             value={postText}
             onChangeText={setPostText}
           />
+
+          {/* Location (optional) */}
+          <View style={{ marginHorizontal: 16, marginTop: 12 }}>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+              >
+                <MapPin size={18} color="#094569" />
+                <Text
+                  style={{
+                    fontSize: 14,
+                    fontWeight: "600",
+                    color: "#374151",
+                  }}
+                >
+                  Add location
+                </Text>
+              </View>
+              <Switch
+                value={addPostLocation}
+                onValueChange={(v) => {
+                  setAddPostLocation(v);
+                  if (!v) {
+                    setLocationLabel("");
+                    setLocationCoords(null);
+                  }
+                }}
+                trackColor={{ false: "#e5e7eb", true: "#94c9e8" }}
+                thumbColor={addPostLocation ? "#094569" : "#f4f4f5"}
+              />
+            </View>
+            {addPostLocation && (
+              <View style={{ marginTop: 10 }}>
+                <TextInput
+                  style={{
+                    borderWidth: 1,
+                    borderColor: "#e5e7eb",
+                    borderRadius: 12,
+                    paddingHorizontal: 12,
+                    paddingVertical: 10,
+                    fontSize: 14,
+                    color: "#1f2937",
+                    backgroundColor: "#fafafa",
+                  }}
+                  placeholder="Type a place, city, or address"
+                  placeholderTextColor="#9ca3af"
+                  value={locationLabel}
+                  onChangeText={(t) => {
+                    setLocationLabel(t);
+                    setLocationCoords(null);
+                  }}
+                />
+                <TouchableOpacity
+                  onPress={handleUseCurrentLocation}
+                  disabled={resolvingLocation}
+                  activeOpacity={0.85}
+                  style={{
+                    marginTop: 10,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8,
+                    paddingVertical: 12,
+                    borderRadius: 12,
+                    borderWidth: 1.5,
+                    borderColor: "#094569",
+                    opacity: resolvingLocation ? 0.7 : 1,
+                  }}
+                >
+                  {resolvingLocation ? (
+                    <ActivityIndicator size="small" color="#094569" />
+                  ) : (
+                    <>
+                      <MapPin size={16} color="#094569" />
+                      <Text
+                        style={{
+                          fontWeight: "700",
+                          color: "#094569",
+                          fontSize: 14,
+                        }}
+                      >
+                        Use current location
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+                <Text
+                  style={{
+                    fontSize: 11,
+                    color: "#9ca3af",
+                    marginTop: 6,
+                  }}
+                >
+                  Your location appears next to the time on the post and
+                  switches every few seconds.
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Feed frame (Instagram-style) — applies to published post */}
+          {postMedia.length > 0 && (
+            <View style={{ marginHorizontal: 16, marginTop: 14 }}>
+              <Text style={{ fontSize: 12, fontWeight: "600", color: "#6b7280", marginBottom: 8 }}>
+                Feed layout
+              </Text>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                {(
+                  [
+                    { mode: "portrait" as const, label: "Portrait 4:5" },
+                    { mode: "square" as const, label: "Square" },
+                    { mode: "landscape" as const, label: "Wide 16:9" },
+                    { mode: "mixed" as const, label: "Mixed" },
+                  ] as const
+                ).map(({ mode, label }) => (
+                  <TouchableOpacity
+                    key={mode}
+                    onPress={() => setMediaAspectMode(mode)}
+                    activeOpacity={0.85}
+                    style={{
+                      paddingHorizontal: 12,
+                      paddingVertical: 8,
+                      borderRadius: 20,
+                      backgroundColor:
+                        mediaAspectMode === mode ? "#094569" : "#f3f4f6",
+                      borderWidth: 1,
+                      borderColor:
+                        mediaAspectMode === mode ? "#094569" : "#e5e7eb",
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        fontWeight: "600",
+                        color: mediaAspectMode === mode ? "#fff" : "#374151",
+                      }}
+                    >
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              {mediaAspectMode === "mixed" && (
+                <Text style={{ fontSize: 11, color: "#9ca3af", marginTop: 6 }}>
+                  Set each slide&apos;s frame below, or use Crop to zoom inside the
+                  frame (photos only).
+                </Text>
+              )}
+            </View>
+          )}
+
+          {previewItem && (
+            <View style={{ marginHorizontal: 16, marginTop: 16 }}>
+              <Text
+                style={{
+                  fontSize: 12,
+                  fontWeight: "600",
+                  color: "#6b7280",
+                  marginBottom: 8,
+                }}
+              >
+                Feed preview
+                {postMedia.length > 1
+                  ? ` · Slide ${previewIdx + 1} of ${postMedia.length}`
+                  : ""}
+              </Text>
+              <View
+                style={{
+                  alignItems: "center",
+                  backgroundColor: "#f9fafb",
+                  borderRadius: 14,
+                  paddingVertical: 14,
+                  paddingHorizontal: 8,
+                  borderWidth: 1,
+                  borderColor: "#e5e7eb",
+                }}
+              >
+                <View
+                  style={{
+                    width: previewWidth,
+                    height: previewHeight,
+                    backgroundColor: "#f3f4f6",
+                    borderRadius: 10,
+                    overflow: "hidden",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  {previewItem.type === "video" ? (
+                    <View
+                      style={{
+                        width: previewWidth,
+                        height: previewHeight,
+                        alignItems: "center",
+                        justifyContent: "center",
+                        backgroundColor: "#e5e7eb",
+                      }}
+                    >
+                      <Video size={40} color="#64748b" />
+                      <Text
+                        style={{
+                          marginTop: 8,
+                          fontSize: 12,
+                          fontWeight: "600",
+                          color: "#64748b",
+                        }}
+                      >
+                        Video · frame matches feed
+                      </Text>
+                    </View>
+                  ) : (
+                    <Image
+                      source={{ uri: previewItem.uri }}
+                      style={{ width: previewWidth, height: previewHeight }}
+                      resizeMode="contain"
+                    />
+                  )}
+                </View>
+                <Text
+                  style={{
+                    marginTop: 10,
+                    fontSize: 11,
+                    color: "#9ca3af",
+                    textAlign: "center",
+                  }}
+                >
+                  Matches feed · {ratioPresetLabel(previewFrameRatio)}
+                </Text>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    flexWrap: "wrap",
+                    justifyContent: "center",
+                    gap: 10,
+                    marginTop: 12,
+                  }}
+                >
+                  {mediaAspectMode === "mixed" && (
+                    <TouchableOpacity
+                      onPress={() =>
+                        setFrameAdjustMediaId(previewItem.id)
+                      }
+                      activeOpacity={0.85}
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 6,
+                        paddingHorizontal: 14,
+                        paddingVertical: 10,
+                        borderRadius: 22,
+                        backgroundColor: "#094569",
+                      }}
+                    >
+                      <Ratio size={16} color="#fff" />
+                      <Text
+                        style={{
+                          color: "#fff",
+                          fontWeight: "700",
+                          fontSize: 13,
+                        }}
+                      >
+                        Frame & ratio
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                  {previewItem.type === "image" && (
+                    <TouchableOpacity
+                      onPress={() => {
+                        setReframeAspectOverride(null);
+                        setReframeMediaId(previewItem.id);
+                      }}
+                      activeOpacity={0.85}
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 6,
+                        paddingHorizontal: 14,
+                        paddingVertical: 10,
+                        borderRadius: 22,
+                        backgroundColor: "#1f2937",
+                      }}
+                    >
+                      <Crop size={16} color="#fff" />
+                      <Text
+                        style={{
+                          color: "#fff",
+                          fontWeight: "700",
+                          fontSize: 13,
+                        }}
+                      >
+                        Crop & position
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+                {mediaAspectMode !== "mixed" && previewItem.type === "image" && (
+                  <Text
+                    style={{
+                      fontSize: 10,
+                      color: "#9ca3af",
+                      marginTop: 8,
+                      textAlign: "center",
+                      paddingHorizontal: 12,
+                    }}
+                  >
+                    Crop uses your selected layout ({ratioPresetLabel(
+                      ratioForUniformMode(mediaAspectMode),
+                    )}
+                    ).
+                  </Text>
+                )}
+              </View>
+            </View>
+          )}
 
           {/* ── 3-Column Action Row ── */}
           <View style={{ flexDirection: "row", marginHorizontal: 16, marginTop: 16, gap: 10 }}>
@@ -572,6 +1122,31 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                       >
                         <X size={14} color="white" />
                       </TouchableOpacity>
+                      {mediaAspectMode === "mixed" && (
+                        <TouchableOpacity
+                          onPress={() => {
+                            setActiveMediaIndex(index);
+                            setFrameAdjustMediaId(item.id);
+                          }}
+                          style={{
+                            position: "absolute",
+                            bottom: 12,
+                            left: 10,
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: 5,
+                            paddingHorizontal: 10,
+                            paddingVertical: 6,
+                            borderRadius: 14,
+                            backgroundColor: "rgba(9,69,105,0.92)",
+                          }}
+                        >
+                          <Ratio size={14} color="#fff" />
+                          <Text style={{ color: "#fff", fontSize: 11, fontWeight: "700" }}>
+                            Frame
+                          </Text>
+                        </TouchableOpacity>
+                      )}
                     </View>
                   );
                 }}
@@ -1006,6 +1581,256 @@ export default function CreatePost({ onClose }: CreatePostProps) {
           )}
         </View>
       </Modal>
+
+      <Modal
+        visible={Boolean(frameAdjustMediaId && frameAdjustItem)}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setFrameAdjustMediaId(null)}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.45)",
+            justifyContent: "flex-end",
+          }}
+        >
+          <TouchableOpacity
+            style={{ flex: 1 }}
+            activeOpacity={1}
+            onPress={() => setFrameAdjustMediaId(null)}
+          />
+          {frameAdjustItem && (
+            <View
+              style={{
+                backgroundColor: "#fff",
+                borderTopLeftRadius: 20,
+                borderTopRightRadius: 20,
+                paddingBottom: 28,
+                maxHeight: "78%",
+              }}
+            >
+              <View
+                style={{
+                  width: 40,
+                  height: 4,
+                  borderRadius: 2,
+                  backgroundColor: "#e5e7eb",
+                  alignSelf: "center",
+                  marginTop: 10,
+                  marginBottom: 6,
+                }}
+              />
+              <Text
+                style={{
+                  fontSize: 17,
+                  fontWeight: "700",
+                  color: "#111",
+                  textAlign: "center",
+                  marginBottom: 4,
+                }}
+              >
+                Frame for this slide
+              </Text>
+              <Text
+                style={{
+                  fontSize: 12,
+                  color: "#9ca3af",
+                  textAlign: "center",
+                  marginBottom: 14,
+                  paddingHorizontal: 20,
+                }}
+              >
+                {frameAdjustItem.type === "video"
+                  ? "Videos use this aspect in the feed (no crop editor)."
+                  : "Pick a ratio, fine-tune with the slider, then apply or open crop."}
+              </Text>
+
+              <ScrollView
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={{ paddingHorizontal: 18, paddingBottom: 12 }}
+              >
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setPostMedia((prev) =>
+                        prev.map((m) =>
+                          m.id === frameAdjustItem.id
+                            ? { ...m, displayRatio: undefined }
+                            : m,
+                        ),
+                      );
+                      setFrameAdjustMediaId(null);
+                    }}
+                    style={{
+                      paddingHorizontal: 12,
+                      paddingVertical: 8,
+                      borderRadius: 18,
+                      backgroundColor: "#f3f4f6",
+                      borderWidth: 1,
+                      borderColor: "#e5e7eb",
+                    }}
+                  >
+                    <Text style={{ fontSize: 12, fontWeight: "600", color: "#374151" }}>
+                      Original
+                    </Text>
+                  </TouchableOpacity>
+                  {(
+                    [
+                      { label: "4:5", r: RATIO_PORTRAIT },
+                      { label: "1:1", r: RATIO_SQUARE },
+                      { label: "16:9", r: RATIO_LANDSCAPE },
+                      { label: "9:16", r: 9 / 16 },
+                    ] as const
+                  ).map(({ label, r }) => (
+                    <TouchableOpacity
+                      key={label}
+                      onPress={() => setDraftFrameRatio(clampMediaRatio(r))}
+                      style={{
+                        paddingHorizontal: 12,
+                        paddingVertical: 8,
+                        borderRadius: 18,
+                        backgroundColor:
+                          Math.abs(draftFrameRatio - r) < 0.02 ? "#094569" : "#f3f4f6",
+                        borderWidth: 1,
+                        borderColor:
+                          Math.abs(draftFrameRatio - r) < 0.02 ? "#094569" : "#e5e7eb",
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          fontWeight: "600",
+                          color:
+                            Math.abs(draftFrameRatio - r) < 0.02 ? "#fff" : "#374151",
+                        }}
+                      >
+                        {label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <Text
+                  style={{
+                    fontSize: 12,
+                    fontWeight: "600",
+                    color: "#6b7280",
+                    marginTop: 16,
+                    marginBottom: 8,
+                  }}
+                >
+                  Custom width ÷ height: {draftFrameRatio.toFixed(2)}
+                </Text>
+                <Slider
+                  minimumValue={RATIO_MIN}
+                  maximumValue={RATIO_MAX}
+                  value={draftFrameRatio}
+                  onValueChange={(v) => setDraftFrameRatio(clampMediaRatio(v))}
+                  step={0.01}
+                  minimumTrackTintColor="#094569"
+                  maximumTrackTintColor="#e5e7eb"
+                  thumbTintColor="#094569"
+                />
+
+                <View style={{ flexDirection: "row", gap: 10, marginTop: 20 }}>
+                  <TouchableOpacity
+                    onPress={() => setFrameAdjustMediaId(null)}
+                    style={{
+                      flex: 1,
+                      paddingVertical: 14,
+                      borderRadius: 14,
+                      backgroundColor: "#f3f4f6",
+                      alignItems: "center",
+                    }}
+                  >
+                    <Text style={{ fontWeight: "700", color: "#374151" }}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setPostMedia((prev) =>
+                        prev.map((m) =>
+                          m.id === frameAdjustItem.id
+                            ? {
+                                ...m,
+                                displayRatio: clampMediaRatio(draftFrameRatio),
+                              }
+                            : m,
+                        ),
+                      );
+                      setFrameAdjustMediaId(null);
+                    }}
+                    style={{
+                      flex: 1,
+                      paddingVertical: 14,
+                      borderRadius: 14,
+                      backgroundColor: "#094569",
+                      alignItems: "center",
+                    }}
+                  >
+                    <Text style={{ fontWeight: "700", color: "#fff" }}>Apply</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {frameAdjustItem.type === "image" && (
+                  <TouchableOpacity
+                    onPress={() => {
+                      setReframeAspectOverride(clampMediaRatio(draftFrameRatio));
+                      setReframeMediaId(frameAdjustItem.id);
+                      setFrameAdjustMediaId(null);
+                    }}
+                    style={{
+                      marginTop: 12,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                      paddingVertical: 14,
+                      borderRadius: 14,
+                      borderWidth: 1.5,
+                      borderColor: "#1f2937",
+                    }}
+                  >
+                    <Crop size={18} color="#1f2937" />
+                    <Text style={{ fontWeight: "700", color: "#1f2937", fontSize: 15 }}>
+                      Crop & position at this ratio
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </ScrollView>
+            </View>
+          )}
+        </View>
+      </Modal>
+
+      <FeedAspectReframeOverlay
+        visible={Boolean(reframeItem && reframeItem.type === "image")}
+        imageUri={reframeItem?.uri ?? ""}
+        imageWidth={reframeItem?.width}
+        imageHeight={reframeItem?.height}
+        aspectWidthOverHeight={reframeAspectForOverlay}
+        onSave={(result) => {
+          setPostMedia((prev) =>
+            prev.map((m) =>
+              m.id === reframeMediaId
+                ? {
+                    ...m,
+                    uri: result.uri,
+                    width: result.width,
+                    height: result.height,
+                    displayRatio: undefined,
+                  }
+                : m,
+            ),
+          );
+          setReframeMediaId(null);
+          setReframeAspectOverride(null);
+        }}
+        onCancel={() => {
+          setReframeMediaId(null);
+          setReframeAspectOverride(null);
+        }}
+      />
 
       <PopupMessage
         visible={showSuccess}

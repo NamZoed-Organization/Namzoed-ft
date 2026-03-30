@@ -1,7 +1,7 @@
 import EarlyAccessBadge from "@/components/EarlyAccessBadge";
+import ProfilePostGridItem from "@/components/profile/ProfilePostGridItem";
 import PopupMessage from "@/components/ui/PopupMessage";
 import FollowRequestsOverlay from "@/components/modals/FollowRequestsOverlay";
-import ImageViewer from "@/components/modals/ImageViewer";
 import ProfileImageViewer from "@/components/modals/ProfileImageViewer";
 import ReportUserModal from "@/components/modals/ReportUserModal";
 import { useUser } from "@/contexts/UserContext";
@@ -19,17 +19,14 @@ import {
 import * as Haptics from "expo-haptics";
 import { useAppRouter } from "@/utils/navigation";
 import { Redirect, Stack, useLocalSearchParams } from "expo-router";
-import { useVideoPlayer, VideoView } from "expo-video";
 import {
     AlertCircle,
     Ban,
     CheckCircle2,
     ChevronLeft,
-    Copy,
     GalleryHorizontal,
     Grid,
     MessageCircle,
-    Play,
     ShoppingBag,
     User,
     Verified,
@@ -64,22 +61,6 @@ const isVideoUrl = (url: string): boolean => {
   );
 };
 
-// Video thumbnail component – renders the first frame via expo-video
-function VideoThumb({ uri }: { uri: string }) {
-  const player = useVideoPlayer(uri, (p) => {
-    p.muted = true;
-    p.loop = false;
-  });
-  return (
-    <VideoView
-      player={player}
-      style={{ width: "100%", height: "100%" }}
-      nativeControls={false}
-      contentFit="cover"
-    />
-  );
-}
-
 export default function PublicProfileScreen() {
   const { id, tab } = useLocalSearchParams(); // Get user ID from route: /user/123
   const { currentUser } = useUser();
@@ -100,10 +81,6 @@ export default function PublicProfileScreen() {
   const [postThumbnails, setPostThumbnails] = useState<
     Array<{ postId: string; thumbnailUrl: string; mediaCount: number; isVideo: boolean; post: Post }>
   >([]);
-  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
-  const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
-  const [showImageViewer, setShowImageViewer] = useState(false);
-
   // Service provider state
   const [serviceProvider, setServiceProvider] = useState<any>(null);
   const [providerServices, setProviderServices] = useState<
@@ -798,45 +775,19 @@ export default function PublicProfileScreen() {
                 {activeTab === "images" && (
                   <View className="flex-row flex-wrap">
                     {postThumbnails.length > 0 ? (
-                      postThumbnails.map((thumb) => {
-                        return (
-                          <View
-                            key={thumb.postId}
-                            className="w-[33.33%] aspect-[9/12] p-[1px]"
-                          >
-                            <TouchableOpacity
-                              className="flex-1 bg-gray-100 relative"
-                              onPress={() => {
-                                setSelectedPost(thumb.post);
-                                setSelectedMediaIndex(0);
-                                setShowImageViewer(true);
-                              }}
-                            >
-                              {thumb.isVideo ? (
-                                <VideoThumb uri={thumb.thumbnailUrl} />
-                              ) : (
-                                <Image
-                                  source={{ uri: thumb.thumbnailUrl }}
-                                  className="w-full h-full"
-                                  resizeMode="cover"
-                                />
-                              )}
-                              {/* Stacked icon for multi-image posts */}
-                              {thumb.mediaCount > 1 && (
-                                <View className="absolute top-1.5 right-1.5">
-                                  <Copy size={14} color="#fff" strokeWidth={2} />
-                                </View>
-                              )}
-                              {/* Video indicator */}
-                              {thumb.isVideo && thumb.mediaCount <= 1 && (
-                                <View className="absolute top-1.5 right-1.5">
-                                  <Play size={14} color="#fff" strokeWidth={1.5} />
-                                </View>
-                              )}
-                            </TouchableOpacity>
-                          </View>
-                        );
-                      })
+                      postThumbnails.map((thumb) => (
+                        <ProfilePostGridItem
+                          key={thumb.postId}
+                          thumbnailUrl={thumb.thumbnailUrl}
+                          isVideo={thumb.isVideo}
+                          mediaCount={thumb.mediaCount}
+                          onPress={() =>
+                            router.push(
+                              `/(users)/post/${thumb.postId}` as any,
+                            )
+                          }
+                        />
+                      ))
                     ) : (
                       <View className="w-full py-16 items-center px-6">
                         <View className="w-14 h-14 rounded-full bg-gray-50 items-center justify-center mb-3">
@@ -1297,21 +1248,6 @@ export default function PublicProfileScreen() {
           targetUserName={userProfile.name || userProfile.username || "user"}
           currentUserId={currentUser.id}
           onReportSuccess={handleReportSuccess}
-        />
-      )}
-
-      {showImageViewer && selectedPost && (
-        <ImageViewer
-          visible={showImageViewer}
-          images={selectedPost.images}
-          initialIndex={selectedMediaIndex}
-          onClose={() => setShowImageViewer(false)}
-          postContent={selectedPost.content}
-          username={userProfile?.name || userProfile?.username || "User"}
-          likes={selectedPost.likes}
-          comments={selectedPost.comments}
-          postId={selectedPost.id}
-          postUserId={selectedPost.user_id}
         />
       )}
 

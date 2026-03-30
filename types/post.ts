@@ -1,3 +1,5 @@
+import type { PostMediaDisplay } from "@/lib/postMediaDisplay";
+
 // Tagged product reference stored on a post
 export interface TaggedProduct {
   id: string;
@@ -28,6 +30,10 @@ export interface PostData {
   likes: number;
   comments: number;
   shares: number;
+  /** From `posts.media_display`; absent on older rows → feed measures URLs */
+  mediaDisplay?: PostMediaDisplay;
+  /** From `posts.location_name`; alternates with timestamp in the feed header */
+  locationName?: string;
   tagged_products?: TaggedProduct[];
   tagged_accounts?: TaggedAccount[];
   isVerified?: boolean;

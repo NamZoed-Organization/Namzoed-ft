@@ -2,6 +2,9 @@
 import BookMongooseModal from "@/components/BookMongooseModal";
 import FollowRequests from "@/components/modals/FollowRequests";
 import TrackMongooseModal from "@/components/modals/TrackMongooseModal";
+import MongooseWorkerNavBar, {
+  MONGOOSE_WORKER_NAV_BAR_HEIGHT,
+} from "@/components/ui/MongooseWorkerNavBar";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { useUnreadMessages } from "@/contexts/UnreadMessagesContext";
 import { useUser } from "@/contexts/UserContext";
@@ -11,6 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
 import { useAppRouter } from "@/utils/navigation";
+import { isMongooseUser } from "@/utils/roleCheck";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import React, {
@@ -1619,6 +1623,9 @@ export default function MessageScreen() {
   }
 
   const tabs = ["Messages", "Mongoose"];
+  const showMongooseWorkerNav = isMongooseUser(currentUser?.email);
+  const listBottomPad =
+    insets.bottom + (showMongooseWorkerNav ? MONGOOSE_WORKER_NAV_BAR_HEIGHT + 8 : 0);
 
   return (
     <View className="flex-1 bg-background">
@@ -1684,7 +1691,7 @@ export default function MessageScreen() {
 
           <FlatList
             style={{ flex: 1 }}
-            contentContainerStyle={{ paddingBottom: insets.bottom }}
+            contentContainerStyle={{ paddingBottom: listBottomPad }}
             keyboardShouldPersistTaps="handled"
             data={searchQuery.trim() ? searchResults : visibleConversations}
             renderItem={
@@ -1833,7 +1840,7 @@ export default function MessageScreen() {
       {activeTab === 0 && showMessageRequests && (
         <FlatList
           style={{ flex: 1 }}
-          contentContainerStyle={{ paddingBottom: insets.bottom }}
+          contentContainerStyle={{ paddingBottom: listBottomPad }}
           data={requestConversations}
           keyExtractor={(item) => item.partnerId}
           renderItem={({ item: convo }) => {
@@ -1993,7 +2000,7 @@ export default function MessageScreen() {
       {activeTab === 1 && (
         <FlatList
           style={{ flex: 1 }}
-          contentContainerStyle={{ paddingBottom: insets.bottom }}
+          contentContainerStyle={{ paddingBottom: listBottomPad }}
           data={mongooseUsers}
           renderItem={renderMongooseUserItem}
           keyExtractor={(item) => item.id}
@@ -2046,6 +2053,8 @@ export default function MessageScreen() {
           booking={selectedBookingForTracking}
         />
       )}
+
+      <MongooseWorkerNavBar />
     </View>
   );
 }

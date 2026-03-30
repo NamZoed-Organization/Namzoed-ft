@@ -1,5 +1,4 @@
-import { PostSkeleton } from "@/components/FeedPost";
-import CreatePost from "@/components/modals/CreatePost";
+import FeedPost, { PostSkeleton } from "@/components/FeedPost";
 import { VideoErrorBoundary } from "@/components/VideoErrorBoundary";
 import { useUser } from "@/contexts/UserContext";
 import { useFeedInfiniteScroll } from "@/hooks/useFeedInfiniteScroll";
@@ -24,19 +23,21 @@ import {
     View
 } from "react-native";
 
-import FeedPost from "@/components/FeedPost";
 import LivesBar from "@/components/livestream/LivesBar";
 import AuthPromptModal from "@/components/modals/AuthPromptModal";
 import { feedEvents } from "@/utils/feedEvents";
-import { useLiveSession } from "@/contexts/LiveSessionProvider";
 import { useLivestreams } from "@/hooks/useLivestreams";
 
-export default function FeedScreen() {
+type CreatePostProps = { onClose?: () => void };
+
+function FeedScreen() {
   const insets = useSafeAreaInsets();
   const { currentUser } = useUser();
-  const { setRestoreHandler } = useLiveSession();
   const { streamId: deepLinkedStreamId } = useLocalSearchParams<{ streamId?: string }>();
   const [showCreatePost, setShowCreatePost] = useState(false);
+  const [CreatePostComponent, setCreatePostComponent] =
+    useState<React.ComponentType<CreatePostProps> | null>(null);
+  const [createPostLoading, setCreatePostLoading] = useState(false);
   const [showLive, setShowLive] = useState(false);
   const [selectedStreamId, setSelectedStreamId] = useState<string | null>(null);
   const [liveRefreshKey, setLiveRefreshKey] = useState(0);
@@ -66,8 +67,26 @@ export default function FeedScreen() {
     initialStreamId?: string;
     onClose: () => void;
     openCreateOnMount?: boolean;
+    onRestore?: (streamId: string) => void;
   }> | null>(null);
   const [liveScreenLoading, setLiveScreenLoading] = useState(false);
+
+  // Lazy-load composer so the route module stays a small sync graph (avoids
+  // expo-router dev warning: default export undefined during circular require).
+  useEffect(() => {
+    if (showCreatePost && !CreatePostComponent && !createPostLoading) {
+      setCreatePostLoading(true);
+      import("@/components/modals/CreatePost")
+        .then((m) => {
+          setCreatePostComponent(() => m.default);
+          setCreatePostLoading(false);
+        })
+        .catch((err) => {
+          console.error("[Feed] Failed to load CreatePost", err);
+          setCreatePostLoading(false);
+        });
+    }
+  }, [showCreatePost, CreatePostComponent, createPostLoading]);
 
   // Dynamically import LiveScrollScreen only when user opens live
   useEffect(() => {
@@ -305,12 +324,19 @@ export default function FeedScreen() {
         onRequestClose={() => setShowCreatePost(false)}
       >
         <View className="flex-1 bg-background">
-          <CreatePost
-            onClose={() => {
-              setShowCreatePost(false);
-              refresh();
-            }}
-          />
+          {CreatePostComponent ? (
+            <CreatePostComponent
+              onClose={() => {
+                setShowCreatePost(false);
+                refresh();
+              }}
+            />
+          ) : (
+            <View className="flex-1 items-center justify-center bg-white">
+              <ActivityIndicator size="large" color="#094569" />
+              <Text className="mt-3 text-gray-500 text-sm">Loading…</Text>
+            </View>
+          )}
         </View>
       </Modal>
 
@@ -330,7 +356,7 @@ export default function FeedScreen() {
               initialStreamId={selectedStreamId ?? undefined}
               openCreateOnMount={selectedStreamId === null}
               onClose={() => setShowLive(false)}
-              onRestore={(streamId) => {
+              onRestore={(streamId: string) => {
                 setSelectedStreamId(streamId);
                 setShowLive(true);
               }}
@@ -347,3 +373,5 @@ export default function FeedScreen() {
     </View>
   );
 }
+
+export default FeedScreen;

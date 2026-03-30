@@ -34,8 +34,13 @@
         "NSMicrophoneUsageDescription": "This app uses the microphone to capture audio for live streams and video recordings.",
         "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to let you choose and update your profile picture.",
         "NSPhotoLibraryAddUsageDescription": "This app needs permission to save photos you take when updating your profile picture.",
-        "NSLocationWhenInUseUsageDescription": "This app uses your location to show nearby services and sellers in your area.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "This app uses your location to show nearby services and sellers in your area."
+        "NSLocationWhenInUseUsageDescription": "This app uses your location for nearby services, sellers, and optional location tags on your posts.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "This app uses your location for nearby services, sellers, and optional location tags on your posts.",
+        "LSApplicationQueriesSchemes": [
+          "comgooglemaps",
+          "googlemaps",
+          "maps"
+        ]
       }
     },
     "android": {

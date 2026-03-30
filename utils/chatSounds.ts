@@ -10,22 +10,24 @@
  * and place your royalty-free .wav or .mp3 file at that path.
  */
 
-import { Audio } from "expo-av";
 import * as Haptics from "expo-haptics";
 
 // ─── Local bundled notification sound ────────────────────────────────────────
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const RECEIVE_SOUND_SOURCE = require("../assets/sounds/notification.mp3");
 
+type CachedReceiveSound = import("expo-av").Audio.Sound;
+
 // ─── Module-level sound cache ─────────────────────────────────────────────────
-let _receiveSound: Audio.Sound | null = null;
+let _receiveSound: CachedReceiveSound | null = null;
 let _loadingReceive = false;
 
-async function getReceiveSound(): Promise<Audio.Sound | null> {
+async function getReceiveSound(): Promise<CachedReceiveSound | null> {
   if (_receiveSound) return _receiveSound;
   if (_loadingReceive) return null;
   _loadingReceive = true;
   try {
+    const { Audio } = await import("expo-av");
     await Audio.setAudioModeAsync({
       playsInSilentModeIOS: true,
       staysActiveInBackground: false,
@@ -38,7 +40,7 @@ async function getReceiveSound(): Promise<Audio.Sound | null> {
     _receiveSound = sound;
     return sound;
   } catch {
-    // Loading failed — silently degrade
+    // Loading failed — silently degrade (e.g. ExponentAV not linked)
     return null;
   } finally {
     _loadingReceive = false;
@@ -92,6 +94,7 @@ export async function triggerReceiveHaptic(): Promise<void> {
  */
 export async function playSendSound(): Promise<void> {
   try {
+    const { Audio } = await import("expo-av");
     await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
     const { sound } = await Audio.Sound.createAsync(
       // eslint-disable-next-line @typescript-eslint/no-require-imports

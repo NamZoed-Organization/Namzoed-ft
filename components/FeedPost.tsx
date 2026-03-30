@@ -1,4 +1,3 @@
-import ImageViewer from "@/components/modals/ImageViewer";
 import CommentsModal from "@/components/modals/CommentsModal";
 import DeleteConfirmationModal from "@/components/modals/DeleteConfirmationModal";
 import LikesListModal from "@/components/modals/LikesListModal";
@@ -20,6 +19,7 @@ import {
 } from "@/lib/likesService";
 import { deletePost } from "@/lib/postsService";
 import { playSound } from "@/lib/soundUtils";
+import { RATIO_PORTRAIT } from "@/lib/postMediaDisplay";
 import { PostData } from "@/types/post";
 import { feedEvents } from "@/utils/feedEvents";
 import { LinearGradient } from "expo-linear-gradient";
@@ -42,7 +42,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Image } from "expo-image";
 import {
     Animated,
-    Dimensions,
     Easing,
     FlatList,
     GestureResponderEvent,
@@ -51,8 +50,10 @@ import {
     NativeSyntheticEvent,
     StyleSheet,
     Text,
+    type TextStyle,
     TouchableOpacity,
     TouchableWithoutFeedback,
+    useWindowDimensions,
     View,
 } from "react-native";
 
@@ -97,6 +98,69 @@ const formatDate = (date: Date): string => {
   });
 };
 
+const TIMESTAMP_ROTATE_MS = 3000;
+
+function TimestampLocationRotator({
+  date,
+  locationName,
+  style,
+}: {
+  date: Date;
+  locationName?: string | null;
+  style?: TextStyle;
+}) {
+  const formatted = useMemo(() => formatDate(date), [date]);
+  const trimmed = locationName?.trim() ?? "";
+  const opTime = useRef(new Animated.Value(1)).current;
+  const opLoc = useRef(new Animated.Value(0)).current;
+  const [showLocation, setShowLocation] = useState(false);
+
+  useEffect(() => {
+    if (!trimmed) return;
+    const id = setInterval(() => {
+      setShowLocation((v) => !v);
+    }, TIMESTAMP_ROTATE_MS);
+    return () => clearInterval(id);
+  }, [trimmed]);
+
+  useEffect(() => {
+    if (!trimmed) return;
+    Animated.parallel([
+      Animated.timing(opTime, {
+        toValue: showLocation ? 0 : 1,
+        duration: 400,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opLoc, {
+        toValue: showLocation ? 1 : 0,
+        duration: 400,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [showLocation, trimmed]);
+
+  if (!trimmed) {
+    return <Text style={style}>{formatted}</Text>;
+  }
+
+  return (
+    <View style={{ minHeight: 17, justifyContent: "center" }}>
+      <Animated.Text
+        style={[style, { position: "absolute", left: 0, right: 0, top: 0, opacity: opTime }]}
+        numberOfLines={1}
+      >
+        {formatted}
+      </Animated.Text>
+      <Animated.Text
+        style={[style, { position: "absolute", left: 0, right: 0, top: 0, opacity: opLoc }]}
+        numberOfLines={1}
+      >
+        {trimmed}
+      </Animated.Text>
+    </View>
+  );
+}
+
 const isVideoUrl = (url: string): boolean => {
   const videoExtensions = [".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"];
   const lowerUrl = url.toLowerCase();
@@ -106,11 +170,9 @@ const isVideoUrl = (url: string): boolean => {
   );
 };
 
-const SCREEN_WIDTH = Dimensions.get("window").width;
-const MEDIA_ASPECT = 4 / 5;
-const MEDIA_HEIGHT = SCREEN_WIDTH * MEDIA_ASPECT;
-
 interface MediaCarouselProps {
+  /** Full-bleed media width (window width — matches Instagram edge-to-edge). */
+  frameWidth: number;
   images: string[];
   onDoubleTapAt?: (x: number, y: number) => void;
   onImagePress?: (index: number) => void;
@@ -119,7 +181,7 @@ interface MediaCarouselProps {
   onTagPress: () => void;
 }
 
-function VideoLoadingShimmer() {
+function VideoLoadingShimmer({ frameWidth }: { frameWidth: number }) {
   const shimmer = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -137,7 +199,7 @@ function VideoLoadingShimmer() {
 
   const translateX = shimmer.interpolate({
     inputRange: [0, 1],
-    outputRange: [-SCREEN_WIDTH, SCREEN_WIDTH],
+    outputRange: [-frameWidth, frameWidth],
   });
 
   return (
@@ -158,7 +220,7 @@ function VideoLoadingShimmer() {
           position: 'absolute',
           top: 0,
           left: 0,
-          width: SCREEN_WIDTH * 0.45,
+          width: frameWidth * 0.45,
           height: 2,
           borderRadius: 1,
           backgroundColor: 'rgba(255,255,255,0.75)',
@@ -171,11 +233,13 @@ function VideoLoadingShimmer() {
 
 interface InlineVideoPlayerProps {
   uri: string;
+  frameWidth: number;
+  slideHeight: number;
   isVisible: boolean;
   onDoubleTapAt?: (x: number, y: number) => void;
 }
 
-const InlineVideoPlayer = React.memo(function InlineVideoPlayer({ uri, isVisible, onDoubleTapAt }: InlineVideoPlayerProps) {
+const InlineVideoPlayer = React.memo(function InlineVideoPlayer({ uri, frameWidth, slideHeight: videoH, isVisible, onDoubleTapAt }: InlineVideoPlayerProps) {
   const [isHolding, setIsHolding] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
@@ -319,17 +383,17 @@ const InlineVideoPlayer = React.memo(function InlineVideoPlayer({ uri, isVisible
   };
 
   return (
-    <View style={{ width: SCREEN_WIDTH, height: MEDIA_HEIGHT }}>
+    <View style={{ width: frameWidth, height: videoH }}>
       <TouchableWithoutFeedback onPressIn={handlePressIn} onPressOut={handlePressOut}>
         <View style={{ flex: 1 }}>
           <VideoView
             player={player}
-            style={{ width: SCREEN_WIDTH, height: MEDIA_HEIGHT }}
+            style={{ width: frameWidth, height: videoH }}
             contentFit="cover"
             nativeControls={false}
             fullscreenOptions={{ enable: false }}
           />
-          {isLoading && <VideoLoadingShimmer />}
+          {isLoading && <VideoLoadingShimmer frameWidth={frameWidth} />}
           <Animated.Text
             style={{
               position: "absolute",
@@ -368,71 +432,111 @@ const InlineVideoPlayer = React.memo(function InlineVideoPlayer({ uri, isVisible
 });
 
 const MediaCarousel = React.memo(
-  ({ images, onDoubleTapAt, onImagePress, isVisible = true, hasTaggedItems, onTagPress }: MediaCarouselProps) => {
+  ({
+    frameWidth,
+    images,
+    onDoubleTapAt,
+    onImagePress,
+    isVisible = true,
+    hasTaggedItems,
+    onTagPress,
+  }: MediaCarouselProps) => {
     const [activeIndex, setActiveIndex] = useState(0);
+    const slideH = frameWidth / RATIO_PORTRAIT;
+
     const multipleMedia = images.length > 1;
     const lastTapRef = useRef(0);
     const singleTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const handleImageTap = useCallback((event: GestureResponderEvent, index: number) => {
-      const now = Date.now();
-      if (now - lastTapRef.current < 300) {
-        // double tap — cancel pending single-tap and trigger like
-        if (singleTapTimerRef.current) {
-          clearTimeout(singleTapTimerRef.current);
-          singleTapTimerRef.current = null;
+    const handleImageTap = useCallback(
+      (event: GestureResponderEvent, index: number) => {
+        const now = Date.now();
+        if (now - lastTapRef.current < 300) {
+          if (singleTapTimerRef.current) {
+            clearTimeout(singleTapTimerRef.current);
+            singleTapTimerRef.current = null;
+          }
+          onDoubleTapAt?.(
+            event.nativeEvent.locationX,
+            event.nativeEvent.locationY,
+          );
+        } else {
+          singleTapTimerRef.current = setTimeout(() => {
+            singleTapTimerRef.current = null;
+            onImagePress?.(index);
+          }, 300);
         }
-        onDoubleTapAt?.(event.nativeEvent.locationX, event.nativeEvent.locationY);
-      } else {
-        // potential single tap — wait to confirm it's not a double
-        singleTapTimerRef.current = setTimeout(() => {
-          singleTapTimerRef.current = null;
-          onImagePress?.(index);
-        }, 300);
-      }
-      lastTapRef.current = now;
-    }, [onDoubleTapAt, onImagePress]);
+        lastTapRef.current = now;
+      },
+      [onDoubleTapAt, onImagePress],
+    );
 
     const handleScroll = useCallback(
       (e: NativeSyntheticEvent<NativeScrollEvent>) => {
         const x = e.nativeEvent.contentOffset.x;
-        const idx = Math.round(x / SCREEN_WIDTH);
+        const idx = Math.round(x / frameWidth);
         setActiveIndex(idx);
       },
-      []
+      [frameWidth],
     );
 
     const renderItem = useCallback(
       ({ item, index }: { item: string; index: number }) => {
         const isVideo = isVideoUrl(item);
+        const h = slideH;
+        const w = frameWidth;
 
         if (isVideo) {
           return (
-            <InlineVideoPlayer
-              uri={item}
-              isVisible={isVisible && activeIndex === index}
-              onDoubleTapAt={onDoubleTapAt}
-            />
+            <View
+              style={{
+                width: w,
+                height: h,
+                backgroundColor: "#000",
+                overflow: "hidden",
+              }}
+            >
+              <InlineVideoPlayer
+                uri={item}
+                frameWidth={w}
+                slideHeight={h}
+                isVisible={isVisible && activeIndex === index}
+                onDoubleTapAt={onDoubleTapAt}
+              />
+            </View>
           );
         }
 
         return (
-          <TouchableOpacity
-            onPress={(e) => handleImageTap(e, index)}
-            activeOpacity={1}
-            style={{ width: SCREEN_WIDTH, height: MEDIA_HEIGHT }}
+          <View
+            style={{
+              width: w,
+              height: h,
+              backgroundColor: "#000",
+              overflow: "hidden",
+            }}
           >
-            <Image
-              source={{ uri: item }}
-              style={{ width: "100%", height: "100%", backgroundColor: "#F3F4F6" }}
-              contentFit="cover"
-              cachePolicy="memory-disk"
-              transition={150}
-            />
-          </TouchableOpacity>
+            <TouchableOpacity
+              onPress={(e) => handleImageTap(e, index)}
+              activeOpacity={1}
+              style={{ width: w, height: h }}
+            >
+              <Image
+                source={{ uri: item }}
+                style={{
+                  width: w,
+                  height: h,
+                  backgroundColor: "#000",
+                }}
+                contentFit="cover"
+                cachePolicy="memory-disk"
+                transition={150}
+              />
+            </TouchableOpacity>
+          </View>
         );
       },
-      [handleImageTap, isVisible, activeIndex, onDoubleTapAt]
+      [handleImageTap, isVisible, activeIndex, onDoubleTapAt, frameWidth, slideH],
     );
 
     if (images.length === 0) return null;
@@ -449,7 +553,7 @@ const MediaCarousel = React.memo(
             showsHorizontalScrollIndicator={false}
             onScroll={handleScroll}
             scrollEventThrottle={16}
-            style={{ height: MEDIA_HEIGHT }}
+            style={{ height: slideH }}
           />
         ) : (
           renderItem({ item: images[0], index: 0 })
@@ -486,22 +590,22 @@ const MediaCarousel = React.memo(
         )}
       </View>
     );
-  }
+  },
 );
 
 const HEADER_HEIGHT = 56;
 const HEART_BTN_X = 26;
-const HEART_BTN_Y = HEADER_HEIGHT + MEDIA_HEIGHT + 22;
 const FLY_SIZE = 72;
 const FLY_DURATION = 700;
 
 interface FlyingHeartProps {
   startX: number;
   startY: number;
+  heartTargetY: number;
   onDone: () => void;
 }
 
-function FlyingHeart({ startX, startY, onDone }: FlyingHeartProps) {
+function FlyingHeart({ startX, startY, heartTargetY, onDone }: FlyingHeartProps) {
   const progress = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(0)).current;
   const opacity = useRef(new Animated.Value(1)).current;
@@ -511,7 +615,7 @@ function FlyingHeart({ startX, startY, onDone }: FlyingHeartProps) {
   const T = FLY_DURATION / 1000;
   const g = 2600; // gravity px/s² — higher = sharper downward arc
   const endX = HEART_BTN_X;
-  const endY = HEART_BTN_Y;
+  const endY = heartTargetY;
   const vx = (endX - startX) / T;
   const vy = (endY - startY - 0.5 * g * T * T) / T; // negative = initially upward
 
@@ -648,6 +752,10 @@ const MiniAvatarRow = React.memo(({ users, totalLikes, onPress }: MiniAvatarRowP
 });
 
 function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: FeedPostProps) {
+  const { width: frameWidth } = useWindowDimensions();
+  const feedMediaHeight = frameWidth / RATIO_PORTRAIT;
+  const heartTargetY = HEADER_HEIGHT + feedMediaHeight + 22;
+
   const [isLiked, setIsLiked] = useState(false);
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [likesCount, setLikesCount] = useState(post.likes);
@@ -664,7 +772,6 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
   const [showComments, setShowComments] = useState(false);
   const [showLikesList, setShowLikesList] = useState(false);
   const [flyingHearts, setFlyingHearts] = useState<Array<{ id: number; x: number; y: number }>>([]);
-  const [previewIndex, setPreviewIndex] = useState<number | null>(null);
   const flyHeartId = useRef(0);
 
   const hasTaggedProducts = (post.tagged_products?.length ?? 0) > 0;
@@ -675,8 +782,6 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
 
   const isOwnPost = currentUser?.id === post.userId;
   const isAuthorLive = isAuthorLiveProp ?? false;
-
-  const formattedDate = useMemo(() => formatDate(post.date), [post.date]);
 
   // Keep interaction cache in sync when user interacts
   const updateCache = useCallback((updates: Partial<NonNullable<ReturnType<typeof interactionCache.get>>>) => {
@@ -894,7 +999,11 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
               <Text style={styles.username}>{post.username || "Unknown"}</Text>
               {post.isVerified && <Verified size={14} color="#094569" />}
             </View>
-            <Text style={styles.timestamp}>{formattedDate}</Text>
+            <TimestampLocationRotator
+              date={post.date}
+              locationName={post.locationName}
+              style={styles.timestamp}
+            />
           </View>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => setShowActionSheet(true)}>
@@ -905,9 +1014,9 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
       {/* Media */}
       {post.images.length > 0 && (
         <MediaCarousel
+          frameWidth={frameWidth}
           images={post.images}
           onDoubleTapAt={handleDoubleTapAt}
-          onImagePress={(index) => setPreviewIndex(index)}
           isVisible={isVisible}
           hasTaggedItems={hasTaggedItems}
           onTagPress={() => setShowTaggedItems(true)}
@@ -1124,22 +1233,14 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
         </Modal>
       )}
       {flyingHearts.map(h => (
-        <FlyingHeart key={h.id} startX={h.x} startY={h.y} onDone={() => removeFlyingHeart(h.id)} />
+        <FlyingHeart
+          key={h.id}
+          startX={h.x}
+          startY={h.y}
+          heartTargetY={heartTargetY}
+          onDone={() => removeFlyingHeart(h.id)}
+        />
       ))}
-
-      {/* Fullscreen Image Viewer */}
-      <ImageViewer
-        visible={previewIndex !== null}
-        images={post.images}
-        initialIndex={previewIndex ?? 0}
-        onClose={() => setPreviewIndex(null)}
-        postContent={post.content}
-        username={post.username}
-        likes={likesCount}
-        comments={commentsCount}
-        postId={post.id}
-        postUserId={post.userId}
-      />
     </View>
   );
 }
@@ -1147,7 +1248,10 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
 export default React.memo(FeedPost, (prev, next) =>
   prev.post.id === next.post.id &&
   prev.isVisible === next.isVisible &&
-  prev.isAuthorLive === next.isAuthorLive
+  prev.isAuthorLive === next.isAuthorLive &&
+  prev.post.locationName === next.post.locationName &&
+  prev.post.images.length === next.post.images.length &&
+  prev.post.images.every((u, i) => u === next.post.images[i])
 );
 
 const styles = StyleSheet.create({

@@ -137,6 +137,31 @@ export default function MongooseResponderModal({
       : inviteData.initiatorAddress;
 
     try {
+      const [{ data: initP }, { data: respP }] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("phone")
+          .eq("id", inviteData.initiatorId)
+          .maybeSingle(),
+        supabase
+          .from("profiles")
+          .select("phone")
+          .eq("id", responderId)
+          .maybeSingle(),
+      ]);
+
+      const initiatorPhone =
+        (initP?.phone && String(initP.phone).trim()) || null;
+      const responderPhone =
+        (respP?.phone && String(respP.phone).trim()) || null;
+
+      const sellerPhone = initiatorIsSeller
+        ? initiatorPhone
+        : responderPhone;
+      const buyerPhone = initiatorIsSeller
+        ? responderPhone
+        : initiatorPhone;
+
       const { data: booking, error } = await supabase
         .from("booking_requests")
         .insert([
@@ -144,6 +169,9 @@ export default function MongooseResponderModal({
             user_id: responderId,
             user_name: responderName,
             user_email: responderEmail ?? "",
+            user_phone: responderPhone,
+            buyer_phone: buyerPhone,
+            seller_phone: sellerPhone,
             mongoose_email: "mongoose@gmail.com",
             booking_date: inviteData.date,
             booking_time: inviteData.time,
@@ -549,8 +577,8 @@ export default function MongooseResponderModal({
                   lineHeight: 17,
                 }}
               >
-                This will submit a booking request to Mongoose.{"\n"}You'll be
-                notified once it's accepted.
+                This will submit a booking request to Mongoose.{"\n"}You will be
+                notified once it is accepted.
               </Text>
             </ScrollView>
           </View>
