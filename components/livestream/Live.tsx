@@ -1,6 +1,7 @@
+import PopupMessage from "@/components/ui/PopupMessage";
+import { useAppRouter } from "@/utils/navigation";
 import { Camera } from "expo-camera";
 import { LinearGradient } from "expo-linear-gradient";
-import { useAppRouter } from "@/utils/navigation";
 import {
     Check,
     ChevronDown,
@@ -17,7 +18,6 @@ import React, {
     useRef,
     useState,
 } from "react";
-import PopupMessage from "@/components/ui/PopupMessage";
 import {
     ActivityIndicator,
     BackHandler,
@@ -26,7 +26,6 @@ import {
     ImageBackground,
     Keyboard,
     KeyboardAvoidingView,
-    Linking,
     Modal,
     Platform,
     Pressable,
@@ -38,7 +37,7 @@ import {
     TouchableOpacity,
     TouchableWithoutFeedback,
     View,
-    ViewStyle,
+    ViewStyle
 } from "react-native";
 import {
     SafeAreaView,

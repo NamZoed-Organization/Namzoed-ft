@@ -5,7 +5,7 @@ import * as Location from "expo-location";
 import React, { useEffect, useRef, useState } from "react";
 import {
     Alert,
-  Linking,
+    Linking,
     Modal,
     Pressable,
     Switch,

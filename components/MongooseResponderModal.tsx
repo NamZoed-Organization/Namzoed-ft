@@ -11,14 +11,14 @@ import { MongooseInviteData } from "@/components/MongooseInviteCard";
 import SingleLocationPicker, {
     PickedLocation,
 } from "@/components/location/SingleLocationPicker";
-import { supabase } from "@/lib/supabase";
 import PopupMessage from "@/components/ui/PopupMessage";
+import { supabase } from "@/lib/supabase";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import React, { useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
-  Linking,
+    Linking,
     Modal,
     ScrollView,
     Text,

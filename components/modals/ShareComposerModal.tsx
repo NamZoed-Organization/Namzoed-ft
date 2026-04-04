@@ -21,7 +21,7 @@ import {
     ActivityIndicator,
     Animated,
     Dimensions,
-  KeyboardAvoidingView,
+    KeyboardAvoidingView,
     Linking,
     Modal,
     PanResponder,

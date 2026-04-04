@@ -10,8 +10,8 @@
  * and place your royalty-free .wav or .mp3 file at that path.
  */
 
-import * as Haptics from "expo-haptics";
 import type { AudioPlayer } from "expo-audio";
+import * as Haptics from "expo-haptics";
 
 // ─── Local bundled notification sound ────────────────────────────────────────
 // eslint-disable-next-line @typescript-eslint/no-require-imports

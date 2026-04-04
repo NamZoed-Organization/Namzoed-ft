@@ -10,14 +10,14 @@
 import SingleLocationPicker, {
     PickedLocation,
 } from "@/components/location/SingleLocationPicker";
+import PopupMessage from "@/components/ui/PopupMessage";
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import PopupMessage from "@/components/ui/PopupMessage";
 import * as Location from "expo-location";
 import React, { useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
-  Linking,
+    Linking,
     Modal,
     Platform,
     Pressable,

@@ -1,61 +1,61 @@
-import React, { useCallback, useEffect, useState } from "react";
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  TextInput,
-  ScrollView,
-  Image,
-  Modal,
-  ActivityIndicator,
-  FlatList,
-  Dimensions,
-  KeyboardAvoidingView,
-  Linking,
-  Platform,
-  Switch,
-} from "react-native";
-import * as Location from "expo-location";
 import FeedAspectReframeOverlay from "@/components/modals/FeedAspectReframeOverlay";
 import PopupMessage from "@/components/ui/PopupMessage";
-import { LinearGradient } from "expo-linear-gradient";
-import {
-  ArrowLeft,
-  Camera,
-  Check,
-  ChevronRight,
-  Crop,
-  ImageIcon,
-  MapPin,
-  Plus,
-  Ratio,
-  Search,
-  ShoppingBag,
-  UserPlus,
-  Video,
-  X,
-} from "lucide-react-native";
-import { useAppRouter } from "@/utils/navigation";
 import { useUser } from "@/contexts/UserContext";
-import * as ImagePicker from "expo-image-picker";
 import {
-  clampMediaRatio,
-  type PostMediaDisplay,
-  type PostMediaDisplayMode,
-  RATIO_LANDSCAPE,
-  RATIO_MAX,
-  RATIO_MIN,
-  RATIO_PORTRAIT,
-  RATIO_SQUARE,
-  RATIO_VIDEO_DEFAULT,
-  ratioForUniformMode,
-  slideHeight,
+    clampMediaRatio,
+    type PostMediaDisplay,
+    type PostMediaDisplayMode,
+    RATIO_LANDSCAPE,
+    RATIO_MAX,
+    RATIO_MIN,
+    RATIO_PORTRAIT,
+    RATIO_SQUARE,
+    RATIO_VIDEO_DEFAULT,
+    ratioForUniformMode,
+    slideHeight,
 } from "@/lib/postMediaDisplay";
-import Slider from "@react-native-community/slider";
 import { createPost, uploadImages, uploadVideos } from "@/lib/postsService";
 import { fetchUserProducts, Product } from "@/lib/productsService";
 import { supabase } from "@/lib/supabase";
-import type { TaggedProduct, TaggedAccount } from "@/types/post";
+import type { TaggedAccount, TaggedProduct } from "@/types/post";
+import { useAppRouter } from "@/utils/navigation";
+import Slider from "@react-native-community/slider";
+import * as ImagePicker from "expo-image-picker";
+import { LinearGradient } from "expo-linear-gradient";
+import * as Location from "expo-location";
+import {
+    ArrowLeft,
+    Camera,
+    Check,
+    ChevronRight,
+    Crop,
+    ImageIcon,
+    MapPin,
+    Plus,
+    Ratio,
+    Search,
+    ShoppingBag,
+    UserPlus,
+    Video,
+    X,
+} from "lucide-react-native";
+import React, { useCallback, useEffect, useState } from "react";
+import {
+    ActivityIndicator,
+    Dimensions,
+    FlatList,
+    Image,
+    KeyboardAvoidingView,
+    Linking,
+    Modal,
+    Platform,
+    ScrollView,
+    Switch,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from "react-native";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const CARD_WIDTH = SCREEN_WIDTH - 48; // leaves 24px on each side so next item peeks
