@@ -11,6 +11,7 @@ import {
   FlatList,
   Dimensions,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Switch,
 } from "react-native";
@@ -140,6 +141,8 @@ export default function CreatePost({ onClose }: CreatePostProps) {
   const [reframeAspectOverride, setReframeAspectOverride] = useState<
     number | null
   >(null);
+  const [showLocationPermissionPopup, setShowLocationPermissionPopup] =
+    useState(false);
 
   useEffect(() => {
     setActiveMediaIndex((i) =>
@@ -303,10 +306,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
       setResolvingLocation(true);
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
-        showErrorPopup(
-          "Location permission is needed to tag this post.",
-          "Permission denied",
-        );
+        setShowLocationPermissionPopup(true);
         return;
       }
       const pos = await Location.getCurrentPositionAsync({
@@ -1843,6 +1843,22 @@ export default function CreatePost({ onClose }: CreatePostProps) {
         type="error"
         title={errorTitle}
         message={errorMessage}
+      />
+      <PopupMessage
+        visible={showLocationPermissionPopup}
+        type="warning"
+        title="Location Permission Needed"
+        message="Enable location permission in Settings to add your current location."
+        onHide={() => setShowLocationPermissionPopup(false)}
+        actions={[
+          { label: "Not now", style: "cancel" },
+          {
+            label: "Open Settings",
+            onPress: () => {
+              void Linking.openSettings();
+            },
+          },
+        ]}
       />
     </View>
   );

@@ -45,18 +45,26 @@ export interface CoHostRequest {
 const TABLE_NAME = "live_streams";
 
 export async function fetchActiveLivestreams(): Promise<Livestream[]> {
-  // Auto-expire streams older than 8 hours that were never properly ended
-  const staleThreshold = new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString();
+  // Auto-expire streams that likely crashed/disconnected without proper teardown.
+  // Host heartbeat updates `updated_at` while truly live.
+  const heartbeatStaleThreshold = new Date(
+    Date.now() - 3 * 60 * 1000
+  ).toISOString();
   await supabase
     .from(TABLE_NAME)
-    .update({ is_active: false })
+    .update({
+      is_active: false,
+      ended_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
     .eq("is_active", true)
-    .lt("started_at", staleThreshold);
+    .lt("updated_at", heartbeatStaleThreshold);
 
   const { data, error } = await supabase
     .from(TABLE_NAME)
     .select("*")
     .eq("is_active", true)
+    .eq("external_metadata->>live_started", "true")
     .order("started_at", { ascending: false });
 
   if (error) {
@@ -247,10 +255,10 @@ export async function createLivestreamRecord(
       profile_image: payload.profile_image ?? null,
       title: payload.title ?? null,
       description: payload.description ?? null,
-      is_active: true,
+      is_active: false,
       viewer_count: 0,
       likes: 0,
-      started_at: now,
+      started_at: null,
       stream_key: payload.stream_key ?? null,
       stream_provider_id: payload.stream_provider_id ?? null,
       playback_id: payload.playback_id ?? null,
@@ -275,18 +283,6 @@ export async function createLivestreamRecord(
   }
 
   const livestream = data as Livestream;
-
-  // Fire-and-forget: notify all followers that this user went live
-  (async () => {
-    try {
-      const followerIds = await getFollowerIdsOf(payload.user_id);
-      if (followerIds.length > 0) {
-        await notifyUserWentLive(payload.user_id, livestream.id, followerIds);
-      }
-    } catch (e) {
-      console.warn("[livestreamService] notifyUserWentLive failed:", e);
-    }
-  })();
 
   return livestream;
 }
@@ -314,11 +310,15 @@ export async function markLivestreamStarted(
       ? { ...(current.data.external_metadata as Record<string, unknown>) }
       : {};
 
+  const wasLiveStarted = externalMetadata.live_started === true;
   externalMetadata.live_started = true;
+  externalMetadata.live_started_at = now;
+  externalMetadata.last_heartbeat_at = now;
 
   let query = supabase
     .from(TABLE_NAME)
     .update({
+      is_active: true,
       external_metadata: externalMetadata,
       started_at: now,
       updated_at: now,
@@ -333,6 +333,65 @@ export async function markLivestreamStarted(
 
   if (error) {
     console.error("Failed to mark livestream started", error);
+    throw error;
+  }
+
+  // Fire only when transitioning to truly live.
+  if (!wasLiveStarted && ownerId) {
+    (async () => {
+      try {
+        const followerIds = await getFollowerIdsOf(ownerId);
+        if (followerIds.length > 0) {
+          await notifyUserWentLive(ownerId, id, followerIds);
+        }
+      } catch (e) {
+        console.warn("[livestreamService] notifyUserWentLive failed:", e);
+      }
+    })();
+  }
+}
+
+export async function touchLivestreamHeartbeat(
+  id: string,
+  ownerId?: string | null
+): Promise<void> {
+  const now = new Date().toISOString();
+
+  const current = await supabase
+    .from(TABLE_NAME)
+    .select("external_metadata")
+    .eq("id", id)
+    .single();
+
+  if (current.error) {
+    console.error("Failed to fetch livestream metadata for heartbeat", current.error);
+    throw current.error;
+  }
+
+  const externalMetadata =
+    current.data?.external_metadata &&
+    typeof current.data.external_metadata === "object"
+      ? { ...(current.data.external_metadata as Record<string, unknown>) }
+      : {};
+
+  externalMetadata.last_heartbeat_at = now;
+
+  let query = supabase
+    .from(TABLE_NAME)
+    .update({
+      updated_at: now,
+      external_metadata: externalMetadata,
+    })
+    .eq("id", id)
+    .eq("is_active", true);
+
+  if (ownerId) {
+    query = query.eq("user_id", ownerId);
+  }
+
+  const { error } = await query;
+  if (error) {
+    console.error("Failed to update livestream heartbeat", error);
     throw error;
   }
 }

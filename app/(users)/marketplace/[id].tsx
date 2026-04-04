@@ -3,44 +3,47 @@ import ReportProductModal from "@/components/modals/ReportProductModal";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { useUser } from "@/contexts/UserContext";
 import {
-  fetchMarketplaceItemById,
-  MarketplaceItemWithUser,
+    fetchMarketplaceItemById,
+    MarketplaceItemWithUser,
 } from "@/lib/postMarketPlace";
 import { supabase } from "@/lib/supabase";
+import { useAppRouter } from "@/utils/navigation";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
-import { useAppRouter } from "@/utils/navigation";
 import {
-  useFocusEffect,
-  useLocalSearchParams,
+    useFocusEffect,
+    useLocalSearchParams,
 } from "expo-router";
 import {
-  ArrowLeft,
-  Bookmark,
-  Calendar,
-  Flag,
-  MapPin,
-  MessageCircle,
-  Tag,
-  Verified,
+    Bookmark,
+    Calendar,
+    ChevronLeft,
+    ChevronRight,
+    Flag,
+    MapPin,
+    MessageCircle,
+    Tag,
+    Verified,
 } from "lucide-react-native";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  BackHandler,
-  Dimensions,
-  Image,
-  RefreshControl,
-  Animated as RNAnimated,
-  ScrollView,
-  StatusBar,
-  Text,
-  TouchableOpacity,
-  View,
+    BackHandler,
+    Dimensions,
+    Image,
+    RefreshControl,
+    Animated as RNAnimated,
+    ScrollView,
+    StatusBar,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const IMAGE_HEIGHT = SCREEN_HEIGHT * 0.5;
+const MIN_IMAGE_HEIGHT = SCREEN_HEIGHT * 0.35;
+const MAX_IMAGE_HEIGHT = SCREEN_HEIGHT * 0.65;
 
 function DetailSkeleton() {
   const shimmerAnim = useRef(new RNAnimated.Value(0)).current;
@@ -85,10 +88,20 @@ export default function MarketplaceDetailScreen() {
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [showImageViewer, setShowImageViewer] = useState(false);
   const imageScrollRef = useRef<ScrollView>(null);
+  const imageScrollX = useRef(new RNAnimated.Value(0)).current;
+  const animatedHeroHeight = useRef(new RNAnimated.Value(IMAGE_HEIGHT)).current;
+  const activeImageIndexRef = useRef(0);
+  const [imageAspectRatios, setImageAspectRatios] = useState<Record<number, number>>({});
   const [showReportModal, setShowReportModal] = useState(false);
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [sellerVerified, setSellerVerified] = useState(false);
+
+  const imageUrls = useMemo(
+    () => (item?.images ?? []).filter((uri): uri is string => typeof uri === "string" && uri.length > 0),
+    [item?.images],
+  );
+  const imageUrlsKey = useMemo(() => imageUrls.join("||"), [imageUrls]);
 
   const [popup, setPopup] = useState<{
     visible: boolean;
@@ -224,6 +237,62 @@ export default function MarketplaceDetailScreen() {
 
   const isOwnItem = currentUser?.id === item?.user_id;
 
+  useEffect(() => {
+    setImageAspectRatios({});
+    animatedHeroHeight.setValue(IMAGE_HEIGHT);
+    setActiveImageIndex(0);
+    activeImageIndexRef.current = 0;
+
+    if (!imageUrls.length) return;
+    let cancelled = false;
+
+    imageUrls.forEach((uri, index) => {
+      Image.getSize(
+        uri,
+        (width, height) => {
+          if (cancelled || !width || !height) return;
+          const ratio = width / height;
+          setImageAspectRatios((prev) => (prev[index] ? prev : { ...prev, [index]: ratio }));
+        },
+        () => {
+          // keep fallback
+        },
+      );
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [item?.id, imageUrls, imageUrlsKey, animatedHeroHeight]);
+
+  const getImageHeightForIndex = useCallback(
+    (index: number) => {
+      const ratio = imageAspectRatios[index] || imageAspectRatios[0];
+      if (!ratio) return IMAGE_HEIGHT;
+      const calculatedHeight = SCREEN_WIDTH / ratio;
+      return Math.min(MAX_IMAGE_HEIGHT, Math.max(MIN_IMAGE_HEIGHT, calculatedHeight));
+    },
+    [imageAspectRatios],
+  );
+
+  useEffect(() => {
+    if (!imageUrls.length) {
+      animatedHeroHeight.setValue(IMAGE_HEIGHT);
+      return;
+    }
+    if (activeImageIndex >= imageUrls.length) {
+      setActiveImageIndex(0);
+      activeImageIndexRef.current = 0;
+      return;
+    }
+
+    RNAnimated.timing(animatedHeroHeight, {
+      toValue: getImageHeightForIndex(activeImageIndex),
+      duration: 220,
+      useNativeDriver: false,
+    }).start();
+  }, [activeImageIndex, imageUrls.length, getImageHeightForIndex, animatedHeroHeight]);
+
   if (isLoading) return <DetailSkeleton />;
 
   if (!item) {
@@ -245,7 +314,7 @@ export default function MarketplaceDetailScreen() {
     );
   }
 
-  const images = item.images || [];
+  const images = imageUrls;
 
   const scrollToImage = (index: number) => {
     setActiveImageIndex(index);
@@ -273,42 +342,86 @@ export default function MarketplaceDetailScreen() {
         }
       >
         {/* Hero Image */}
-        <View style={{ height: IMAGE_HEIGHT }}>
+        <RNAnimated.View style={{ height: animatedHeroHeight, overflow: "hidden" }}>
           {images.length > 0 ? (
-            <ScrollView
+            <RNAnimated.ScrollView
               ref={imageScrollRef}
               horizontal
               pagingEnabled
               showsHorizontalScrollIndicator={false}
-              onMomentumScrollEnd={(e) => {
-                const idx = Math.round(
-                  e.nativeEvent.contentOffset.x / SCREEN_WIDTH,
-                );
-                setActiveImageIndex(idx);
-              }}
+              onScroll={RNAnimated.event(
+                [{ nativeEvent: { contentOffset: { x: imageScrollX } } }],
+                {
+                  useNativeDriver: false,
+                  listener: (e: any) => {
+                    const x = e?.nativeEvent?.contentOffset?.x || 0;
+                    const rawIndex = x / SCREEN_WIDTH;
+                    const leftIndex = Math.max(0, Math.floor(rawIndex));
+                    const rightIndex = Math.min(images.length - 1, leftIndex + 1);
+                    const t = Math.max(0, Math.min(1, rawIndex - leftIndex));
+                    const leftHeight = getImageHeightForIndex(leftIndex);
+                    const rightHeight = getImageHeightForIndex(rightIndex);
+                    animatedHeroHeight.setValue(leftHeight + (rightHeight - leftHeight) * t);
+
+                    const idx = Math.round(rawIndex);
+                    if (idx !== activeImageIndexRef.current) {
+                      activeImageIndexRef.current = idx;
+                      setActiveImageIndex(idx);
+                    }
+                  },
+                },
+              )}
               scrollEventThrottle={16}
-              style={{ width: SCREEN_WIDTH, height: IMAGE_HEIGHT }}
+              style={{ width: SCREEN_WIDTH, height: "100%" }}
             >
               {images.map((imageUrl, index) => (
                 <TouchableOpacity
                   key={index}
                   activeOpacity={0.95}
+                  style={{ width: SCREEN_WIDTH, height: "100%", backgroundColor: "#0F172A" }}
                   onPress={() => {
                     setActiveImageIndex(index);
                     setShowImageViewer(true);
                   }}
                 >
-                  <Image
+                  <RNAnimated.Image
                     source={{ uri: imageUrl }}
-                    style={{ width: SCREEN_WIDTH, height: IMAGE_HEIGHT }}
-                    resizeMode="cover"
+                    style={{
+                      width: SCREEN_WIDTH,
+                      height: "100%",
+                      transform: [
+                        {
+                          translateX: imageScrollX.interpolate({
+                            inputRange: [
+                              (index - 1) * SCREEN_WIDTH,
+                              index * SCREEN_WIDTH,
+                              (index + 1) * SCREEN_WIDTH,
+                            ],
+                            outputRange: [18, 0, -18],
+                            extrapolate: "clamp",
+                          }),
+                        },
+                        {
+                          scale: imageScrollX.interpolate({
+                            inputRange: [
+                              (index - 1) * SCREEN_WIDTH,
+                              index * SCREEN_WIDTH,
+                              (index + 1) * SCREEN_WIDTH,
+                            ],
+                            outputRange: [1.06, 1, 1.06],
+                            extrapolate: "clamp",
+                          }),
+                        },
+                      ],
+                    }}
+                    resizeMode="contain"
                   />
                 </TouchableOpacity>
               ))}
-            </ScrollView>
+            </RNAnimated.ScrollView>
           ) : (
             <View
-              style={{ width: SCREEN_WIDTH, height: IMAGE_HEIGHT }}
+              style={{ width: SCREEN_WIDTH, height: "100%" }}
               className="bg-gray-200 items-center justify-center"
             >
               <Tag size={64} color="#D1D5DB" />
@@ -331,7 +444,7 @@ export default function MarketplaceDetailScreen() {
                 className="w-11 h-11 rounded-full overflow-hidden"
               >
                 <BlurView intensity={30} tint="dark" className="flex-1 items-center justify-center">
-                  <ArrowLeft size={22} color="white" strokeWidth={2.5} />
+                  <ChevronLeft size={22} color="white" strokeWidth={2.5} />
                 </BlurView>
               </TouchableOpacity>
 
@@ -406,7 +519,7 @@ export default function MarketplaceDetailScreen() {
               </View>
             </View>
           )}
-        </View>
+        </RNAnimated.View>
 
         {/* Content Card */}
         <View className="bg-white min-h-screen">
@@ -484,11 +597,7 @@ export default function MarketplaceDetailScreen() {
                 </View>
 
                 <View className="bg-white w-10 h-10 rounded-xl items-center justify-center shadow-sm">
-                  <ArrowLeft
-                    size={18}
-                    color="#094569"
-                    style={{ transform: [{ rotate: "180deg" }] }}
-                  />
+                  <ChevronRight size={18} color="#094569" />
                 </View>
               </TouchableOpacity>
             </View>

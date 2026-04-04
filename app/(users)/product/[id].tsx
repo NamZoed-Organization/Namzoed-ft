@@ -1,47 +1,51 @@
 import CountdownTimer from "@/components/CountdownTimer";
 import MarketplaceImageViewer from "@/components/modals/MarketplaceImageViewer";
 import ReportProductModal from "@/components/modals/ReportProductModal";
+import ShareComposerModal from "@/components/modals/ShareComposerModal";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { useUser } from "@/contexts/UserContext";
 import { fetchProductById, ProductWithUser } from "@/lib/productsService";
+import { buildProductExternalSharePayload } from "@/lib/shareUtils";
 import { supabase } from "@/lib/supabase";
+import { useAppRouter } from "@/utils/navigation";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
-import { useAppRouter } from "@/utils/navigation";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import {
-  ArrowLeft,
-  Bookmark,
-  Clock,
-  Flag,
-  MessageCircle,
-  Moon,
-  Package,
-  Share2,
-  ShoppingBag,
-  Sparkles,
-  Tag,
-  User,
-  Verified,
+    Bookmark,
+    ChevronLeft,
+    ChevronRight,
+    Clock,
+    Flag,
+    MessageCircle,
+    Moon,
+    Package,
+    Share2,
+    ShoppingBag,
+    Sparkles,
+    Tag,
+    User,
+    Verified
 } from "lucide-react-native";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  BackHandler,
-  Dimensions,
-  Image,
-  RefreshControl,
-  Animated as RNAnimated,
-  ScrollView,
-  Share,
-  StatusBar,
-  Text,
-  TouchableOpacity,
-  View,
+    BackHandler,
+    Dimensions,
+    Image,
+    RefreshControl,
+    Animated as RNAnimated,
+    ScrollView,
+    StatusBar,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const IMAGE_HEIGHT = SCREEN_HEIGHT * 0.5;
+const MIN_IMAGE_HEIGHT = SCREEN_HEIGHT * 0.35;
+const MAX_IMAGE_HEIGHT = SCREEN_HEIGHT * 0.65;
 
 // Premium Skeleton Loader
 function DetailSkeleton() {
@@ -119,7 +123,11 @@ export default function ProductDetail() {
   const [error, setError] = useState<string | null>(null);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [sellerVerified, setSellerVerified] = useState(false);
+  const [imageAspectRatios, setImageAspectRatios] = useState<Record<number, number>>({});
   const imageScrollRef = useRef<ScrollView>(null);
+  const imageScrollX = useRef(new RNAnimated.Value(0)).current;
+  const animatedHeroHeight = useRef(new RNAnimated.Value(IMAGE_HEIGHT)).current;
+  const activeImageIndexRef = useRef(0);
 
   // Image viewer state
   const [showImageViewer, setShowImageViewer] = useState(false);
@@ -130,12 +138,25 @@ export default function ProductDetail() {
   // Refresh & Report State
   const [refreshing, setRefreshing] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
+  const [showShareComposer, setShowShareComposer] = useState(false);
 
   // Popup states
   const [showSuccess, setShowSuccess] = useState(false);
   const [showError, setShowError] = useState(false);
   const [popupMessage, setPopupMessage] = useState("");
   const [popupTitle, setPopupTitle] = useState("");
+
+  const productImageUrls = useMemo(
+    () =>
+      (product?.images ?? []).filter(
+        (uri): uri is string => typeof uri === "string" && uri.length > 0,
+      ),
+    [product?.images],
+  );
+  const productImagesKey = useMemo(
+    () => productImageUrls.join("||"),
+    [productImageUrls],
+  );
 
   const showSuccessPopup = (message: string, title: string = "Success") => {
     setPopupMessage(message);
@@ -210,6 +231,74 @@ export default function ProductDetail() {
     return () => backHandler.remove();
   }, [product]);
 
+  useEffect(() => {
+    const imageUrls = productImageUrls;
+
+    setImageAspectRatios({});
+    animatedHeroHeight.setValue(IMAGE_HEIGHT);
+    setActiveImageIndex(0);
+    activeImageIndexRef.current = 0;
+
+    if (!imageUrls.length) return;
+
+    let cancelled = false;
+
+    imageUrls.forEach((uri, index) => {
+      Image.getSize(
+        uri,
+        (width, height) => {
+          if (cancelled || !width || !height) return;
+          const ratio = width / height;
+          setImageAspectRatios((prev) => {
+            if (prev[index]) return prev;
+            return { ...prev, [index]: ratio };
+          });
+        },
+        () => {
+          // Keep fallback height when metadata can't be resolved.
+        },
+      );
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [product?.id, productImagesKey]);
+
+  const getImageHeightForIndex = useCallback(
+    (index: number) => {
+      const ratio = imageAspectRatios[index] || imageAspectRatios[0];
+      if (!ratio) return IMAGE_HEIGHT;
+
+      const calculatedHeight = SCREEN_WIDTH / ratio;
+      return Math.min(
+        MAX_IMAGE_HEIGHT,
+        Math.max(MIN_IMAGE_HEIGHT, calculatedHeight),
+      );
+    },
+    [imageAspectRatios],
+  );
+
+  useEffect(() => {
+    const imageUrls = productImageUrls;
+    if (!imageUrls.length) {
+      animatedHeroHeight.setValue(IMAGE_HEIGHT);
+      return;
+    }
+
+    if (activeImageIndex >= imageUrls.length) {
+      setActiveImageIndex(0);
+      activeImageIndexRef.current = 0;
+      return;
+    }
+
+    RNAnimated.timing(animatedHeroHeight, {
+      toValue: getImageHeightForIndex(activeImageIndex),
+      duration: 220,
+      useNativeDriver: false,
+    }).start();
+  }, [activeImageIndex, getImageHeightForIndex, productImagesKey, animatedHeroHeight]);
+
   const handleGoBack = () => {
     if (router.canGoBack()) {
       router.back();
@@ -279,15 +368,18 @@ export default function ProductDetail() {
 
   const handleShare = async () => {
     if (!product) return;
-    try {
-      await Share.share({
-        message: `Check out ${product.name} for Nu. ${product.current_price || product.price} on Namzoed!`,
-        title: product.name,
-      });
-    } catch (error) {
-      console.error("Share error:", error);
-    }
+    setShowShareComposer(true);
   };
+
+  const productSharePayload = useMemo(() => {
+    if (!product) return null;
+    return buildProductExternalSharePayload({
+      id: String(product.id),
+      name: product.name,
+      price: product.current_price || product.price,
+      imageUrl: product.images?.[0],
+    });
+  }, [product]);
 
   const handleReportProduct = () => {
     if (!currentUser) {
@@ -323,8 +415,8 @@ export default function ProductDetail() {
     );
   }
 
-  const hasImages = product.images && product.images.length > 0;
-  const images = hasImages ? product.images : [];
+  const hasImages = productImageUrls.length > 0;
+  const images = productImageUrls;
 
   const scrollToImage = (index: number) => {
     setActiveImageIndex(index);
@@ -356,43 +448,89 @@ export default function ProductDetail() {
         }
       >
         {/* Hero Image Section */}
-        <View style={{ height: IMAGE_HEIGHT }}>
+        <RNAnimated.View style={{ height: animatedHeroHeight, overflow: "hidden" }}>
           {hasImages ? (
-            <ScrollView
+            <RNAnimated.ScrollView
               ref={imageScrollRef}
               horizontal
               pagingEnabled
               showsHorizontalScrollIndicator={false}
-              onMomentumScrollEnd={(e) => {
-                const idx = Math.round(
-                  e.nativeEvent.contentOffset.x / SCREEN_WIDTH,
-                );
-                setActiveImageIndex(idx);
-              }}
+              onScroll={RNAnimated.event(
+                [{ nativeEvent: { contentOffset: { x: imageScrollX } } }],
+                {
+                  useNativeDriver: false,
+                  listener: (e: any) => {
+                    const x = e?.nativeEvent?.contentOffset?.x || 0;
+                    const rawIndex = x / SCREEN_WIDTH;
+                    const leftIndex = Math.max(0, Math.floor(rawIndex));
+                    const rightIndex = Math.min(images.length - 1, leftIndex + 1);
+                    const t = Math.max(0, Math.min(1, rawIndex - leftIndex));
+
+                    const leftHeight = getImageHeightForIndex(leftIndex);
+                    const rightHeight = getImageHeightForIndex(rightIndex);
+                    const nextHeight = leftHeight + (rightHeight - leftHeight) * t;
+                    animatedHeroHeight.setValue(nextHeight);
+
+                    const idx = Math.round(rawIndex);
+                    if (idx !== activeImageIndexRef.current) {
+                      activeImageIndexRef.current = idx;
+                      setActiveImageIndex(idx);
+                    }
+                  },
+                },
+              )}
               scrollEventThrottle={16}
-              style={{ width: SCREEN_WIDTH, height: IMAGE_HEIGHT }}
+              style={{ width: SCREEN_WIDTH, height: "100%" }}
             >
               {images.map((imageUrl, index) => (
                 <TouchableOpacity
                   key={index}
                   activeOpacity={0.95}
+                  style={{ width: SCREEN_WIDTH, height: "100%", backgroundColor: "#0F172A" }}
                   onPress={() => {
                     setActiveImageIndex(index);
                     setShowImageViewer(true);
                   }}
                 >
-                  <Image
+                  <RNAnimated.Image
                     source={{ uri: imageUrl }}
-                    style={{ width: SCREEN_WIDTH, height: IMAGE_HEIGHT }}
-                    resizeMode="cover"
+                    style={{
+                      width: SCREEN_WIDTH,
+                      height: "100%",
+                      transform: [
+                        {
+                          translateX: imageScrollX.interpolate({
+                            inputRange: [
+                              (index - 1) * SCREEN_WIDTH,
+                              index * SCREEN_WIDTH,
+                              (index + 1) * SCREEN_WIDTH,
+                            ],
+                            outputRange: [18, 0, -18],
+                            extrapolate: "clamp",
+                          }),
+                        },
+                        {
+                          scale: imageScrollX.interpolate({
+                            inputRange: [
+                              (index - 1) * SCREEN_WIDTH,
+                              index * SCREEN_WIDTH,
+                              (index + 1) * SCREEN_WIDTH,
+                            ],
+                            outputRange: [1.06, 1, 1.06],
+                            extrapolate: "clamp",
+                          }),
+                        },
+                      ],
+                    }}
+                    resizeMode="contain"
                   />
                 </TouchableOpacity>
               ))}
-            </ScrollView>
+            </RNAnimated.ScrollView>
           ) : (
             <View
               className="bg-gray-200 items-center justify-center"
-              style={{ width: SCREEN_WIDTH, height: IMAGE_HEIGHT }}
+              style={{ width: SCREEN_WIDTH, height: "100%" }}
             >
               <Package size={64} color="#D1D5DB" />
             </View>
@@ -425,7 +563,7 @@ export default function ProductDetail() {
                   tint="dark"
                   className="flex-1 items-center justify-center"
                 >
-                  <ArrowLeft size={22} color="white" strokeWidth={2.5} />
+                  <ChevronLeft size={22} color="white" strokeWidth={2.5} />
                 </BlurView>
               </TouchableOpacity>
 
@@ -513,13 +651,11 @@ export default function ProductDetail() {
               </View>
             </View>
           )}
-        </View>
+        </RNAnimated.View>
 
         {/* Content Card */}
-        <View
-          className="bg-white min-h-screen"
-        >
-          <View className="px-6 pt-6 pb-32">
+        <View className="bg-white">
+          <View className={`px-6 pt-6 ${isOwnProduct ? "pb-10" : "pb-32"}`}>
             {/* Category & Tags */}
             <View
               className="flex-row flex-wrap gap-2 mb-4"
@@ -691,12 +827,8 @@ export default function ProductDetail() {
                   </View>
 
                   {/* View Profile Arrow */}
-                  <View className="bg-white w-10 h-10 rounded-xl items-center justify-center shadow-sm">
-                    <ArrowLeft
-                      size={18}
-                      color="#094569"
-                      style={{ transform: [{ rotate: "180deg" }] }}
-                    />
+                  <View className="bg-white/90 border border-gray-200 w-10 h-10 rounded-xl items-center justify-center">
+                    <ChevronRight size={18} color="#094569" strokeWidth={2.5} />
                   </View>
                 </TouchableOpacity>
 
@@ -826,6 +958,22 @@ export default function ProductDetail() {
           images={images}
           initialIndex={activeImageIndex}
           onClose={() => setShowImageViewer(false)}
+        />
+      )}
+
+      {product && productSharePayload && (
+        <ShareComposerModal
+          visible={showShareComposer}
+          onClose={() => setShowShareComposer(false)}
+          heading="Share product"
+          sharePayload={productSharePayload}
+          inAppContextParams={{
+            context_product_id: String(product.id),
+            context_product_title: product.name,
+            context_product_price: String(product.current_price || product.price || ""),
+            context_product_image: product.images?.[0] || "",
+            context_source: "product",
+          }}
         />
       )}
 

@@ -10,9 +10,7 @@ export default function UsersLayout() {
         fullScreenGestureEnabled: true,
         gestureDirection: "horizontal",
         animation: "none",
-        freezeOnBlur: true,
       }}
-      {...({ detachInactiveScreens: true } as any)}
     >
       <Stack.Screen name="(tabs)" />
     </Stack>

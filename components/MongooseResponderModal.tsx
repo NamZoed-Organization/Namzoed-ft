@@ -18,6 +18,7 @@ import * as Location from "expo-location";
 import React, { useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
+  Linking,
     Modal,
     ScrollView,
     Text,
@@ -41,6 +42,11 @@ interface Props {
 
 const SELLER_COLOR = "#15803d";
 const BUYER_COLOR = "#1d4ed8";
+type PopupAction = {
+  label: string;
+  onPress?: () => void;
+  style?: "default" | "cancel" | "destructive";
+};
 
 export default function MongooseResponderModal({
   visible,
@@ -57,8 +63,19 @@ export default function MongooseResponderModal({
   const [showMapPicker, setShowMapPicker] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const fetchedRef = useRef(false);
-  const [popup, setPopup] = useState<{visible: boolean; type: 'warning'|'error'; title: string; message: string}>({visible: false, type: 'warning', title: '', message: ''});
-  const showPopup = (type: 'warning'|'error', title: string, message: string) => setPopup({visible: true, type, title, message});
+  const [popup, setPopup] = useState<{
+    visible: boolean;
+    type: "warning" | "error";
+    title: string;
+    message: string;
+    actions?: PopupAction[];
+  }>({ visible: false, type: "warning", title: "", message: "", actions: undefined });
+  const showPopup = (
+    type: "warning" | "error",
+    title: string,
+    message: string,
+    actions?: PopupAction[],
+  ) => setPopup({ visible: true, type, title, message, actions });
 
   // Auto-fetch GPS each time the modal opens
   useEffect(() => {
@@ -77,7 +94,20 @@ export default function MongooseResponderModal({
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
-        showPopup("warning", "Permission Denied", "Location access is needed. You can pick your location on the map instead.");
+        showPopup(
+          "warning",
+          "Location Permission Needed",
+          "Enable location permission in Settings to auto-detect your location.",
+          [
+            { label: "Not now", style: "cancel" },
+            {
+              label: "Open Settings",
+              onPress: () => {
+                void Linking.openSettings();
+              },
+            },
+          ],
+        );
         return;
       }
       const pos = await Location.getCurrentPositionAsync({
@@ -601,7 +631,14 @@ export default function MongooseResponderModal({
         }
       />
       <Modal visible={popup.visible} transparent animationType="none" statusBarTranslucent>
-        <PopupMessage visible={popup.visible} type={popup.type} title={popup.title} message={popup.message} onHide={() => setPopup(p => ({...p, visible: false}))} />
+        <PopupMessage
+          visible={popup.visible}
+          type={popup.type}
+          title={popup.title}
+          message={popup.message}
+          actions={popup.actions}
+          onHide={() => setPopup(p => ({ ...p, visible: false, actions: undefined }))}
+        />
       </Modal>
     </>
   );

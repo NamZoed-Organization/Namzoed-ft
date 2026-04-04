@@ -5,6 +5,7 @@ import LicenseViewerOverlay from "@/components/modals/LicenseViewerOverlay";
 import ManageListingsOverlay from "@/components/modals/ManageListingsOverlay";
 import ProfileImageViewer from "@/components/modals/ProfileImageViewer";
 import ProfileSettings from "@/components/modals/ProfileSettings";
+import ShareComposerModal from "@/components/modals/ShareComposerModal";
 import { useUser } from "@/contexts/UserContext";
 // Added import for profile services
 import AddServicesModal from "@/components/modals/AddServicesModal";
@@ -22,21 +23,24 @@ import ServiceProviderSection from "@/components/profile/ServiceProviderSection"
 import BottomNavBar from "@/components/ui/BottomNavBar";
 import PopupMessage from "@/components/ui/PopupMessage";
 import {
-  deleteAvatar,
-  updateUserProfile,
-  uploadAvatar,
+    deleteAvatar,
+    updateUserProfile,
+    uploadAvatar,
 } from "@/lib/profileService";
 import {
-  deleteLicenseImage,
-  deleteProviderAvatar,
-  deleteProviderService,
-  ProviderServiceWithDetails,
-  toggleServiceStatus,
-  updateServiceProviderLicense,
-  updateServiceProviderProfile,
-  uploadLicenseImage,
-  uploadProviderAvatar,
+    deleteLicenseImage,
+    deleteProviderAvatar,
+    deleteProviderService,
+    ProviderServiceWithDetails,
+    toggleServiceStatus,
+    updateServiceProviderLicense,
+    updateServiceProviderProfile,
+    uploadLicenseImage,
+    uploadProviderAvatar,
 } from "@/lib/servicesService";
+import {
+    buildProfileExternalSharePayload,
+} from "@/lib/shareUtils";
 import { useAppRouter } from "@/utils/navigation";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
@@ -44,36 +48,37 @@ import { ImpactFeedbackStyle, NotificationFeedbackType } from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import {
-  Camera,
-  Eye,
-  GalleryHorizontal,
-  Grid,
-  ImageIcon,
-  Package,
-  Settings,
-  ShoppingBag,
-  Trash2,
-  Upload,
-  User,
-  UserPlus,
-  Verified,
-  Wrench,
+    Camera,
+    Eye,
+    GalleryHorizontal,
+    Grid,
+    ImageIcon,
+    Package,
+    Settings,
+    Share2,
+    ShoppingBag,
+    Trash2,
+    Upload,
+    User,
+    UserPlus,
+    Verified,
+    Wrench,
 } from "lucide-react-native";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Dimensions,
-  Image,
-  InteractionManager,
-  Modal,
-  Platform,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Dimensions,
+    Image,
+    InteractionManager,
+    Modal,
+    Platform,
+    Pressable,
+    RefreshControl,
+    ScrollView,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -81,12 +86,12 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 // --- Reanimated & Gesture Handler ---
 import Animated, {
-  FadeIn,
-  FadeInDown,
-  FadeOut,
-  FadeOutDown,
-  SlideInDown,
-  SlideOutDown,
+    FadeIn,
+    FadeInDown,
+    FadeOut,
+    FadeOutDown,
+    SlideInDown,
+    SlideOutDown,
 } from "react-native-reanimated";
 
 export default function ProfileScreen() {
@@ -158,6 +163,7 @@ export default function ProfileScreen() {
   const [showLicenseViewer, setShowLicenseViewer] = useState(false);
   const [showLicenseMenu, setShowLicenseMenu] = useState(false);
   const [uploadingLicense, setUploadingLicense] = useState(false);
+  const [showShareComposer, setShowShareComposer] = useState(false);
 
   // Popup states
   const [showSuccess, setShowSuccess] = useState(false);
@@ -178,6 +184,23 @@ export default function ProfileScreen() {
     setPopupTitle(title);
     setShowSuccess(true);
     setTimeout(() => setShowSuccess(false), 2000);
+  };
+
+  const profileSharePayload = useMemo(() => {
+    if (!currentUser?.id) return null;
+    return buildProfileExternalSharePayload({
+      id: String(currentUser.id),
+      name: currentUser.name || currentUser.full_name || undefined,
+      username: currentUser.username || undefined,
+    });
+  }, [currentUser]);
+
+  const handleShareProfile = () => {
+    if (!profileSharePayload) {
+      showErrorPopup("Profile link unavailable right now.");
+      return;
+    }
+    setShowShareComposer(true);
   };
 
   // ------------------------------------------------------
@@ -1056,13 +1079,21 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Settings Icon on Right */}
-          <TouchableOpacity
-            onPress={handleSettings}
-            className="w-10 h-10 items-center justify-center"
-          >
-            <Settings size={24} strokeWidth={1.5} className="text-gray-700" />
-          </TouchableOpacity>
+          {/* Right Actions */}
+          <View className="flex-row items-center gap-1">
+            <TouchableOpacity
+              onPress={handleShareProfile}
+              className="w-10 h-10 items-center justify-center"
+            >
+              <Share2 size={22} strokeWidth={1.7} className="text-gray-700" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleSettings}
+              className="w-10 h-10 items-center justify-center"
+            >
+              <Settings size={24} strokeWidth={1.5} className="text-gray-700" />
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
@@ -2182,6 +2213,27 @@ export default function ProfileScreen() {
         title={popupTitle}
         message={popupMessage}
       />
+
+      {profileSharePayload && (
+        <ShareComposerModal
+          visible={showShareComposer}
+          onClose={() => setShowShareComposer(false)}
+          heading="Share profile"
+          sharePayload={profileSharePayload}
+          inAppContextParams={{
+            context_product_id: String(currentUser?.id || ""),
+            context_product_title:
+              currentUser?.name || currentUser?.full_name || currentUser?.username || "Profile",
+            context_product_price: "",
+            context_product_image:
+              profileImage ||
+              (currentUser as any)?.avatar_url ||
+              currentUser?.profileImg ||
+              "",
+            context_source: "profile",
+          }}
+        />
+      )}
 
       <BottomNavBar />
     </View>

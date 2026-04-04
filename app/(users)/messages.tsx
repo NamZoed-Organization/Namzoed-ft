@@ -10,13 +10,12 @@ import { useUnreadMessages } from "@/contexts/UnreadMessagesContext";
 import { useUser } from "@/contexts/UserContext";
 import users from "@/data/UserData";
 import { supabase } from "@/lib/supabase";
+import { useAppRouter } from "@/utils/navigation";
+import { isMongooseUser } from "@/utils/roleCheck";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
-import { useAppRouter } from "@/utils/navigation";
-import { isMongooseUser } from "@/utils/roleCheck";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import React, {
   useCallback,
   useEffect,
@@ -30,6 +29,7 @@ import {
   FlatList,
   Image,
   InteractionManager,
+  Platform,
   Text,
   TextInput,
   TouchableOpacity,
@@ -45,6 +45,7 @@ import Reanimated, {
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 // Width of each action button (Mute + Delete)
@@ -54,6 +55,8 @@ const ACTIONS_TOTAL = ACTION_BTN_W * 2; // 160px — fully revealed area
 const FULL_SWIPE_THRESHOLD = SCREEN_WIDTH * 0.6;
 const DELETE_COLOR = "#FF3B30";
 const MUTE_COLOR = "#8E8E93";
+const IS_IOS = Platform.OS === "ios";
+const IOS_BACK_SWIPE_EDGE = 24;
 
 // Types
 interface IMessage {
@@ -118,8 +121,20 @@ const SwipeableConversationRow = React.memo(
     }
 
     const pan = Gesture.Pan()
-      .activeOffsetX([-10, 10])
+      // Row actions are left-swipe only; don't capture right-swipe
+      // so iOS back gesture can work naturally.
+      .activeOffsetX([-10, 9999])
       .failOffsetY([-8, 8])
+      .onTouchesDown((e, stateManager) => {
+        "worklet";
+        if (!IS_IOS) return;
+
+        const firstTouch = e.allTouches[0];
+        const startX = firstTouch?.absoluteX ?? 0;
+        if (startX <= IOS_BACK_SWIPE_EDGE) {
+          stateManager.fail();
+        }
+      })
       .onBegin(() => {
         "worklet";
         gestureStartX.value = translateX.value;
@@ -312,7 +327,72 @@ export default function MessageScreen() {
     }, [setIsOnMessagesScreen]),
   );
   const router = useAppRouter();
-  const { tab } = useLocalSearchParams();
+  const {
+    tab,
+    context_product_id,
+    context_product_title,
+    context_product_price,
+    context_product_image,
+    context_source,
+  } = useLocalSearchParams<{
+    tab?: string;
+    context_product_id?: string | string[];
+    context_product_title?: string | string[];
+    context_product_price?: string | string[];
+    context_product_image?: string | string[];
+    context_source?: string | string[];
+  }>();
+  const normalizeParam = useCallback(
+    (value?: string | string[]) => (Array.isArray(value) ? value[0] : value),
+    [],
+  );
+  const pendingShareContext = useMemo(() => {
+    const productId = normalizeParam(context_product_id);
+    const productTitle = normalizeParam(context_product_title);
+    if (!productId || !productTitle) return null;
+
+    const source = normalizeParam(context_source);
+
+    return {
+      context_product_id: String(productId),
+      context_product_title: String(productTitle),
+      context_product_price: normalizeParam(context_product_price) || "",
+      context_product_image: normalizeParam(context_product_image) || "",
+      context_source:
+        source === "marketplace" || source === "post" || source === "profile"
+          ? source
+          : "product",
+    };
+  }, [
+    context_product_id,
+    context_product_title,
+    context_product_price,
+    context_product_image,
+    context_source,
+    normalizeParam,
+  ]);
+  const openChatWithContext = useCallback(
+    (partnerId: string) => {
+      const params: {
+        id: string;
+        context_product_id?: string;
+        context_product_title?: string;
+        context_product_price?: string;
+        context_product_image?: string;
+        context_source?: string;
+      } = { id: String(partnerId) };
+
+      if (pendingShareContext) {
+        Object.assign(params, pendingShareContext);
+      }
+
+      router.push({
+        pathname: "/(users)/chat/[id]",
+        params,
+      });
+    },
+    [pendingShareContext, router],
+  );
   const [activeTab, setActiveTab] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [showFollowRequests, setShowFollowRequests] = useState(false);
@@ -458,11 +538,30 @@ export default function MessageScreen() {
     if (!message) return "No messages yet";
     let content =
       typeof message.content === "string" ? message.content : message.content;
+    let sharedSource: "product" | "marketplace" | "post" | "profile" | null =
+      null;
 
     // Strip embedded metadata wrappers used by chat screen persistence.
     if (typeof content === "string") {
       for (let i = 0; i < 3; i++) {
         if (content.startsWith("[product-meta]") && content.includes("[/product-meta]")) {
+          try {
+            const suffixIndex = content.indexOf("[/product-meta]");
+            const encoded = content
+              .slice("[product-meta]".length, suffixIndex)
+              .trim();
+            const parsed = JSON.parse(decodeURIComponent(encoded));
+            if (
+              parsed?.source === "product" ||
+              parsed?.source === "marketplace" ||
+              parsed?.source === "post" ||
+              parsed?.source === "profile"
+            ) {
+              sharedSource = parsed.source;
+            }
+          } catch {
+            // ignore malformed metadata
+          }
           const suffixIndex = content.indexOf("[/product-meta]");
           content = content
             .slice(suffixIndex + "[/product-meta]".length)
@@ -491,7 +590,24 @@ export default function MessageScreen() {
     ) {
       return "Location";
     }
-    const preview = content || "No messages yet";
+
+    const trimmedContent = typeof content === "string" ? content.trim() : "";
+    let preview = trimmedContent;
+
+    if (!preview) {
+      if (sharedSource === "profile") {
+        preview = "Profile shared";
+      } else if (sharedSource === "post") {
+        preview = "Post shared";
+      } else if (sharedSource === "marketplace") {
+        preview = "Marketplace item shared";
+      } else if (sharedSource === "product") {
+        preview = "Product shared";
+      } else {
+        preview = "No messages yet";
+      }
+    }
+
     return isMine ? `You: ${preview}` : preview;
   };
 
@@ -1179,7 +1295,7 @@ export default function MessageScreen() {
       <TouchableOpacity
         className="flex-row items-center p-4 border-b border-gray-200"
         onPress={() =>
-          router.push(`/(users)/chat/${phoneNumber.replace("+975", "")}`)
+          openChatWithContext(phoneNumber.replace("+975", ""))
         }
       >
         <View className="w-12 h-12 bg-primary rounded-full items-center justify-center mr-3">
@@ -1192,7 +1308,7 @@ export default function MessageScreen() {
             {user?.username || phoneNumber}
           </Text>
           <Text className="text-sm text-gray-500 mt-1" numberOfLines={1}>
-            {lastMessage?.content || "No messages yet"}
+            {formatConversationPreview(lastMessage, false)}
           </Text>
         </View>
         <Text className="text-xs text-gray-400">
@@ -1245,7 +1361,7 @@ export default function MessageScreen() {
 
     return (
       <SwipeableConversationRow
-        onPress={() => router.push(`/(users)/chat/${conversation.partnerId}`)}
+        onPress={() => openChatWithContext(String(conversation.partnerId))}
         onDelete={() =>
           handleDeleteConversation(conversation.partnerId, userName)
         }
@@ -1320,7 +1436,7 @@ export default function MessageScreen() {
         className="flex-row items-center p-4 border-b border-gray-200"
         onPress={() => {
           setSearchQuery(""); // Clear search
-          router.push(`/(users)/chat/${userId}`); // Use UUID instead of phone
+          openChatWithContext(String(userId)); // Use UUID instead of phone
         }}
       >
         <View className="w-12 h-12 bg-blue-500 rounded-full items-center justify-center mr-3">
@@ -1868,7 +1984,7 @@ export default function MessageScreen() {
                   <TouchableOpacity
                     onPress={() => {
                       setShowMessageRequests(false);
-                      router.push(`/(users)/chat/${convo.partnerId}`);
+                      openChatWithContext(String(convo.partnerId));
                     }}
                   >
                     <View
@@ -1900,7 +2016,7 @@ export default function MessageScreen() {
                     style={{ flex: 1 }}
                     onPress={() => {
                       setShowMessageRequests(false);
-                      router.push(`/(users)/chat/${convo.partnerId}`);
+                      openChatWithContext(String(convo.partnerId));
                     }}
                   >
                     <Text style={{ fontSize: 15, fontWeight: "600", color: "#111827" }}>

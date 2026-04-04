@@ -65,6 +65,7 @@ import {
     subscribeToCoHostRequests,
     subscribeToLivestreams,
     subscribeToViewerCount,
+    touchLivestreamHeartbeat,
     updateCoHostRequestStatus,
     type CoHostRequest,
     type Livestream,
@@ -556,6 +557,11 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose, onMinimize, initialStr
       try {
         const { identity, client } = await ensureStreamClient();
         const call = await getStreamService.prepareViewerCall(identity, callId);
+        if ((call.state as any)?.backstage === true) {
+          // Provider says this call is not live; clean up stale DB "live" row.
+          await endLivestreamRecord(stream.id).catch(() => undefined);
+          throw new Error("This livestream has ended.");
+        }
         logLiveAudioMode("viewer call prepared", {
           callId,
           userId: identity.id,
@@ -571,6 +577,9 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose, onMinimize, initialStr
         setHostingRecord(null);
       } catch (error) {
         console.error("Failed to join livestream", error);
+        // If Stream cannot resolve this call, proactively clear stale rows.
+        await endLivestreamRecord(stream.id).catch(() => undefined);
+        setLivestreams((prev) => prev.filter((s) => s.id !== stream.id));
         const message =
           error instanceof Error ? error.message : "Unable to join livestream.";
         setErrorMessage(message);
@@ -2094,6 +2103,32 @@ const HostCallContainer: React.FC<HostCallContainerProps> = ({
   const isRealHost =
     !!hostId && !!currentUserId && String(currentUserId) === String(hostId);
 
+  // Keep DB status fresh while host is truly live, so stale rows auto-expire quickly if app dies.
+  useEffect(() => {
+    if (!isLive || !isRealHost || !livestreamId || !currentUserId) return;
+
+    let cancelled = false;
+
+    const beat = async () => {
+      if (cancelled) return;
+      try {
+        await touchLivestreamHeartbeat(livestreamId, currentUserId);
+      } catch {
+        // best effort
+      }
+    };
+
+    void beat();
+    const interval = setInterval(() => {
+      void beat();
+    }, 30000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [isLive, isRealHost, livestreamId, currentUserId]);
+
   // For co-hosts using HostCallContainer: find the real host as a remote participant
   const remoteHostParticipant = !isRealHost
     ? participants.find(
@@ -2892,6 +2927,15 @@ const HostCallContainer: React.FC<HostCallContainerProps> = ({
               }
             </View>
 
+            {!isLive && isRealHost && (
+              <View className="mb-3 flex-row items-center rounded-2xl border border-red-400/35 bg-red-500/15 px-3 py-2">
+                <Ionicons name="information-circle" size={18} color="#FCA5A5" />
+                <Text className="ml-2 flex-1 text-xs font-semibold text-red-100">
+                  You are in backstage mode. Press Start to go live.
+                </Text>
+              </View>
+            )}
+
             <View
               className="flex-row items-center justify-around bg-zinc-900 rounded-2xl px-4 py-4"
               style={{ marginBottom: Math.max(insets.bottom, 16) }}
@@ -2961,9 +3005,10 @@ const HostCallContainer: React.FC<HostCallContainerProps> = ({
                 <TouchableOpacity
                   onPress={handleToggleLive}
                   disabled={countdown !== null}
-                  className="bg-red-600 p-4 rounded-full"
+                  className="flex-row items-center rounded-full bg-red-600 px-4 py-3"
                 >
                   <Ionicons name="radio" size={28} color="#fff" />
+                  <Text className="ml-2 text-sm font-bold text-white">Start</Text>
                 </TouchableOpacity>
               )}
             </View>

@@ -193,6 +193,11 @@ class GetStreamService {
     try {
       await call.get();
     } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "This livestream is no longer available.";
+      throw new Error(message);
     }
     return call;
   }

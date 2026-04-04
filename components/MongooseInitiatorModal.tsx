@@ -17,6 +17,7 @@ import * as Location from "expo-location";
 import React, { useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
+  Linking,
     Modal,
     Platform,
     Pressable,
@@ -28,6 +29,11 @@ import {
 
 type Role = "seller" | "buyer";
 type Step = "role" | "location" | "datetime";
+type PopupAction = {
+  label: string;
+  onPress?: () => void;
+  style?: "default" | "cancel" | "destructive";
+};
 
 interface Props {
   visible: boolean;
@@ -59,8 +65,19 @@ export default function MongooseInitiatorModal({
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [showMapPicker, setShowMapPicker] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [popup, setPopup] = useState<{visible: boolean; type: 'warning'|'error'; title: string; message: string}>({visible: false, type: 'warning', title: '', message: ''});
-  const showPopup = (type: 'warning'|'error', title: string, message: string) => setPopup({visible: true, type, title, message});
+  const [popup, setPopup] = useState<{
+    visible: boolean;
+    type: "warning" | "error";
+    title: string;
+    message: string;
+    actions?: PopupAction[];
+  }>({ visible: false, type: "warning", title: "", message: "", actions: undefined });
+  const showPopup = (
+    type: "warning" | "error",
+    title: string,
+    message: string,
+    actions?: PopupAction[],
+  ) => setPopup({ visible: true, type, title, message, actions });
 
   const fetchedRef = useRef(false);
 
@@ -94,7 +111,20 @@ export default function MongooseInitiatorModal({
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
-        showPopup("warning", "Permission Denied", "Location permission is needed to auto-fill your location. You can pick manually on the map.");
+        showPopup(
+          "warning",
+          "Location Permission Needed",
+          "Enable location permission in Settings to auto-fill your location.",
+          [
+            { label: "Not now", style: "cancel" },
+            {
+              label: "Open Settings",
+              onPress: () => {
+                void Linking.openSettings();
+              },
+            },
+          ],
+        );
         setLocationLoading(false);
         return;
       }
@@ -848,7 +878,14 @@ export default function MongooseInitiatorModal({
         }
       />
       <Modal visible={popup.visible} transparent animationType="none" statusBarTranslucent>
-        <PopupMessage visible={popup.visible} type={popup.type} title={popup.title} message={popup.message} onHide={() => setPopup(p => ({...p, visible: false}))} />
+        <PopupMessage
+          visible={popup.visible}
+          type={popup.type}
+          title={popup.title}
+          message={popup.message}
+          actions={popup.actions}
+          onHide={() => setPopup(p => ({ ...p, visible: false, actions: undefined }))}
+        />
       </Modal>
     </>
   );

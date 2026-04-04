@@ -10,17 +10,23 @@ type SoundName = keyof typeof SOUND_SOURCES;
 /** Fire-and-forget sound player. Silently no-ops on any error. */
 export async function playSound(name: SoundName): Promise<void> {
   try {
-    const { Audio } = await import("expo-av");
-    await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
-    const { sound } = await Audio.Sound.createAsync(SOUND_SOURCES[name], {
-      shouldPlay: true,
-      volume: 0.8,
+    const { createAudioPlayer, setAudioModeAsync } = await import("expo-audio");
+    await setAudioModeAsync({
+      allowsRecording: false,
+      playsInSilentMode: true,
+      shouldPlayInBackground: false,
     });
-    sound.setOnPlaybackStatusUpdate((status) => {
-      if (status.isLoaded && status.didJustFinish) {
-        sound.unloadAsync().catch(() => {});
+    const player = createAudioPlayer(SOUND_SOURCES[name], { keepAudioSessionActive: true });
+    player.volume = 0.8;
+
+    const subscription = player.addListener("playbackStatusUpdate", (status) => {
+      if (status.didJustFinish) {
+        subscription.remove();
+        player.remove();
       }
     });
+
+    player.play();
   } catch {
     // e.g. native module missing (Expo Go mismatch), web, or playback failure
   }

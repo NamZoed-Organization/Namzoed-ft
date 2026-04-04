@@ -1,22 +1,23 @@
 import MarketplaceImageViewer from "@/components/modals/MarketplaceImageViewer";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { useUser } from "@/contexts/UserContext";
-import { supabase } from "@/lib/supabase";
 import {
     fetchProviderServiceById,
     ProviderServiceWithDetails,
 } from "@/lib/servicesService";
+import { supabase } from "@/lib/supabase";
+import { useAppRouter } from "@/utils/navigation";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
-import { useAppRouter } from "@/utils/navigation";
 import {
     Href,
     useFocusEffect,
     useLocalSearchParams,
 } from "expo-router";
 import {
-    ArrowLeft,
     Bookmark,
+    ChevronLeft,
+    ChevronRight,
     Clock,
     MessageCircle,
     Tag,
@@ -24,7 +25,7 @@ import {
     Verified,
     Wrench,
 } from "lucide-react-native";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     BackHandler,
     Dimensions,
@@ -41,6 +42,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const IMAGE_HEIGHT = SCREEN_HEIGHT * 0.45;
+const MIN_IMAGE_HEIGHT = SCREEN_HEIGHT * 0.32;
+const MAX_IMAGE_HEIGHT = SCREEN_HEIGHT * 0.62;
 
 // Premium Skeleton Loader
 function DetailSkeleton() {
@@ -118,6 +121,10 @@ export default function ServiceDetail() {
   const [loading, setLoading] = useState(true);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const imageScrollRef = useRef<ScrollView>(null);
+  const imageScrollX = useRef(new RNAnimated.Value(0)).current;
+  const animatedHeroHeight = useRef(new RNAnimated.Value(IMAGE_HEIGHT)).current;
+  const activeImageIndexRef = useRef(0);
+  const [imageAspectRatios, setImageAspectRatios] = useState<Record<number, number>>({});
   const [showImageViewer, setShowImageViewer] = useState(false);
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -125,6 +132,15 @@ export default function ServiceDetail() {
   const [showError, setShowError] = useState(false);
   const [popupMessage, setPopupMessage] = useState("");
   const [popupTitle, setPopupTitle] = useState("");
+
+  const serviceImageUrls = useMemo(
+    () =>
+      (service?.images ?? []).filter(
+        (uri): uri is string => typeof uri === "string" && uri.length > 0,
+      ),
+    [service?.images],
+  );
+  const serviceImagesKey = useMemo(() => serviceImageUrls.join("||"), [serviceImageUrls]);
 
   const showSuccessPopup = (message: string, title: string = "Success") => {
     setPopupMessage(message);
@@ -255,6 +271,62 @@ export default function ServiceDetail() {
     }
   };
 
+  useEffect(() => {
+    setImageAspectRatios({});
+    animatedHeroHeight.setValue(IMAGE_HEIGHT);
+    setActiveImageIndex(0);
+    activeImageIndexRef.current = 0;
+
+    if (!serviceImageUrls.length) return;
+    let cancelled = false;
+
+    serviceImageUrls.forEach((uri, index) => {
+      Image.getSize(
+        uri,
+        (width, height) => {
+          if (cancelled || !width || !height) return;
+          const ratio = width / height;
+          setImageAspectRatios((prev) => (prev[index] ? prev : { ...prev, [index]: ratio }));
+        },
+        () => {
+          // fallback
+        },
+      );
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [service?.id, serviceImageUrls, serviceImagesKey, animatedHeroHeight]);
+
+  const getImageHeightForIndex = useCallback(
+    (index: number) => {
+      const ratio = imageAspectRatios[index] || imageAspectRatios[0];
+      if (!ratio) return IMAGE_HEIGHT;
+      const calculatedHeight = SCREEN_WIDTH / ratio;
+      return Math.min(MAX_IMAGE_HEIGHT, Math.max(MIN_IMAGE_HEIGHT, calculatedHeight));
+    },
+    [imageAspectRatios],
+  );
+
+  useEffect(() => {
+    if (!serviceImageUrls.length) {
+      animatedHeroHeight.setValue(IMAGE_HEIGHT);
+      return;
+    }
+    if (activeImageIndex >= serviceImageUrls.length) {
+      setActiveImageIndex(0);
+      activeImageIndexRef.current = 0;
+      return;
+    }
+
+    RNAnimated.timing(animatedHeroHeight, {
+      toValue: getImageHeightForIndex(activeImageIndex),
+      duration: 220,
+      useNativeDriver: false,
+    }).start();
+  }, [activeImageIndex, serviceImageUrls.length, getImageHeightForIndex, animatedHeroHeight]);
+
   if (loading) return <DetailSkeleton />;
 
   if (!service) {
@@ -281,8 +353,8 @@ export default function ServiceDetail() {
     );
   }
 
-  const hasImages = service.images && service.images.length > 0;
-  const images = hasImages ? (service.images as string[]) : [];
+  const hasImages = serviceImageUrls.length > 0;
+  const images = serviceImageUrls;
   const isOwnService = currentUser?.id === service.service_providers?.user_id;
   const providerName =
     service.service_providers?.name ||
@@ -315,43 +387,87 @@ export default function ServiceDetail() {
         }
       >
         {/* Hero Image Section */}
-        <View style={{ height: IMAGE_HEIGHT }}>
+        <RNAnimated.View style={{ height: animatedHeroHeight, overflow: "hidden" }}>
           {hasImages ? (
-            <ScrollView
+            <RNAnimated.ScrollView
               ref={imageScrollRef}
               horizontal
               pagingEnabled
               showsHorizontalScrollIndicator={false}
-              onMomentumScrollEnd={(event) => {
-                const slideIndex = Math.round(
-                  event.nativeEvent.contentOffset.x / SCREEN_WIDTH,
-                );
-                setActiveImageIndex(slideIndex);
-              }}
+              onScroll={RNAnimated.event(
+                [{ nativeEvent: { contentOffset: { x: imageScrollX } } }],
+                {
+                  useNativeDriver: false,
+                  listener: (event: any) => {
+                    const x = event?.nativeEvent?.contentOffset?.x || 0;
+                    const rawIndex = x / SCREEN_WIDTH;
+                    const leftIndex = Math.max(0, Math.floor(rawIndex));
+                    const rightIndex = Math.min(images.length - 1, leftIndex + 1);
+                    const t = Math.max(0, Math.min(1, rawIndex - leftIndex));
+                    const leftHeight = getImageHeightForIndex(leftIndex);
+                    const rightHeight = getImageHeightForIndex(rightIndex);
+                    animatedHeroHeight.setValue(leftHeight + (rightHeight - leftHeight) * t);
+
+                    const idx = Math.round(rawIndex);
+                    if (idx !== activeImageIndexRef.current) {
+                      activeImageIndexRef.current = idx;
+                      setActiveImageIndex(idx);
+                    }
+                  },
+                },
+              )}
               scrollEventThrottle={16}
-              style={{ width: SCREEN_WIDTH, height: IMAGE_HEIGHT }}
+              style={{ width: SCREEN_WIDTH, height: "100%" }}
             >
               {images.map((imageUrl, index) => (
                 <TouchableOpacity
                   key={index}
                   activeOpacity={0.95}
+                  style={{ width: SCREEN_WIDTH, height: "100%", backgroundColor: "#0F172A" }}
                   onPress={() => {
                     setActiveImageIndex(index);
                     setShowImageViewer(true);
                   }}
                 >
-                  <Image
+                  <RNAnimated.Image
                     source={{ uri: imageUrl }}
-                    style={{ width: SCREEN_WIDTH, height: IMAGE_HEIGHT }}
-                    resizeMode="cover"
+                    style={{
+                      width: SCREEN_WIDTH,
+                      height: "100%",
+                      transform: [
+                        {
+                          translateX: imageScrollX.interpolate({
+                            inputRange: [
+                              (index - 1) * SCREEN_WIDTH,
+                              index * SCREEN_WIDTH,
+                              (index + 1) * SCREEN_WIDTH,
+                            ],
+                            outputRange: [18, 0, -18],
+                            extrapolate: "clamp",
+                          }),
+                        },
+                        {
+                          scale: imageScrollX.interpolate({
+                            inputRange: [
+                              (index - 1) * SCREEN_WIDTH,
+                              index * SCREEN_WIDTH,
+                              (index + 1) * SCREEN_WIDTH,
+                            ],
+                            outputRange: [1.06, 1, 1.06],
+                            extrapolate: "clamp",
+                          }),
+                        },
+                      ],
+                    }}
+                    resizeMode="contain"
                   />
                 </TouchableOpacity>
               ))}
-            </ScrollView>
+            </RNAnimated.ScrollView>
           ) : (
             <View
               className="bg-gray-200 items-center justify-center"
-              style={{ width: SCREEN_WIDTH, height: IMAGE_HEIGHT }}
+              style={{ width: SCREEN_WIDTH, height: "100%" }}
             >
               <Wrench size={64} color="#D1D5DB" />
             </View>
@@ -383,7 +499,7 @@ export default function ServiceDetail() {
                   tint="dark"
                   className="flex-1 items-center justify-center"
                 >
-                  <ArrowLeft size={22} color="white" strokeWidth={2.5} />
+                  <ChevronLeft size={22} color="white" strokeWidth={2.5} />
                 </BlurView>
               </TouchableOpacity>
 
@@ -454,7 +570,7 @@ export default function ServiceDetail() {
               </View>
             </View>
           )}
-        </View>
+        </RNAnimated.View>
 
         {/* Content Card */}
         <View className="bg-white min-h-screen">
@@ -533,11 +649,7 @@ export default function ServiceDetail() {
 
                 {/* View Profile Arrow */}
                 <View className="bg-white w-10 h-10 rounded-xl items-center justify-center shadow-sm">
-                  <ArrowLeft
-                    size={18}
-                    color="#094569"
-                    style={{ transform: [{ rotate: "180deg" }] }}
-                  />
+                  <ChevronRight size={18} color="#094569" />
                 </View>
               </TouchableOpacity>
 

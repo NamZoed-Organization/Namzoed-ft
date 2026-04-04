@@ -3,6 +3,7 @@ import DeleteConfirmationModal from "@/components/modals/DeleteConfirmationModal
 import LikesListModal from "@/components/modals/LikesListModal";
 import PostActionSheet from "@/components/modals/PostActionSheet";
 import ReportPostModal from "@/components/modals/ReportPostModal";
+import ShareComposerModal from "@/components/modals/ShareComposerModal";
 import TaggedItemsModal from "@/components/modals/TaggedItemsModal";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { useUser } from "@/contexts/UserContext";
@@ -17,20 +18,22 @@ import {
     hasUserLikedPost,
     togglePostLike,
 } from "@/lib/likesService";
-import { deletePost } from "@/lib/postsService";
-import { playSound } from "@/lib/soundUtils";
 import { RATIO_PORTRAIT } from "@/lib/postMediaDisplay";
+import { deletePost } from "@/lib/postsService";
+import { buildPostExternalSharePayload } from "@/lib/shareUtils";
+import { playSound } from "@/lib/soundUtils";
 import { PostData } from "@/types/post";
 import { feedEvents } from "@/utils/feedEvents";
-import { LinearGradient } from "expo-linear-gradient";
 import { useAppRouter } from "@/utils/navigation";
+import { Image } from "expo-image";
+import { LinearGradient } from "expo-linear-gradient";
 import { useVideoPlayer, VideoView } from "expo-video";
 import {
     Bookmark,
-    Copy,
     Heart,
     MessageCircle,
     MoreHorizontal,
+    Share2,
     ShoppingBag,
     Tag,
     UserRound,
@@ -39,7 +42,6 @@ import {
     VolumeX,
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Image } from "expo-image";
 import {
     Animated,
     Easing,
@@ -111,8 +113,7 @@ function TimestampLocationRotator({
 }) {
   const formatted = useMemo(() => formatDate(date), [date]);
   const trimmed = locationName?.trim() ?? "";
-  const opTime = useRef(new Animated.Value(1)).current;
-  const opLoc = useRef(new Animated.Value(0)).current;
+  const slide = useRef(new Animated.Value(0)).current;
   const [showLocation, setShowLocation] = useState(false);
 
   useEffect(() => {
@@ -125,34 +126,55 @@ function TimestampLocationRotator({
 
   useEffect(() => {
     if (!trimmed) return;
-    Animated.parallel([
-      Animated.timing(opTime, {
-        toValue: showLocation ? 0 : 1,
-        duration: 400,
-        useNativeDriver: true,
-      }),
-      Animated.timing(opLoc, {
-        toValue: showLocation ? 1 : 0,
-        duration: 400,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [showLocation, trimmed]);
+    Animated.timing(slide, {
+      toValue: showLocation ? 1 : 0,
+      duration: 420,
+      useNativeDriver: true,
+    }).start();
+  }, [showLocation, trimmed, slide]);
 
   if (!trimmed) {
     return <Text style={style}>{formatted}</Text>;
   }
 
+  const timeTranslateY = slide.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -18],
+  });
+
+  const locTranslateY = slide.interpolate({
+    inputRange: [0, 1],
+    outputRange: [18, 0],
+  });
+
   return (
-    <View style={{ minHeight: 17, justifyContent: "center" }}>
+    <View style={{ minHeight: 17, justifyContent: "center", overflow: "hidden" }}>
       <Animated.Text
-        style={[style, { position: "absolute", left: 0, right: 0, top: 0, opacity: opTime }]}
+        style={[
+          style,
+          {
+            position: "absolute",
+            left: 0,
+            right: 0,
+            top: 0,
+            transform: [{ translateY: timeTranslateY }],
+          },
+        ]}
         numberOfLines={1}
       >
         {formatted}
       </Animated.Text>
       <Animated.Text
-        style={[style, { position: "absolute", left: 0, right: 0, top: 0, opacity: opLoc }]}
+        style={[
+          style,
+          {
+            position: "absolute",
+            left: 0,
+            right: 0,
+            top: 0,
+            transform: [{ translateY: locTranslateY }],
+          },
+        ]}
         numberOfLines={1}
       >
         {trimmed}
@@ -560,8 +582,10 @@ const MediaCarousel = React.memo(
         )}
 
         {multipleMedia && (
-          <View style={styles.stackIcon}>
-            <Copy size={14} color="#fff" />
+          <View style={styles.mediaCounterPill}>
+            <Text style={styles.mediaCounterText}>
+              {activeIndex + 1}/{images.length}
+            </Text>
           </View>
         )}
 
@@ -575,19 +599,6 @@ const MediaCarousel = React.memo(
           </TouchableOpacity>
         )}
 
-        {multipleMedia && (
-          <View style={styles.dotsContainer}>
-            {images.map((_, i) => (
-              <View
-                key={i}
-                style={[
-                  styles.dot,
-                  i === activeIndex ? styles.dotActive : styles.dotInactive,
-                ]}
-              />
-            ))}
-          </View>
-        )}
       </View>
     );
   },
@@ -771,6 +782,7 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
   const [showTaggedItems, setShowTaggedItems] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [showLikesList, setShowLikesList] = useState(false);
+  const [showShareComposer, setShowShareComposer] = useState(false);
   const [flyingHearts, setFlyingHearts] = useState<Array<{ id: number; x: number; y: number }>>([]);
   const flyHeartId = useRef(0);
 
@@ -925,6 +937,21 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
     }
   };
 
+  const handleSharePost = () => {
+    setShowShareComposer(true);
+  };
+
+  const postSharePayload = useMemo(
+    () =>
+      buildPostExternalSharePayload({
+        id: String(post.id),
+        author: post.username,
+        content: post.content,
+        imageUrl: post.images?.[0],
+      }),
+    [post.id, post.username, post.content, post.images],
+  );
+
   const handleDeletePress = () => {
     setShowActionSheet(false);
     setShowDeleteConfirmation(true);
@@ -1038,6 +1065,9 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
             style={styles.actionBtn}
           >
             <MessageCircle size={24} color="#262626" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleSharePost} style={styles.actionBtn}>
+            <Share2 size={24} color="#262626" />
           </TouchableOpacity>
         </View>
         <TouchableOpacity onPress={handleBookmark}>
@@ -1232,6 +1262,21 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
           </TouchableWithoutFeedback>
         </Modal>
       )}
+
+      <ShareComposerModal
+        visible={showShareComposer}
+        onClose={() => setShowShareComposer(false)}
+        heading="Share post"
+        sharePayload={postSharePayload}
+        inAppContextParams={{
+          context_product_id: String(post.id),
+          context_product_title: `${post.username || "User"}'s post`,
+          context_product_price: "",
+          context_product_image: post.images?.[0] || "",
+          context_source: "post",
+        }}
+      />
+
       {flyingHearts.map(h => (
         <FlyingHeart
           key={h.id}
@@ -1325,13 +1370,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 1,
   },
-  stackIcon: {
+  mediaCounterPill: {
     position: "absolute",
     top: 12,
     right: 12,
     backgroundColor: "rgba(0,0,0,0.55)",
-    borderRadius: 6,
-    padding: 6,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  mediaCounterText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "700",
   },
   tagButton: {
     position: "absolute",
@@ -1343,27 +1394,6 @@ const styles = StyleSheet.create({
     height: 30,
     alignItems: "center",
     justifyContent: "center",
-  },
-  dotsContainer: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    position: "absolute",
-    bottom: 12,
-    left: 0,
-    right: 0,
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    marginHorizontal: 3,
-  },
-  dotActive: {
-    backgroundColor: "#094569",
-  },
-  dotInactive: {
-    backgroundColor: "rgba(255,255,255,0.5)",
   },
   actionBar: {
     flexDirection: "row",

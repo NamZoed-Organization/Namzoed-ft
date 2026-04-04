@@ -1,9 +1,10 @@
 import EarlyAccessBadge from "@/components/EarlyAccessBadge";
-import ProfilePostGridItem from "@/components/profile/ProfilePostGridItem";
-import PopupMessage from "@/components/ui/PopupMessage";
 import FollowRequestsOverlay from "@/components/modals/FollowRequestsOverlay";
 import ProfileImageViewer from "@/components/modals/ProfileImageViewer";
 import ReportUserModal from "@/components/modals/ReportUserModal";
+import ShareComposerModal from "@/components/modals/ShareComposerModal";
+import ProfilePostGridItem from "@/components/profile/ProfilePostGridItem";
+import PopupMessage from "@/components/ui/PopupMessage";
 import { useUser } from "@/contexts/UserContext";
 import { blockUser, isUserBlocked, unblockUser } from "@/lib/blockService";
 import { EarlyAccessBadgeType, getEarlyAccessBadge } from "@/lib/earlyAccessService";
@@ -16,23 +17,24 @@ import {
     fetchUserProviderServices,
     ProviderServiceWithDetails,
 } from "@/lib/servicesService";
-import * as Haptics from "expo-haptics";
+import { buildProfileExternalSharePayload } from "@/lib/shareUtils";
 import { useAppRouter } from "@/utils/navigation";
+import * as Haptics from "expo-haptics";
 import { Redirect, Stack, useLocalSearchParams } from "expo-router";
 import {
     AlertCircle,
     Ban,
-    CheckCircle2,
     ChevronLeft,
     GalleryHorizontal,
     Grid,
     MessageCircle,
+    Share2,
     ShoppingBag,
     User,
     Verified,
     Wrench
 } from "lucide-react-native";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -99,6 +101,7 @@ export default function PublicProfileScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [showProfileImageViewer, setShowProfileImageViewer] = useState(false);
   const [viewerImageUri, setViewerImageUri] = useState<string | null>(null);
+  const [showShareComposer, setShowShareComposer] = useState(false);
   const [showFollowRequests, setShowFollowRequests] = useState(false);
   const [followRequestsTab, setFollowRequestsTab] = useState<
     "followers" | "following"
@@ -108,6 +111,15 @@ export default function PublicProfileScreen() {
 
   // Early-access badge for this profile
   const [badgeType, setBadgeType] = useState<EarlyAccessBadgeType>(null);
+
+  const profileSharePayload = useMemo(() => {
+    if (!id || typeof id !== "string") return null;
+    return buildProfileExternalSharePayload({
+      id,
+      name: userProfile?.name || userProfile?.full_name || undefined,
+      username: userProfile?.username || undefined,
+    });
+  }, [id, userProfile]);
 
   // Horizontal scroll ref
   const horizontalScrollRef = React.useRef<ScrollView>(null);
@@ -496,15 +508,23 @@ export default function PublicProfileScreen() {
         </View>
 
 
-          <TouchableOpacity
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              setShowBlockMenu(true);
-            }}
-            className="w-10 h-10 items-center justify-center"
-          >
-            <AlertCircle size={24} color="#EF4444" />
-          </TouchableOpacity>
+          <View className="flex-row items-center gap-1">
+            <TouchableOpacity
+              onPress={() => setShowShareComposer(true)}
+              className="w-10 h-10 items-center justify-center"
+            >
+              <Share2 size={22} color="#374151" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setShowBlockMenu(true);
+              }}
+              className="w-10 h-10 items-center justify-center"
+            >
+              <AlertCircle size={24} color="#EF4444" />
+            </TouchableOpacity>
+          </View>
         </View>
 
       </View>
@@ -1259,6 +1279,27 @@ export default function PublicProfileScreen() {
           setViewerImageUri(null);
         }}
       />
+
+      {profileSharePayload && (
+        <ShareComposerModal
+          visible={showShareComposer}
+          onClose={() => setShowShareComposer(false)}
+          heading="Share profile"
+          sharePayload={profileSharePayload}
+          inAppContextParams={{
+            context_product_id: typeof id === "string" ? id : "",
+            context_product_title:
+              userProfile?.name || userProfile?.full_name || userProfile?.username || "Profile",
+            context_product_price: "",
+            context_product_image:
+              userProfile?.avatar_url ||
+              userProfile?.profile_url ||
+              userProfile?.image ||
+              "",
+            context_source: "profile",
+          }}
+        />
+      )}
     </View>
   );
 }

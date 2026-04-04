@@ -1,8 +1,4 @@
 // app/(users)/chat/[id].tsx
-import MongooseWorkerNavBar, {
-  MONGOOSE_WORKER_NAV_BAR_HEIGHT,
-} from "@/components/ui/MongooseWorkerNavBar";
-import PopupMessage from "@/components/ui/PopupMessage";
 import MongooseInitiatorModal from "@/components/MongooseInitiatorModal";
 import MongooseInviteCard, {
     type MongooseInviteData,
@@ -14,6 +10,10 @@ import ChatImageViewer from "@/components/chat/ChatImageViewer";
 import SingleLocationPicker from "@/components/location/SingleLocationPicker";
 import MapPinMarker from "@/components/maps/MapPinMarker";
 import TrackMongooseModal from "@/components/modals/TrackMongooseModal";
+import MongooseWorkerNavBar, {
+    MONGOOSE_WORKER_NAV_BAR_HEIGHT,
+} from "@/components/ui/MongooseWorkerNavBar";
+import PopupMessage from "@/components/ui/PopupMessage";
 import { useAppearance } from "@/contexts/AppearanceContext";
 import { useUnreadMessages } from "@/contexts/UnreadMessagesContext";
 import { useUser } from "@/contexts/UserContext";
@@ -25,21 +25,19 @@ import {
 import { supabase } from "@/lib/supabase";
 import { sendChatPushNotification } from "@/services/chatPushService";
 import { playReceiveSound, playSendSound, preloadChatSounds, triggerReceiveHaptic, triggerSendHaptic, unloadChatSounds } from "@/utils/chatSounds";
+import { useAppRouter } from "@/utils/navigation";
+import { isMongooseUser } from "@/utils/roleCheck";
 import { Ionicons } from "@expo/vector-icons";
 import {
     RecordingPresets,
     requestRecordingPermissionsAsync,
     setAudioModeAsync,
-    useAudioPlayer,
-    useAudioPlayerStatus,
-    useAudioRecorder,
+    useAudioRecorder
 } from "expo-audio";
-import * as FileSystem from "expo-file-system/legacy";
 import { BlurView } from "expo-blur";
+import * as FileSystem from "expo-file-system/legacy";
 import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
-import { useAppRouter } from "@/utils/navigation";
-import { isMongooseUser } from "@/utils/roleCheck";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import { Bike, Verified } from "lucide-react-native";
 
@@ -54,7 +52,6 @@ import {
     ActivityIndicator,
     Animated,
     Dimensions,
-    Easing,
     FlatList,
     Image,
     Keyboard,
@@ -66,21 +63,21 @@ import {
     TextInput,
     TouchableOpacity,
     useWindowDimensions,
-    View,
+    View
 } from "react-native";
 
+import { androidMapProvider } from "@/utils/mapProvider";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Gesture, GestureDetector, ScrollView as GestureScrollView } from "react-native-gesture-handler";
-import { androidMapProvider } from "@/utils/mapProvider";
 import MapView from "react-native-maps";
 import Reanimated, {
-  Extrapolation,
-  interpolate,
-  runOnJS,
-  useAnimatedKeyboard,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
+    Extrapolation,
+    interpolate,
+    runOnJS,
+    useAnimatedKeyboard,
+    useAnimatedStyle,
+    useSharedValue,
+    withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -121,10 +118,16 @@ type ProductMeta = {
   title: string;
   price?: string;
   imageUrl?: string;
-  source?: "product" | "marketplace";
+  source?: "product" | "marketplace" | "post" | "profile";
 };
 
 type OutgoingDeliveryStatus = "sent" | "delivered" | "seen";
+
+type PopupAction = {
+  label: string;
+  onPress?: () => void;
+  style?: "default" | "cancel" | "destructive";
+};
 
 const parseMessageMetaContent = (
   rawContent?: string | null,
@@ -565,8 +568,19 @@ export default function ChatScreen() {
   const [showMongooseTracker, setShowMongooseTracker] = useState(false);
   const [mongooseTrackerBooking, setMongooseTrackerBooking] =
     useState<any>(null);
-  const [popup, setPopup] = useState<{visible: boolean; type: 'success'|'warning'|'error'|'white'; title: string; message: string}>({visible: false, type: 'white', title: '', message: ''});
-  const showPopup = (type: 'success'|'warning'|'error'|'white', title: string, message: string) => setPopup({visible: true, type, title, message});
+  const [popup, setPopup] = useState<{
+    visible: boolean;
+    type: "success" | "warning" | "error" | "white";
+    title: string;
+    message: string;
+    actions?: PopupAction[];
+  }>({ visible: false, type: "white", title: "", message: "", actions: undefined });
+  const showPopup = (
+    type: "success" | "warning" | "error" | "white",
+    title: string,
+    message: string,
+    actions?: PopupAction[],
+  ) => setPopup({ visible: true, type, title, message, actions });
   const [isSharingLocation, setIsSharingLocation] = useState(false);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [locationPickerInitial, setLocationPickerInitial] = useState<{
@@ -726,7 +740,7 @@ export default function ChatScreen() {
     context_product_title?: string;
     context_product_price?: string;
     context_product_image?: string;
-    context_source?: "product" | "marketplace";
+    context_source?: "product" | "marketplace" | "post" | "profile";
   }>();
   const isMongooseChat =
     typeof chatPartnerRouteParam === "string" &&
@@ -748,7 +762,12 @@ export default function ChatScreen() {
       imageUrl: context_product_image
         ? String(context_product_image)
         : undefined,
-      source: context_source === "marketplace" ? "marketplace" : "product",
+      source:
+        context_source === "marketplace" ||
+        context_source === "post" ||
+        context_source === "profile"
+          ? context_source
+          : "product",
     });
   }, [
     context_product_id,
@@ -1076,8 +1095,16 @@ export default function ChatScreen() {
   const openProductContext = useCallback(
     (productMeta?: ProductMeta | null) => {
       if (!productMeta?.id) return;
+      if (productMeta.source === "profile") {
+        router.push(`/(users)/profile/${productMeta.id}`);
+        return;
+      }
       if (productMeta.source === "marketplace") {
         router.push(`/(users)/marketplace/${productMeta.id}`);
+        return;
+      }
+      if (productMeta.source === "post") {
+        router.push(`/(users)/post/${productMeta.id}`);
         return;
       }
       router.push(`/(users)/product/${productMeta.id}`);
@@ -1861,17 +1888,47 @@ export default function ChatScreen() {
     // Ask for permission and pre-center the map on the user's position
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status === "granted") {
-        const pos = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
-        });
-        setLocationPickerInitial({
-          latitude: pos.coords.latitude,
-          longitude: pos.coords.longitude,
-        });
+      if (status !== "granted") {
+        showPopup(
+          "warning",
+          "Location Permission Needed",
+          "Enable location permission in Settings to share your current location.",
+          [
+            { label: "Not now", style: "cancel" },
+            {
+              label: "Open Settings",
+              onPress: () => {
+                void Linking.openSettings();
+              },
+            },
+          ],
+        );
+        return;
       }
+
+      const pos = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      setLocationPickerInitial({
+        latitude: pos.coords.latitude,
+        longitude: pos.coords.longitude,
+      });
     } catch {
-      setLocationPickerInitial(null);
+      showPopup(
+        "warning",
+        "Location Unavailable",
+        "Please enable location permission in Settings and try again.",
+        [
+          { label: "Not now", style: "cancel" },
+          {
+            label: "Open Settings",
+            onPress: () => {
+              void Linking.openSettings();
+            },
+          },
+        ],
+      );
+      return;
     }
     setShowLocationPicker(true);
   };
@@ -2288,8 +2345,10 @@ export default function ChatScreen() {
     const isAudio = messageType === "audio" || message.audio_url;
     const parsedContent = parseMessageMetaContent(message.content);
     const visibleTextContent = parsedContent.text;
+    const hasVisibleTextContent = visibleTextContent.trim().length > 0;
     const embeddedReplyMeta = parsedContent.replyMeta;
     const embeddedProductMeta = parsedContent.productMeta;
+    const shouldRenderTextBubble = hasVisibleTextContent || !!embeddedReplyMeta;
     const RADIUS_LARGE = 20;
     const RADIUS_SMALL = 6;
     const rowSpacingClass = connectNext ? "mb-1" : "mb-3";
@@ -2580,7 +2639,13 @@ export default function ChatScreen() {
                 }`}
                 numberOfLines={1}
               >
-                Product
+                {embeddedProductMeta.source === "profile"
+                  ? "Profile"
+                  : embeddedProductMeta.source === "post"
+                    ? "Post"
+                    : embeddedProductMeta.source === "marketplace"
+                      ? "Marketplace"
+                      : "Product"}
               </Text>
               <Text
                 className="text-[13px] text-gray-800 font-medium"
@@ -2588,7 +2653,7 @@ export default function ChatScreen() {
               >
                 {embeddedProductMeta.title}
               </Text>
-              {embeddedProductMeta.price ? (
+              {embeddedProductMeta.source !== "profile" && embeddedProductMeta.price ? (
                 <Text
                   className="text-[12px] text-gray-500 mt-0.5"
                   numberOfLines={1}
@@ -2600,85 +2665,89 @@ export default function ChatScreen() {
           </Pressable>
         ) : null}
 
-        <SwipeableRow
-          onTriggered={() => startReplyToMessage(message)}
-          isCurrentUser={isCurrentUser}
-        >
-          <Pressable
-            onPress={() => {
-              if (localStatus === "failed") {
-                setLocalMessages((prev) =>
-                  prev.map((m) =>
-                    m.id === message.id ? { ...m, localStatus: "sending" } : m,
-                  ),
-                );
-                const retryPreview = parseMessageMetaContent(
-                  message.content,
-                ).text;
-                void sendMessageToServer({
-                  messageContent: message.content,
-                  optimisticId: String(message.id),
-                  messagePreview: retryPreview || "Sent a message",
-                });
-              }
-            }}
-            onLongPress={(e) =>
-              openMessageActions(message, e.nativeEvent.pageY, isCurrentUser)
-            }
-            delayLongPress={400}
-            className={`px-3 py-3 ${
-              isCurrentUser
-                ? "bg-primary mr-2"
-                : "bg-[#f7f8fa] ml-2"
-            } ${isOptimistic ? "opacity-70" : ""}`}
-            style={[
-              bubbleRadiusStyle,
-              {
-                overflow: "hidden",
-                maxWidth: screenWidth * 0.72,
-                borderWidth: isCurrentUser ? 0 : 1,
-                borderColor: isCurrentUser ? "transparent" : "#eceff3",
-              },
-            ]}
+        {shouldRenderTextBubble ? (
+          <SwipeableRow
+            onTriggered={() => startReplyToMessage(message)}
+            isCurrentUser={isCurrentUser}
           >
-            {embeddedReplyMeta ? (
-              <View
-                className={`mb-2 rounded-xl px-2 py-1.5 border-l-2 ${
-                  isCurrentUser
-                    ? "bg-white/15 border-white/80"
-                    : "bg-white/90 border-gray-300"
-                }`}
-              >
-                <Text
-                  className={`text-[11px] font-semibold ${
-                    isCurrentUser
-                      ? "text-blue-100"
-                      : "text-gray-700"
-                  }`}
-                  numberOfLines={1}
-                >
-                  {embeddedReplyMeta.senderName}
-                </Text>
-                <Text
-                  className={`text-[11px] ${
-                    isCurrentUser
-                      ? "text-blue-100"
-                      : "text-gray-600"
-                  }`}
-                  numberOfLines={1}
-                >
-                  {embeddedReplyMeta.snippet}
-                </Text>
-              </View>
-            ) : null}
-            <Text
-              className={`${isCurrentUser ? "text-white" : "text-gray-800"} text-[15px]`}
-              style={{ lineHeight: 20 }}
+            <Pressable
+              onPress={() => {
+                if (localStatus === "failed") {
+                  setLocalMessages((prev) =>
+                    prev.map((m) =>
+                      m.id === message.id ? { ...m, localStatus: "sending" } : m,
+                    ),
+                  );
+                  const retryPreview = parseMessageMetaContent(
+                    message.content,
+                  ).text;
+                  void sendMessageToServer({
+                    messageContent: message.content,
+                    optimisticId: String(message.id),
+                    messagePreview: retryPreview || "Sent a message",
+                  });
+                }
+              }}
+              onLongPress={(e) =>
+                openMessageActions(message, e.nativeEvent.pageY, isCurrentUser)
+              }
+              delayLongPress={400}
+              className={`px-3 py-3 ${
+                isCurrentUser
+                  ? "bg-primary mr-2"
+                  : "bg-[#f7f8fa] ml-2"
+              } ${isOptimistic ? "opacity-70" : ""}`}
+              style={[
+                bubbleRadiusStyle,
+                {
+                  overflow: "hidden",
+                  maxWidth: screenWidth * 0.72,
+                  borderWidth: isCurrentUser ? 0 : 1,
+                  borderColor: isCurrentUser ? "transparent" : "#eceff3",
+                },
+              ]}
             >
-              {visibleTextContent}
-            </Text>
-          </Pressable>
-        </SwipeableRow>
+              {embeddedReplyMeta ? (
+                <View
+                  className={`mb-2 rounded-xl px-2 py-1.5 border-l-2 ${
+                    isCurrentUser
+                      ? "bg-white/15 border-white/80"
+                      : "bg-white/90 border-gray-300"
+                  }`}
+                >
+                  <Text
+                    className={`text-[11px] font-semibold ${
+                      isCurrentUser
+                        ? "text-blue-100"
+                        : "text-gray-700"
+                    }`}
+                    numberOfLines={1}
+                  >
+                    {embeddedReplyMeta.senderName}
+                  </Text>
+                  <Text
+                    className={`text-[11px] ${
+                      isCurrentUser
+                        ? "text-blue-100"
+                        : "text-gray-600"
+                    }`}
+                    numberOfLines={1}
+                  >
+                    {embeddedReplyMeta.snippet}
+                  </Text>
+                </View>
+              ) : null}
+              {hasVisibleTextContent ? (
+                <Text
+                  className={`${isCurrentUser ? "text-white" : "text-gray-800"} text-[15px]`}
+                  style={{ lineHeight: 20 }}
+                >
+                  {visibleTextContent}
+                </Text>
+              ) : null}
+            </Pressable>
+          </SwipeableRow>
+        ) : null}
         {/* Emoji reactions pill */}
         {reactionsForMsg.length > 0 && (
           <ReactionPill
@@ -2903,7 +2972,20 @@ export default function ChatScreen() {
 
   return (
     <View className="flex-1 bg-white">
-      <PopupMessage visible={popup.visible} type={popup.type} title={popup.title} message={popup.message} onHide={() => setPopup(p => ({...p, visible: false}))} />
+      <PopupMessage
+        visible={popup.visible}
+        type={popup.type}
+        title={popup.title}
+        message={popup.message}
+        actions={popup.actions}
+        onHide={() =>
+          setPopup((p) => ({
+            ...p,
+            visible: false,
+            actions: undefined,
+          }))
+        }
+      />
       {/* Status Bar Space */}
       <View style={{ height: insets.top, backgroundColor: 'white', zIndex: 10 }} />
 
@@ -3084,7 +3166,13 @@ export default function ChatScreen() {
                       className="text-[11px] font-semibold text-primary"
                       numberOfLines={1}
                     >
-                      Interested in this product
+                      {pendingProductContext.source === "profile"
+                        ? "Shared profile"
+                        : pendingProductContext.source === "post"
+                          ? "Shared post"
+                          : pendingProductContext.source === "marketplace"
+                            ? "Shared marketplace item"
+                            : "Interested in this product"}
                     </Text>
                     <Text
                       className="text-[12px] text-gray-700"
@@ -3092,7 +3180,7 @@ export default function ChatScreen() {
                     >
                       {pendingProductContext.title}
                     </Text>
-                    {pendingProductContext.price ? (
+                    {pendingProductContext.source !== "profile" && pendingProductContext.price ? (
                       <Text
                         className="text-[11px] text-gray-500"
                         numberOfLines={1}

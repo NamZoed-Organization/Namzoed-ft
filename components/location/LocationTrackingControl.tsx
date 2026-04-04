@@ -5,6 +5,7 @@ import * as Location from "expo-location";
 import React, { useEffect, useRef, useState } from "react";
 import {
     Alert,
+  Linking,
     Modal,
     Pressable,
     Switch,
@@ -38,6 +39,12 @@ interface LocationTrackingControlProps {
   onClose?: () => void;
 }
 
+type PopupAction = {
+  label: string;
+  onPress?: () => void;
+  style?: "default" | "cancel" | "destructive";
+};
+
 export default function LocationTrackingControl({
   bookingId,
   bookingUserName,
@@ -56,8 +63,19 @@ export default function LocationTrackingControl({
     lat: number;
     lng: number;
   } | null>(null);
-  const [popup, setPopup] = useState<{visible: boolean; type: 'success'|'warning'|'error'|'white'; title: string; message: string}>({visible: false, type: 'white', title: '', message: ''});
-  const showPopup = (type: 'success'|'warning'|'error'|'white', title: string, message: string) => setPopup({visible: true, type, title, message});
+  const [popup, setPopup] = useState<{
+    visible: boolean;
+    type: "success" | "warning" | "error" | "white";
+    title: string;
+    message: string;
+    actions?: PopupAction[];
+  }>({ visible: false, type: "white", title: "", message: "", actions: undefined });
+  const showPopup = (
+    type: "success" | "warning" | "error" | "white",
+    title: string,
+    message: string,
+    actions?: PopupAction[],
+  ) => setPopup({ visible: true, type, title, message, actions });
 
   useEffect(() => {
     // Check if tracking is already active for this booking
@@ -106,7 +124,20 @@ export default function LocationTrackingControl({
       const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync();
       
       if (foregroundStatus !== 'granted') {
-        showPopup('warning', 'Permission Required', 'Location permission is needed to track your location for deliveries.');
+        showPopup(
+          'warning',
+          'Location Permission Needed',
+          'Enable location permission in Settings to share your live location.',
+          [
+            { label: 'Not now', style: 'cancel' },
+            {
+              label: 'Open Settings',
+              onPress: () => {
+                void Linking.openSettings();
+              },
+            },
+          ],
+        );
         return;
       }
 
@@ -407,7 +438,14 @@ export default function LocationTrackingControl({
         </View>
       </Modal>
       <Modal visible={popup.visible} transparent animationType="none" statusBarTranslucent>
-        <PopupMessage visible={popup.visible} type={popup.type} title={popup.title} message={popup.message} onHide={() => setPopup(p => ({...p, visible: false}))} />
+        <PopupMessage
+          visible={popup.visible}
+          type={popup.type}
+          title={popup.title}
+          message={popup.message}
+          actions={popup.actions}
+          onHide={() => setPopup(p => ({ ...p, visible: false, actions: undefined }))}
+        />
       </Modal>
     </>
   );

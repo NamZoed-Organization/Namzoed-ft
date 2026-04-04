@@ -2,7 +2,7 @@
   "expo": {
     "name": "Namzoed",
     "slug": "Namzoed",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./icon.png",
     "scheme": "namzoed",
@@ -15,7 +15,13 @@
     },
     "ios": {
       "bundleIdentifier": "com.namzoed.Namzoed",
+      "associatedDomains": [
+        "applinks:namzoed.com",
+        "applinks:www.namzoed.com"
+      ],
       "supportsTablet": true,
+      "deploymentTarget": "15.1",
+      "useFrameworks": "static",
       "infoPlist": {
         "UIBackgroundModes": [
           "remote-notification"
@@ -39,7 +45,16 @@
         "LSApplicationQueriesSchemes": [
           "comgooglemaps",
           "googlemaps",
-          "maps"
+          "maps",
+          "whatsapp",
+          "tg",
+          "instagram",
+          "instagram-stories",
+          "fb",
+          "fb-messenger",
+          "fb-messenger-share-api",
+          "snssdk1233",
+          "tiktok"
         ]
       }
     },
@@ -51,6 +66,28 @@
       "edgeToEdgeEnabled": true,
       "usesCleartextTraffic": true,
       "package": "com.anonymous.Namzoed",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "namzoed.com",
+              "pathPrefix": "/"
+            },
+            {
+              "scheme": "https",
+              "host": "www.namzoed.com",
+              "pathPrefix": "/"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ],
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",

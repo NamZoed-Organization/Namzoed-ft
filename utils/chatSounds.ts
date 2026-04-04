@@ -11,12 +11,13 @@
  */
 
 import * as Haptics from "expo-haptics";
+import type { AudioPlayer } from "expo-audio";
 
 // ─── Local bundled notification sound ────────────────────────────────────────
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const RECEIVE_SOUND_SOURCE = require("../assets/sounds/notification.mp3");
 
-type CachedReceiveSound = import("expo-av").Audio.Sound;
+type CachedReceiveSound = AudioPlayer;
 
 // ─── Module-level sound cache ─────────────────────────────────────────────────
 let _receiveSound: CachedReceiveSound | null = null;
@@ -27,16 +28,18 @@ async function getReceiveSound(): Promise<CachedReceiveSound | null> {
   if (_loadingReceive) return null;
   _loadingReceive = true;
   try {
-    const { Audio } = await import("expo-av");
-    await Audio.setAudioModeAsync({
-      playsInSilentModeIOS: true,
-      staysActiveInBackground: false,
+    const { createAudioPlayer, setAudioModeAsync } = await import("expo-audio");
+    await setAudioModeAsync({
+      allowsRecording: false,
+      playsInSilentMode: true,
+      shouldPlayInBackground: false,
     });
-    const { sound } = await Audio.Sound.createAsync(RECEIVE_SOUND_SOURCE, {
-      shouldPlay: false,
-      volume: 0.55,
-      isLooping: false,
+    const sound = createAudioPlayer(RECEIVE_SOUND_SOURCE, {
+      updateInterval: 200,
+      keepAudioSessionActive: true,
     });
+    sound.volume = 0.55;
+    sound.loop = false;
     _receiveSound = sound;
     return sound;
   } catch {
@@ -63,8 +66,8 @@ export async function playReceiveSound(): Promise<void> {
   try {
     const sound = await getReceiveSound();
     if (!sound) return;
-    await sound.setPositionAsync(0);
-    await sound.playAsync();
+    await sound.seekTo(0);
+    sound.play();
   } catch {
     // Non-critical — audio errors should never surface to the user
   }
@@ -94,18 +97,28 @@ export async function triggerReceiveHaptic(): Promise<void> {
  */
 export async function playSendSound(): Promise<void> {
   try {
-    const { Audio } = await import("expo-av");
-    await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
-    const { sound } = await Audio.Sound.createAsync(
+    const { createAudioPlayer, setAudioModeAsync } = await import("expo-audio");
+    await setAudioModeAsync({
+      allowsRecording: false,
+      playsInSilentMode: true,
+      shouldPlayInBackground: false,
+    });
+
+    const player = createAudioPlayer(
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       require("../assets/sounds/sendmessage.mp3"),
-      { shouldPlay: true, volume: 0.8 },
+      { keepAudioSessionActive: true },
     );
-    sound.setOnPlaybackStatusUpdate((status) => {
-      if (status.isLoaded && status.didJustFinish) {
-        sound.unloadAsync().catch(() => {});
+    player.volume = 0.8;
+
+    const subscription = player.addListener("playbackStatusUpdate", (status) => {
+      if (status.didJustFinish) {
+        subscription.remove();
+        player.remove();
       }
     });
+
+    player.play();
   } catch {}
 }
 
@@ -114,7 +127,7 @@ export async function playSendSound(): Promise<void> {
  */
 export function unloadChatSounds(): void {
   if (_receiveSound) {
-    _receiveSound.unloadAsync().catch(() => {});
+    _receiveSound.remove();
     _receiveSound = null;
   }
 }
