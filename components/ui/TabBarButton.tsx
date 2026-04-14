@@ -1,11 +1,14 @@
 // components/ui/TabBarButton.tsx
-import { PlatformPressable } from "@react-navigation/elements";
 import React from "react";
+import { Pressable } from "react-native";
 
-// Match React Navigation default tab button (PlatformPressable) so flex:1 / alignment stay correct.
-// RNGH TouchableOpacity missed presses on iOS; plain Pressable + style callback broke horizontal flex.
+// Use RN Pressable instead of PlatformPressable to eliminate the ~100-150ms
+// built-in press delay that PlatformPressable adds (ripple/highlight timing).
+// No default style — callers / BottomTabBar pass `flex: 1` through `style` as
+// needed. Setting it here would break content-sized usages like TopNavbar
+// where each button should size to its icon, not expand.
 const TabBarButton = React.forwardRef<any, any>((props, ref) => (
-  <PlatformPressable ref={ref} {...props} />
+  <Pressable ref={ref} {...props} />
 ));
 
 TabBarButton.displayName = "TabBarButton";

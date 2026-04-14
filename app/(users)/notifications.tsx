@@ -115,9 +115,7 @@ function relativeTime(dateStr: string): string {
 // ─── icon per type ──────────────────────────────────────────────────
 
 const KNOWN_NOTIFICATION_TYPES = new Set([
-
   "post_liked",
- 
 ]);
 
 const POST_CONTEXT_TYPES = new Set(["post_liked", "post_commented", "new_post"]);
@@ -182,7 +180,12 @@ function NotificationItem({
     >
       {/* Avatar + type badge */}
       <View className="relative mr-3">
-        {item.actor_avatar_url ? (
+        {item.type === "mongoose_booking_request" ? (
+          <Image
+            source={require("@/assets/images/logowithbg.jpg")}
+            className="w-12 h-12 rounded-full"
+          />
+        ) : item.actor_avatar_url ? (
           <Image
             source={{ uri: item.actor_avatar_url }}
             className="w-12 h-12 rounded-full"
@@ -351,6 +354,11 @@ export default function NotificationsScreen() {
           } else {
             router.push(`/(users)/profile/${n.actor_id}` as any);
           }
+          break;
+
+        case "mongoose_booking_request":
+          // Open the chat with the person who sent the request
+          router.push(`/(users)/chat/${n.actor_id}` as any);
           break;
 
         default:

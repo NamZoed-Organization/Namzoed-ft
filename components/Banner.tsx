@@ -1,9 +1,9 @@
 import { useBanners } from "@/data/bannerData";
 import React, { useCallback, useRef, useState } from "react";
+import { Image } from "expo-image";
 import {
     Animated,
     Dimensions,
-    Image,
     Linking,
     Pressable,
     Text,
@@ -65,7 +65,8 @@ export default function Banner() {
                   width: "100%",
                   borderRadius: 16,
                 }}
-                resizeMode="cover"
+                contentFit="cover"
+                cachePolicy="memory-disk"
               />
 
               {item.type === "live" && (

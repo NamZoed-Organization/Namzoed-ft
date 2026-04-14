@@ -1,4 +1,4 @@
-// app/(tabs)/messages.tsx
+// app/(users)/(tabs)/messages.tsx
 import BookMongooseModal from "@/components/BookMongooseModal";
 import FollowRequests from "@/components/modals/FollowRequests";
 import TrackMongooseModal from "@/components/modals/TrackMongooseModal";
@@ -8,14 +8,14 @@ import MongooseWorkerNavBar, {
 import PopupMessage from "@/components/ui/PopupMessage";
 import { useUnreadMessages } from "@/contexts/UnreadMessagesContext";
 import { useUser } from "@/contexts/UserContext";
-import users from "@/data/UserData";
 import { supabase } from "@/lib/supabase";
-import { useAppRouter } from "@/utils/navigation";
-import { isMongooseUser } from "@/utils/roleCheck";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
+import { useAppRouter } from "@/utils/navigation";
+import { isMongooseUser } from "@/utils/roleCheck";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import React, {
   useCallback,
   useEffect,
@@ -23,13 +23,16 @@ import React, {
   useRef,
   useState,
 } from "react";
+import ConversationSkeleton from "@/components/ui/ConversationSkeleton";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import {
+  ActivityIndicator,
   Alert,
   Dimensions,
   FlatList,
   Image,
   InteractionManager,
-  Platform,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
@@ -45,7 +48,6 @@ import Reanimated, {
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 // Width of each action button (Mute + Delete)
@@ -55,8 +57,6 @@ const ACTIONS_TOTAL = ACTION_BTN_W * 2; // 160px — fully revealed area
 const FULL_SWIPE_THRESHOLD = SCREEN_WIDTH * 0.6;
 const DELETE_COLOR = "#FF3B30";
 const MUTE_COLOR = "#8E8E93";
-const IS_IOS = Platform.OS === "ios";
-const IOS_BACK_SWIPE_EDGE = 24;
 
 // Types
 interface IMessage {
@@ -121,20 +121,8 @@ const SwipeableConversationRow = React.memo(
     }
 
     const pan = Gesture.Pan()
-      // Row actions are left-swipe only; don't capture right-swipe
-      // so iOS back gesture can work naturally.
-      .activeOffsetX([-10, 9999])
+      .activeOffsetX([-10, 10])
       .failOffsetY([-8, 8])
-      .onTouchesDown((e, stateManager) => {
-        "worklet";
-        if (!IS_IOS) return;
-
-        const firstTouch = e.allTouches[0];
-        const startX = firstTouch?.absoluteX ?? 0;
-        if (startX <= IOS_BACK_SWIPE_EDGE) {
-          stateManager.fail();
-        }
-      })
       .onBegin(() => {
         "worklet";
         gestureStartX.value = translateX.value;
@@ -315,6 +303,7 @@ const SwipeableConversationRow = React.memo(
 
 export default function MessageScreen() {
   const insets = useSafeAreaInsets();
+  const tabBarHeight = useBottomTabBarHeight();
   const { currentUser } = useUser();
   const { refreshUnreadCount, currentUserUUID, setIsOnMessagesScreen } = useUnreadMessages();
 
@@ -327,72 +316,7 @@ export default function MessageScreen() {
     }, [setIsOnMessagesScreen]),
   );
   const router = useAppRouter();
-  const {
-    tab,
-    context_product_id,
-    context_product_title,
-    context_product_price,
-    context_product_image,
-    context_source,
-  } = useLocalSearchParams<{
-    tab?: string;
-    context_product_id?: string | string[];
-    context_product_title?: string | string[];
-    context_product_price?: string | string[];
-    context_product_image?: string | string[];
-    context_source?: string | string[];
-  }>();
-  const normalizeParam = useCallback(
-    (value?: string | string[]) => (Array.isArray(value) ? value[0] : value),
-    [],
-  );
-  const pendingShareContext = useMemo(() => {
-    const productId = normalizeParam(context_product_id);
-    const productTitle = normalizeParam(context_product_title);
-    if (!productId || !productTitle) return null;
-
-    const source = normalizeParam(context_source);
-
-    return {
-      context_product_id: String(productId),
-      context_product_title: String(productTitle),
-      context_product_price: normalizeParam(context_product_price) || "",
-      context_product_image: normalizeParam(context_product_image) || "",
-      context_source:
-        source === "marketplace" || source === "post" || source === "profile"
-          ? source
-          : "product",
-    };
-  }, [
-    context_product_id,
-    context_product_title,
-    context_product_price,
-    context_product_image,
-    context_source,
-    normalizeParam,
-  ]);
-  const openChatWithContext = useCallback(
-    (partnerId: string) => {
-      const params: {
-        id: string;
-        context_product_id?: string;
-        context_product_title?: string;
-        context_product_price?: string;
-        context_product_image?: string;
-        context_source?: string;
-      } = { id: String(partnerId) };
-
-      if (pendingShareContext) {
-        Object.assign(params, pendingShareContext);
-      }
-
-      router.push({
-        pathname: "/(users)/chat/[id]",
-        params,
-      });
-    },
-    [pendingShareContext, router],
-  );
+  const { tab } = useLocalSearchParams();
   const [activeTab, setActiveTab] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [showFollowRequests, setShowFollowRequests] = useState(false);
@@ -401,7 +325,7 @@ export default function MessageScreen() {
   const [conversations, setConversations] = useState<any[]>([]);
   const [requestConversations, setRequestConversations] = useState<any[]>([]);
   const [showMessageRequests, setShowMessageRequests] = useState(false);
-  const [isLoadingConversations, setIsLoadingConversations] = useState(false);
+  const [isLoadingConversations, setIsLoadingConversations] = useState(true);
   const [debugInfo, setDebugInfo] = useState<string>("");
   const [popup, setPopup] = useState<{visible: boolean; type: 'success'|'warning'|'error'|'white'; title: string; message: string}>({visible: false, type: 'white', title: '', message: ''});
   const showPopup = (type: 'success'|'warning'|'error'|'white', title: string, message: string) => setPopup({visible: true, type, title, message});
@@ -538,30 +462,11 @@ export default function MessageScreen() {
     if (!message) return "No messages yet";
     let content =
       typeof message.content === "string" ? message.content : message.content;
-    let sharedSource: "product" | "marketplace" | "post" | "profile" | null =
-      null;
 
     // Strip embedded metadata wrappers used by chat screen persistence.
     if (typeof content === "string") {
       for (let i = 0; i < 3; i++) {
         if (content.startsWith("[product-meta]") && content.includes("[/product-meta]")) {
-          try {
-            const suffixIndex = content.indexOf("[/product-meta]");
-            const encoded = content
-              .slice("[product-meta]".length, suffixIndex)
-              .trim();
-            const parsed = JSON.parse(decodeURIComponent(encoded));
-            if (
-              parsed?.source === "product" ||
-              parsed?.source === "marketplace" ||
-              parsed?.source === "post" ||
-              parsed?.source === "profile"
-            ) {
-              sharedSource = parsed.source;
-            }
-          } catch {
-            // ignore malformed metadata
-          }
           const suffixIndex = content.indexOf("[/product-meta]");
           content = content
             .slice(suffixIndex + "[/product-meta]".length)
@@ -590,24 +495,7 @@ export default function MessageScreen() {
     ) {
       return "Location";
     }
-
-    const trimmedContent = typeof content === "string" ? content.trim() : "";
-    let preview = trimmedContent;
-
-    if (!preview) {
-      if (sharedSource === "profile") {
-        preview = "Profile shared";
-      } else if (sharedSource === "post") {
-        preview = "Post shared";
-      } else if (sharedSource === "marketplace") {
-        preview = "Marketplace item shared";
-      } else if (sharedSource === "product") {
-        preview = "Product shared";
-      } else {
-        preview = "No messages yet";
-      }
-    }
-
+    const preview = content || "No messages yet";
     return isMine ? `You: ${preview}` : preview;
   };
 
@@ -1189,11 +1077,6 @@ export default function MessageScreen() {
     resolveCurrentUserUUID,
   ]);
 
-  const getUserByPhone = (phoneNumber: string) => {
-    const cleanPhone = phoneNumber.replace("+975", "");
-    return Object.values(users).find((u) => u.phone_number === cleanPhone);
-  };
-
   const handleFollowBack = (phoneNumber: string) => {
     // Here you would update the backend and local state
   };
@@ -1285,41 +1168,6 @@ export default function MessageScreen() {
     );
   };
 
-  const renderMessageItem = ({ item: phoneNumber }: { item: string }) => {
-    const user = getUserByPhone(phoneNumber);
-    const messagesObj = userData?.messages as Record<string, IMessage[]>;
-    const conversation = messagesObj[phoneNumber];
-    const lastMessage = conversation?.[conversation.length - 1];
-
-    return (
-      <TouchableOpacity
-        className="flex-row items-center p-4 border-b border-gray-200"
-        onPress={() =>
-          openChatWithContext(phoneNumber.replace("+975", ""))
-        }
-      >
-        <View className="w-12 h-12 bg-primary rounded-full items-center justify-center mr-3">
-          <Text className="text-white font-bold">
-            {user?.username.charAt(0).toUpperCase() || "U"}
-          </Text>
-        </View>
-        <View className="flex-1">
-          <Text className="font-semibold text-gray-800">
-            {user?.username || phoneNumber}
-          </Text>
-          <Text className="text-sm text-gray-500 mt-1" numberOfLines={1}>
-            {formatConversationPreview(lastMessage, false)}
-          </Text>
-        </View>
-        <Text className="text-xs text-gray-400">
-          {lastMessage?.timestamp
-            ? new Date(lastMessage.timestamp).toLocaleDateString()
-            : ""}
-        </Text>
-      </TouchableOpacity>
-    );
-  };
-
   const handleDeleteConversation = (
     partnerId: string,
     partnerName: string,
@@ -1361,62 +1209,67 @@ export default function MessageScreen() {
 
     return (
       <SwipeableConversationRow
-        onPress={() => openChatWithContext(String(conversation.partnerId))}
+        onPress={() => router.push(`/(users)/chat/${conversation.partnerId}`)}
         onDelete={() =>
           handleDeleteConversation(conversation.partnerId, userName)
         }
         onMute={() => toggleMuteConversation(String(conversation.partnerId))}
         isMuted={isMuted}
       >
-        <View className="flex-row items-center py-4 px-4">
+        <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 13, backgroundColor: "white", borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#e5e7eb" }}>
+          {/* Avatar 56px */}
           {avatarUri ? (
             <Image
               source={{ uri: avatarUri }}
-              className="w-12 h-12 rounded-full mr-3"
+              style={{ width: 56, height: 56, borderRadius: 28, marginRight: 12 }}
               resizeMode="cover"
             />
           ) : (
-            <View className="w-12 h-12 bg-primary rounded-full items-center justify-center mr-3">
-              <Text className="text-white font-bold">
+            <View style={{ width: 56, height: 56, borderRadius: 28, marginRight: 12, backgroundColor: "#094569", alignItems: "center", justifyContent: "center" }}>
+              <Text style={{ color: "white", fontWeight: "700", fontSize: 20 }}>
                 {userName?.charAt(0).toUpperCase() || "U"}
               </Text>
             </View>
           )}
-          <View className="flex-1 flex-row items-center border-b border-gray-200 pb-4 -mb-4">
-            <View className="flex-1">
-              <View className="flex-row items-center gap-1">
+
+          {/* Right column */}
+          <View style={{ flex: 1 }}>
+            {/* Top row: name + timestamp */}
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 4, flex: 1, marginRight: 8 }}>
                 <Text
-                  className={`text-gray-800 ${hasUnreadIncoming ? "font-bold" : "font-semibold"}`}
+                  numberOfLines={1}
+                  style={{ fontSize: 15, color: "#111827", fontWeight: hasUnreadIncoming ? "700" : "600" }}
                 >
                   {userName}
                 </Text>
                 {isMuted && (
-                  <Ionicons
-                    name="notifications-off"
-                    size={12}
-                    color="#8E8E93"
-                  />
+                  <Ionicons name="notifications-off" size={12} color="#8E8E93" />
                 )}
               </View>
+              <Text style={{ fontSize: 12, color: "#9ca3af", flexShrink: 0 }}>
+                {formatConversationTime(conversation.lastMessage?.created_at)}
+              </Text>
+            </View>
+
+            {/* Bottom row: preview + unread indicator */}
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
               <Text
-                className={`text-sm mt-1 ${hasUnreadIncoming ? "text-gray-800 font-semibold" : "text-gray-500"}`}
                 numberOfLines={1}
+                style={{ fontSize: 13, flex: 1, marginRight: 8, color: hasUnreadIncoming ? "#1f2937" : "#6b7280", fontWeight: hasUnreadIncoming ? "600" : "400" }}
               >
                 {formatConversationPreview(lastMessage, isLastMessageMine)}
               </Text>
+              {conversation.unreadCount > 0 && (
+                conversation.unreadCount <= 9 ? (
+                  <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: "#094569" }} />
+                ) : (
+                  <View style={{ minWidth: 18, height: 18, borderRadius: 9, backgroundColor: "#094569", paddingHorizontal: 4, alignItems: "center", justifyContent: "center" }}>
+                    <Text style={{ color: "white", fontSize: 10, fontWeight: "700" }}>9+</Text>
+                  </View>
+                )
+              )}
             </View>
-            <Text className="text-xs text-gray-400 mr-2">
-              {formatConversationTime(conversation.lastMessage?.created_at)}
-            </Text>
-            {conversation.unreadCount > 0 && (
-              <View className="mr-2 min-w-[22px] h-[22px] px-1 rounded-full bg-primary items-center justify-center">
-                <Text className="text-white text-[11px] font-bold">
-                  {conversation.unreadCount > 99
-                    ? "99+"
-                    : conversation.unreadCount}
-                </Text>
-              </View>
-            )}
           </View>
         </View>
       </SwipeableConversationRow>
@@ -1436,7 +1289,7 @@ export default function MessageScreen() {
         className="flex-row items-center p-4 border-b border-gray-200"
         onPress={() => {
           setSearchQuery(""); // Clear search
-          openChatWithContext(String(userId)); // Use UUID instead of phone
+          router.push(`/(users)/chat/${userId}`); // Use UUID instead of phone
         }}
       >
         <View className="w-12 h-12 bg-blue-500 rounded-full items-center justify-center mr-3">
@@ -1740,28 +1593,15 @@ export default function MessageScreen() {
 
   const tabs = ["Messages", "Mongoose"];
   const showMongooseWorkerNav = isMongooseUser(currentUser?.email);
-  const listBottomPad =
-    insets.bottom + (showMongooseWorkerNav ? MONGOOSE_WORKER_NAV_BAR_HEIGHT + 8 : 0);
+  const listBottomPad = showMongooseWorkerNav
+    ? insets.bottom + MONGOOSE_WORKER_NAV_BAR_HEIGHT + 8
+    : tabBarHeight + insets.bottom + 16;
 
   return (
     <View className="flex-1 bg-background">
       <PopupMessage visible={popup.visible} type={popup.type} title={popup.title} message={popup.message} onHide={() => setPopup(p => ({...p, visible: false}))} />
       {/* Status Bar Space */}
       <View className="h-12 bg-white" />
-
-      {/* Fixed Header with spacing */}
-      <View className="bg-white px-4 py-3 ">
-        <View className="flex-row items-center justify-between">
-          <View>
-            <Text className="text-2xl font-mbold text-primary">
-              Conversations
-            </Text>
-            <Text className="text-base font-medium text-gray-700">
-              {currentUser.name || "User"}
-            </Text>
-          </View>
-        </View>
-      </View>
 
       {/* Tabs — fixed below the header */}
       <View className="flex-row bg-white border-b border-gray-200">
@@ -1788,23 +1628,27 @@ export default function MessageScreen() {
       {activeTab === 0 && !showMessageRequests && (
         <>
           {/* Search Bar — lives outside FlatList so the keyboard never dismisses on re-render */}
-          <View className="px-4 py-3 bg-white border-b border-gray-200">
-            <View className="flex-row items-center bg-gray-100 rounded-lg px-3">
-              <Ionicons name="search" size={20} color="#666" />
+          <View style={{ paddingHorizontal: 16, paddingVertical: 10, backgroundColor: "white" }}>
+            <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: "#f3f4f6", borderRadius: 24, paddingHorizontal: 14, paddingVertical: 10 }}>
+              <Ionicons name="search" size={18} color="#9ca3af" />
               <TextInput
-                style={{ flex: 1, marginLeft: 8, fontSize: 16, paddingVertical: 10, lineHeight: undefined }}
-                placeholder="Search conversations or find new users..."
+                style={{ flex: 1, marginLeft: 8, fontSize: 15, color: "#000", paddingVertical: 0 }}
+                placeholderTextColor="#9ca3af"
+                placeholder="Search"
                 value={searchQuery}
                 onChangeText={setSearchQuery}
               />
               {isSearching && (
-                <View className="ml-2">
-                  <Text className="text-xs text-gray-500">Searching...</Text>
-                </View>
+                <ActivityIndicator size="small" color="#9ca3af" style={{ marginLeft: 6 }} />
               )}
             </View>
           </View>
 
+          {isLoadingConversations && conversations.length === 0 ? (
+            <View style={{ flex: 1, paddingBottom: listBottomPad }}>
+              <ConversationSkeleton count={8} />
+            </View>
+          ) : (
           <FlatList
             style={{ flex: 1 }}
             contentContainerStyle={{ paddingBottom: listBottomPad }}
@@ -1949,6 +1793,7 @@ export default function MessageScreen() {
           }}
           showsVerticalScrollIndicator={false}
         />
+          )}
         </>
       )}
 
@@ -1984,7 +1829,7 @@ export default function MessageScreen() {
                   <TouchableOpacity
                     onPress={() => {
                       setShowMessageRequests(false);
-                      openChatWithContext(String(convo.partnerId));
+                      router.push(`/(users)/chat/${convo.partnerId}`);
                     }}
                   >
                     <View
@@ -2016,7 +1861,7 @@ export default function MessageScreen() {
                     style={{ flex: 1 }}
                     onPress={() => {
                       setShowMessageRequests(false);
-                      openChatWithContext(String(convo.partnerId));
+                      router.push(`/(users)/chat/${convo.partnerId}`);
                     }}
                   >
                     <Text style={{ fontSize: 15, fontWeight: "600", color: "#111827" }}>

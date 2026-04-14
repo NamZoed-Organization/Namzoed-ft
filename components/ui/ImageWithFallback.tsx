@@ -1,39 +1,57 @@
+import { useNetworkConnectionKey } from '@/contexts/NetworkContext';
+import { Image, type ImageProps } from 'expo-image';
 import React, { useState } from 'react';
-import { Image, ImageProps } from 'react-native';
+import { View, type StyleProp, type ViewStyle } from 'react-native';
 
-interface ImageWithFallbackProps extends ImageProps {
-  fallbackSource?: any;
+interface ImageWithFallbackProps extends Omit<ImageProps, 'style'> {
+  /** Legacy RN Image prop — forwarded to expo-image's contentFit. */
+  resizeMode?: 'cover' | 'contain' | 'stretch' | 'center';
+  className?: string;
+  style?: StyleProp<ViewStyle>;
 }
 
+// expo-image does not honor NativeWind className, and expects explicit
+// dimensions in its style prop. We wrap it in a View that takes the className
+// / style, and give the inner Image { width: '100%', height: '100%' } so it
+// fills the wrapper. When the source is missing or fails to load, we render
+// a plain gray placeholder inside the wrapper.
 const ImageWithFallback: React.FC<ImageWithFallbackProps> = ({
   source,
-  fallbackSource = require('@/assets/images/all.png'),
-  ...props
+  className,
+  style,
+  resizeMode,
+  contentFit,
+  ...imageProps
 }) => {
   const [hasError, setHasError] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const connectionKey = useNetworkConnectionKey();
 
-  const handleError = () => {
-    setHasError(true);
-    setIsLoading(false);
-  };
+  React.useEffect(() => {
+    if (connectionKey > 0) {
+      setHasError(false);
+    }
+  }, [connectionKey]);
 
-  const handleLoad = () => {
-    setIsLoading(false);
-  };
-
-  // Use fallback if there's an error, or if source.uri is empty/missing
-  const hasEmptyUri = source && typeof source === 'object' && 'uri' in source && !source.uri;
-  const imageSource = hasError || hasEmptyUri ? fallbackSource : source;
+  const hasEmptyUri =
+    source && typeof source === 'object' && 'uri' in source && !source.uri;
+  const showPlaceholder = hasError || hasEmptyUri || !source;
+  const fit = contentFit ?? resizeMode ?? 'cover';
 
   return (
-    <Image
-      {...props}
-      source={imageSource}
-      onError={handleError}
-      onLoad={handleLoad}
-      onLoadEnd={handleLoad}
-    />
+    <View className={className} style={style}>
+      {showPlaceholder ? (
+        <View style={{ width: '100%', height: '100%', backgroundColor: '#e5e7eb' }} />
+      ) : (
+        <Image
+          {...imageProps}
+          source={source}
+          onError={() => setHasError(true)}
+          style={{ width: '100%', height: '100%' }}
+          contentFit={fit}
+          cachePolicy="memory-disk"
+        />
+      )}
+    </View>
   );
 };
 

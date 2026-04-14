@@ -17,10 +17,8 @@ import { useFonts } from "expo-font";
 import * as Linking from "expo-linking";
 import { Stack, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import { StatusBar } from "expo-status-bar";
-import * as SystemUI from "expo-system-ui";
 import React, { useEffect, useRef } from "react";
-import { Platform, View } from "react-native";
+import { Platform, StatusBar, View } from "react-native";
 import FlashMessage from "react-native-flash-message";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "../global.css";
@@ -31,6 +29,7 @@ import { DzongkhagProvider } from "@/contexts/DzongkhagContext";
 import { LiveSessionProvider } from "@/contexts/LiveSessionProvider";
 import { NotificationsProvider } from "@/contexts/NotificationsContext";
 import { UserProvider } from "@/contexts/UserContext";
+import { NetworkProvider } from "@/contexts/NetworkContext";
 import { VideoCacheProvider } from "@/contexts/VideoCacheContext";
 import { VideoPlaybackProvider } from "@/contexts/VideoPlaybackContext";
 
@@ -41,6 +40,7 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
   const router = useRouter();
   const lastHandledUrlRef = useRef<string | null>(null);
+  const shouldMountOneSignalBootstrap = !(__DEV__ && Platform.OS === "android");
 
   const fontMap = {
     // Load icon fonts directly from assets/fonts/ — node_modules requires fail in release builds
@@ -67,11 +67,6 @@ export default function RootLayout() {
       SplashScreen.hideAsync();
     }
   }, [fontsLoaded, fontError]);
-
-  // Light app shell behind edge-to-edge status bar when the OS draws a light strip.
-  useEffect(() => {
-    void SystemUI.setBackgroundColorAsync("#f8f9fa");
-  }, []);
 
   useEffect(() => {
     const resolveDestination = (
@@ -167,10 +162,17 @@ export default function RootLayout() {
     <ErrorBoundary>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <ThemeProvider
-          value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
+          value={
+            Platform.OS === "android"
+              ? DefaultTheme
+              : colorScheme === "dark"
+                ? DarkTheme
+                : DefaultTheme
+          }
         >
           {/* 2. wrap your entire app in the provider */}
           <UserProvider>
+            <NetworkProvider>
             <AppearanceProvider>
             <UnreadMessagesProvider>
               <NotificationsProvider>
@@ -178,7 +180,7 @@ export default function RootLayout() {
                 <VideoPlaybackProvider>
                   <VideoCacheProvider>
                     <LiveSessionProvider>
-                      <OneSignalBootstrap />
+                      {shouldMountOneSignalBootstrap ? <OneSignalBootstrap /> : null}
                     <View className="flex-1 bg-background">
                         <Stack
                           screenOptions={{
@@ -192,17 +194,18 @@ export default function RootLayout() {
                         />
                         <InAppChatBanner />
                         <InAppNotificationBanner />
-                        {/* Android: many devices paint a dark status bar under edge-to-edge; `dark` here
-                            means dark *icons* (RN dark-content) → invisible on black. Use `light` =
-                            light-content (white icons). iOS: follow system appearance. */}
+                        {/* Transparent status bar with dark icons on Android;
+                            iOS continues to follow the current appearance. */}
                         <StatusBar
-                          style={
+                          barStyle={
                             Platform.OS === "android"
-                              ? "light"
+                              ? "dark-content"
                               : colorScheme === "dark"
-                                ? "light"
-                                : "dark"
+                                ? "light-content"
+                                : "dark-content"
                           }
+                          translucent={Platform.OS === "android"}
+                          backgroundColor="transparent"
                         />
                         <FlashMessage
                           position="top"
@@ -218,6 +221,7 @@ export default function RootLayout() {
               </NotificationsProvider>
             </UnreadMessagesProvider>
             </AppearanceProvider>
+            </NetworkProvider>
           </UserProvider>
         </ThemeProvider>
       </GestureHandlerRootView>

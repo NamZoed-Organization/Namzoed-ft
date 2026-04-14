@@ -6,9 +6,9 @@ import { useAppRouter } from '@/utils/navigation';
 import { ArrowDownAZ, ArrowUpAZ, X } from 'lucide-react-native';
 import PopupMessage from '@/components/ui/PopupMessage';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Image } from 'expo-image';
 import {
   ActivityIndicator,
-  Image,
   Modal,
   RefreshControl,
   Text,
@@ -112,7 +112,8 @@ export default function FollowRequests({ onClose, userId }: FollowRequestsProps)
               <Image
                 source={{ uri: item.avatar_url }}
                 className="w-12 h-12"
-                resizeMode="cover"
+                contentFit="cover"
+                cachePolicy="memory-disk"
               />
             ) : (
               <Text className="text-gray-400 font-mbold text-lg">

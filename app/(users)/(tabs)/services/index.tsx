@@ -1,5 +1,3 @@
-import AddServicesModal from "@/components/modals/AddServicesModal";
-import AuthPromptModal from "@/components/modals/AuthPromptModal";
 import TopNavbar from "@/components/ui/TopNavbar";
 import { useUser } from "@/contexts/UserContext";
 import { serviceCategories } from "@/data/servicecategory";
@@ -21,14 +19,13 @@ import {
     Palette,
     PawPrint,
     Plane,
-    Plus,
     ShoppingBasket,
     Sparkles,
     Tent,
     Utensils,
     Wrench,
 } from "lucide-react-native";
-import React, { useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import {
     Dimensions,
     FlatList,
@@ -43,8 +40,6 @@ export default function ServiceScreen() {
   const router = useAppRouter();
   const insets = useSafeAreaInsets();
   const { currentUser } = useUser();
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [showAuthModal, setShowAuthModal] = useState(false);
 
   const { numColumns, itemSize, gap } = useMemo(() => {
     const horizontalPadding = 32;
@@ -64,6 +59,13 @@ export default function ServiceScreen() {
   }, []);
 
   const visibleCategories = useMemo(() => serviceCategories, []);
+
+  const BETA_USER = "77737314";
+  const showBetaBookings =
+    String(currentUser?.id ?? "") === BETA_USER ||
+    String(currentUser?.phone_number ?? "").replace(/\D/g, "").endsWith(BETA_USER) ||
+    String(currentUser?.phone ?? "").replace(/\D/g, "").endsWith(BETA_USER) ||
+    String(currentUser?.username ?? "") === BETA_USER;
 
   const handleCategoryPress = (category: any) => {
     router.push(`/services/${category.slug}` as Href);
@@ -153,34 +155,7 @@ export default function ServiceScreen() {
 
       <View className="flex-1 px-4 pt-4">
         <View className="mb-6 ml-1">
-          <View className="flex-row justify-between items-center mb-2">
-            <Text className="text-3xl font-mbold text-primary">Services</Text>
-
-            {currentUser && (
-              <TouchableOpacity
-                onPress={() => setShowAddModal(true)}
-                className="bg-primary px-4 py-2.5 rounded-full flex-row items-center shadow-sm"
-                activeOpacity={0.7}
-              >
-                <Plus size={18} color="white" />
-                <Text className="text-white font-msemibold text-sm ml-1">
-                  Add Service
-                </Text>
-              </TouchableOpacity>
-            )}
-            {!currentUser && (
-              <TouchableOpacity
-                onPress={() => setShowAuthModal(true)}
-                className="bg-primary px-4 py-2.5 rounded-full flex-row items-center shadow-sm"
-                activeOpacity={0.7}
-              >
-                <Plus size={18} color="white" />
-                <Text className="text-white font-msemibold text-sm ml-1">
-                  Add Service
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
+          <Text className="text-3xl font-mbold text-primary mb-2">Services</Text>
           <Text className="text-sm font-regular text-gray-500">
             Professional help at your fingertips
           </Text>
@@ -195,6 +170,7 @@ export default function ServiceScreen() {
           showsVerticalScrollIndicator={false}
           ListHeaderComponent={
               <View style={{ marginBottom: 20 }}>
+                {showBetaBookings && (
                 <View className="flex-row gap-3">
                   <TouchableOpacity
                     onPress={handleGamesPress}
@@ -252,12 +228,13 @@ export default function ServiceScreen() {
                     </View>
                   </TouchableOpacity>
                 </View>
+                )}
 
                 <View
                   style={{
                     flexDirection: "row",
                     alignItems: "center",
-                    marginTop: 18,
+                    marginTop: showBetaBookings ? 18 : 0,
                   }}
                 >
                   <View style={{ flex: 1, height: 1, backgroundColor: "#D1D5DB" }} />
@@ -286,22 +263,6 @@ export default function ServiceScreen() {
         />
       </View>
 
-      {currentUser?.id && (
-        <AddServicesModal
-          isVisible={showAddModal}
-          onClose={() => setShowAddModal(false)}
-          userId={currentUser.id}
-          onSuccess={() => {
-            setShowAddModal(false);
-          }}
-        />
-      )}
-
-      <AuthPromptModal
-        visible={showAuthModal}
-        onClose={() => setShowAuthModal(false)}
-        message="Sign in to add a service listing"
-      />
     </View>
   );
 }

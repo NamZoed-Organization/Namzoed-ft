@@ -34,12 +34,16 @@ const SIDE_HANDLE_HEIGHT = 24; // Height of the side bars
 
 interface ImageCropperProps {
   imageUri: string;
+  imageWidth?: number;
+  imageHeight?: number;
   onSave: (croppedUri: string) => void;
   onCancel: () => void;
 }
 
 export default function ResizableImageCropper({
   imageUri,
+  imageWidth,
+  imageHeight,
   onSave,
   onCancel,
 }: ImageCropperProps) {
@@ -69,47 +73,48 @@ export default function ResizableImageCropper({
   useEffect(() => {
     if (!imageUri) return;
 
-    Image.getSize(
-      imageUri,
-      (w, h) => {
-        setOriginalSize({ width: w, height: h });
+    const initWithSize = (w: number, h: number) => {
+      setOriginalSize({ width: w, height: h });
 
-        const maxAreaWidth = SCREEN_WIDTH;
-        const maxAreaHeight = SCREEN_HEIGHT - 140;
+      const maxAreaWidth = SCREEN_WIDTH;
+      const maxAreaHeight = SCREEN_HEIGHT - 140;
 
-        const imageAspect = w / h;
-        const screenAspect = maxAreaWidth / maxAreaHeight;
+      const imageAspect = w / h;
+      const screenAspect = maxAreaWidth / maxAreaHeight;
 
-        let renderWidth, renderHeight;
+      let renderWidth, renderHeight;
 
-        if (imageAspect > screenAspect) {
-          renderWidth = maxAreaWidth;
-          renderHeight = maxAreaWidth / imageAspect;
-        } else {
-          renderHeight = maxAreaHeight;
-          renderWidth = maxAreaHeight * imageAspect;
-        }
+      if (imageAspect > screenAspect) {
+        renderWidth = maxAreaWidth;
+        renderHeight = maxAreaWidth / imageAspect;
+      } else {
+        renderHeight = maxAreaHeight;
+        renderWidth = maxAreaHeight * imageAspect;
+      }
 
-        const x = (maxAreaWidth - renderWidth) / 2;
-        const y = (maxAreaHeight - renderHeight) / 2;
+      const x = (maxAreaWidth - renderWidth) / 2;
+      const y = (maxAreaHeight - renderHeight) / 2;
 
-        setImageLayout({ width: renderWidth, height: renderHeight, x, y });
+      setImageLayout({ width: renderWidth, height: renderHeight, x, y });
 
-        const initialW = renderWidth * 0.8;
-        const initialH = renderHeight * 0.8;
+      const initialW = renderWidth * 0.8;
+      const initialH = renderHeight * 0.8;
 
-        cropWidth.value = initialW;
-        cropHeight.value = initialH;
-        cropX.value = (renderWidth - initialW) / 2;
-        cropY.value = (renderHeight - initialH) / 2;
+      cropWidth.value = initialW;
+      cropHeight.value = initialH;
+      cropX.value = (renderWidth - initialW) / 2;
+      cropY.value = (renderHeight - initialH) / 2;
 
-        setReady(true);
-      },
-      () => {
-        onCancel();
-      },
-    );
-  }, [imageUri]);
+      setReady(true);
+    };
+
+    // Use passed dimensions when available to avoid EXIF orientation issues with Image.getSize
+    if (imageWidth && imageHeight) {
+      initWithSize(imageWidth, imageHeight);
+    } else {
+      Image.getSize(imageUri, initWithSize, () => { onCancel(); });
+    }
+  }, [imageUri, imageWidth, imageHeight]);
 
   const clamp = (val: number, min: number, max: number) => {
     "worklet";

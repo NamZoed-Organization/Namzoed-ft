@@ -29,6 +29,7 @@ interface AddServicesModalProps {
   onClose: () => void;
   userId: string;
   onSuccess: () => void;
+  lockedCategorySlug?: string;
 }
 
 export default function AddServicesModal({
@@ -36,6 +37,7 @@ export default function AddServicesModal({
   onClose,
   userId,
   onSuccess,
+  lockedCategorySlug,
 }: AddServicesModalProps) {
   const selectableCategories = serviceCategories.filter(
     (category) => category.slug !== "government-services",
@@ -74,6 +76,7 @@ export default function AddServicesModal({
   const [showPickerSheet, setShowPickerSheet] = useState(false);
   const [showCropper, setShowCropper] = useState(false);
   const [pendingImageUri, setPendingImageUri] = useState<string | null>(null);
+  const [pendingImageDims, setPendingImageDims] = useState<{ width: number; height: number } | null>(null);
 
   // Animation - Slide up from bottom
   const translateY = useSharedValue(1000);
@@ -81,10 +84,13 @@ export default function AddServicesModal({
   useEffect(() => {
     if (isVisible) {
       translateY.value = withTiming(0, { duration: 300 });
+      if (lockedCategorySlug) {
+        setSelectedCategory(lockedCategorySlug);
+      }
     } else {
       translateY.value = withTiming(1000, { duration: 300 });
     }
-  }, [isVisible]);
+  }, [isVisible, lockedCategorySlug]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.value }],
@@ -115,7 +121,9 @@ export default function AddServicesModal({
       });
 
       if (!result.canceled && result.assets?.[0]) {
-        setPendingImageUri(result.assets[0].uri);
+        const asset = result.assets[0];
+        setPendingImageUri(asset.uri);
+        setPendingImageDims(asset.width && asset.height ? { width: asset.width, height: asset.height } : null);
         setShowCropper(true);
       }
     } catch (error) {
@@ -140,7 +148,9 @@ export default function AddServicesModal({
       });
 
       if (!result.canceled && result.assets?.[0]) {
-        setPendingImageUri(result.assets[0].uri);
+        const asset = result.assets[0];
+        setPendingImageUri(asset.uri);
+        setPendingImageDims(asset.width && asset.height ? { width: asset.width, height: asset.height } : null);
         setShowCropper(true);
       }
     } catch (error) {
@@ -157,11 +167,13 @@ export default function AddServicesModal({
     setImages([...images, croppedUri]);
     setShowCropper(false);
     setPendingImageUri(null);
+    setPendingImageDims(null);
   };
 
   const handleCropCancel = () => {
     setShowCropper(false);
     setPendingImageUri(null);
+    setPendingImageDims(null);
   };
 
   const removeImage = (index: number) => {
@@ -292,24 +304,35 @@ export default function AddServicesModal({
                     </View>
                   </View>
 
-                  {/* Accordion Toggle Button */}
-                  <TouchableOpacity
-                    onPress={() => setIsCategoryExpanded(!isCategoryExpanded)}
-                    className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 flex-row justify-between items-center"
-                    activeOpacity={0.7}
-                  >
-                    <Text className="text-gray-700 text-sm">
-                      {getSelectedCategoryName() || "Select a category"}
-                    </Text>
-                    {isCategoryExpanded ? (
-                      <ChevronUp size={20} color="#6B7280" />
-                    ) : (
-                      <ChevronDown size={20} color="#6B7280" />
-                    )}
-                  </TouchableOpacity>
+                  {/* Accordion Toggle Button (hidden when category is locked) */}
+                  {!lockedCategorySlug && (
+                    <TouchableOpacity
+                      onPress={() => setIsCategoryExpanded(!isCategoryExpanded)}
+                      className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 flex-row justify-between items-center"
+                      activeOpacity={0.7}
+                    >
+                      <Text className="text-gray-700 text-sm">
+                        {getSelectedCategoryName() || "Select a category"}
+                      </Text>
+                      {isCategoryExpanded ? (
+                        <ChevronUp size={20} color="#6B7280" />
+                      ) : (
+                        <ChevronDown size={20} color="#6B7280" />
+                      )}
+                    </TouchableOpacity>
+                  )}
+
+                  {/* Locked category display (read-only) */}
+                  {lockedCategorySlug && (
+                    <View className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3">
+                      <Text className="text-gray-700 text-sm font-medium">
+                        {getSelectedCategoryName() || lockedCategorySlug}
+                      </Text>
+                    </View>
+                  )}
 
                   {/* Category Options - Expandable */}
-                  {isCategoryExpanded && (
+                  {!lockedCategorySlug && isCategoryExpanded && (
                     <View className="mt-3 bg-gray-50 rounded-xl p-3 border border-gray-200">
                       <View className="flex-row flex-wrap gap-2">
                         {selectableCategories.map((category) => (
@@ -484,6 +507,8 @@ export default function AddServicesModal({
         <Modal visible={showCropper} animationType="slide">
           <ImageCropperOverlay
             imageUri={pendingImageUri}
+            imageWidth={pendingImageDims?.width}
+            imageHeight={pendingImageDims?.height}
             onSave={handleCropSave}
             onCancel={handleCropCancel}
           />

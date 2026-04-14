@@ -9,7 +9,8 @@
 
 import { Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Dimensions, Image, Modal, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { Image } from "expo-image";
+import { Dimensions, Modal, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
 import Reanimated, {
     runOnJS,
@@ -116,7 +117,8 @@ const ZoomableImage = ({
         <Image
           source={{ uri }}
           style={{ width: "100%", height: "100%" }}
-          resizeMode="contain"
+          contentFit="contain"
+          cachePolicy="memory-disk"
         />
       </Reanimated.View>
     </GestureDetector>

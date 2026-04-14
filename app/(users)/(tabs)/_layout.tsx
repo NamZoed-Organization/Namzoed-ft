@@ -29,19 +29,17 @@ export default function UsersTabsLayout() {
   const plusSize = clamp(ms(28), 24, 32);
   const sideIconSize = clamp(ms(22), 20, 26);
 
-  const tabBarBottomPad = Math.max(
-    Math.round(
-      Math.max(
-        insets.bottom,
-        Platform.OS === "android" ? 12 : 8,
-      ) / 2,
-    ),
-    4,
-  );
+  // Same pattern as MongooseWorkerNavBar — full insets.bottom with platform minimum,
+  // no division. Ensures the bar always clears the Android nav bar and iOS home indicator.
+  const tabBarBottomPad = Platform.OS === "android"
+    ? Math.max(insets.bottom, 12)
+    : Math.max(insets.bottom, 8);
 
   return (
     <View className="flex-1 bg-background">
       <Tabs
+        initialRouteName="index"
+        backBehavior="history"
         safeAreaInsets={{ bottom: 0 }}
         // Pre-mount all screens so tab switching is always instant
         {...({ lazy: false } as any)}
@@ -94,6 +92,12 @@ export default function UsersTabsLayout() {
           },
         }}
       >
+        {/* Messages — mounted in the tab group for instant navigation; hidden from tab bar */}
+        <Tabs.Screen
+          name="messages"
+          options={{ href: null }}
+        />
+
         <Tabs.Screen
           name="index"
           options={{

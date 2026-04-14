@@ -42,6 +42,7 @@ function FeedScreen() {
   const [selectedStreamId, setSelectedStreamId] = useState<string | null>(null);
   const [liveRefreshKey, setLiveRefreshKey] = useState(0);
   const [visiblePostId, setVisiblePostId] = useState<string | null>(null);
+  const visiblePostIdRef = useRef<string | null>(null);
   const [reportedPostIds, setReportedPostIds] = useState<string[]>([]);
   const { getLivestreamForUser } = useLivestreams();
 
@@ -167,10 +168,10 @@ function FeedScreen() {
 
   // Handle end of list reached
   const handleEndReached = useCallback(() => {
-    if (hasMore && !postsLoading) {
+    if (hasMore) {
       loadMore();
     }
-  }, [hasMore, postsLoading, loadMore]);
+  }, [hasMore, loadMore]);
 
   // TikTok-style viewability handler - only visible post gets to play videos
   const onViewableItemsChanged = useCallback(({ viewableItems }: any) => {
@@ -180,8 +181,11 @@ function FeedScreen() {
     );
 
     if (mostVisibleItem) {
-      setVisiblePostId(mostVisibleItem.item.id);
+      const newVisiblePostId = mostVisibleItem.item.id;
+      visiblePostIdRef.current = newVisiblePostId;
+      setVisiblePostId(newVisiblePostId);
     } else {
+      visiblePostIdRef.current = null;
       setVisiblePostId(null);
     }
   }, []);
@@ -197,7 +201,7 @@ function FeedScreen() {
   ]).current;
 
   const renderPost = useCallback(({ item }: { item: PostData }) => {
-    const isVisible = visiblePostId === item.id;
+    const isVisible = visiblePostIdRef.current === item.id;
     const isAuthorLive = !!getLivestreamForUser(item.userId);
 
     return (
@@ -205,10 +209,10 @@ function FeedScreen() {
         <FeedPost post={item} isVisible={isVisible} isAuthorLive={isAuthorLive} />
       </VideoErrorBoundary>
     );
-  }, [visiblePostId, getLivestreamForUser]);
+  }, [getLivestreamForUser]);
 
   // Footer component for loading more posts
-  const renderFooter = () => {
+  const renderFooter = useCallback(() => {
     if (!postsLoading) return null;
     return (
       <View className="py-4 items-center">
@@ -218,7 +222,7 @@ function FeedScreen() {
         </Text>
       </View>
     );
-  };
+  }, [postsLoading]);
 
   const handleJoinLive = useCallback((stream: { id: string }) => {
     console.log("[FeedLive] handleJoinLive", { streamId: stream.id });
@@ -285,6 +289,7 @@ function FeedScreen() {
       <FlatList
         ref={flatListRef}
         data={filteredPosts}
+        extraData={visiblePostId}
         renderItem={renderPost}
         keyExtractor={(item) => item.id}
         ListHeaderComponent={renderHeader}
@@ -301,8 +306,9 @@ function FeedScreen() {
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
         removeClippedSubviews={true}
-        maxToRenderPerBatch={5}
-        windowSize={51}
+        maxToRenderPerBatch={3}
+        updateCellsBatchingPeriod={50}
+        windowSize={5}
         initialNumToRender={5}
         viewabilityConfigCallbackPairs={viewabilityConfigCallbackPairs}
         refreshControl={

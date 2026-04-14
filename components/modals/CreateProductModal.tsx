@@ -66,6 +66,7 @@ export default function CreateProductModal({
   const [showPickerSheet, setShowPickerSheet] = useState(false);
   const [showCropper, setShowCropper] = useState(false);
   const [pendingImageUri, setPendingImageUri] = useState<string | null>(null);
+  const [pendingImageDims, setPendingImageDims] = useState<{ width: number; height: number } | null>(null);
 
   const categoryKeys = Object.keys(categories);
 
@@ -134,11 +135,13 @@ export default function CreateProductModal({
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ["images"],
         allowsEditing: false,
-        quality: 0.85,
+        quality: 1.0,
       });
 
       if (!result.canceled && result.assets?.[0]) {
-        setPendingImageUri(result.assets[0].uri);
+        const asset = result.assets[0];
+        setPendingImageUri(asset.uri);
+        setPendingImageDims(asset.width && asset.height ? { width: asset.width, height: asset.height } : null);
         setShowCropper(true);
       }
     } catch (error) {
@@ -152,11 +155,13 @@ export default function CreateProductModal({
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
         allowsEditing: false,
-        quality: 0.85,
+        quality: 1.0,
       });
 
       if (!result.canceled && result.assets?.[0]) {
-        setPendingImageUri(result.assets[0].uri);
+        const asset = result.assets[0];
+        setPendingImageUri(asset.uri);
+        setPendingImageDims(asset.width && asset.height ? { width: asset.width, height: asset.height } : null);
         setShowCropper(true);
       }
     } catch (error) {
@@ -173,11 +178,13 @@ export default function CreateProductModal({
     setImages([...images, croppedUri]);
     setShowCropper(false);
     setPendingImageUri(null);
+    setPendingImageDims(null);
   };
 
   const handleCropCancel = () => {
     setShowCropper(false);
     setPendingImageUri(null);
+    setPendingImageDims(null);
   };
 
   const removeImage = (index: number) => {
@@ -638,6 +645,8 @@ export default function CreateProductModal({
         <Modal visible={showCropper} animationType="slide">
           <ImageCropperOverlay
             imageUri={pendingImageUri}
+            imageWidth={pendingImageDims?.width}
+            imageHeight={pendingImageDims?.height}
             onSave={handleCropSave}
             onCancel={handleCropCancel}
           />

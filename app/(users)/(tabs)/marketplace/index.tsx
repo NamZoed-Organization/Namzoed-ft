@@ -13,6 +13,7 @@ import {
 import { supabase } from "@/lib/supabase";
 import { Picker } from "@react-native-picker/picker";
 import { useAppRouter } from "@/utils/navigation";
+import { getInitials } from "@/utils/initials";
 import {
   Briefcase,
   Filter,
@@ -28,6 +29,7 @@ import {
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   Modal,
   RefreshControl,
   ScrollView,
@@ -128,9 +130,21 @@ export default function MarketplaceScreen() {
           {item.title}
         </Text>
 
-        {/* Row 2: Seller name + verified badge */}
+        {/* Row 2: Seller avatar + name + verified badge */}
         {item.profiles?.name && (
-          <View className="flex-row items-center mb-2 gap-1">
+          <View className="flex-row items-center mb-2 gap-1.5">
+            {(item.profiles as any)?.avatar_url ? (
+              <Image
+                source={{ uri: (item.profiles as any).avatar_url }}
+                style={{ width: 20, height: 20, borderRadius: 10 }}
+              />
+            ) : (
+              <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: '#e0e7ef', alignItems: 'center', justifyContent: 'center' }}>
+                <Text style={{ fontSize: 9, fontWeight: '700', color: '#094569' }}>
+                  {getInitials(item.profiles.name)}
+                </Text>
+              </View>
+            )}
             <Text className="text-xs text-gray-500 font-medium" numberOfLines={1} style={{ flex: 1 }}>
               {item.profiles.name}
             </Text>

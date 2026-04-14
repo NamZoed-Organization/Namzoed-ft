@@ -7,6 +7,7 @@ import {
 } from "@/lib/servicesService";
 import { supabase } from "@/lib/supabase";
 import { useAppRouter } from "@/utils/navigation";
+import { getInitials } from "@/utils/initials";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import {
@@ -611,8 +612,10 @@ export default function ServiceDetail() {
                       className="w-14 h-14 rounded-2xl bg-gray-200"
                     />
                   ) : (
-                    <View className="w-14 h-14 bg-primary/10 rounded-2xl items-center justify-center">
-                      <User size={24} color="#094569" />
+                    <View className="w-14 h-14 bg-[#e0e7ef] rounded-2xl items-center justify-center">
+                      <Text style={{ fontSize: 20, fontWeight: '700', color: '#094569' }}>
+                        {getInitials(providerName)}
+                      </Text>
                     </View>
                   )}
                 </View>

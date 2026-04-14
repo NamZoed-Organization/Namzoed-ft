@@ -396,9 +396,9 @@ export default function HomeScreen() {
     />
   ), [router]);
 
-  const goCategories = useCallback(() => router.push("/(users)/categories" as any), [router]);
-  const goServices   = useCallback(() => router.push("/(users)/services/index" as any), [router]);
-  const goMarketplace = useCallback(() => router.push("/(users)/marketplace" as any), [router]);
+  const goCategories = useCallback(() => router.push("/(users)/(tabs)/categories" as any), [router]);
+  const goServices   = useCallback(() => router.push("/(users)/(tabs)/services" as any), [router]);
+  const goMarketplace = useCallback(() => router.push("/(users)/(tabs)/marketplace" as any), [router]);
 
   // ─── Flat items list ──────────────────────────────────────────────────────
   const hasFlashDeals = !loading && discountedProducts.length > 0;
@@ -560,7 +560,7 @@ export default function HomeScreen() {
             items={d.discountedProducts}
             loading={d.loading}
             renderCard={d.renderFlashDealCard}
-            viewAllRoute="/(users)/categories"
+            viewAllRoute="/(users)/(tabs)/categories"
             onViewAll={d.goCategories}
           />
         );
@@ -575,7 +575,7 @@ export default function HomeScreen() {
             items={d.products}
             loading={d.loading}
             renderCard={d.renderProductCard}
-            viewAllRoute="/(users)/categories"
+            viewAllRoute="/(users)/(tabs)/categories"
             showEmptyState
             onViewAll={d.goCategories}
           />
@@ -591,7 +591,7 @@ export default function HomeScreen() {
             items={d.services}
             loading={d.loading}
             renderCard={d.renderServiceCard}
-            viewAllRoute="/(users)/services/index"
+            viewAllRoute="/(users)/(tabs)/services"
             showEmptyState
             onViewAll={d.goServices}
           />
@@ -607,7 +607,7 @@ export default function HomeScreen() {
             items={d.marketplaceItems}
             loading={d.loading}
             renderCard={d.renderMarketplaceCard}
-            viewAllRoute="/(users)/marketplace"
+            viewAllRoute="/(users)/(tabs)/marketplace"
             showEmptyState
             onViewAll={d.goMarketplace}
           />
@@ -663,8 +663,8 @@ export default function HomeScreen() {
         className="flex-1 bg-background"
         contentContainerStyle={{ paddingBottom: 72 + insets.bottom }}
         showsVerticalScrollIndicator={false}
-        windowSize={2}
-        maxToRenderPerBatch={1}
+        windowSize={5}
+        maxToRenderPerBatch={3}
         initialNumToRender={2}
         removeClippedSubviews={true}
         overScrollMode="never"

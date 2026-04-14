@@ -1,9 +1,11 @@
+import AddServicesModal from "@/components/modals/AddServicesModal";
 import TopNavbar from "@/components/ui/TopNavbar";
 import { getServiceCategoryBySlug } from "@/data/servicecategory";
 import { fetchAllServiceProviders, fetchProviderServicesByCategory, ProviderServiceWithDetails } from "@/lib/servicesService";
 import { useAppRouter } from "@/utils/navigation";
+import { getInitials } from "@/utils/initials";
 import { Href, useLocalSearchParams, useFocusEffect } from "expo-router";
-import { User, ArrowUpDown, Shuffle, ChevronLeft, Verified } from "lucide-react-native";
+import { ArrowUpDown, Shuffle, ChevronLeft, Plus, Verified } from "lucide-react-native";
 import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { ActivityIndicator, FlatList, Image, Text, TouchableOpacity, View, BackHandler } from "react-native";
 import * as Haptics from "expo-haptics";
@@ -33,6 +35,9 @@ export default function ServiceDetailScreen() {
   const [isProviderShuffled, setIsProviderShuffled] = useState(false);
   const [providerShuffling, setProviderShuffling] = useState(false);
   const [providerShuffleKey, setProviderShuffleKey] = useState(0);
+
+  const [showAddModal, setShowAddModal] = useState(false);
+  const canAddService = !!currentUser?.id && slug !== "government-services";
 
   const loadServices = async () => {
     if (!slug) return;
@@ -215,8 +220,8 @@ export default function ServiceDetailScreen() {
 
   const renderServiceCard = ({ item }: { item: ProviderServiceWithDetails }) => {
     const providerName = item.service_providers?.name || item.service_providers?.profiles?.name || 'Unknown Provider';
-    const providerImage = item.service_providers?.profile_url ||
-                         item.service_providers?.profiles?.avatar_url;
+    const providerImage = item.service_providers?.profiles?.avatar_url ||
+                         item.service_providers?.profile_url;
 
     // Prevent stretching when there's only one item
     const cardStyle = displayedServices.length === 1 ? { maxWidth: '48%' } : {};
@@ -253,7 +258,20 @@ export default function ServiceDetailScreen() {
               {providerImage ? (
                 <Image source={{ uri: providerImage }} className="w-6 h-6 rounded-full" />
               ) : (
-                <View className="w-6 h-6 rounded-full bg-gray-200" />
+                <View
+                  style={{
+                    width: 24,
+                    height: 24,
+                    borderRadius: 12,
+                    backgroundColor: '#e0e7ef',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Text style={{ fontSize: 10, fontWeight: '700', color: '#094569' }}>
+                    {getInitials(providerName)}
+                  </Text>
+                </View>
               )}
             </View>
             <View className="flex-1">
@@ -274,7 +292,7 @@ export default function ServiceDetailScreen() {
 
   const renderProviderCard = ({ item }: { item: any }) => {
     const providerName = item.name || item.profiles?.name || 'Unknown Provider';
-    const providerImage = item.profile_url || item.profiles?.avatar_url;
+    const providerImage = item.profiles?.avatar_url || item.profile_url;
     const userId = item.user_id;
 
     // Count services in this category
@@ -311,8 +329,19 @@ export default function ServiceDetailScreen() {
             {providerImage ? (
               <Image source={{ uri: providerImage }} className="w-16 h-16 rounded-full" />
             ) : (
-              <View className="w-16 h-16 rounded-full bg-primary/20 items-center justify-center">
-                <User size={24} color="#059669" />
+              <View
+                style={{
+                  width: 64,
+                  height: 64,
+                  borderRadius: 32,
+                  backgroundColor: '#e0e7ef',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Text style={{ fontSize: 22, fontWeight: '700', color: '#094569' }}>
+                  {getInitials(providerName)}
+                </Text>
               </View>
             )}
           </View>
@@ -391,138 +420,198 @@ export default function ServiceDetailScreen() {
     <View className="flex-1 bg-background">
       <TopNavbar />
 
-      {/* Back Button */}
-      <View className="flex-row items-center gap-2 px-4 py-2 bg-white">
+      {/* Top bar: back + title + add */}
+      <View className="flex-row items-center px-4 pt-2 pb-2 bg-background">
         <TouchableOpacity
           onPress={handleBackPress}
           activeOpacity={0.7}
           style={{
             width: 40,
             height: 40,
-            borderRadius: 12,
-            backgroundColor: '#f5f5f5',
+            borderRadius: 20,
+            backgroundColor: '#ffffff',
             justifyContent: 'center',
             alignItems: 'center',
+            shadowColor: '#000',
+            shadowOpacity: 0.06,
+            shadowRadius: 6,
+            shadowOffset: { width: 0, height: 2 },
+            elevation: 2,
           }}
         >
-          <ChevronLeft size={24} color="#1a1a1a" strokeWidth={2.5} />
+          <ChevronLeft size={22} color="#0f172a" strokeWidth={2.5} />
         </TouchableOpacity>
-        <Text className="text-lg font-semibold text-gray-900">Back to Services</Text>
+
+        <Text
+          className="text-xl font-mbold text-gray-900 flex-1 mx-3"
+          numberOfLines={1}
+        >
+          {category.name}
+        </Text>
+
+        {canAddService && (
+          <TouchableOpacity
+            onPress={() => setShowAddModal(true)}
+            activeOpacity={0.85}
+            style={{
+              height: 40,
+              paddingHorizontal: 16,
+              borderRadius: 20,
+              backgroundColor: '#094569',
+              flexDirection: 'row',
+              alignItems: 'center',
+              shadowColor: '#094569',
+              shadowOpacity: 0.25,
+              shadowRadius: 8,
+              shadowOffset: { width: 0, height: 3 },
+              elevation: 3,
+            }}
+          >
+            <Plus size={16} color="white" strokeWidth={2.8} />
+            <Text className="text-white font-msemibold text-sm ml-1">Add</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
-      {/* Category Header */}
-      <View className="p-4 bg-white border-b border-gray-100">
-        <Text className="text-2xl font-mbold text-gray-900">{category.name}</Text>
-        <Text className="text-gray-500 mt-1">{category.description}</Text>
-        <View className="flex-row items-center justify-between mt-2">
-          <View className="bg-primary/10 px-3 py-1 rounded-full">
-            <Text className="text-primary font-msemibold text-xs">
-              {activeTab === 'services'
-                ? `${services.length} ${services.length === 1 ? 'Service' : 'Services'} Available`
-                : `${providers.length} ${providers.length === 1 ? 'Provider' : 'Providers'}`}
+      {/* Segmented tabs */}
+      <View className="px-4 pb-2 bg-background">
+        <View
+          style={{
+            backgroundColor: '#f1f5f9',
+            borderRadius: 999,
+            padding: 4,
+            flexDirection: 'row',
+          }}
+        >
+          <TouchableOpacity
+            onPress={() => setActiveTab('services')}
+            activeOpacity={0.85}
+            style={{
+              flex: 1,
+              paddingVertical: 10,
+              borderRadius: 999,
+              backgroundColor: activeTab === 'services' ? '#ffffff' : 'transparent',
+              shadowColor: activeTab === 'services' ? '#000' : 'transparent',
+              shadowOpacity: activeTab === 'services' ? 0.08 : 0,
+              shadowRadius: activeTab === 'services' ? 4 : 0,
+              shadowOffset: { width: 0, height: 1 },
+              elevation: activeTab === 'services' ? 2 : 0,
+            }}
+          >
+            <Text
+              className={`text-center text-sm font-msemibold ${
+                activeTab === 'services' ? 'text-primary' : 'text-gray-500'
+              }`}
+            >
+              Services
             </Text>
-          </View>
+          </TouchableOpacity>
 
-          {/* Sort and Shuffle buttons */}
-          {activeTab === 'services' && services.length > 0 && (
-            <View className="flex-row items-center gap-x-2">
+          <TouchableOpacity
+            onPress={() => setActiveTab('providers')}
+            activeOpacity={0.85}
+            style={{
+              flex: 1,
+              paddingVertical: 10,
+              borderRadius: 999,
+              backgroundColor: activeTab === 'providers' ? '#ffffff' : 'transparent',
+              shadowColor: activeTab === 'providers' ? '#000' : 'transparent',
+              shadowOpacity: activeTab === 'providers' ? 0.08 : 0,
+              shadowRadius: activeTab === 'providers' ? 4 : 0,
+              shadowOffset: { width: 0, height: 1 },
+              elevation: activeTab === 'providers' ? 2 : 0,
+            }}
+          >
+            <Text
+              className={`text-center text-sm font-msemibold ${
+                activeTab === 'providers' ? 'text-primary' : 'text-gray-500'
+              }`}
+            >
+              Providers
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Count + Sort / Shuffle toolbar */}
+      <View className="flex-row items-center px-4 pt-1 pb-2 gap-x-2 bg-background">
+        <View className="bg-primary/10 px-3 py-1.5 rounded-full">
+          <Text className="text-primary font-msemibold text-xs">
+            {activeTab === 'services'
+              ? `${services.length} ${services.length === 1 ? 'Service' : 'Services'}`
+              : `${providers.length} ${providers.length === 1 ? 'Provider' : 'Providers'}`}
+          </Text>
+        </View>
+        <View className="flex-1" />
+        {((activeTab === 'services' && services.length > 0) ||
+          (activeTab === 'providers' && providers.length > 0)) &&
+          (activeTab === 'services' ? (
+            <>
               <TouchableOpacity
                 onPress={toggleSortOrder}
-                className={`px-3 py-1.5 rounded-full shadow-sm border flex-row items-center gap-x-1 ${
+                className={`px-3 py-1.5 rounded-full border flex-row items-center gap-x-1 ${
                   !isShuffled ? 'bg-primary border-primary' : 'bg-white border-gray-200'
                 }`}
-                activeOpacity={0.7}
+                activeOpacity={0.8}
               >
-                <ArrowUpDown size={14} color={!isShuffled ? "#FFFFFF" : "#1F2937"} />
+                <ArrowUpDown size={13} color={!isShuffled ? '#FFFFFF' : '#475569'} />
                 {!isShuffled && (
-                  <Text className="text-xs font-msemibold text-white">
+                  <Text className="text-[11px] font-msemibold text-white">
                     {sortOrder === 'latest' ? 'Latest' : 'Oldest'}
                   </Text>
                 )}
               </TouchableOpacity>
-
               <TouchableOpacity
                 onPress={handleShuffle}
-                className={`px-3 py-1.5 rounded-full shadow-sm border flex-row items-center gap-x-1 ${
+                className={`px-3 py-1.5 rounded-full border flex-row items-center gap-x-1 ${
                   isShuffled ? 'bg-primary border-primary' : 'bg-white border-gray-200'
                 }`}
-                activeOpacity={0.7}
+                activeOpacity={0.8}
               >
-                <Shuffle size={14} color={isShuffled ? "#FFFFFF" : "#059669"} />
-                <Text className={`text-xs font-msemibold ${isShuffled ? 'text-white' : 'text-primary'}`}>
+                <Shuffle size={13} color={isShuffled ? '#FFFFFF' : '#094569'} />
+                <Text
+                  className={`text-[11px] font-msemibold ${
+                    isShuffled ? 'text-white' : 'text-primary'
+                  }`}
+                >
                   Shuffle
                 </Text>
               </TouchableOpacity>
-            </View>
-          )}
-
-          {activeTab === 'providers' && providers.length > 0 && (
-            <View className="flex-row items-center gap-x-2">
+            </>
+          ) : (
+            <>
               <TouchableOpacity
                 onPress={toggleProviderSortOrder}
-                className={`px-3 py-1.5 rounded-full shadow-sm border flex-row items-center gap-x-1 ${
+                className={`px-3 py-1.5 rounded-full border flex-row items-center gap-x-1 ${
                   !isProviderShuffled ? 'bg-primary border-primary' : 'bg-white border-gray-200'
                 }`}
-                activeOpacity={0.7}
+                activeOpacity={0.8}
               >
-                <ArrowUpDown size={14} color={!isProviderShuffled ? "#FFFFFF" : "#1F2937"} />
+                <ArrowUpDown size={13} color={!isProviderShuffled ? '#FFFFFF' : '#475569'} />
                 {!isProviderShuffled && (
-                  <Text className="text-xs font-msemibold text-white">
+                  <Text className="text-[11px] font-msemibold text-white">
                     {providerSortOrder === 'latest' ? 'Latest' : 'Oldest'}
                   </Text>
                 )}
               </TouchableOpacity>
-
               <TouchableOpacity
                 onPress={handleProviderShuffle}
-                className={`px-3 py-1.5 rounded-full shadow-sm border flex-row items-center gap-x-1 ${
+                className={`px-3 py-1.5 rounded-full border flex-row items-center gap-x-1 ${
                   isProviderShuffled ? 'bg-primary border-primary' : 'bg-white border-gray-200'
                 }`}
-                activeOpacity={0.7}
+                activeOpacity={0.8}
               >
-                <Shuffle size={14} color={isProviderShuffled ? "#FFFFFF" : "#059669"} />
-                <Text className={`text-xs font-msemibold ${isProviderShuffled ? 'text-white' : 'text-primary'}`}>
+                <Shuffle size={13} color={isProviderShuffled ? '#FFFFFF' : '#094569'} />
+                <Text
+                  className={`text-[11px] font-msemibold ${
+                    isProviderShuffled ? 'text-white' : 'text-primary'
+                  }`}
+                >
                   Shuffle
                 </Text>
               </TouchableOpacity>
-            </View>
-          )}
-        </View>
-      </View>
-
-      {/* Tabs */}
-      <View className="flex-row px-4 bg-white border-b border-gray-100">
-        <TouchableOpacity
-          onPress={() => setActiveTab('services')}
-          className={`flex-1 py-3 border-b-2 ${
-            activeTab === 'services' ? 'border-primary' : 'border-transparent'
-          }`}
-          activeOpacity={0.7}
-        >
-          <Text
-            className={`text-center font-msemibold ${
-              activeTab === 'services' ? 'text-primary' : 'text-gray-500'
-            }`}
-          >
-            Services
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          onPress={() => setActiveTab('providers')}
-          className={`flex-1 py-3 border-b-2 ${
-            activeTab === 'providers' ? 'border-primary' : 'border-transparent'
-          }`}
-          activeOpacity={0.7}
-        >
-          <Text
-            className={`text-center font-msemibold ${
-              activeTab === 'providers' ? 'text-primary' : 'text-gray-500'
-            }`}
-          >
-            Providers
-          </Text>
-        </TouchableOpacity>
+            </>
+          ))}
       </View>
 
       {/* Content */}
@@ -568,6 +657,19 @@ export default function ServiceDetailScreen() {
           ListEmptyComponent={renderEmptyState}
           refreshing={refreshing}
           onRefresh={handleRefresh}
+        />
+      )}
+
+      {canAddService && currentUser?.id && (
+        <AddServicesModal
+          isVisible={showAddModal}
+          onClose={() => setShowAddModal(false)}
+          userId={currentUser.id}
+          onSuccess={() => {
+            setShowAddModal(false);
+            loadServices();
+          }}
+          lockedCategorySlug={slug}
         />
       )}
     </View>

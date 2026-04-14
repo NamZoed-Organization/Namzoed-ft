@@ -4,10 +4,10 @@ import { getPostLikes } from '@/lib/likesService';
 import { useAppRouter } from '@/utils/navigation';
 import { X } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
+import { Image } from 'expo-image';
 import {
     ActivityIndicator,
     FlatList,
-    Image,
     Modal,
     Text,
     TouchableOpacity,
@@ -100,6 +100,7 @@ export default function LikesListModal({
           <Image
             source={{ uri: item.avatar_url }}
             style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: '#E5E7EB' }}
+            cachePolicy="memory-disk"
           />
         ) : (
           <View

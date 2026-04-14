@@ -8,6 +8,7 @@ import { fetchProductById, ProductWithUser } from "@/lib/productsService";
 import { buildProductExternalSharePayload } from "@/lib/shareUtils";
 import { supabase } from "@/lib/supabase";
 import { useAppRouter } from "@/utils/navigation";
+import { getInitials } from "@/utils/initials";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
@@ -24,7 +25,6 @@ import {
     ShoppingBag,
     Sparkles,
     Tag,
-    User,
     Verified
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -804,8 +804,10 @@ export default function ProductDetail() {
                         className="w-14 h-14 rounded-2xl bg-gray-200"
                       />
                     ) : (
-                      <View className="w-14 h-14 bg-primary/10 rounded-2xl items-center justify-center">
-                        <User size={24} color="#094569" />
+                      <View className="w-14 h-14 bg-[#e0e7ef] rounded-2xl items-center justify-center">
+                        <Text style={{ fontSize: 20, fontWeight: '700', color: '#094569' }}>
+                          {getInitials(product.profiles?.name)}
+                        </Text>
                       </View>
                     )}
                   </View>

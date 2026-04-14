@@ -47,7 +47,7 @@
     "expo-location": "~55.1.4",
     "expo-modules-core": "~55.0.17",
     "expo-notifications": "~55.0.14",
-    "expo-router": "~55.0.8",
+    "expo-router": "~55.0.7",
     "expo-splash-screen": "~55.0.13",
     "expo-status-bar": "~55.0.4",
     "expo-symbols": "~55.0.5",

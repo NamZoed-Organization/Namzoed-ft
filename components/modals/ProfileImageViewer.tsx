@@ -2,7 +2,8 @@ import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import { X } from "lucide-react-native";
 import React from "react";
-import { Dimensions, Image, Modal, TouchableOpacity, View } from "react-native";
+import { Image } from "expo-image";
+import { Dimensions, Modal, TouchableOpacity, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   useAnimatedStyle,
@@ -70,7 +71,8 @@ const ZoomableImage = ({ uri }: { uri: string }) => {
         <Image
           source={{ uri }}
           style={{ width: AVATAR_SIZE, height: AVATAR_SIZE }}
-          resizeMode="cover"
+          contentFit="cover"
+          cachePolicy="memory-disk"
         />
       </Animated.View>
     </GestureDetector>

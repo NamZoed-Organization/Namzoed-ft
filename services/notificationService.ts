@@ -410,6 +410,35 @@ export async function notifyUserWentLive(
   }).catch(() => {});
 }
 
+/**
+ * Notify a user that their chat partner sent them a Mongoose delivery request.
+ * Triggered right after the `mongoose_invite` message is inserted in the chat.
+ */
+export async function notifyMongooseRequest(
+  recipientId: string,
+  senderId: string,
+): Promise<void> {
+  if (recipientId === senderId) return;
+  const actor = await resolveProfile(senderId);
+  await createNotification({
+    userId: recipientId,
+    type: "mongoose_booking_request",
+    actorId: senderId,
+    title: "Mongoose Request",
+    body: `${actor.name} sent you a Mongoose delivery request`,
+  });
+
+  // Push notification (fire-and-forget)
+  sendPushToUsers({
+    recipientIds: [recipientId],
+    heading: "Mongoose Request",
+    content: `${actor.name} sent you a Mongoose delivery request`,
+    type: "mongoose_booking_request",
+    data: { actor_id: senderId },
+    actorAvatarUrl: actor.avatar_url,
+  }).catch(() => {});
+}
+
 export async function notifyNewPost(
   posterId: string,
   postId: string,

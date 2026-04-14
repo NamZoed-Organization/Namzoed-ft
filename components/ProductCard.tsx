@@ -2,8 +2,9 @@
 import { ProductWithUser } from "@/lib/productsService";
 import { Ionicons } from "@expo/vector-icons";
 import { useAppRouter } from "@/utils/navigation";
+import { Image } from "expo-image";
 import React from "react";
-import { Image, Text, TouchableOpacity, View } from "react-native";
+import { Text, TouchableOpacity, View } from "react-native";
 import CountdownTimer from "./CountdownTimer";
 
 interface Props {
@@ -27,12 +28,13 @@ export default function ProductCard({ product, isLeftColumn = true }: Props) {
     >
       {/* Image with padding inside card */}
       <View className="p-2">
-        <View className="relative overflow-hidden rounded-lg">
+        <View className="relative overflow-hidden rounded-lg" style={{ height: 176, backgroundColor: "#f3f4f6" }}>
           {mainImage ? (
             <Image
               source={mainImage}
-              className="w-full h-44 bg-gray-100"
-              resizeMode="cover"
+              style={{ width: "100%", height: "100%" }}
+              contentFit="cover"
+              cachePolicy="memory-disk"
             />
           ) : (
             <View className="w-full h-44 bg-gray-200 items-center justify-center rounded-lg">

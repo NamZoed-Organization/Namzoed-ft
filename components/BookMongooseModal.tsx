@@ -13,6 +13,7 @@ import {
   ScrollView,
   Text,
   TextInput,
+  TouchableOpacity,
   View,
 } from "react-native";
 import LocationMapPicker from "./location/LocationMapPicker";
@@ -94,10 +95,7 @@ export default function BookMongooseModal({
       return;
     }
 
-    const buyer =
-      buyerPhone.trim() ||
-      (currentUser.phone && String(currentUser.phone).trim()) ||
-      "";
+    const buyer = buyerPhone.trim();
     if (!buyer) {
       showPopup(
         "warning",
@@ -358,31 +356,58 @@ export default function BookMongooseModal({
                   </View>
 
                   <View className="mt-4">
-                    <Text className="text-sm font-medium text-gray-700 mb-2">
+                    <Text className="text-sm font-medium text-gray-700 mb-1">
                       Your phone (buyer / delivery) *
                     </Text>
-                    <TextInput
-                      value={buyerPhone}
-                      onChangeText={setBuyerPhone}
-                      placeholder="e.g. +975 17 123 456"
-                      keyboardType="phone-pad"
-                      className="border border-gray-300 rounded-lg px-4 py-3 text-base"
-                      editable={!submitting}
-                    />
+                    <Text className="text-xs text-gray-400 mb-2">
+                      Mongoose will contact you on this number
+                    </Text>
+                    <View className="flex-row items-center border border-gray-300 rounded-lg px-4 bg-white">
+                      <Ionicons name="call-outline" size={16} color="#6b7280" />
+                      <TextInput
+                        value={buyerPhone}
+                        onChangeText={(t) => setBuyerPhone(t.replace(/[^0-9]/g, ""))}
+                        placeholder="e.g. 17123456"
+                        keyboardType="numeric"
+                        className="flex-1 py-3 ml-2 text-base"
+                        editable={!submitting}
+                        maxLength={15}
+                      />
+                      {buyerPhone.length > 0 && (
+                        <TouchableOpacity onPress={() => setBuyerPhone("")} disabled={submitting}>
+                          <Ionicons name="close-circle" size={18} color="#9ca3af" />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                    {buyerPhone.length === 0 && (
+                      <Text className="text-xs text-red-500 mt-1">Phone number is required</Text>
+                    )}
                   </View>
 
                   <View className="mt-4">
-                    <Text className="text-sm font-medium text-gray-700 mb-2">
-                      Pickup / seller phone (optional)
+                    <Text className="text-sm font-medium text-gray-700 mb-1">
+                      Seller / pickup phone (optional)
                     </Text>
-                    <TextInput
-                      value={sellerPhone}
-                      onChangeText={setSellerPhone}
-                      placeholder="Contact at pickup location"
-                      keyboardType="phone-pad"
-                      className="border border-gray-300 rounded-lg px-4 py-3 text-base"
-                      editable={!submitting}
-                    />
+                    <Text className="text-xs text-gray-400 mb-2">
+                      Contact at the pickup location
+                    </Text>
+                    <View className="flex-row items-center border border-gray-300 rounded-lg px-4 bg-white">
+                      <Ionicons name="call-outline" size={16} color="#6b7280" />
+                      <TextInput
+                        value={sellerPhone}
+                        onChangeText={(t) => setSellerPhone(t.replace(/[^0-9]/g, ""))}
+                        placeholder="e.g. 17654321"
+                        keyboardType="numeric"
+                        className="flex-1 py-3 ml-2 text-base"
+                        editable={!submitting}
+                        maxLength={15}
+                      />
+                      {sellerPhone.length > 0 && (
+                        <TouchableOpacity onPress={() => setSellerPhone("")} disabled={submitting}>
+                          <Ionicons name="close-circle" size={18} color="#9ca3af" />
+                        </TouchableOpacity>
+                      )}
+                    </View>
                   </View>
 
                   {/* Location Selection */}

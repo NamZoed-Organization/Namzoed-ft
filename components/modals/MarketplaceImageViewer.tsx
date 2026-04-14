@@ -1,6 +1,6 @@
 import ImageWithFallback from "@/components/ui/ImageWithFallback";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Dimensions, FlatList, Image, Modal, View } from "react-native";
+import { Dimensions, FlatList, Image as RNImage, Modal, View } from "react-native";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
 import Animated, {
   runOnJS,
@@ -25,7 +25,7 @@ const ZoomableImage = ({ uri }: ZoomableImageProps) => {
   useEffect(() => {
     let cancelled = false;
 
-    Image.getSize(
+    RNImage.getSize(
       uri,
       (width, height) => {
         if (cancelled || !width || !height) return;

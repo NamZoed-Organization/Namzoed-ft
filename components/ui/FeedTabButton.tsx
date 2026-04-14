@@ -1,9 +1,10 @@
-import { PlatformPressable } from "@react-navigation/elements";
 import React, { useRef } from "react";
+import { Pressable } from "react-native";
 import type { GestureResponderEvent } from "react-native";
 import { feedEvents } from "@/utils/feedEvents";
 
-// Feed tab: double-tap scroll-to-top, same press handling as default tab bar for layout.
+// Feed tab: double-tap scroll-to-top. Uses RN Pressable instead of
+// PlatformPressable to eliminate the ~100-150ms built-in press delay.
 const FeedTabButton = React.forwardRef<any, any>((props, ref) => {
   const lastTapTime = useRef(0);
   const { onPress, ...rest } = props;
@@ -17,7 +18,7 @@ const FeedTabButton = React.forwardRef<any, any>((props, ref) => {
     onPress?.(e);
   };
 
-  return <PlatformPressable ref={ref} {...rest} onPress={handlePress} />;
+  return <Pressable ref={ref} {...rest} onPress={handlePress} />;
 });
 
 FeedTabButton.displayName = "FeedTabButton";

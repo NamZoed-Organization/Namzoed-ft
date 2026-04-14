@@ -7,7 +7,8 @@ export type NotificationType =
   | "post_liked"
   | "post_commented"
   | "user_went_live"
-  | "new_post";
+  | "new_post"
+  | "mongoose_booking_request";
 
 export interface AppNotification {
   id: string;

@@ -111,6 +111,7 @@ export default function EditProductModal({
   const [showPickerSheet, setShowPickerSheet] = useState(false);
   const [showCropper, setShowCropper] = useState(false);
   const [pendingImageUri, setPendingImageUri] = useState<string | null>(null);
+  const [pendingImageDims, setPendingImageDims] = useState<{ width: number; height: number } | null>(null);
 
   // Ref to track initial mount for tags
   const isInitialMount = useRef(true);
@@ -177,7 +178,9 @@ export default function EditProductModal({
       });
 
       if (!result.canceled && result.assets?.[0]) {
-        setPendingImageUri(result.assets[0].uri);
+        const asset = result.assets[0];
+        setPendingImageUri(asset.uri);
+        setPendingImageDims(asset.width && asset.height ? { width: asset.width, height: asset.height } : null);
         setShowCropper(true);
       }
     } catch (error) {
@@ -202,7 +205,9 @@ export default function EditProductModal({
       });
 
       if (!result.canceled && result.assets?.[0]) {
-        setPendingImageUri(result.assets[0].uri);
+        const asset = result.assets[0];
+        setPendingImageUri(asset.uri);
+        setPendingImageDims(asset.width && asset.height ? { width: asset.width, height: asset.height } : null);
         setShowCropper(true);
       }
     } catch (error) {
@@ -219,11 +224,13 @@ export default function EditProductModal({
     setNewImages([...newImages, croppedUri]);
     setShowCropper(false);
     setPendingImageUri(null);
+    setPendingImageDims(null);
   };
 
   const handleCropCancel = () => {
     setShowCropper(false);
     setPendingImageUri(null);
+    setPendingImageDims(null);
   };
 
   const removeExistingImage = (index: number) => {
@@ -810,9 +817,10 @@ export default function EditProductModal({
         <Modal visible={showCropper} animationType="slide">
           <ImageCropperOverlay
             imageUri={pendingImageUri}
+            imageWidth={pendingImageDims?.width}
+            imageHeight={pendingImageDims?.height}
             onSave={handleCropSave}
             onCancel={handleCropCancel}
-            initialAspectRatio="1:1"
           />
         </Modal>
       )}

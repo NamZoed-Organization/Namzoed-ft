@@ -15,12 +15,12 @@ import { playSound } from '@/lib/soundUtils';
 import { Ionicons } from '@expo/vector-icons';
 import { ChevronDown, ChevronUp, CornerDownRight, Crown, Send, Trash2, X } from 'lucide-react-native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Image } from 'expo-image';
 import {
     ActivityIndicator,
     Animated,
     Dimensions,
     FlatList,
-    Image,
     Keyboard,
     Modal,
     PanResponder,
@@ -60,6 +60,7 @@ function Avatar({ user, size = 36 }: { user?: PostComment['user']; size?: number
       <Image
         source={{ uri: user.avatar_url }}
         style={{ width: size, height: size, borderRadius: radius, backgroundColor: '#E5E7EB' }}
+        cachePolicy="memory-disk"
       />
     );
   }

@@ -1,5 +1,6 @@
 import CommentsModal from "@/components/modals/CommentsModal";
 import DeleteConfirmationModal from "@/components/modals/DeleteConfirmationModal";
+import ImageViewer from "@/components/modals/ImageViewer";
 import LikesListModal from "@/components/modals/LikesListModal";
 import PostActionSheet from "@/components/modals/PostActionSheet";
 import ReportPostModal from "@/components/modals/ReportPostModal";
@@ -33,6 +34,7 @@ import {
     Heart,
     MessageCircle,
     MoreHorizontal,
+    Play,
     Share2,
     ShoppingBag,
     Tag,
@@ -464,7 +466,14 @@ const MediaCarousel = React.memo(
     onTagPress,
   }: MediaCarouselProps) => {
     const [activeIndex, setActiveIndex] = useState(0);
+    const [playingVideoSet, setPlayingVideoSet] = useState<Set<number>>(new Set());
     const slideH = frameWidth / RATIO_PORTRAIT;
+
+    // When the user scrolls to a different slide in the carousel, unmount any
+    // video players that were playing so they release native resources.
+    useEffect(() => {
+      setPlayingVideoSet((prev) => (prev.size === 0 ? prev : new Set()));
+    }, [activeIndex]);
 
     const multipleMedia = images.length > 1;
     const lastTapRef = useRef(0);
@@ -509,6 +518,49 @@ const MediaCarousel = React.memo(
         const w = frameWidth;
 
         if (isVideo) {
+          const isPlaying = playingVideoSet.has(index);
+          if (!isPlaying) {
+            return (
+              <View
+                style={{
+                  width: w,
+                  height: h,
+                  backgroundColor: "#000",
+                  overflow: "hidden",
+                }}
+              >
+                <TouchableOpacity
+                  onPress={() =>
+                    setPlayingVideoSet((prev) => {
+                      const next = new Set(prev);
+                      next.add(index);
+                      return next;
+                    })
+                  }
+                  activeOpacity={0.85}
+                  style={{
+                    width: w,
+                    height: h,
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 64,
+                      height: 64,
+                      borderRadius: 32,
+                      backgroundColor: "rgba(0,0,0,0.55)",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Play size={32} color="#fff" fill="#fff" />
+                  </View>
+                </TouchableOpacity>
+              </View>
+            );
+          }
           return (
             <View
               style={{
@@ -558,7 +610,7 @@ const MediaCarousel = React.memo(
           </View>
         );
       },
-      [handleImageTap, isVisible, activeIndex, onDoubleTapAt, frameWidth, slideH],
+      [handleImageTap, isVisible, activeIndex, onDoubleTapAt, frameWidth, slideH, playingVideoSet],
     );
 
     if (images.length === 0) return null;
@@ -783,6 +835,8 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
   const [showComments, setShowComments] = useState(false);
   const [showLikesList, setShowLikesList] = useState(false);
   const [showShareComposer, setShowShareComposer] = useState(false);
+  const [imageViewerVisible, setImageViewerVisible] = useState(false);
+  const [imageViewerIndex, setImageViewerIndex] = useState(0);
   const [flyingHearts, setFlyingHearts] = useState<Array<{ id: number; x: number; y: number }>>([]);
   const flyHeartId = useRef(0);
 
@@ -1047,6 +1101,10 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
           isVisible={isVisible}
           hasTaggedItems={hasTaggedItems}
           onTagPress={() => setShowTaggedItems(true)}
+          onImagePress={(i) => {
+            setImageViewerIndex(i);
+            setImageViewerVisible(true);
+          }}
         />
       )}
 
@@ -1275,6 +1333,19 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
           context_product_image: post.images?.[0] || "",
           context_source: "post",
         }}
+      />
+
+      <ImageViewer
+        visible={imageViewerVisible}
+        images={post.images}
+        initialIndex={imageViewerIndex}
+        onClose={() => setImageViewerVisible(false)}
+        postId={String(post.id)}
+        postUserId={String(post.userId)}
+        postContent={post.content}
+        username={post.username}
+        likes={likesCount}
+        comments={commentsCount}
       />
 
       {flyingHearts.map(h => (

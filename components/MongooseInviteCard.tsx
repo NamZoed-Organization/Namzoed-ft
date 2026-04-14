@@ -39,6 +39,7 @@ export interface MongooseInviteData {
   initiatorLatitude: number;
   initiatorLongitude: number;
   initiatorAddress: string;
+  initiatorPhone?: string | null;
 }
 
 interface Props {

@@ -4,7 +4,8 @@ import { followUser, getFollowingIds, unfollowUser } from '@/lib/followService';
 import { FeaturedSellerProfile, fetchFeaturedSellers, fetchRandomSellers } from '@/lib/profileService';
 import * as Haptics from 'expo-haptics';
 import { useAppRouter } from "@/utils/navigation";
-import { Clock, MapPin, Package, Search, User as UserIcon, X } from 'lucide-react-native';
+import { getInitials } from '@/utils/initials';
+import { Clock, MapPin, Package, Search, X } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -45,8 +46,10 @@ const UserCard = ({ user, onPress, onFollow, onUnfollow, isFollowed }: {
           resizeMode="cover"
         />
       ) : (
-        <View className="w-16 h-16 bg-gray-200 rounded-full items-center justify-center mb-2">
-          <UserIcon size={32} color="#9CA3AF" />
+        <View className="w-16 h-16 bg-[#e0e7ef] rounded-full items-center justify-center mb-2">
+          <Text style={{ fontSize: 22, fontWeight: '700', color: '#094569' }}>
+            {getInitials(user.name)}
+          </Text>
         </View>
       )}
       <Text className="text-sm font-msemibold text-gray-900 text-center" numberOfLines={1}>

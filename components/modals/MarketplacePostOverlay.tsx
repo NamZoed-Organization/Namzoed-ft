@@ -114,7 +114,9 @@ export default function MarketplacePostOverlay({
   // Image crop overlay
   const [showCropper, setShowCropper] = useState(false);
   const [pendingImageUri, setPendingImageUri] = useState<string | null>(null);
+  const [pendingImageDims, setPendingImageDims] = useState<{ width: number; height: number } | null>(null);
   const [cropIndex, setCropIndex] = useState<number | null>(null);
+  const [selectedImageDims, setSelectedImageDims] = useState<({ width: number; height: number } | null)[]>([]);
 
   // Vertical slide for drag-to-close
   const panY = useRef(new Animated.Value(0)).current;
@@ -179,7 +181,9 @@ export default function MarketplacePostOverlay({
       });
 
       if (!result.canceled && result.assets?.[0]) {
-        setSelectedImages((prev) => [...prev, result.assets[0].uri]);
+        const asset = result.assets[0];
+        setSelectedImages((prev) => [...prev, asset.uri]);
+        setSelectedImageDims((prev) => [...prev, asset.width && asset.height ? { width: asset.width, height: asset.height } : null]);
       }
     } catch (error) {
       console.error("Failed to open camera:", error);
@@ -203,7 +207,9 @@ export default function MarketplacePostOverlay({
       });
 
       if (!result.canceled && result.assets?.[0]) {
-        setSelectedImages((prev) => [...prev, result.assets[0].uri]);
+        const asset = result.assets[0];
+        setSelectedImages((prev) => [...prev, asset.uri]);
+        setSelectedImageDims((prev) => [...prev, asset.width && asset.height ? { width: asset.width, height: asset.height } : null]);
       }
     } catch (error) {
       console.error("Failed to open gallery:", error);
@@ -214,6 +220,7 @@ export default function MarketplacePostOverlay({
   const handleEditImage = (index: number) => {
     setCropIndex(index);
     setPendingImageUri(selectedImages[index]);
+    setPendingImageDims(selectedImageDims[index] ?? null);
     setShowCropper(true);
   };
 
@@ -230,22 +237,30 @@ export default function MarketplacePostOverlay({
       setSelectedImages((prev) =>
         prev.map((uri, i) => (i === cropIndex ? croppedUri : uri))
       );
+      // Cropped image has no EXIF issues — clear its stored dims
+      setSelectedImageDims((prev) =>
+        prev.map((dims, i) => (i === cropIndex ? null : dims))
+      );
       setCropIndex(null);
     } else {
       setSelectedImages((prev) => [...prev, croppedUri]);
+      setSelectedImageDims((prev) => [...prev, null]);
     }
     setShowCropper(false);
     setPendingImageUri(null);
+    setPendingImageDims(null);
   };
 
   const handleCropCancel = () => {
     setShowCropper(false);
     setPendingImageUri(null);
+    setPendingImageDims(null);
     setCropIndex(null);
   };
 
   const handleRemoveImage = (index: number) => {
     setSelectedImages(selectedImages.filter((_, i) => i !== index));
+    setSelectedImageDims((prev) => prev.filter((_, i) => i !== index));
   };
 
   const validateForm = (): string | null => {
@@ -767,6 +782,8 @@ export default function MarketplacePostOverlay({
         <Modal visible={showCropper} animationType="slide">
           <ImageCropperOverlay
             imageUri={pendingImageUri}
+            imageWidth={pendingImageDims?.width}
+            imageHeight={pendingImageDims?.height}
             onSave={handleCropSave}
             onCancel={handleCropCancel}
           />

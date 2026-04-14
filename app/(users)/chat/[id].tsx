@@ -17,13 +17,13 @@ import PopupMessage from "@/components/ui/PopupMessage";
 import { useAppearance } from "@/contexts/AppearanceContext";
 import { useUnreadMessages } from "@/contexts/UnreadMessagesContext";
 import { useUser } from "@/contexts/UserContext";
-import users from "@/data/UserData";
 import {
     EarlyAccessBadgeType,
     getEarlyAccessBadge,
 } from "@/lib/earlyAccessService";
 import { supabase } from "@/lib/supabase";
 import { sendChatPushNotification } from "@/services/chatPushService";
+import { notifyMongooseRequest } from "@/services/notificationService";
 import { playReceiveSound, playSendSound, preloadChatSounds, triggerReceiveHaptic, triggerSendHaptic, unloadChatSounds } from "@/utils/chatSounds";
 import { useAppRouter } from "@/utils/navigation";
 import { isMongooseUser } from "@/utils/roleCheck";
@@ -250,21 +250,7 @@ const getUserData = async (identifier: string) => {
     }
   } catch (e) {}
 
-  // Fallback to local user data
-  const cleanIdentifier = identifier.replace("+975", "");
-  const user = Object.values(users).find(
-    (u) =>
-      u.phone_number === identifier ||
-      u.phone_number === cleanIdentifier ||
-      u.username === identifier ||
-      u.username === cleanIdentifier,
-  );
-
-  if (user) {
-    return user;
-  }
-
-  // Return a basic user object instead of the demo data
+  // Return a basic user object when no profile is found
   return {
     id: identifier,
     username: `User ${identifier}`,
@@ -793,6 +779,16 @@ export default function ChatScreen() {
       setActiveChatPartnerId(String(chatPartnerId));
       return () => setActiveChatPartnerId(null);
     }, [chatPartnerId, isMongooseChat, setActiveChatPartnerId]),
+  );
+
+  // Dismiss keyboard on screen blur so useAnimatedKeyboard() resets its height
+  // to 0. Prevents the composer from staying pushed up when revisiting the chat.
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        Keyboard.dismiss();
+      };
+    }, []),
   );
 
   // Preload notification sound assets on chat screen mount
@@ -2181,6 +2177,11 @@ export default function ChatScreen() {
             return [...prev, data];
           });
         }, 1500);
+
+        // Notify the recipient that they have a new Mongoose delivery request
+        notifyMongooseRequest(chatPartnerId, effectiveCurrentUserUUID).catch((e) =>
+          console.warn("[chat] notifyMongooseRequest failed:", e),
+        );
       }
     } catch (err) {
       console.error("Unexpected error sending mongoose invite:", err);

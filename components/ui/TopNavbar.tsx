@@ -10,6 +10,7 @@ import { useAppRouter } from "@/utils/navigation";
 import { usePathname } from "expo-router";
 import { Bell, Send, UserCircle } from "lucide-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Image as ExpoImage } from "expo-image";
 import { Animated, Image, Platform, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -233,14 +234,15 @@ export default function TopNavbar() {
             android_ripple={null}
           >
             {currentUser?.avatar_url && !imageLoadError ? (
-              <Image
+              <ExpoImage
                 source={{ uri: currentUser.avatar_url }}
                 style={{
                   width: avatarSize,
                   height: avatarSize,
                   borderRadius: avatarSize / 2,
                 }}
-                resizeMode="cover"
+                contentFit="cover"
+                cachePolicy="memory-disk"
                 onError={() => {
                   setImageLoadError(true);
                 }}
