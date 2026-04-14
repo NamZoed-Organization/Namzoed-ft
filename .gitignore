@@ -210,8 +210,8 @@ yarn-error.*
 /android/keystore.properties
 /android/app/release.keystore
 
-# Claude Code local settings
-.claude/settings.local.json
+# Claude Code
+.claude/
 
 # iOS build artifacts
 /ios/build/
