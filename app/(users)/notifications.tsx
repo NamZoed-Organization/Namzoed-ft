@@ -8,18 +8,20 @@
  */
 
 import { useNotifications } from "@/contexts/NotificationsContext";
+import { getNotificationPermission, togglePushOptIn } from "@/services/oneSignalService";
 import type {
   AppNotification,
   NotificationSection,
 } from "@/types/notification";
 import { Ionicons } from "@expo/vector-icons";
 import { useAppRouter } from "@/utils/navigation";
-import { Bell, ChevronLeft } from "lucide-react-native";
-import React, { useCallback, useEffect, useMemo } from "react";
+import { Bell, BellOff, ChevronLeft } from "lucide-react-native";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Image,
   InteractionManager,
+  Linking,
   SectionList,
   Text,
   TouchableOpacity,
@@ -288,6 +290,22 @@ export default function NotificationsScreen() {
     markAllAsRead,
   } = useNotifications();
 
+  const [notifEnabled, setNotifEnabled] = useState(true);
+
+  useEffect(() => {
+    getNotificationPermission().then(setNotifEnabled).catch(() => {});
+  }, []);
+
+  const handleNotifToggle = async () => {
+    const granted = await getNotificationPermission();
+    if (!granted) {
+      Linking.openSettings();
+      return;
+    }
+    const newState = await togglePushOptIn();
+    setNotifEnabled(newState);
+  };
+
   // Mark all as read as soon as the screen opens (Instagram-style)
   useEffect(() => {
     const task = InteractionManager.runAfterInteractions(() => {
@@ -387,7 +405,17 @@ export default function NotificationsScreen() {
           <Text className="text-lg font-mbold text-gray-900">
             Notifications
           </Text>
-          <View style={{ width: 50 }} />
+          <TouchableOpacity
+            onPress={handleNotifToggle}
+            className="w-9 h-9 items-center justify-center"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            {notifEnabled ? (
+              <Bell size={22} color="#111" />
+            ) : (
+              <BellOff size={22} color="#9ca3af" />
+            )}
+          </TouchableOpacity>
         </View>
       </View>
 

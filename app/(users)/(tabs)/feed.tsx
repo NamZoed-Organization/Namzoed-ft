@@ -306,10 +306,10 @@ function FeedScreen() {
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
         removeClippedSubviews={true}
-        maxToRenderPerBatch={3}
+        maxToRenderPerBatch={2}
         updateCellsBatchingPeriod={50}
-        windowSize={5}
-        initialNumToRender={5}
+        windowSize={3}
+        initialNumToRender={3}
         viewabilityConfigCallbackPairs={viewabilityConfigCallbackPairs}
         refreshControl={
           <RefreshControl

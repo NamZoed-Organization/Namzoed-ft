@@ -19,6 +19,7 @@ import {
     Palette,
     PawPrint,
     Plane,
+    Search,
     ShoppingBasket,
     Sparkles,
     Tent,
@@ -36,6 +37,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
+
 export default function ServiceScreen() {
   const router = useAppRouter();
   const insets = useSafeAreaInsets();
@@ -43,10 +45,10 @@ export default function ServiceScreen() {
 
   const { numColumns, itemSize, gap } = useMemo(() => {
     const horizontalPadding = 32;
-    let cols = SCREEN_WIDTH < 340 ? 2 : 3;
-    if (SCREEN_WIDTH > 768) cols = 4;
+    let cols = SCREEN_WIDTH < 340 ? 3 : 4;
+    if (SCREEN_WIDTH > 768) cols = 5;
 
-    const gapSize = 12;
+    const gapSize = 10;
     const availableWidth = SCREEN_WIDTH - horizontalPadding;
     const totalGapSpace = gapSize * (cols - 1);
     const size = (availableWidth - totalGapSpace) / cols;
@@ -58,7 +60,6 @@ export default function ServiceScreen() {
     };
   }, []);
 
-  const visibleCategories = useMemo(() => serviceCategories, []);
 
   const BETA_USER = "77737314";
   const showBetaBookings =
@@ -107,25 +108,26 @@ export default function ServiceScreen() {
   };
 
   const renderCategoryItem = ({ item }: { item: any }) => {
-    const iconSize = itemSize * 0.3;
+    const iconBox = Math.floor(itemSize * 0.75);
+    const iconSize = Math.floor(itemSize * 0.32);
 
     return (
       <View
         style={{
           width: itemSize,
-          marginBottom: gap,
+          marginBottom: 14,
           alignItems: "center",
         }}
       >
         <TouchableOpacity
           style={{
-            width: itemSize * 0.7,
-            height: itemSize * 0.7,
+            width: iconBox,
+            height: iconBox,
             backgroundColor: "#094569",
-            borderRadius: 16,
+            borderRadius: 14,
             alignItems: "center",
             justifyContent: "center",
-            marginBottom: 8,
+            marginBottom: 6,
           }}
           onPress={() => handleCategoryPress(item)}
           activeOpacity={0.7}
@@ -135,11 +137,12 @@ export default function ServiceScreen() {
 
         <Text
           style={{
-            fontSize: Math.max(9, itemSize * 0.1),
-            fontWeight: "800",
-            color: "#000000",
+            fontSize: 10,
+            fontWeight: "700",
+            color: "#111827",
             textAlign: "center",
-            paddingHorizontal: 4,
+            paddingHorizontal: 2,
+            lineHeight: 13,
           }}
           numberOfLines={2}
         >
@@ -153,118 +156,185 @@ export default function ServiceScreen() {
     <View className="flex-1 bg-background">
       <TopNavbar />
 
-      <View className="flex-1 px-4 pt-4">
-        <View className="mb-6 ml-1">
-          <Text className="text-3xl font-mbold text-primary mb-2">Services</Text>
-          <Text className="text-sm font-regular text-gray-500">
-            Professional help at your fingertips
-          </Text>
-        </View>
+      <FlatList
+        data={serviceCategories}
+        renderItem={renderCategoryItem}
+        keyExtractor={(item) => item.id}
+        numColumns={numColumns}
+        key={numColumns}
+        showsVerticalScrollIndicator={false}
+        ListHeaderComponent={
+          <View>
+            {/* Compact title */}
+            <View style={{ marginTop: 10, marginBottom: 10, paddingHorizontal: 2 }}>
+              <Text
+                style={{
+                  fontSize: 20,
+                  fontWeight: "800",
+                  color: "#094569",
+                  letterSpacing: -0.3,
+                }}
+              >
+                Services
+              </Text>
+              <Text
+                style={{
+                  fontSize: 11,
+                  color: "#6B7280",
+                  marginTop: 1,
+                }}
+              >
+                Professional help at your fingertips
+              </Text>
+            </View>
 
-        <FlatList
-          data={visibleCategories}
-          renderItem={renderCategoryItem}
-          keyExtractor={(item) => item.id}
-          numColumns={numColumns}
-          key={numColumns}
-          showsVerticalScrollIndicator={false}
-          ListHeaderComponent={
-              <View style={{ marginBottom: 20 }}>
-                {showBetaBookings && (
-                <View className="flex-row gap-3">
-                  <TouchableOpacity
-                    onPress={handleGamesPress}
-                    activeOpacity={0.8}
-                    className="flex-1 rounded-2xl px-3 py-2.5 border border-primary bg-transparent"
-                  >
-                    <View className="flex-row items-center">
-                      <View
-                        style={{
-                          width: 42,
-                          height: 42,
-                          borderRadius: 14,
-                          backgroundColor: "transparent",
-                          borderWidth: 1.5,
-                          borderColor: "#094569",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          marginRight: 10,
-                        }}
-                      >
-                        {getIconComponent("ground", 22, "#094569")}
-                      </View>
+            {/* Compact search trigger */}
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => router.push("/(users)/services/search" as any)}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                backgroundColor: "#F1F5F9",
+                borderRadius: 10,
+                paddingHorizontal: 12,
+                paddingVertical: 8,
+                marginBottom: 14,
+              }}
+            >
+              <Search size={14} color="#94A3B8" />
+              <Text
+                style={{
+                  marginLeft: 8,
+                  fontSize: 12.5,
+                  color: "#94A3B8",
+                }}
+              >
+                Search services, providers...
+              </Text>
+            </TouchableOpacity>
 
-                      <Text className="text-black text-base font-msemibold flex-1">
-                        Ground Bookings
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    onPress={handleHotelsPress}
-                    activeOpacity={0.8}
-                    className="flex-1 rounded-2xl px-3 py-2.5 border border-primary bg-transparent"
-                  >
-                    <View className="flex-row items-center">
-                      <View
-                        style={{
-                          width: 42,
-                          height: 42,
-                          borderRadius: 14,
-                          backgroundColor: "transparent",
-                          borderWidth: 1.5,
-                          borderColor: "#094569",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          marginRight: 10,
-                        }}
-                      >
-                        {getIconComponent("room", 22, "#094569")}
-                      </View>
-
-                      <Text className="text-black text-base font-msemibold flex-1">
-                        Room{"\n"}Booking
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                </View>
-                )}
-
-                <View
+            {/* Beta bookings - compact */}
+            {showBetaBookings && (
+              <View style={{ flexDirection: "row", gap: 10, marginBottom: 14 }}>
+                <TouchableOpacity
+                  onPress={handleGamesPress}
+                  activeOpacity={0.8}
                   style={{
+                    flex: 1,
                     flexDirection: "row",
                     alignItems: "center",
-                    marginTop: showBetaBookings ? 18 : 0,
+                    borderRadius: 10,
+                    borderWidth: 1,
+                    borderColor: "#094569",
+                    paddingHorizontal: 10,
+                    paddingVertical: 8,
                   }}
                 >
-                  <View style={{ flex: 1, height: 1, backgroundColor: "#D1D5DB" }} />
-                  <Text
+                  <View
                     style={{
-                      marginHorizontal: 12,
-                      fontSize: 12,
-                      fontWeight: "700",
-                      color: "#6B7280",
-                      letterSpacing: 0.5,
+                      width: 30,
+                      height: 30,
+                      borderRadius: 9,
+                      borderWidth: 1.2,
+                      borderColor: "#094569",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      marginRight: 8,
                     }}
                   >
-                    ALL SERVICES
+                    {getIconComponent("ground", 16, "#094569")}
+                  </View>
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      fontWeight: "600",
+                      color: "#111827",
+                      flex: 1,
+                    }}
+                    numberOfLines={1}
+                  >
+                    Ground Bookings
                   </Text>
-                  <View style={{ flex: 1, height: 1, backgroundColor: "#D1D5DB" }} />
-                </View>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={handleHotelsPress}
+                  activeOpacity={0.8}
+                  style={{
+                    flex: 1,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    borderRadius: 10,
+                    borderWidth: 1,
+                    borderColor: "#094569",
+                    paddingHorizontal: 10,
+                    paddingVertical: 8,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 30,
+                      height: 30,
+                      borderRadius: 9,
+                      borderWidth: 1.2,
+                      borderColor: "#094569",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      marginRight: 8,
+                    }}
+                  >
+                    {getIconComponent("room", 16, "#094569")}
+                  </View>
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      fontWeight: "600",
+                      color: "#111827",
+                      flex: 1,
+                    }}
+                    numberOfLines={1}
+                  >
+                    Room Booking
+                  </Text>
+                </TouchableOpacity>
               </View>
-          }
-          contentContainerStyle={{
-            paddingBottom: 72 + insets.bottom,
-          }}
-          columnWrapperStyle={{
-            gap: gap,
-            justifyContent: "flex-start",
-          }}
-        />
-      </View>
+            )}
+
+            {/* Section divider */}
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                marginBottom: 10,
+              }}
+            >
+              <View style={{ flex: 1, height: 1, backgroundColor: "#E5E7EB" }} />
+              <Text
+                style={{
+                  marginHorizontal: 10,
+                  fontSize: 10,
+                  fontWeight: "700",
+                  color: "#6B7280",
+                  letterSpacing: 0.5,
+                }}
+              >
+                ALL SERVICES
+              </Text>
+              <View style={{ flex: 1, height: 1, backgroundColor: "#E5E7EB" }} />
+            </View>
+          </View>
+        }
+        contentContainerStyle={{
+          paddingHorizontal: 16,
+          paddingBottom: 72 + insets.bottom,
+        }}
+        columnWrapperStyle={{
+          gap: gap,
+          justifyContent: "flex-start",
+        }}
+      />
 
     </View>
   );
 }
-
-const { StyleSheet } = require("react-native");

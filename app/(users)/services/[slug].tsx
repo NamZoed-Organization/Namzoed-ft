@@ -1,13 +1,13 @@
 import AddServicesModal from "@/components/modals/AddServicesModal";
 import TopNavbar from "@/components/ui/TopNavbar";
 import { getServiceCategoryBySlug } from "@/data/servicecategory";
-import { fetchAllServiceProviders, fetchProviderServicesByCategory, ProviderServiceWithDetails } from "@/lib/servicesService";
+import { fetchProviderServicesByCategory, ProviderServiceWithDetails } from "@/lib/servicesService";
 import { useAppRouter } from "@/utils/navigation";
 import { getInitials } from "@/utils/initials";
 import { Href, useLocalSearchParams, useFocusEffect } from "expo-router";
-import { ArrowUpDown, Shuffle, ChevronLeft, Plus, Verified } from "lucide-react-native";
+import { ArrowUpDown, Shuffle, ChevronLeft, Plus, Search, Verified } from "lucide-react-native";
 import React, { useEffect, useState, useMemo, useCallback } from "react";
-import { ActivityIndicator, FlatList, Image, Text, TouchableOpacity, View, BackHandler } from "react-native";
+import { ActivityIndicator, FlatList, Image, StyleSheet, Text, TouchableOpacity, View, BackHandler } from "react-native";
 import * as Haptics from "expo-haptics";
 import { useUser } from "@/contexts/UserContext";
 
@@ -39,6 +39,7 @@ export default function ServiceDetailScreen() {
   const [showAddModal, setShowAddModal] = useState(false);
   const canAddService = !!currentUser?.id && slug !== "government-services";
 
+
   const loadServices = async () => {
     if (!slug) return;
 
@@ -49,6 +50,7 @@ export default function ServiceDetailScreen() {
         setCategory(foundCategory);
         const providerServices = await fetchProviderServicesByCategory(slug);
         setServices(providerServices);
+        loadProviders(providerServices);
       }
     } catch (error) {
       console.error('Error loading services:', error);
@@ -57,35 +59,35 @@ export default function ServiceDetailScreen() {
     }
   };
 
-  const loadProviders = async () => {
-    if (!slug) return;
+  const loadProviders = (serviceList: ProviderServiceWithDetails[]) => {
+    setLoadingProviders(true);
 
-    try {
-      setLoadingProviders(true);
-      const allProviders = await fetchAllServiceProviders();
-
-      // Filter providers who have services in this category
-      const providersInCategory = allProviders.filter(provider =>
-        provider.provider_services?.some((service: any) =>
-          service.service_categories?.slug === slug
-        )
-      );
-
-      setProviders(providersInCategory);
-    } catch (error) {
-      console.error('Error loading providers:', error);
-    } finally {
-      setLoadingProviders(false);
+    // Derive unique providers directly from the already-fetched services
+    const providerMap = new Map<string, any>();
+    for (const svc of serviceList) {
+      if (!svc.service_providers || svc.status === false) continue;
+      const pid = svc.service_providers.id;
+      if (!providerMap.has(pid)) {
+        providerMap.set(pid, {
+          ...svc.service_providers,
+          created_at: svc.created_at,
+          provider_services: [],
+        });
+      }
+      providerMap.get(pid).provider_services.push({
+        id: svc.id,
+        name: svc.name,
+        service_categories: { slug },
+      });
     }
+
+    setProviders(Array.from(providerMap.values()));
+    setLoadingProviders(false);
   };
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    if (activeTab === 'services') {
-      await loadServices();
-    } else {
-      await loadProviders();
-    }
+    await loadServices();
     setRefreshing(false);
   };
 
@@ -192,11 +194,6 @@ export default function ServiceDetailScreen() {
     loadServices();
   }, [slug]);
 
-  useEffect(() => {
-    if (activeTab === 'providers') {
-      loadProviders();
-    }
-  }, [activeTab, slug]);
 
   // Handle Android back button
   useFocusEffect(
@@ -614,6 +611,18 @@ export default function ServiceDetailScreen() {
           ))}
       </View>
 
+      {/* Search trigger (opens modal scoped to this category) */}
+      <TouchableOpacity
+        onPress={() => router.push(`/(users)/services/search?scope=${slug}` as any)}
+        activeOpacity={0.85}
+        style={slugStyles.searchContainer}
+      >
+        <Search size={15} color="#94A3B8" style={{ marginRight: 8 }} />
+        <Text style={slugStyles.searchPlaceholder}>
+          {`Search ${category?.name?.toLowerCase() || 'services'}...`}
+        </Text>
+      </TouchableOpacity>
+
       {/* Content */}
       {activeTab === 'services' ? (
         shuffling ? (
@@ -672,6 +681,25 @@ export default function ServiceDetailScreen() {
           lockedCategorySlug={slug}
         />
       )}
+
     </View>
   );
 }
+
+const slugStyles = StyleSheet.create({
+  searchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F1F5F9",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    marginHorizontal: 16,
+    marginBottom: 4,
+  },
+  searchPlaceholder: {
+    flex: 1,
+    fontSize: 13,
+    color: "#94A3B8",
+  },
+});

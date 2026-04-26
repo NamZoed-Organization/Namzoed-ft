@@ -1,6 +1,6 @@
 // Path: app/(users)/index.tsx
 
-import StaticBanner from "@/components/StaticBanner";
+import Banner from "@/components/Banner";
 import ClosingSaleBanner from "@/components/ClosingSaleBanner";
 import { CARD_LIST_HEIGHT, ForYouSection } from "@/components/ForYou";
 import HomeCard from "@/components/HomeCard";
@@ -55,17 +55,33 @@ type PageItem =
   | { key: "coming-soon"; label: string }
   | { key: "footer" };
 
-const SectionLoadingPlaceholder = React.memo(function SectionLoadingPlaceholder({
-  title,
-}: {
-  title: string;
-}) {
+const SectionLoadingPlaceholder = React.memo(function SectionLoadingPlaceholder() {
   return (
-    <View className="px-4 py-4">
-      <Text className="text-base font-semibold text-gray-900 mb-3">{title}</Text>
-      <View className="bg-white rounded-2xl border border-gray-100 px-4 py-8 items-center">
-        <ActivityIndicator size="small" color="#094569" />
-        <Text className="text-sm text-gray-500 mt-3">Loading {title.toLowerCase()}...</Text>
+    <View style={{ marginTop: 16, marginBottom: 24 }}>
+      {/* Title skeleton */}
+      <View style={{ height: 12, width: 80, backgroundColor: "#e5e7eb", borderRadius: 6, marginBottom: 12, marginLeft: 16 }} />
+      {/* Card skeletons */}
+      <View style={{ flexDirection: "row", paddingLeft: 16 }}>
+        {[0, 1, 2].map((i) => (
+          <View
+            key={i}
+            style={{
+              width: 130,
+              height: 200,
+              borderRadius: 14,
+              backgroundColor: "#e5e7eb",
+              marginRight: 10,
+              overflow: "hidden",
+            }}
+          >
+            <View style={{ width: "100%", height: 95, backgroundColor: "#d1d5db" }} />
+            <View style={{ padding: 8, gap: 5 }}>
+              <View style={{ height: 9, width: "80%", backgroundColor: "#d1d5db", borderRadius: 4 }} />
+              <View style={{ height: 9, width: "50%", backgroundColor: "#d1d5db", borderRadius: 4 }} />
+              <View style={{ height: 9, width: "60%", backgroundColor: "#d1d5db", borderRadius: 4 }} />
+            </View>
+          </View>
+        ))}
       </View>
     </View>
   );
@@ -92,31 +108,46 @@ const TabPills = React.memo(function TabPills({
   activeTab: TabType;
   onTabPress: (tab: TabType) => void;
 }) {
+  const tabs: { key: TabType; Icon: any; fill: boolean; label: string }[] = [
+    { key: "foryou",   Icon: Heart,  fill: true,  label: "For You"  },
+    { key: "featured", Icon: Users,  fill: false, label: "Featured" },
+    { key: "live",     Icon: Radio,  fill: false, label: "Live"     },
+    { key: "norbu",    Icon: Coins,  fill: false, label: "Norbu"    },
+    { key: "bidding",  Icon: Ticket, fill: false, label: "Bidding"  },
+  ];
+
+  const activeLabel = tabs.find((t) => t.key === activeTab)?.label ?? "";
+
   return (
-    <View className="flex-row items-center w-full mx-auto mt-2 gap-2">
-      {(
-        [
-          { key: "foryou",    Icon: Heart,  fill: true },
-          { key: "featured",  Icon: Users,  fill: false },
-          { key: "live",      Icon: Radio,  fill: false },
-          { key: "norbu",     Icon: Coins,  fill: false },
-          { key: "bidding",   Icon: Ticket, fill: false },
-        ] as { key: TabType; Icon: any; fill: boolean }[]
-      ).map(({ key, Icon, fill }) => (
-        <TouchableOpacity
-          key={key}
-          onPress={() => onTabPress(key)}
-          className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm ${
-            activeTab === key ? "bg-primary" : "bg-white"
-          }`}
-        >
-          <Icon
-            size={20}
-            color={activeTab === key ? "white" : "black"}
-            fill={fill && activeTab === key ? "white" : "none"}
-          />
-        </TouchableOpacity>
-      ))}
+    <View style={{ marginTop: 8 }}>
+      <View style={{ flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 12, paddingHorizontal: 16 }}>
+        {tabs.map(({ key, Icon, fill }) => {
+          const isActive = activeTab === key;
+          return (
+            <TouchableOpacity
+              key={key}
+              onPress={() => onTabPress(key)}
+              style={{
+                width: 42,
+                height: 42,
+                borderRadius: 21,
+                backgroundColor: isActive ? "#094569" : "#f3f4f6",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Icon
+                size={17}
+                color={isActive ? "#fff" : "#9ca3af"}
+                fill={key === "foryou" && isActive ? "#fff" : fill && isActive ? "#fff" : "none"}
+              />
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+      <Text className="text-2xl font-mbold text-gray-800" style={{ marginTop: 10, paddingHorizontal: 16 }}>
+        {activeLabel}
+      </Text>
     </View>
   );
 });
@@ -454,9 +485,11 @@ export default function HomeScreen() {
         return (
           <View>
             <TopNavbar />
-            <View className="px-4 gap-2">
+            <View className="px-4">
               <SearchBar value={d.searchQuery} onChangeText={(t) => setSearchQuery(t)} />
-              <StaticBanner />
+            </View>
+            <Banner />
+            <View className="px-4">
               <TabPills activeTab={d.activeTab} onTabPress={handleTabPress} />
             </View>
           </View>
@@ -464,7 +497,7 @@ export default function HomeScreen() {
 
       case "closing-sale":
         if (!isCurrentTabReady) {
-          return <SectionLoadingPlaceholder title="Closing Sale" />;
+          return <SectionLoadingPlaceholder />;
         }
         return (
           <View style={{ marginBottom: 16, paddingTop: 8 }}>
@@ -552,7 +585,7 @@ export default function HomeScreen() {
 
       case "flash-deals":
         if (!isCurrentTabReady) {
-          return <SectionLoadingPlaceholder title="Flash Deals" />;
+          return <SectionLoadingPlaceholder />;
         }
         return (
           <ForYouSection
@@ -567,7 +600,7 @@ export default function HomeScreen() {
 
       case "products":
         if (!isCurrentTabReady) {
-          return <SectionLoadingPlaceholder title="Products" />;
+          return <SectionLoadingPlaceholder />;
         }
         return (
           <ForYouSection
@@ -583,7 +616,7 @@ export default function HomeScreen() {
 
       case "services":
         if (!isCurrentTabReady) {
-          return <SectionLoadingPlaceholder title="Services" />;
+          return <SectionLoadingPlaceholder />;
         }
         return (
           <ForYouSection
@@ -599,7 +632,7 @@ export default function HomeScreen() {
 
       case "marketplace":
         if (!isCurrentTabReady) {
-          return <SectionLoadingPlaceholder title="Marketplace" />;
+          return <SectionLoadingPlaceholder />;
         }
         return (
           <ForYouSection

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, TextInput, Alert, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, ScrollView } from 'react-native';
 import { ArrowLeft, Eye, EyeOff } from 'lucide-react-native';
 import PopupMessage from '@/components/ui/PopupMessage';
 import { supabase } from '@/lib/supabase';
@@ -9,10 +9,8 @@ interface ChangePasswordProps {
 }
 
 export default function ChangePassword({ onClose }: ChangePasswordProps) {
-  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -49,45 +47,12 @@ export default function ChangePassword({ onClose }: ChangePasswordProps) {
         showPopup('error', 'Change Failed', error.message);
       } else {
         showPopup('success', 'Password Changed!', 'Password changed successfully');
-        setCurrentPassword('');
         setNewPassword('');
         setConfirmPassword('');
         onClose?.();
       }
     } catch (error: any) {
       showPopup('error', 'Error', error.message || 'Failed to change password');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleTestPassword = async () => {
-    if (!currentPassword) {
-      showPopup('error', 'Missing Field', 'Please enter a test password');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
-
-      if (!user?.email) {
-        showPopup('error', 'No Email', 'No user email found');
-        return;
-      }
-
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: user.email,
-        password: currentPassword
-      });
-
-      if (error) {
-        showPopup('error', 'Test Failed', `Password does NOT match database\n\nError: ${error.message}`);
-      } else {
-        showPopup('success', 'Test Passed!', `Password MATCHES database\n\nUser ID: ${data.user?.id}`);
-      }
-    } catch (error: any) {
-      showPopup('error', 'Test Error', error.message || 'Test failed');
     } finally {
       setLoading(false);
     }
@@ -106,40 +71,6 @@ export default function ChangePassword({ onClose }: ChangePasswordProps) {
       {/* Scrollable Content */}
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
         <View className="px-6 py-8">
-          {/* Current Password (for testing) */}
-          <View className="mb-6">
-            <Text className="text-sm font-medium text-gray-700 mb-2">Test Password</Text>
-            <View className="flex-row items-center bg-gray-100 rounded-lg px-4 py-3 border border-gray-300">
-              <TextInput
-                className="flex-1 text-base text-gray-900"
-                placeholder="Enter password to test"
-                value={currentPassword}
-                onChangeText={setCurrentPassword}
-                secureTextEntry={!showCurrent}
-                autoCapitalize="none"
-              />
-              <TouchableOpacity onPress={() => setShowCurrent(!showCurrent)}>
-                {showCurrent ? (
-                  <EyeOff size={20} color="#6b7280" />
-                ) : (
-                  <Eye size={20} color="#6b7280" />
-                )}
-              </TouchableOpacity>
-            </View>
-            <TouchableOpacity
-              onPress={handleTestPassword}
-              disabled={loading}
-              className="mt-2 bg-gray-600 rounded-lg py-2 px-4"
-            >
-              <Text className="text-white text-center font-medium">
-                {loading ? 'Testing...' : 'Test Password'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Divider */}
-          <View className="border-t border-gray-300 my-4" />
-
           {/* New Password */}
           <View className="mb-4">
             <Text className="text-sm font-medium text-gray-700 mb-2">New Password</Text>

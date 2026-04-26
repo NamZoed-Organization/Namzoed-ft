@@ -1,130 +1,97 @@
 import { useBanners } from "@/data/bannerData";
-import React, { useCallback, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Image } from "expo-image";
-import {
-    Animated,
-    Dimensions,
-    Linking,
-    Pressable,
-    Text,
-    View,
-} from "react-native";
+import { FlatList, View, useWindowDimensions } from "react-native";
 
-const { width } = Dimensions.get("window");
-const CARD_WIDTH = width * 0.9;
+const SIDE_PADDING = 16;
+const AUTO_SLIDE_INTERVAL = 2000;
 
 export default function Banner() {
-  const scrollX = useRef(new Animated.Value(0)).current;
+  const { width } = useWindowDimensions();
   const [activeIndex, setActiveIndex] = useState(0);
   const { banners, loading } = useBanners();
+  const flatListRef = useRef<FlatList>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const activeIndexRef = useRef(0);
 
-  const renderItem = useCallback(({ item, index }: any) => {
-    const inputRange = [
-      (index - 1) * CARD_WIDTH,
-      index * CARD_WIDTH,
-      (index + 1) * CARD_WIDTH,
-    ];
+  const CARD_WIDTH = width - SIDE_PADDING * 2;
+  const CARD_HEIGHT = CARD_WIDTH * 0.45;
 
-    const translateX = scrollX.interpolate({
-      inputRange,
-      outputRange: [30, 0, -30],
-    });
+  const startTimer = () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => {
+      if (!banners.length) return;
+      const next = (activeIndexRef.current + 1) % banners.length;
+      flatListRef.current?.scrollToIndex({ index: next, animated: true });
+      activeIndexRef.current = next;
+      setActiveIndex(next);
+    }, AUTO_SLIDE_INTERVAL);
+  };
 
-    return (
-      <View
-        style={{ width: CARD_WIDTH }}
-        className="mx-auto h-full justify-center"
-      >
-        <View className="flex-row items-center justify-between w-full px-4">
-          <View className="flex-1 pr-4">
-            <Text className="text-xl font-mbold mb-2 text-white">
-              {item.header}
-            </Text>
-            <Text className="text-base font-regular mb-3 text-white/80">
-              {item.body}
-            </Text>
-            <Pressable
-              onPress={() => Linking.openURL(item.link || "https://namzoed.com")}
-              className="self-start px-5 py-2 rounded-full bg-white"
-            >
-              <Text className="text-sm font-medium text-black">
-                {item.cta || "Learn More"}
-              </Text>
-            </Pressable>
-          </View>
-
-          <Animated.View
-            style={{ transform: [{ translateX }], height: "100%" }}
-            className="justify-center items-center"
-          >
-            <View className="relative h-[90%] aspect-square w-full">
-              <Image
-                source={{ uri: item.image_url }}
-                style={{
-                  height: "100%",
-                  width: "100%",
-                  borderRadius: 16,
-                }}
-                contentFit="cover"
-                cachePolicy="memory-disk"
-              />
-
-              {item.type === "live" && (
-                <View className="absolute top-0 right-0 bg-red-600 px-2 py-0.5 rounded-sm">
-                  <Text className="text-[12px] text-white font-medium">
-                    Live
-                  </Text>
-                </View>
-              )}
-            </View>
-          </Animated.View>
-        </View>
-      </View>
-    );
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scrollX]);
-
-  const handleScroll = Animated.event(
-    [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-    { useNativeDriver: true }
-  );
+  useEffect(() => {
+    if (banners.length > 1) startTimer();
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [banners.length]);
 
   if (loading || banners.length === 0) return null;
 
   return (
-    <View className="relative mt-3">
-      <View className="bg-primary rounded-xl overflow-hidden h-56 justify-center">
-        <Animated.FlatList
-          data={banners}
-          keyExtractor={(item) => item.id}
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          onScroll={handleScroll}
-          onMomentumScrollEnd={(e) => {
-            const index = Math.round(
-              e.nativeEvent.contentOffset.x / CARD_WIDTH
-            );
-            setActiveIndex(index);
-          }}
-          scrollEventThrottle={16}
-          renderItem={renderItem}
-          snapToInterval={CARD_WIDTH}
-          decelerationRate="fast"
-          snapToAlignment="start"
-        />
-      </View>
+    <View className="mt-3">
+      <FlatList
+        ref={flatListRef}
+        data={banners}
+        keyExtractor={(item) => item.id}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onMomentumScrollEnd={(e) => {
+          const index = Math.round(e.nativeEvent.contentOffset.x / width);
+          activeIndexRef.current = index;
+          setActiveIndex(index);
+          startTimer();
+        }}
+        scrollEventThrottle={16}
+        decelerationRate="fast"
+        getItemLayout={(_, index) => ({
+          length: width,
+          offset: width * index,
+          index,
+        })}
+        renderItem={({ item }) => (
+          <View style={{ width, alignItems: "center" }}>
+            <View
+              style={{
+                width: CARD_WIDTH,
+                height: CARD_HEIGHT,
+                borderRadius: 16,
+                overflow: "hidden",
+              }}
+            >
+              <Image
+                source={{ uri: item.image_url }}
+                style={{ width: "100%", height: "100%" }}
+                contentFit="cover"
+                cachePolicy="memory-disk"
+              />
+            </View>
+          </View>
+        )}
+      />
 
-      <View className="mt-4 flex-row justify-center gap-2">
-        {banners.map((_, index) => (
-          <View
-            key={index}
-            className={`w-2 h-2 rounded-full ${
-              activeIndex === index ? "bg-primary" : "bg-gray-300"
-            }`}
-          />
-        ))}
-      </View>
+      {banners.length > 1 && (
+        <View className="mt-3 flex-row justify-center gap-2">
+          {banners.map((_, index) => (
+            <View
+              key={index}
+              className={`w-2 h-2 rounded-full ${
+                activeIndex === index ? "bg-primary" : "bg-gray-300"
+              }`}
+            />
+          ))}
+        </View>
+      )}
     </View>
   );
 }

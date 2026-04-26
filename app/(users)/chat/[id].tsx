@@ -23,7 +23,7 @@ import {
 } from "@/lib/earlyAccessService";
 import { supabase } from "@/lib/supabase";
 import { sendChatPushNotification } from "@/services/chatPushService";
-import { notifyMongooseRequest } from "@/services/notificationService";
+import { notifyMongooseBookingConfirmed } from "@/services/notificationService";
 import { playReceiveSound, playSendSound, preloadChatSounds, triggerReceiveHaptic, triggerSendHaptic, unloadChatSounds } from "@/utils/chatSounds";
 import { useAppRouter } from "@/utils/navigation";
 import { isMongooseUser } from "@/utils/roleCheck";
@@ -1037,7 +1037,7 @@ export default function ChatScreen() {
     if (isLoadingMore || !hasMoreMessages || !oldestCursorRef.current || !effectiveCurrentUserUUID || !chatPartnerId) return;
     setIsLoadingMore(true);
     try {
-      const { data } = await supabase
+      const { data, error: loadErr } = await supabase
         .from("messages")
         .select("*")
         .or(
@@ -1046,6 +1046,7 @@ export default function ChatScreen() {
         .lt("created_at", oldestCursorRef.current)
         .order("created_at", { ascending: false })
         .limit(50);
+      if (loadErr) throw loadErr;
       if (data && data.length > 0) {
         oldestCursorRef.current = data[data.length - 1].created_at;
         setMessages((prev) => [...data.slice().reverse(), ...prev]);
@@ -1053,8 +1054,11 @@ export default function ChatScreen() {
       } else {
         setHasMoreMessages(false);
       }
-    } catch { /* ignore */ }
-    setIsLoadingMore(false);
+    } catch {
+      // silent — pagination will retry on next scroll
+    } finally {
+      setIsLoadingMore(false);
+    }
   }, [isLoadingMore, hasMoreMessages, effectiveCurrentUserUUID, chatPartnerId]);
 
   const startReplyToMessage = useCallback(
@@ -2178,10 +2182,6 @@ export default function ChatScreen() {
           });
         }, 1500);
 
-        // Notify the recipient that they have a new Mongoose delivery request
-        notifyMongooseRequest(chatPartnerId, effectiveCurrentUserUUID).catch((e) =>
-          console.warn("[chat] notifyMongooseRequest failed:", e),
-        );
       }
     } catch (err) {
       console.error("Unexpected error sending mongoose invite:", err);
@@ -2241,9 +2241,9 @@ export default function ChatScreen() {
       ),
     );
 
-    // Notify both sides: booking is submitted; track only after Mongoose accepts
+    // Inform Person 1 (initiator) that the booking is now with Mongoose
     const submittedNotice =
-      "Your Mongoose delivery request has been sent. Wait for Mongoose to confirm—you’ll be able to use Check status & track on the booking card once they accept.";
+      "Booking confirmed! Mongoose has been notified and will review your delivery request. You can track once they accept.";
     await supabase.from("messages").insert([
       {
         sender_id: effectiveCurrentUserUUID,
@@ -2252,6 +2252,13 @@ export default function ChatScreen() {
         is_read: false,
       },
     ]);
+
+    // Notify Person 1 (initiator) that Person 2 has confirmed the booking
+    if (chatPartnerId && effectiveCurrentUserUUID) {
+      notifyMongooseBookingConfirmed(chatPartnerId, effectiveCurrentUserUUID).catch((e) =>
+        console.warn("[chat] notifyMongooseBookingConfirmed failed:", e),
+      );
+    }
 
     setPendingMongooseInvite(null);
     setShowMongooseResponder(false);
@@ -3079,7 +3086,6 @@ export default function ChatScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Keyboard-aware body — slides up with the keyboard on the native UI thread */}
       <Reanimated.View style={[{ flex: 1 }, keyboardAwareStyle]}>
       {/* Scrollable Messages Area */}
       <FlatList

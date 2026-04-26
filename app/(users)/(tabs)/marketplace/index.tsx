@@ -502,9 +502,11 @@ export default function MarketplaceScreen() {
                 <Plus size={24} color="white" />
               </TouchableOpacity>
             </View>
+          </View>
 
-            <Banner />
+          <Banner />
 
+          <View className="px-4 gap-2">
             {/* Marketplace Options H1 */}
             <Text className="text-2xl font-bold text-gray-900 mt-4 mb-4">
               Marketplace Options

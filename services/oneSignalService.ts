@@ -344,3 +344,31 @@ export const getOneSignalDebugState = async (
     return null;
   }
 };
+
+export const getNotificationPermission = async (): Promise<boolean> => {
+  const sdk = getOneSignalSdk();
+  if (!sdk) return false;
+  try {
+    return await sdk.OneSignal.Notifications.getPermissionAsync();
+  } catch {
+    return false;
+  }
+};
+
+/** Returns the new opted-in state after toggling. */
+export const togglePushOptIn = async (): Promise<boolean> => {
+  const sdk = getOneSignalSdk();
+  if (!sdk) return false;
+  try {
+    const optedIn = await sdk.OneSignal.User.pushSubscription.getOptedInAsync();
+    if (optedIn) {
+      await sdk.OneSignal.User.pushSubscription.optOut();
+      return false;
+    } else {
+      await sdk.OneSignal.User.pushSubscription.optIn();
+      return true;
+    }
+  } catch {
+    return false;
+  }
+};

@@ -1,0 +1,415 @@
+import ImageViewer from "@/components/modals/ImageViewer";
+import { useUser } from "@/contexts/UserContext";
+import { searchAll, SearchResult, SearchResults } from "@/lib/searchService";
+import { useAppRouter } from "@/utils/navigation";
+import { Ionicons } from "@expo/vector-icons";
+import React, { useEffect, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Image,
+  Keyboard,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+export default function GlobalSearchScreen() {
+  const router = useAppRouter();
+  const insets = useSafeAreaInsets();
+  const { currentUser } = useUser();
+
+  const [query, setQuery] = useState("");
+  const [throttledQuery, setThrottledQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<SearchResults | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const [activeTab, setActiveTab] = useState<"all" | "users" | "services" | "products" | "marketplace">("all");
+  const [selectedPost, setSelectedPost] = useState<any | null>(null);
+  const [showImageViewer, setShowImageViewer] = useState(false);
+
+  const inputRef = useRef<TextInput>(null);
+  const tabScrollRef = useRef<ScrollView>(null);
+  const touchStartX = useRef(0);
+  const tabLayouts = useRef<{ [key: string]: { x: number; width: number } }>({});
+  const tabBarVisibleWidth = useRef(0);
+
+  // Auto-focus on mount
+  useEffect(() => {
+    const t = setTimeout(() => inputRef.current?.focus(), 120);
+    return () => clearTimeout(t);
+  }, []);
+
+  // Debounce query
+  useEffect(() => {
+    const t = setTimeout(() => setThrottledQuery(query), 300);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  // Search on debounced query
+  useEffect(() => {
+    if (throttledQuery.trim().length < 2) {
+      setSearchResults(null);
+      setIsSearching(false);
+      return;
+    }
+    let cancelled = false;
+    setIsSearching(true);
+    searchAll(throttledQuery, currentUser?.id)
+      .then((results) => { if (!cancelled) setSearchResults(results); })
+      .catch(() => { if (!cancelled) setSearchResults(null); })
+      .finally(() => { if (!cancelled) setIsSearching(false); });
+    return () => { cancelled = true; };
+  }, [throttledQuery, currentUser?.id]);
+
+  const handleResultPress = (result: SearchResult) => {
+    Keyboard.dismiss();
+    switch (result.type) {
+      case "user":
+        router.push(
+          result.id === currentUser?.id
+            ? "/(users)/profile"
+            : (`/(users)/profile/${result.id}` as any),
+        );
+        break;
+      case "service":
+        router.push(`/(users)/servicedetail/${result.id}` as any);
+        break;
+      case "product":
+        router.push(`/(users)/product/${result.id}` as any);
+        break;
+      case "marketplace":
+        router.push(`/(users)/marketplace/${result.id}` as any);
+        break;
+      case "post":
+        setSelectedPost({
+          id: result.id,
+          user_id: result.metadata.userId,
+          content: result.metadata.content,
+          images: result.metadata.images || [],
+          likes: result.metadata.likes || 0,
+          comments: result.metadata.comments || 0,
+          shares: result.metadata.shares || 0,
+          userName: result.metadata.userName || result.title,
+        });
+        setShowImageViewer(true);
+        break;
+    }
+  };
+
+  const highlightMatch = (text: string, q: string) => {
+    if (!q.trim()) return <Text className="text-gray-800">{text}</Text>;
+    const parts = text.split(new RegExp(`(${q.trim()})`, "i"));
+    return parts.map((part, i) => (
+      <Text key={i} className={part.toLowerCase() === q.toLowerCase().trim() ? "font-semibold text-black" : "text-gray-800"}>
+        {part}
+      </Text>
+    ));
+  };
+
+  const getFilteredResults = (): SearchResult[] => {
+    if (!searchResults) return [];
+    if (activeTab === "all") {
+      return [
+        ...searchResults.products,
+        ...searchResults.services,
+        ...searchResults.users,
+        ...searchResults.marketplace,
+        ...searchResults.posts,
+      ];
+    }
+    return searchResults[activeTab] || [];
+  };
+
+  const getTabCount = (tab: string): number => {
+    if (!searchResults) return 0;
+    if (tab === "all") {
+      return (
+        searchResults.users.length +
+        searchResults.services.length +
+        searchResults.products.length +
+        searchResults.marketplace.length +
+        searchResults.posts.length
+      );
+    }
+    return searchResults[tab as keyof SearchResults]?.length || 0;
+  };
+
+  const tabs = [
+    { key: "all", label: "All", icon: "apps" },
+    { key: "users", label: "Users", icon: "people" },
+    { key: "services", label: "Services", icon: "construct" },
+    { key: "products", label: "Products", icon: "pricetag" },
+    { key: "marketplace", label: "Market", icon: "storefront" },
+  ];
+
+  const handleTabPress = (tabKey: string, tabIndex: number) => {
+    setActiveTab(tabKey as any);
+    const layout = tabLayouts.current[tabKey];
+    const visibleWidth = tabBarVisibleWidth.current;
+    if (!layout || !visibleWidth) return;
+    let targetX =
+      tabIndex === 0 ? 0
+      : tabIndex === tabs.length - 1 ? 99999
+      : layout.x - visibleWidth / 2 + layout.width / 2;
+    tabScrollRef.current?.scrollTo({ x: Math.max(0, targetX), animated: true });
+  };
+
+  const handleTouchEnd = (e: any) => {
+    const diff = touchStartX.current - e.nativeEvent.pageX;
+    if (Math.abs(diff) < 50) return;
+    const currentIndex = tabs.findIndex((t) => t.key === activeTab);
+    if (diff > 0 && currentIndex < tabs.length - 1) setActiveTab(tabs[currentIndex + 1].key as any);
+    if (diff < 0 && currentIndex > 0) setActiveTab(tabs[currentIndex - 1].key as any);
+  };
+
+  const PostCard = ({ result }: { result: SearchResult }) => (
+    <TouchableOpacity onPress={() => handleResultPress(result)} className="mb-3" activeOpacity={0.7}>
+      <View className="bg-white rounded-lg overflow-hidden border border-gray-100">
+        {result.imageUrl && (
+          <Image source={{ uri: result.imageUrl }} className="w-full h-32" resizeMode="cover" />
+        )}
+        <View className={result.imageUrl ? "p-2.5" : "p-3"}>
+          <Text className="text-xs font-semibold text-gray-900" numberOfLines={1}>{result.title}</Text>
+          {result.subtitle && (
+            <Text className="text-xs text-gray-500 mt-1.5" numberOfLines={result.imageUrl ? 2 : 4}>{result.subtitle}</Text>
+          )}
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+
+  const SearchResultItem = ({ result, showTypeTag = false }: { result: SearchResult; showTypeTag?: boolean }) => {
+    const isUser = result.type === "user";
+    const typeColors: Record<string, string> = {
+      user: "bg-blue-100 text-blue-700",
+      service: "bg-purple-100 text-purple-700",
+      product: "bg-green-100 text-green-700",
+      marketplace: "bg-orange-100 text-orange-700",
+      post: "bg-pink-100 text-pink-700",
+    };
+    const typeLabels: Record<string, string> = {
+      user: "User", service: "Service", product: "Product", marketplace: "Marketplace", post: "Post",
+    };
+    const typeIcons: Record<string, string> = {
+      user: "person", service: "construct", product: "pricetag", marketplace: "storefront", post: "chatbubble",
+    };
+
+    return (
+      <TouchableOpacity
+        onPress={() => handleResultPress(result)}
+        className="flex-row items-center bg-white rounded-lg p-3 mb-2 border border-gray-100"
+        activeOpacity={0.7}
+      >
+        <View className={`w-14 h-14 ${isUser ? "rounded-full" : "rounded-lg"} bg-gray-200 overflow-hidden mr-3`}>
+          {result.imageUrl ? (
+            <Image source={{ uri: result.imageUrl }} className="w-full h-full" resizeMode="cover" />
+          ) : (
+            <View className="w-full h-full items-center justify-center bg-gray-300">
+              <Ionicons name={typeIcons[result.type] as any} size={24} color="#9CA3AF" />
+            </View>
+          )}
+        </View>
+        <View className="flex-1">
+          <View className="flex-row items-center">
+            <Text className="text-base font-semibold text-gray-900 flex-1" numberOfLines={1}>
+              {highlightMatch(result.title, throttledQuery)}
+            </Text>
+            {showTypeTag && (
+              <View className={`ml-2 px-2 py-0.5 rounded-full ${typeColors[result.type] ?? "bg-gray-100 text-gray-700"}`}>
+                <Text className={`text-xs font-medium ${typeColors[result.type] ?? "bg-gray-100 text-gray-700"}`}>
+                  {typeLabels[result.type] ?? ""}
+                </Text>
+              </View>
+            )}
+          </View>
+          {result.subtitle && (
+            <Text className="text-sm text-gray-500 mt-0.5" numberOfLines={1}>{result.subtitle}</Text>
+          )}
+        </View>
+        <Ionicons name="chevron-forward" size={20} color="#D1D5DB" />
+      </TouchableOpacity>
+    );
+  };
+
+  return (
+    <View style={{ flex: 1, backgroundColor: "#F9FAFB", paddingTop: insets.top }}>
+      {/* Header */}
+      <View className="flex-row items-center px-3 py-2 bg-white border-b border-gray-100">
+        <TouchableOpacity
+          onPress={() => router.back()}
+          className="p-2 mr-1"
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Ionicons name="arrow-back" size={22} color="#0f172a" />
+        </TouchableOpacity>
+        <View className="flex-1 flex-row items-center bg-gray-100 rounded-full px-3 py-2">
+          <Ionicons name="search" size={16} color="#9CA3AF" />
+          <TextInput
+            ref={inputRef}
+            className="flex-1 ml-2 text-sm text-gray-900 font-regular"
+            style={{ paddingVertical: 0 }}
+            placeholder="Search users, services, products..."
+            placeholderTextColor="#9CA3AF"
+            value={query}
+            onChangeText={setQuery}
+            returnKeyType="search"
+            onSubmitEditing={Keyboard.dismiss}
+          />
+          {query.length > 0 && (
+            <TouchableOpacity onPress={() => setQuery("")} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+
+      {/* Results */}
+      <ScrollView
+        className="flex-1 px-4"
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        onTouchStart={(e) => { touchStartX.current = e.nativeEvent.pageX; }}
+        onTouchEnd={handleTouchEnd}
+      >
+        {/* Searching indicator */}
+        {isSearching && (
+          <View className="py-8 items-center">
+            <ActivityIndicator size="large" color="#094569" />
+            <Text className="text-gray-500 mt-2">Searching...</Text>
+          </View>
+        )}
+
+        {/* Empty prompt */}
+        {!isSearching && !searchResults && throttledQuery.length === 0 && (
+          <View className="py-16 items-center">
+            <Ionicons name="search" size={48} color="#9CA3AF" />
+            <Text className="text-gray-500 mt-4 text-center">
+              Search for users, services, products, marketplace items, or posts
+            </Text>
+          </View>
+        )}
+
+        {/* Too short */}
+        {!isSearching && throttledQuery.length > 0 && throttledQuery.length < 2 && (
+          <View className="py-8 items-center">
+            <Ionicons name="information-circle-outline" size={48} color="#9CA3AF" />
+            <Text className="text-gray-500 mt-4 text-center">Type at least 2 characters to search</Text>
+          </View>
+        )}
+
+        {/* Results with tabs */}
+        {!isSearching && searchResults && throttledQuery.length >= 2 && (
+          <>
+            <ScrollView
+              ref={tabScrollRef}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              className="mt-3 mb-3"
+              contentContainerStyle={{ paddingHorizontal: 4 }}
+              onLayout={(e) => { tabBarVisibleWidth.current = e.nativeEvent.layout.width; }}
+            >
+              {tabs.map((tab, index) => {
+                const count = getTabCount(tab.key);
+                const isActive = activeTab === tab.key;
+                return (
+                  <TouchableOpacity
+                    key={tab.key}
+                    onPress={() => handleTabPress(tab.key, index)}
+                    onLayout={(e) => {
+                      tabLayouts.current[tab.key] = {
+                        x: e.nativeEvent.layout.x,
+                        width: e.nativeEvent.layout.width,
+                      };
+                    }}
+                    className={`mr-2 px-4 py-2 rounded-full flex-row items-center ${
+                      isActive ? "bg-primary" : "bg-white border border-gray-200"
+                    }`}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name={tab.icon as any} size={16} color={isActive ? "white" : "#6B7280"} />
+                    <Text className={`ml-1.5 text-sm font-msemibold ${isActive ? "text-white" : "text-gray-700"}`}>
+                      {tab.label}
+                    </Text>
+                    {count > 0 && (
+                      <View className={`ml-1.5 px-1.5 py-0.5 rounded-full min-w-[18px] items-center ${isActive ? "bg-white/20" : "bg-gray-200"}`}>
+                        <Text className={`text-xs font-semibold ${isActive ? "text-white" : "text-gray-600"}`}>
+                          {count}
+                        </Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            {activeTab === "all" ? (
+              getFilteredResults().length > 0 ? (
+                (() => {
+                  const posts = getFilteredResults().filter((r) => r.type === "post");
+                  const others = getFilteredResults().filter((r) => r.type !== "post");
+                  return (
+                    <>
+                      {others.map((result) => (
+                        <SearchResultItem key={result.id} result={result} showTypeTag />
+                      ))}
+                      {posts.length > 0 && (
+                        <>
+                          {others.length > 0 && <View className="border-t border-gray-200 my-4" />}
+                          <View className="flex-row flex-wrap justify-between">
+                            {posts.map((result) => (
+                              <View key={result.id} style={{ width: "48%" }}>
+                                <PostCard result={result} />
+                              </View>
+                            ))}
+                          </View>
+                        </>
+                      )}
+                    </>
+                  );
+                })()
+              ) : (
+                <View className="py-8 items-center">
+                  <Ionicons name="search-outline" size={48} color="#9CA3AF" />
+                  <Text className="text-gray-500 mt-4 text-center">No results found for "{throttledQuery}"</Text>
+                  <Text className="text-gray-400 mt-2 text-center text-sm">Try different keywords</Text>
+                </View>
+              )
+            ) : (
+              getFilteredResults().length > 0 ? (
+                getFilteredResults().map((result) => (
+                  <SearchResultItem key={result.id} result={result} />
+                ))
+              ) : (
+                <View className="py-8 items-center">
+                  <Ionicons name="search-outline" size={48} color="#9CA3AF" />
+                  <Text className="text-gray-500 mt-4 text-center">
+                    No {activeTab} found for "{throttledQuery}"
+                  </Text>
+                </View>
+              )
+            )}
+          </>
+        )}
+
+        <View style={{ height: insets.bottom + 24 }} />
+      </ScrollView>
+
+      {showImageViewer && selectedPost && (
+        <ImageViewer
+          visible={showImageViewer}
+          images={selectedPost.images}
+          initialIndex={0}
+          onClose={() => { setShowImageViewer(false); setSelectedPost(null); }}
+          postContent={selectedPost.content}
+          username={selectedPost.userName}
+          likes={selectedPost.likes}
+          comments={selectedPost.comments}
+          postId={selectedPost.id}
+          postUserId={selectedPost.user_id}
+        />
+      )}
+    </View>
+  );
+}

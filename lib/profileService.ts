@@ -102,7 +102,18 @@ export interface FeaturedSellerProfile extends Profile {
   product_count?: number;
 }
 
-// Returns the set of user IDs that have at least one product, marketplace item, or service
+// Supabase PostgREST URL limit — keep .in() arrays under this many items.
+const IN_QUERY_LIMIT = 200;
+
+// Randomly sample up to `max` items from an array.
+const sampleArray = <T>(arr: T[], max: number): T[] => {
+  if (arr.length <= max) return arr;
+  const shuffled = [...arr].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, max);
+};
+
+// Returns the set of user IDs that have at least one product, marketplace item, or service.
+// Capped at IN_QUERY_LIMIT to avoid Supabase 400 Bad Request on large .in() calls.
 const fetchCommerceUserIds = async (): Promise<Set<string>> => {
   const [productsRes, marketplaceRes, servicesRes] = await Promise.all([
     supabase.from('products').select('user_id'),
@@ -114,7 +125,9 @@ const fetchCommerceUserIds = async (): Promise<Set<string>> => {
   for (const row of productsRes.data || []) if (row.user_id) ids.add(row.user_id);
   for (const row of marketplaceRes.data || []) if (row.user_id) ids.add(row.user_id);
   for (const row of servicesRes.data || []) if (row.user_id) ids.add(row.user_id);
-  return ids;
+
+  if (ids.size <= IN_QUERY_LIMIT) return ids;
+  return new Set(sampleArray([...ids], IN_QUERY_LIMIT));
 };
 
 // Fetch featured sellers with location-based sorting and pagination
@@ -242,7 +255,10 @@ export const fetchRandomSellers = async (
 ): Promise<FeaturedSellerProfile[]> => {
   try {
     const commerceIds = await fetchCommerceUserIds();
-    const sellerIds = [...commerceIds].filter(id => !excludeIds.includes(id));
+    const sellerIds = sampleArray(
+      [...commerceIds].filter(id => !excludeIds.includes(id)),
+      IN_QUERY_LIMIT,
+    );
     if (sellerIds.length === 0) return [];
 
     const { data, error } = await supabase

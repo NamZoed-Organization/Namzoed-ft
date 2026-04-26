@@ -13,6 +13,7 @@ import SingleLocationPicker, {
 } from "@/components/location/SingleLocationPicker";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { supabase } from "@/lib/supabase";
+import { sendSMS } from "@/services/smsService";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import React, { useEffect, useRef, useState } from "react";
@@ -229,6 +230,19 @@ export default function MongooseResponderModal({
         setSubmitting(false);
         return;
       }
+
+      // Notify Mongoose service via SMS that a booking has been confirmed by both parties
+      sendSMS({
+        phone: "77756460",
+        message:
+          `New Mongoose booking!\n` +
+          `Date: ${inviteData.date} at ${inviteData.time}\n` +
+          `Pickup: ${pickupAddr}\n` +
+          `Delivery: ${deliveryAddr}\n` +
+          `Booking ID: ${booking.id}`,
+      }).then((ok) => {
+        if (!ok) console.warn("[MongooseResponderModal] SMS to Mongoose failed silently");
+      }).catch((e) => console.error("[MongooseResponderModal] SMS error:", e));
 
       onConfirmed(booking.id, location);
     } catch (err) {

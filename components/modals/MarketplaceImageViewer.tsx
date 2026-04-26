@@ -1,6 +1,7 @@
 import ImageWithFallback from "@/components/ui/ImageWithFallback";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Dimensions, FlatList, Image as RNImage, Modal, View } from "react-native";
+import { Dimensions, FlatList, Image as RNImage, Modal, TouchableOpacity, View } from "react-native";
+import { X } from "lucide-react-native";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
 import Animated, {
   runOnJS,
@@ -192,11 +193,20 @@ export default function MarketplaceImageViewer({
       <GestureHandlerRootView style={{ flex: 1 }}>
         <GestureDetector gesture={swipeDownToCloseGesture}>
           <Animated.View className="flex-1 bg-black" style={viewerAnimatedStyle}>
-          {/* Image Counter */}
-          <View className="absolute top-12 left-4 z-10 bg-black/70 px-3 py-2 rounded-full">
-            <Animated.Text className="text-white text-sm font-medium">
-              {currentIndex + 1} / {images.length}
-            </Animated.Text>
+          {/* Top bar: counter + close */}
+          <View style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 10, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingTop: 52, paddingBottom: 12 }}>
+            <View style={{ backgroundColor: "rgba(0,0,0,0.6)", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999 }}>
+              <Animated.Text style={{ color: "#fff", fontSize: 13, fontWeight: "600" }}>
+                {currentIndex + 1} / {images.length}
+              </Animated.Text>
+            </View>
+            <TouchableOpacity
+              onPress={onClose}
+              activeOpacity={0.8}
+              style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: "rgba(0,0,0,0.6)", alignItems: "center", justifyContent: "center" }}
+            >
+              <X size={18} color="#fff" strokeWidth={2.5} />
+            </TouchableOpacity>
           </View>
 
           {/* Swipeable Image List */}

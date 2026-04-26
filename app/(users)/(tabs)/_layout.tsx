@@ -27,7 +27,7 @@ export default function UsersTabsLayout() {
   const fabSize = clamp(ms(62), 56, 70);
   const fabOffset = clamp(vs(24), 20, 30);
   const plusSize = clamp(ms(28), 24, 32);
-  const sideIconSize = clamp(ms(22), 20, 26);
+  const sideIconSize = clamp(ms(22), 20, 24);
 
   // Same pattern as MongooseWorkerNavBar — full insets.bottom with platform minimum,
   // no division. Ensures the bar always clears the Android nav bar and iOS home indicator.
@@ -79,7 +79,10 @@ export default function UsersTabsLayout() {
         )}
         screenOptions={{
           headerShown: false,
-          tabBarShowLabel: false,
+          tabBarShowLabel: true,
+          tabBarActiveTintColor: "#094569",
+          tabBarInactiveTintColor: "#6b7280",
+          tabBarLabelStyle: { fontSize: 10, fontWeight: "500", marginTop: 2 },
           animation: "none",
           tabBarBackground: () => null,
           tabBarStyle: {
@@ -105,20 +108,21 @@ export default function UsersTabsLayout() {
             tabBarButton: (props) => (
               <TabBarButton {...props} android_ripple={null} />
             ),
-            tabBarIcon: ({ focused }) => <HomeIcon focused={focused} />,
+            tabBarIcon: ({ focused }) => <HomeIcon focused={focused} size={sideIconSize} />,
           }}
         />
 
         <Tabs.Screen
           name="categories/index"
           options={{
-            title: "Categories",
+            title: "Shop",
             tabBarButton: (props) => (
               <TabBarButton {...props} android_ripple={null} />
             ),
             tabBarIcon: ({ focused }) => (
               <CategoriesIcon
                 focused={focused || pathname.includes("/categories/")}
+                size={sideIconSize}
               />
             ),
           }}
@@ -128,6 +132,8 @@ export default function UsersTabsLayout() {
           name="feed"
           options={{
             title: "Feed",
+            tabBarShowLabel: false,
+            tabBarLabel: () => null,
             tabBarButton: (props) => (
               <FeedTabButton {...props} android_ripple={null} />
             ),
@@ -143,7 +149,7 @@ export default function UsersTabsLayout() {
               >
                 <Plus
                   size={plusSize}
-                  stroke={focused ? "#094569" : "#9ca3af"}
+                  stroke={focused ? "#EDC06D" : "#6b7280"}
                   strokeWidth={2}
                 />
               </View>
@@ -154,14 +160,14 @@ export default function UsersTabsLayout() {
         <Tabs.Screen
           name="marketplace/index"
           options={{
-            title: "Marketplace",
+            title: "Market",
             tabBarButton: (props) => (
               <TabBarButton {...props} android_ripple={null} />
             ),
             tabBarIcon: ({ focused }) => (
               <Store
                 size={sideIconSize}
-                stroke={focused ? "#094569" : "#9ca3af"}
+                stroke={focused ? "#EDC06D" : "#6b7280"}
                 strokeWidth={2}
               />
             ),
@@ -178,7 +184,7 @@ export default function UsersTabsLayout() {
             tabBarIcon: ({ focused }) => (
               <Wrench
                 size={sideIconSize}
-                stroke={focused ? "#094569" : "#9ca3af"}
+                stroke={focused ? "#EDC06D" : "#6b7280"}
                 strokeWidth={2}
               />
             ),

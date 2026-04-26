@@ -263,17 +263,46 @@ interface InlineVideoPlayerProps {
   onDoubleTapAt?: (x: number, y: number) => void;
 }
 
-const InlineVideoPlayer = React.memo(function InlineVideoPlayer({ uri, frameWidth, slideHeight: videoH, isVisible, onDoubleTapAt }: InlineVideoPlayerProps) {
+// Top-level wrapper: only mounts the heavy ExoPlayer-backed component when the
+// slide is actually visible. This keeps memory bounded as the FlatList window
+// holds several posts; without it, every video post in the window holds a
+// live ExoPlayer instance and crashes older devices with java.lang.OutOfMemoryError
+// in androidx.media3.exoplayer.ExoPlayerImplInternal.shouldContinueLoading.
+const InlineVideoPlayer = React.memo(function InlineVideoPlayer({ uri, frameWidth, slideHeight, isVisible, onDoubleTapAt }: InlineVideoPlayerProps) {
+  if (!isVisible) {
+    return <View style={{ width: frameWidth, height: slideHeight, backgroundColor: "#000" }} />;
+  }
+  return (
+    <ActiveVideoPlayer
+      uri={uri}
+      frameWidth={frameWidth}
+      slideHeight={slideHeight}
+      onDoubleTapAt={onDoubleTapAt}
+    />
+  );
+});
+
+interface ActiveVideoPlayerProps {
+  uri: string;
+  frameWidth: number;
+  slideHeight: number;
+  onDoubleTapAt?: (x: number, y: number) => void;
+}
+
+const ActiveVideoPlayer = React.memo(function ActiveVideoPlayer({ uri, frameWidth, slideHeight: videoH, onDoubleTapAt }: ActiveVideoPlayerProps) {
   const [isHolding, setIsHolding] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [shouldPlay, setShouldPlay] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const hasAutoUnmutedRef = useRef(false);
+  const playOverlayOpacity = useRef(new Animated.Value(1)).current;
   const holdTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTapRef = useRef(0);
   const lastTapPosRef = useRef({ x: 0, y: 0 });
-  const muteIconOpacity = useRef(new Animated.Value(1)).current;
-  const muteIconTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const singleTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const timerOpacity = useRef(new Animated.Value(0)).current;
   const timerVisible = useRef(false);
   const timerFadeTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -290,61 +319,37 @@ const InlineVideoPlayer = React.memo(function InlineVideoPlayer({ uri, frameWidt
     player.muted = isMuted;
   }, [isMuted, player]);
 
-  // Flash mute icon briefly on toggle
-  const showMuteIcon = () => {
-    if (muteIconTimeout.current) clearTimeout(muteIconTimeout.current);
-    muteIconOpacity.setValue(1);
-    muteIconTimeout.current = setTimeout(() => {
-      Animated.timing(muteIconOpacity, {
-        toValue: 0,
-        duration: 600,
-        useNativeDriver: true,
-      }).start();
-    }, 1200);
-  };
-
-  // Show mute icon on mount (video starts muted)
-  useEffect(() => {
-    showMuteIcon();
-    return () => {
-      if (muteIconTimeout.current) clearTimeout(muteIconTimeout.current);
-    };
-  }, []);
-
   useEffect(() => {
     if (!player) return;
-    if (isVisible && !isHolding) {
+    if (shouldPlay && !isHolding) {
       player.play();
     } else {
       player.pause();
     }
-  }, [isVisible, isHolding, player]);
+  }, [shouldPlay, isHolding, player]);
+
+  // Fade play-button overlay based on playing state
+  useEffect(() => {
+    Animated.timing(playOverlayOpacity, {
+      toValue: isPlaying ? 0 : 1,
+      duration: 180,
+      useNativeDriver: true,
+    }).start();
+  }, [isPlaying, playOverlayOpacity]);
 
   useEffect(() => {
-    if (!player || !isVisible) return;
+    if (!player) return;
     const interval = setInterval(() => {
       setCurrentTime(player.currentTime ?? 0);
       setDuration(player.duration ?? 0);
       setIsLoading(player.status === 'idle' || player.status === 'loading');
-    }, 250);
+      setIsPlaying(player.playing ?? false);
+    }, 200);
     return () => clearInterval(interval);
-  }, [player, isVisible]);
+  }, [player]);
 
-  // Show timer for 3s on each visibility entry, then fade out
+  // Show timer for 3s on mount (i.e. when slide becomes visible), then fade out.
   useEffect(() => {
-    if (!isVisible) {
-      // Reset so it shows again next time
-      timerOpacity.stopAnimation();
-      timerOpacity.setValue(0);
-      timerVisible.current = false;
-      if (timerFadeTimeout.current) {
-        clearTimeout(timerFadeTimeout.current);
-        timerFadeTimeout.current = null;
-      }
-      return;
-    }
-
-    // Capture current remaining when becoming visible
     const secs = duration > 0
       ? Math.max(0, Math.ceil(duration - (player.currentTime ?? 0)))
       : null;
@@ -372,7 +377,7 @@ const InlineVideoPlayer = React.memo(function InlineVideoPlayer({ uri, frameWidt
         timerFadeTimeout.current = null;
       }
     };
-  }, [isVisible]);
+  }, []);
 
   const handlePressIn = (event: GestureResponderEvent) => {
     lastTapPosRef.current = {
@@ -392,18 +397,35 @@ const InlineVideoPlayer = React.memo(function InlineVideoPlayer({ uri, frameWidt
     if (!isHolding) {
       const now = Date.now();
       if (now - lastTapRef.current < 300) {
-        // Double tap
+        // Double tap — cancel pending single-tap, fire heart
+        if (singleTapTimerRef.current) {
+          clearTimeout(singleTapTimerRef.current);
+          singleTapTimerRef.current = null;
+        }
         onDoubleTapAt?.(lastTapPosRef.current.x, lastTapPosRef.current.y);
+        lastTapRef.current = 0;
       } else {
-        // Single tap: toggle mute
-        setIsMuted((prev) => {
-          showMuteIcon();
-          return !prev;
-        });
+        // Defer single tap so a follow-up tap can be detected as double
+        singleTapTimerRef.current = setTimeout(() => {
+          singleTapTimerRef.current = null;
+          setShouldPlay((prev) => {
+            const next = !prev;
+            // First time the user plays this video, unmute by default
+            if (next && !hasAutoUnmutedRef.current) {
+              hasAutoUnmutedRef.current = true;
+              setIsMuted(false);
+            }
+            return next;
+          });
+        }, 280);
+        lastTapRef.current = now;
       }
-      lastTapRef.current = now;
     }
     setIsHolding(false);
+  };
+
+  const handleMutePress = () => {
+    setIsMuted((prev) => !prev);
   };
 
   return (
@@ -432,25 +454,58 @@ const InlineVideoPlayer = React.memo(function InlineVideoPlayer({ uri, frameWidt
           >
             {timerLabel}
           </Animated.Text>
-          {/* Mute/unmute icon */}
+          {/* Center play button (visible when paused) */}
           <Animated.View
+            pointerEvents="none"
             style={{
               position: "absolute",
-              bottom: 12,
-              right: 12,
-              backgroundColor: "rgba(0,0,0,0.4)",
-              borderRadius: 20,
-              padding: 6,
-              opacity: muteIconOpacity,
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              alignItems: "center",
+              justifyContent: "center",
+              opacity: playOverlayOpacity,
             }}
-            pointerEvents="none"
           >
-            {isMuted
-              ? <VolumeX size={16} color="#fff" />
-              : <Volume2 size={16} color="#fff" />}
+            <View
+              style={{
+                width: 64,
+                height: 64,
+                borderRadius: 32,
+                backgroundColor: "rgba(0,0,0,0.55)",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Play size={32} color="#fff" fill="#fff" />
+            </View>
           </Animated.View>
         </View>
       </TouchableWithoutFeedback>
+      {/* Mute/unmute icon — tappable, sits above gesture layer */}
+      <TouchableOpacity
+        onPress={handleMutePress}
+        activeOpacity={0.8}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        style={{
+          position: "absolute",
+          bottom: 12,
+          right: 12,
+        }}
+      >
+        <View
+          style={{
+            backgroundColor: "rgba(0,0,0,0.4)",
+            borderRadius: 20,
+            padding: 6,
+          }}
+        >
+          {isMuted
+            ? <VolumeX size={16} color="#fff" />
+            : <Volume2 size={16} color="#fff" />}
+        </View>
+      </TouchableOpacity>
     </View>
   );
 });
@@ -466,14 +521,7 @@ const MediaCarousel = React.memo(
     onTagPress,
   }: MediaCarouselProps) => {
     const [activeIndex, setActiveIndex] = useState(0);
-    const [playingVideoSet, setPlayingVideoSet] = useState<Set<number>>(new Set());
     const slideH = frameWidth / RATIO_PORTRAIT;
-
-    // When the user scrolls to a different slide in the carousel, unmount any
-    // video players that were playing so they release native resources.
-    useEffect(() => {
-      setPlayingVideoSet((prev) => (prev.size === 0 ? prev : new Set()));
-    }, [activeIndex]);
 
     const multipleMedia = images.length > 1;
     const lastTapRef = useRef(0);
@@ -518,49 +566,6 @@ const MediaCarousel = React.memo(
         const w = frameWidth;
 
         if (isVideo) {
-          const isPlaying = playingVideoSet.has(index);
-          if (!isPlaying) {
-            return (
-              <View
-                style={{
-                  width: w,
-                  height: h,
-                  backgroundColor: "#000",
-                  overflow: "hidden",
-                }}
-              >
-                <TouchableOpacity
-                  onPress={() =>
-                    setPlayingVideoSet((prev) => {
-                      const next = new Set(prev);
-                      next.add(index);
-                      return next;
-                    })
-                  }
-                  activeOpacity={0.85}
-                  style={{
-                    width: w,
-                    height: h,
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  <View
-                    style={{
-                      width: 64,
-                      height: 64,
-                      borderRadius: 32,
-                      backgroundColor: "rgba(0,0,0,0.55)",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <Play size={32} color="#fff" fill="#fff" />
-                  </View>
-                </TouchableOpacity>
-              </View>
-            );
-          }
           return (
             <View
               style={{
@@ -610,7 +615,7 @@ const MediaCarousel = React.memo(
           </View>
         );
       },
-      [handleImageTap, isVisible, activeIndex, onDoubleTapAt, frameWidth, slideH, playingVideoSet],
+      [handleImageTap, isVisible, activeIndex, onDoubleTapAt, frameWidth, slideH],
     );
 
     if (images.length === 0) return null;

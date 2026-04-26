@@ -411,30 +411,43 @@ export async function notifyUserWentLive(
 }
 
 /**
- * Notify a user that their chat partner sent them a Mongoose delivery request.
- * Triggered right after the `mongoose_invite` message is inserted in the chat.
+ * Notify the initiator that their chat partner accepted the Mongoose delivery request.
+ * Triggered only after Person 2 confirms their location and the booking_request row is created.
  */
-export async function notifyMongooseRequest(
-  recipientId: string,
-  senderId: string,
+export async function notifyMongooseBookingConfirmed(
+  initiatorId: string,
+  responderId: string,
 ): Promise<void> {
-  if (recipientId === senderId) return;
-  const actor = await resolveProfile(senderId);
+  if (initiatorId === responderId) return;
+  const actor = await resolveProfile(responderId);
+
+  // Notify the initiator (Person 1)
   await createNotification({
-    userId: recipientId,
+    userId: initiatorId,
     type: "mongoose_booking_request",
-    actorId: senderId,
-    title: "Mongoose Request",
-    body: `${actor.name} sent you a Mongoose delivery request`,
+    actorId: responderId,
+    title: "Mongoose Request Confirmed",
+    body: `${actor.name} accepted your Mongoose delivery request`,
   });
 
-  // Push notification (fire-and-forget)
+  // Look up the Mongoose service user so they get a push too
+  const { data: mongooseProfile } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("email", "mongoose@gmail.com")
+    .maybeSingle();
+
+  const pushRecipients = [initiatorId];
+  if (mongooseProfile?.id && mongooseProfile.id !== initiatorId) {
+    pushRecipients.push(mongooseProfile.id);
+  }
+
   sendPushToUsers({
-    recipientIds: [recipientId],
-    heading: "Mongoose Request",
-    content: `${actor.name} sent you a Mongoose delivery request`,
+    recipientIds: pushRecipients,
+    heading: "New Mongoose Booking!",
+    content: `${actor.name} confirmed a delivery request`,
     type: "mongoose_booking_request",
-    data: { actor_id: senderId },
+    data: { actor_id: responderId },
     actorAvatarUrl: actor.avatar_url,
   }).catch(() => {});
 }
