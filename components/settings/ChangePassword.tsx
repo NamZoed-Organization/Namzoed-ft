@@ -9,8 +9,10 @@ interface ChangePasswordProps {
 }
 
 export default function ChangePassword({ onClose }: ChangePasswordProps) {
+  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -22,7 +24,7 @@ export default function ChangePassword({ onClose }: ChangePasswordProps) {
   };
 
   const handleChangePassword = async () => {
-    if (!newPassword || !confirmPassword) {
+    if (!currentPassword || !newPassword || !confirmPassword) {
       showPopup('error', 'Missing Fields', 'Please fill in all fields');
       return;
     }
@@ -39,6 +41,24 @@ export default function ChangePassword({ onClose }: ChangePasswordProps) {
 
     try {
       setLoading(true);
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      const authEmail = userData?.user?.email;
+
+      if (userError || !authEmail) {
+        showPopup('error', 'Session Error', 'Unable to verify your account. Please log in again.');
+        return;
+      }
+
+      const { error: verifyError } = await supabase.auth.signInWithPassword({
+        email: authEmail,
+        password: currentPassword,
+      });
+
+      if (verifyError) {
+        showPopup('error', 'Incorrect Password', 'Your current password is incorrect');
+        return;
+      }
+
       const { error } = await supabase.auth.updateUser({
         password: newPassword
       });
@@ -47,6 +67,7 @@ export default function ChangePassword({ onClose }: ChangePasswordProps) {
         showPopup('error', 'Change Failed', error.message);
       } else {
         showPopup('success', 'Password Changed!', 'Password changed successfully');
+        setCurrentPassword('');
         setNewPassword('');
         setConfirmPassword('');
         onClose?.();
@@ -71,6 +92,28 @@ export default function ChangePassword({ onClose }: ChangePasswordProps) {
       {/* Scrollable Content */}
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
         <View className="px-6 py-8">
+          {/* Current Password */}
+          <View className="mb-4">
+            <Text className="text-sm font-medium text-gray-700 mb-2">Current Password</Text>
+            <View className="flex-row items-center bg-gray-100 rounded-lg px-4 py-3 border border-gray-300">
+              <TextInput
+                className="flex-1 text-base text-gray-900"
+                placeholder="Enter current password"
+                value={currentPassword}
+                onChangeText={setCurrentPassword}
+                secureTextEntry={!showCurrent}
+                autoCapitalize="none"
+              />
+              <TouchableOpacity onPress={() => setShowCurrent(!showCurrent)}>
+                {showCurrent ? (
+                  <EyeOff size={20} color="#6b7280" />
+                ) : (
+                  <Eye size={20} color="#6b7280" />
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+
           {/* New Password */}
           <View className="mb-4">
             <Text className="text-sm font-medium text-gray-700 mb-2">New Password</Text>

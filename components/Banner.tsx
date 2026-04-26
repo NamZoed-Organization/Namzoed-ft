@@ -1,10 +1,10 @@
 import { useBanners } from "@/data/bannerData";
-import React, { useEffect, useRef, useState } from "react";
 import { Image } from "expo-image";
+import React, { useEffect, useRef, useState } from "react";
 import { FlatList, View, useWindowDimensions } from "react-native";
 
 const SIDE_PADDING = 16;
-const AUTO_SLIDE_INTERVAL = 2000;
+const AUTO_SLIDE_INTERVAL = 7000;
 
 export default function Banner() {
   const { width } = useWindowDimensions();

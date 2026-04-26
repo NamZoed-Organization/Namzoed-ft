@@ -17,7 +17,6 @@ import { useFonts } from "expo-font";
 import * as Linking from "expo-linking";
 import { Stack, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import * as NavigationBar from "expo-navigation-bar";
 import React, { useEffect, useRef } from "react";
 import { Platform, StatusBar, View } from "react-native";
 import FlashMessage from "react-native-flash-message";
@@ -68,13 +67,6 @@ export default function RootLayout() {
       SplashScreen.hideAsync();
     }
   }, [fontsLoaded, fontError]);
-
-  useEffect(() => {
-    if (Platform.OS === "android") {
-      NavigationBar.setBackgroundColorAsync("#ffffff").catch(() => {});
-      NavigationBar.setButtonStyleAsync("dark").catch(() => {});
-    }
-  }, []);
 
   useEffect(() => {
     const resolveDestination = (
