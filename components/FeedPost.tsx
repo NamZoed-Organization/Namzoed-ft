@@ -4,9 +4,12 @@ import ImageViewer from "@/components/modals/ImageViewer";
 import LikesListModal from "@/components/modals/LikesListModal";
 import PostActionSheet from "@/components/modals/PostActionSheet";
 import ReportPostModal from "@/components/modals/ReportPostModal";
+import ReelsViewer from "@/components/ReelsViewer";
 import ShareComposerModal from "@/components/modals/ShareComposerModal";
 import TaggedItemsModal from "@/components/modals/TaggedItemsModal";
 import PopupMessage from "@/components/ui/PopupMessage";
+import ProgressiveImage from "@/components/ui/ProgressiveImage";
+import { ContentWarning } from "@/components/ContentWarning";
 import { useUser } from "@/contexts/UserContext";
 import {
     hasUserBookmarkedPost,
@@ -20,7 +23,7 @@ import {
     togglePostLike,
 } from "@/lib/likesService";
 import { RATIO_PORTRAIT } from "@/lib/postMediaDisplay";
-import { deletePost } from "@/lib/postsService";
+import { deletePost, VideoReel } from "@/lib/postsService";
 import { buildPostExternalSharePayload } from "@/lib/shareUtils";
 import { playSound } from "@/lib/soundUtils";
 import { PostData } from "@/types/post";
@@ -30,6 +33,7 @@ import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useVideoPlayer, VideoView } from "expo-video";
 import {
+  EyeOff,
     Bookmark,
     Heart,
     MessageCircle,
@@ -198,8 +202,12 @@ interface MediaCarouselProps {
   /** Full-bleed media width (window width — matches Instagram edge-to-edge). */
   frameWidth: number;
   images: string[];
+  /** BlurHash per image, aligned with `images`. */
+  blurHashes?: (string | null)[];
   onDoubleTapAt?: (x: number, y: number) => void;
   onImagePress?: (index: number) => void;
+  /** Opens the fullscreen reels player for the tapped video URL. */
+  onVideoPress?: (uri: string) => void;
   isVisible?: boolean;
   hasTaggedItems: boolean;
   onTagPress: () => void;
@@ -261,6 +269,7 @@ interface InlineVideoPlayerProps {
   slideHeight: number;
   isVisible: boolean;
   onDoubleTapAt?: (x: number, y: number) => void;
+  onExpand?: () => void;
 }
 
 // Top-level wrapper: only mounts the heavy ExoPlayer-backed component when the
@@ -268,7 +277,7 @@ interface InlineVideoPlayerProps {
 // holds several posts; without it, every video post in the window holds a
 // live ExoPlayer instance and crashes older devices with java.lang.OutOfMemoryError
 // in androidx.media3.exoplayer.ExoPlayerImplInternal.shouldContinueLoading.
-const InlineVideoPlayer = React.memo(function InlineVideoPlayer({ uri, frameWidth, slideHeight, isVisible, onDoubleTapAt }: InlineVideoPlayerProps) {
+const InlineVideoPlayer = React.memo(function InlineVideoPlayer({ uri, frameWidth, slideHeight, isVisible, onDoubleTapAt, onExpand }: InlineVideoPlayerProps) {
   if (!isVisible) {
     return <View style={{ width: frameWidth, height: slideHeight, backgroundColor: "#000" }} />;
   }
@@ -278,6 +287,7 @@ const InlineVideoPlayer = React.memo(function InlineVideoPlayer({ uri, frameWidt
       frameWidth={frameWidth}
       slideHeight={slideHeight}
       onDoubleTapAt={onDoubleTapAt}
+      onExpand={onExpand}
     />
   );
 });
@@ -287,9 +297,10 @@ interface ActiveVideoPlayerProps {
   frameWidth: number;
   slideHeight: number;
   onDoubleTapAt?: (x: number, y: number) => void;
+  onExpand?: () => void;
 }
 
-const ActiveVideoPlayer = React.memo(function ActiveVideoPlayer({ uri, frameWidth, slideHeight: videoH, onDoubleTapAt }: ActiveVideoPlayerProps) {
+const ActiveVideoPlayer = React.memo(function ActiveVideoPlayer({ uri, frameWidth, slideHeight: videoH, onDoubleTapAt, onExpand }: ActiveVideoPlayerProps) {
   const [isHolding, setIsHolding] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
@@ -308,7 +319,9 @@ const ActiveVideoPlayer = React.memo(function ActiveVideoPlayer({ uri, frameWidt
   const timerFadeTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [timerLabel, setTimerLabel] = useState("");
 
-  const player = useVideoPlayer(uri, (p) => {
+  // Cache to disk so the same clip isn't re-downloaded across feed re-renders or
+  // when opened in the fullscreen reels player.
+  const player = useVideoPlayer({ uri, useCaching: true }, (p) => {
     p.loop = true;
     p.muted = true;
   });
@@ -379,49 +392,35 @@ const ActiveVideoPlayer = React.memo(function ActiveVideoPlayer({ uri, frameWidt
     };
   }, []);
 
+  // Capture the touch position only — used to place the double-tap heart.
   const handlePressIn = (event: GestureResponderEvent) => {
     lastTapPosRef.current = {
       x: event.nativeEvent.locationX,
       y: event.nativeEvent.locationY,
     };
-    holdTimeoutRef.current = setTimeout(() => {
-      setIsHolding(true);
-    }, 150);
   };
 
-  const handlePressOut = () => {
-    if (holdTimeoutRef.current) {
-      clearTimeout(holdTimeoutRef.current);
-      holdTimeoutRef.current = null;
-    }
-    if (!isHolding) {
-      const now = Date.now();
-      if (now - lastTapRef.current < 300) {
-        // Double tap — cancel pending single-tap, fire heart
-        if (singleTapTimerRef.current) {
-          clearTimeout(singleTapTimerRef.current);
-          singleTapTimerRef.current = null;
-        }
-        onDoubleTapAt?.(lastTapPosRef.current.x, lastTapPosRef.current.y);
-        lastTapRef.current = 0;
-      } else {
-        // Defer single tap so a follow-up tap can be detected as double
-        singleTapTimerRef.current = setTimeout(() => {
-          singleTapTimerRef.current = null;
-          setShouldPlay((prev) => {
-            const next = !prev;
-            // First time the user plays this video, unmute by default
-            if (next && !hasAutoUnmutedRef.current) {
-              hasAutoUnmutedRef.current = true;
-              setIsMuted(false);
-            }
-            return next;
-          });
-        }, 280);
-        lastTapRef.current = now;
+  // onPress (not onPressOut) so a vertical scroll over the video doesn't count
+  // as a tap — RN cancels the press once the FlatList claims the scroll gesture.
+  const handlePress = () => {
+    const now = Date.now();
+    if (now - lastTapRef.current < 300) {
+      // Double tap — cancel the pending single-tap and fire the like heart.
+      if (singleTapTimerRef.current) {
+        clearTimeout(singleTapTimerRef.current);
+        singleTapTimerRef.current = null;
       }
+      onDoubleTapAt?.(lastTapPosRef.current.x, lastTapPosRef.current.y);
+      lastTapRef.current = 0;
+    } else {
+      // Defer the single tap so a follow-up tap can register as a double tap.
+      // A confirmed single tap opens the immersive fullscreen reels player.
+      lastTapRef.current = now;
+      singleTapTimerRef.current = setTimeout(() => {
+        singleTapTimerRef.current = null;
+        onExpand?.();
+      }, 280);
     }
-    setIsHolding(false);
   };
 
   const handleMutePress = () => {
@@ -430,7 +429,7 @@ const ActiveVideoPlayer = React.memo(function ActiveVideoPlayer({ uri, frameWidt
 
   return (
     <View style={{ width: frameWidth, height: videoH }}>
-      <TouchableWithoutFeedback onPressIn={handlePressIn} onPressOut={handlePressOut}>
+      <TouchableWithoutFeedback onPressIn={handlePressIn} onPress={handlePress}>
         <View style={{ flex: 1 }}>
           <VideoView
             player={player}
@@ -514,8 +513,10 @@ const MediaCarousel = React.memo(
   ({
     frameWidth,
     images,
+    blurHashes,
     onDoubleTapAt,
     onImagePress,
+    onVideoPress,
     isVisible = true,
     hasTaggedItems,
     onTagPress,
@@ -581,6 +582,7 @@ const MediaCarousel = React.memo(
                 slideHeight={h}
                 isVisible={isVisible && activeIndex === index}
                 onDoubleTapAt={onDoubleTapAt}
+                onExpand={() => onVideoPress?.(item)}
               />
             </View>
           );
@@ -600,22 +602,19 @@ const MediaCarousel = React.memo(
               activeOpacity={1}
               style={{ width: w, height: h }}
             >
-              <Image
-                source={{ uri: item }}
-                style={{
-                  width: w,
-                  height: h,
-                  backgroundColor: "#000",
-                }}
+              <ProgressiveImage
+                uri={item}
+                blurhash={blurHashes?.[index]}
+                style={{ width: w, height: h }}
                 contentFit="cover"
-                cachePolicy="memory-disk"
-                transition={150}
+                backgroundColor="#000"
+                recyclingKey={item}
               />
             </TouchableOpacity>
           </View>
         );
       },
-      [handleImageTap, isVisible, activeIndex, onDoubleTapAt, frameWidth, slideH],
+      [handleImageTap, isVisible, activeIndex, onDoubleTapAt, onVideoPress, frameWidth, slideH, blurHashes],
     );
 
     if (images.length === 0) return null;
@@ -842,7 +841,11 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
   const [showShareComposer, setShowShareComposer] = useState(false);
   const [imageViewerVisible, setImageViewerVisible] = useState(false);
   const [imageViewerIndex, setImageViewerIndex] = useState(0);
+  const [reelsVisible, setReelsVisible] = useState(false);
+  const [reelsInitial, setReelsInitial] = useState<VideoReel[]>([]);
+  const [reelsIndex, setReelsIndex] = useState(0);
   const [flyingHearts, setFlyingHearts] = useState<Array<{ id: number; x: number; y: number }>>([]);
+  const [isContentRevealed, setIsContentRevealed] = useState(post.contentRating === "general" || !post.contentRating);
   const flyHeartId = useRef(0);
 
   const hasTaggedProducts = (post.tagged_products?.length ?? 0) > 0;
@@ -853,6 +856,11 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
 
   const isOwnPost = currentUser?.id === post.userId;
   const isAuthorLive = isAuthorLiveProp ?? false;
+  const needsContentWarning = !!post.contentRating && post.contentRating !== "general";
+
+  useEffect(() => {
+    setIsContentRevealed(!needsContentWarning);
+  }, [post.id, post.contentRating, needsContentWarning]);
 
   // Keep interaction cache in sync when user interacts
   const updateCache = useCallback((updates: Partial<NonNullable<ReturnType<typeof interactionCache.get>>>) => {
@@ -1000,6 +1008,30 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
     setShowShareComposer(true);
   };
 
+  // Open the fullscreen reels player at the tapped video. The viewer then loads
+  // an endless stream of every video in the system.
+  const handleVideoPress = useCallback(
+    (uri: string) => {
+      const videoUrls = (post.images || []).filter(isVideoUrl);
+      if (videoUrls.length === 0) return;
+      const startIndex = Math.max(0, videoUrls.indexOf(uri));
+      const initial: VideoReel[] = videoUrls.map((videoUri, i) => ({
+        id: `${post.id}::${i}`,
+        uri: videoUri,
+        postId: String(post.id),
+        userId: String(post.userId),
+        username: post.username || "Unknown",
+        avatarUrl: post.profilePic ?? null,
+        content: post.content || "",
+        createdAt: (post.date instanceof Date ? post.date : new Date(post.date)).toISOString(),
+      }));
+      setReelsInitial(initial);
+      setReelsIndex(startIndex);
+      setReelsVisible(true);
+    },
+    [post.images, post.id, post.userId, post.username, post.profilePic, post.content, post.date],
+  );
+
   const postSharePayload = useMemo(
     () =>
       buildPostExternalSharePayload({
@@ -1099,22 +1131,46 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
 
       {/* Media */}
       {post.images.length > 0 && (
-        <MediaCarousel
-          frameWidth={frameWidth}
-          images={post.images}
-          onDoubleTapAt={handleDoubleTapAt}
-          isVisible={isVisible}
-          hasTaggedItems={hasTaggedItems}
-          onTagPress={() => setShowTaggedItems(true)}
-          onImagePress={(i) => {
-            setImageViewerIndex(i);
-            setImageViewerVisible(true);
-          }}
-        />
+        <View style={{ position: "relative" }}>
+          <MediaCarousel
+            frameWidth={frameWidth}
+            images={post.images}
+            blurHashes={post.blurHashes}
+            onDoubleTapAt={handleDoubleTapAt}
+            isVisible={isVisible}
+            hasTaggedItems={hasTaggedItems}
+            onTagPress={() => setShowTaggedItems(true)}
+            onImagePress={(i) => {
+              setImageViewerIndex(i);
+              setImageViewerVisible(true);
+            }}
+            onVideoPress={handleVideoPress}
+          />
+          {/* Content Warning Overlay for sensitive/18+ posts */}
+          {needsContentWarning && !isContentRevealed && (
+            <ContentWarning
+              contentRating={post.contentRating}
+              onDismiss={() => setIsContentRevealed(true)}
+            />
+          )}
+        </View>
+      )}
+
+      {/* Text-only warning prompt */}
+      {post.images.length === 0 && needsContentWarning && !isContentRevealed && (
+        <TouchableOpacity
+          style={styles.textOnlyWarningCard}
+          onPress={() => setIsContentRevealed(true)}
+          activeOpacity={0.85}
+        >
+          <EyeOff size={30} color="#fff" strokeWidth={2.2} />
+          <Text style={styles.textOnlyWarningTitle}>Sensitive Content</Text>
+          <Text style={styles.textOnlyWarningBody}>Tap to view this post</Text>
+        </TouchableOpacity>
       )}
 
       {/* Action Bar */}
-      <View style={styles.actionBar}>
+      {(!needsContentWarning || isContentRevealed) && <View style={styles.actionBar}>
         <View style={{ flexDirection: "row", alignItems: "center" }}>
           <TouchableOpacity onPress={handleLike} style={styles.actionBtn}>
             <Heart
@@ -1140,10 +1196,10 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
             fill={isBookmarked ? "#262626" : "none"}
           />
         </TouchableOpacity>
-      </View>
+      </View>}
 
       {/* Likes */}
-      <View style={styles.likesSection}>
+      {(!needsContentWarning || isContentRevealed) && <View style={styles.likesSection}>
         {followedLikers.length > 0 ? (
           <MiniAvatarRow
             users={followedLikers}
@@ -1157,10 +1213,10 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
             </Text>
           </TouchableOpacity>
         ) : null}
-      </View>
+      </View>}
 
       {/* Caption */}
-      {post.content ? (
+      {post.content && (!needsContentWarning || isContentRevealed) ? (
         <View style={styles.captionSection}>
           <Text style={styles.captionText}>
             <Text style={styles.captionUsername}>{post.username || "Unknown"}</Text>
@@ -1340,9 +1396,17 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
         }}
       />
 
+      <ReelsViewer
+        visible={reelsVisible}
+        initialReels={reelsInitial}
+        initialIndex={reelsIndex}
+        onClose={() => setReelsVisible(false)}
+      />
+
       <ImageViewer
         visible={imageViewerVisible}
         images={post.images}
+        blurHashes={post.blurHashes}
         initialIndex={imageViewerIndex}
         onClose={() => setImageViewerVisible(false)}
         postId={String(post.id)}
@@ -1490,6 +1554,30 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     fontSize: 13,
     color: "#262626",
+  },
+  textOnlyWarningCard: {
+    marginHorizontal: 14,
+    marginTop: 10,
+    paddingVertical: 20,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: "rgba(0, 0, 0, 0.75)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  textOnlyWarningTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#fff",
+    marginTop: 10,
+    marginBottom: 6,
+  },
+  textOnlyWarningBody: {
+    fontSize: 13,
+    color: "rgba(255, 255, 255, 0.9)",
+    fontWeight: "700",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
   },
   captionSection: {
     paddingHorizontal: 14,

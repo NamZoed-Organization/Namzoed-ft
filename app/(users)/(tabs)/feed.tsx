@@ -1,11 +1,12 @@
 import FeedPost, { PostSkeleton } from "@/components/FeedPost";
 import { VideoErrorBoundary } from "@/components/VideoErrorBoundary";
 import { useUser } from "@/contexts/UserContext";
+import { useSafety } from "@/contexts/SafetyContext";
 import { useFeedInfiniteScroll } from "@/hooks/useFeedInfiniteScroll";
+import { canViewContent } from "@/lib/contentClassifier";
 import { getReportedPostIds } from "@/lib/reportService";
 import { PostData } from "@/types/post";
 import { useLocalSearchParams } from "expo-router";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import React, {
     useCallback,
     useEffect,
@@ -20,20 +21,26 @@ import {
     RefreshControl,
     Text,
     TouchableWithoutFeedback,
-    View
+    View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import LivesBar from "@/components/livestream/LivesBar";
 import AuthPromptModal from "@/components/modals/AuthPromptModal";
-import { feedEvents } from "@/utils/feedEvents";
+import OnboardingTutorial from "@/components/onboarding/OnboardingTutorial";
 import { useLivestreams } from "@/hooks/useLivestreams";
+import { useOnboardingTutorial } from "@/hooks/useOnboardingTutorial";
+import { feedEvents } from "@/utils/feedEvents";
 
 type CreatePostProps = { onClose?: () => void };
 
 function FeedScreen() {
   const insets = useSafeAreaInsets();
   const { currentUser } = useUser();
-  const { streamId: deepLinkedStreamId } = useLocalSearchParams<{ streamId?: string }>();
+  const { safeView, userAge, isAgeVerified } = useSafety();
+  const { streamId: deepLinkedStreamId } = useLocalSearchParams<{
+    streamId?: string;
+  }>();
   const [showCreatePost, setShowCreatePost] = useState(false);
   const [CreatePostComponent, setCreatePostComponent] =
     useState<React.ComponentType<CreatePostProps> | null>(null);
@@ -46,6 +53,27 @@ function FeedScreen() {
   const [reportedPostIds, setReportedPostIds] = useState<string[]>([]);
   const { getLivestreamForUser } = useLivestreams();
 
+  // ── Onboarding tutorial (first-time only) ──────────────────────────────
+  const {
+    hasUnseen,
+    loading: tutorialLoading,
+    markComplete,
+  } = useOnboardingTutorial();
+  const [showTutorial, setShowTutorial] = useState(false);
+  const tutorialTriggeredRef = useRef(false);
+
+  // Wait until the feed has loaded and the tutorial state is known,
+  // then show the modal once for brand-new users.
+  useEffect(() => {
+    if (tutorialLoading || tutorialTriggeredRef.current || !currentUser) return;
+    if (hasUnseen) {
+      tutorialTriggeredRef.current = true;
+      // Small delay so the feed renders first before the modal appears
+      const timer = setTimeout(() => setShowTutorial(true), 1200);
+      return () => clearTimeout(timer);
+    }
+  }, [tutorialLoading, hasUnseen, currentUser]);
+
   // Infinite scroll hook — cursor-based pagination from Supabase
   const {
     posts: allPosts,
@@ -57,11 +85,32 @@ function FeedScreen() {
     removePost,
   } = useFeedInfiniteScroll();
 
-  // Filter out reported posts
+  // Filter out reported posts and filter by moderation + user age
   const filteredPosts = useMemo(() => {
-    if (reportedPostIds.length === 0) return allPosts;
-    return allPosts.filter(post => !reportedPostIds.includes(post.id));
-  }, [allPosts, reportedPostIds]);
+    let posts = allPosts;
+    
+    // Remove reported posts
+    if (reportedPostIds.length > 0) {
+      posts = posts.filter((post) => !reportedPostIds.includes(post.id));
+    }
+
+    // Filter by moderation status: only show approved posts or pending if user is admin
+    posts = posts.filter((post) => {
+      const moderationStatus = (post as any).moderationStatus || 'approved';
+      // For now, only show approved posts. Admin view can show all.
+      return moderationStatus === 'approved';
+    });
+
+    // Filter by content rating, the viewer's age, and their Safe View setting.
+    // With Safe View ON (default) or for minors/unverified users, mature
+    // (sensitive / 18+) posts are hidden entirely so they're never recommended.
+    posts = posts.filter((post) => {
+      const contentRating = (post as any).contentRating || 'general';
+      return canViewContent(contentRating, userAge, isAgeVerified, safeView);
+    });
+
+    return posts;
+  }, [allPosts, reportedPostIds, userAge, isAgeVerified, safeView]);
 
   // Dynamic import for LiveScrollScreen
   const [LiveScrollScreen, setLiveScrollScreen] = useState<React.ComponentType<{
@@ -110,7 +159,9 @@ function FeedScreen() {
     if (currentUser?.id) {
       getReportedPostIds(currentUser.id)
         .then(setReportedPostIds)
-        .catch((error) => console.error('Error loading reported posts:', error));
+        .catch((error) =>
+          console.error("Error loading reported posts:", error),
+        );
     }
   }, [currentUser?.id]);
 
@@ -154,15 +205,15 @@ function FeedScreen() {
     };
 
     const handlePostReported = (postId: string) => {
-      setReportedPostIds(prev => [...prev, postId]);
+      setReportedPostIds((prev) => [...prev, postId]);
     };
 
-    feedEvents.on('postDeleted', handlePostDeleted);
-    feedEvents.on('postReported', handlePostReported);
+    feedEvents.on("postDeleted", handlePostDeleted);
+    feedEvents.on("postReported", handlePostReported);
 
     return () => {
-      feedEvents.off('postDeleted', handlePostDeleted);
-      feedEvents.off('postReported', handlePostReported);
+      feedEvents.off("postDeleted", handlePostDeleted);
+      feedEvents.off("postReported", handlePostReported);
     };
   }, [removePost]);
 
@@ -200,16 +251,23 @@ function FeedScreen() {
     { viewabilityConfig, onViewableItemsChanged },
   ]).current;
 
-  const renderPost = useCallback(({ item }: { item: PostData }) => {
-    const isVisible = visiblePostIdRef.current === item.id;
-    const isAuthorLive = !!getLivestreamForUser(item.userId);
+  const renderPost = useCallback(
+    ({ item }: { item: PostData }) => {
+      const isVisible = visiblePostIdRef.current === item.id;
+      const isAuthorLive = !!getLivestreamForUser(item.userId);
 
-    return (
-      <VideoErrorBoundary>
-        <FeedPost post={item} isVisible={isVisible} isAuthorLive={isAuthorLive} />
-      </VideoErrorBoundary>
-    );
-  }, [getLivestreamForUser]);
+      return (
+        <VideoErrorBoundary>
+          <FeedPost
+            post={item}
+            isVisible={isVisible}
+            isAuthorLive={isAuthorLive}
+          />
+        </VideoErrorBoundary>
+      );
+    },
+    [getLivestreamForUser],
+  );
 
   // Footer component for loading more posts
   const renderFooter = useCallback(() => {
@@ -241,14 +299,17 @@ function FeedScreen() {
 
   const handleCreatePost = useCallback(() => setShowCreatePost(true), []);
 
-  const renderHeader = useCallback(() => (
-    <LivesBar
-      onJoin={handleJoinLive}
-      onGoLive={handleGoLive}
-      onCreatePost={handleCreatePost}
-      refreshKey={liveRefreshKey}
-    />
-  ), [handleJoinLive, handleGoLive, handleCreatePost, liveRefreshKey]);
+  const renderHeader = useCallback(
+    () => (
+      <LivesBar
+        onJoin={handleJoinLive}
+        onGoLive={handleGoLive}
+        onCreatePost={handleCreatePost}
+        refreshKey={liveRefreshKey}
+      />
+    ),
+    [handleJoinLive, handleGoLive, handleCreatePost, liveRefreshKey],
+  );
 
   const [showAuthModal, setShowAuthModal] = useState(false);
 
@@ -256,7 +317,7 @@ function FeedScreen() {
     return (
       <View className="flex-1 bg-gray-100">
         {/* Status Bar Space */}
-        <View style={{ height: insets.top, backgroundColor: 'white' }} />
+        <View style={{ height: insets.top, backgroundColor: "white" }} />
 
         <View className="flex-1 items-center justify-center px-4">
           <Text className="text-xl font-semibold text-gray-700 mb-2">
@@ -267,7 +328,9 @@ function FeedScreen() {
           </Text>
           <TouchableWithoutFeedback onPress={() => setShowAuthModal(true)}>
             <View className="bg-primary px-8 py-3 rounded-full">
-              <Text className="text-white font-msemibold text-base">Sign In</Text>
+              <Text className="text-white font-msemibold text-base">
+                Sign In
+              </Text>
             </View>
           </TouchableWithoutFeedback>
           <AuthPromptModal
@@ -283,7 +346,7 @@ function FeedScreen() {
   return (
     <View className="flex-1 bg-gray-100">
       {/* Status Bar Space */}
-      <View style={{ height: insets.top, backgroundColor: 'white' }} />
+      <View style={{ height: insets.top, backgroundColor: "white" }} />
 
       {/* Feed Content */}
       <FlatList
@@ -293,13 +356,15 @@ function FeedScreen() {
         renderItem={renderPost}
         keyExtractor={(item) => item.id}
         ListHeaderComponent={renderHeader}
-        ListEmptyComponent={postsLoading ? (
-          <>
-            <PostSkeleton />
-            <PostSkeleton />
-            <PostSkeleton />
-          </>
-        ) : null}
+        ListEmptyComponent={
+          postsLoading ? (
+            <>
+              <PostSkeleton />
+              <PostSkeleton />
+              <PostSkeleton />
+            </>
+          ) : null
+        }
         ListFooterComponent={renderFooter}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 72 + insets.bottom }}
@@ -319,6 +384,20 @@ function FeedScreen() {
             colors={["#1877F2"]}
           />
         }
+      />
+
+      {/* ── First-time Onboarding Tutorial ─────────────────────────────────── */}
+      <OnboardingTutorial
+        visible={showTutorial}
+        mode="all"
+        onComplete={async () => {
+          setShowTutorial(false);
+          await markComplete("addProducts", "tagInPosts");
+        }}
+        onDismiss={async () => {
+          setShowTutorial(false);
+          await markComplete("addProducts", "tagInPosts");
+        }}
       />
 
       {/* Create Post Modal */}
@@ -375,7 +454,6 @@ function FeedScreen() {
           )}
         </Modal>
       )}
-
     </View>
   );
 }

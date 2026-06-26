@@ -1,17 +1,18 @@
+import { Image } from 'expo-image';
+import { X } from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
-  View,
-  Text,
-  Modal,
-  TouchableOpacity,
-  StatusBar,
-  Dimensions,
   ActivityIndicator,
+  Dimensions,
+  Modal,
+  StatusBar,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import { X } from 'lucide-react-native';
-import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
-import { Image } from 'expo-image';
 import ImageZoom from 'react-native-image-pan-zoom';
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+const AnyImageZoom = ImageZoom as unknown as React.ComponentType<any>;
 
 interface LicenseViewerOverlayProps {
   visible: boolean;
@@ -70,8 +71,8 @@ export default function LicenseViewerOverlay({
               <Text className="text-gray-900 text-base font-msemibold mb-2">Failed to load image</Text>
               <Text className="text-gray-600 text-sm">Please try again</Text>
             </View>
-          ) : (
-            <ImageZoom
+            ) : (
+            <AnyImageZoom
               cropWidth={SCREEN_WIDTH}
               cropHeight={SCREEN_HEIGHT - 80}
               imageWidth={SCREEN_WIDTH}
@@ -100,7 +101,7 @@ export default function LicenseViewerOverlay({
                   console.error('Failed to load license image:', licenseUrl);
                 }}
               />
-            </ImageZoom>
+            </AnyImageZoom>
           )}
         </View>
 

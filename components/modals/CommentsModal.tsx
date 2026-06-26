@@ -39,6 +39,12 @@ interface CommentsModalProps {
   postId: string;
   postOwnerId: string;
   onCommentCountChange?: (count: number) => void;
+  /** Reels mode: no dimming backdrop so the (shrunken) video stays visible above. */
+  embedded?: boolean;
+  /** Fraction of screen height where the sheet top sits (embedded mode). */
+  sheetTopRatio?: number;
+  /** Rendered above the comment list — used to show the post description first. */
+  headerContent?: React.ReactNode;
 }
 
 const PRIMARY = '#094569';
@@ -88,6 +94,9 @@ export default function CommentsModal({
   postId,
   postOwnerId,
   onCommentCountChange,
+  embedded = false,
+  sheetTopRatio,
+  headerContent,
 }: CommentsModalProps) {
   const { currentUser } = useUser();
   const userId = currentUser?.id ?? '';
@@ -109,7 +118,9 @@ export default function CommentsModal({
 
   const SCREEN_H = Dimensions.get('window').height;
   const insets   = useSafeAreaInsets();
-  const POS_70   = SCREEN_H * 0.30;          // top = 30% → sheet is 70% tall
+  const POS_70   = embedded
+    ? SCREEN_H * (sheetTopRatio ?? 0.46)     // reels: leave the top for the video
+    : SCREEN_H * 0.30;                        // top = 30% → sheet is 70% tall
   const POS_100  = insets.top + 8;            // just below Dynamic Island / status bar
   const POS_CLOSED = SCREEN_H;        // off-screen
 
@@ -552,7 +563,10 @@ export default function CommentsModal({
     <Modal visible={visible} transparent animationType="none" onRequestClose={handleClose}>
       {/* Animated backdrop */}
       <Animated.View
-        style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.4)', opacity: backdropAnim }]}
+        style={[
+          StyleSheet.absoluteFillObject,
+          { backgroundColor: embedded ? 'transparent' : 'rgba(0,0,0,0.4)', opacity: embedded ? 1 : backdropAnim },
+        ]}
         pointerEvents="box-none"
       >
         <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={handleClose} />
@@ -575,26 +589,28 @@ export default function CommentsModal({
             </TouchableOpacity>
           </View>
 
-          {/* list */}
-          {loading ? (
-            <View style={styles.emptyState}>
-              <ActivityIndicator size="small" color={PRIMARY} />
-            </View>
-          ) : comments.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyTitle}>No comments yet</Text>
-              <Text style={styles.emptySubtitle}>Be the first to comment</Text>
-            </View>
-          ) : (
-            <FlatList
-              data={comments}
-              keyExtractor={(item) => item.id}
-              renderItem={renderComment}
-              style={{ flex: 1 }}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-            />
-          )}
+          {/* list — description (headerContent) shows first, then comments */}
+          <FlatList
+            data={loading ? [] : comments}
+            keyExtractor={(item) => item.id}
+            renderItem={renderComment}
+            style={{ flex: 1 }}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            ListHeaderComponent={headerContent ? <>{headerContent}</> : null}
+            ListEmptyComponent={
+              loading ? (
+                <View style={styles.emptyState}>
+                  <ActivityIndicator size="small" color={PRIMARY} />
+                </View>
+              ) : (
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyTitle}>No comments yet</Text>
+                  <Text style={styles.emptySubtitle}>Be the first to comment</Text>
+                </View>
+              )
+            }
+          />
 
           {/* reply-to banner */}
           {replyTarget && (

@@ -23,16 +23,22 @@ export default function GlobalSearchScreen() {
 
   const [query, setQuery] = useState("");
   const [throttledQuery, setThrottledQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<SearchResults | null>(null);
+  const [searchResults, setSearchResults] = useState<SearchResults | null>(
+    null,
+  );
   const [isSearching, setIsSearching] = useState(false);
-  const [activeTab, setActiveTab] = useState<"all" | "users" | "services" | "products" | "marketplace">("all");
+  const [activeTab, setActiveTab] = useState<
+    "all" | "users" | "services" | "products" | "marketplace"
+  >("all");
   const [selectedPost, setSelectedPost] = useState<any | null>(null);
   const [showImageViewer, setShowImageViewer] = useState(false);
 
   const inputRef = useRef<TextInput>(null);
   const tabScrollRef = useRef<ScrollView>(null);
   const touchStartX = useRef(0);
-  const tabLayouts = useRef<{ [key: string]: { x: number; width: number } }>({});
+  const tabLayouts = useRef<{ [key: string]: { x: number; width: number } }>(
+    {},
+  );
   const tabBarVisibleWidth = useRef(0);
 
   // Auto-focus on mount
@@ -57,10 +63,18 @@ export default function GlobalSearchScreen() {
     let cancelled = false;
     setIsSearching(true);
     searchAll(throttledQuery, currentUser?.id)
-      .then((results) => { if (!cancelled) setSearchResults(results); })
-      .catch(() => { if (!cancelled) setSearchResults(null); })
-      .finally(() => { if (!cancelled) setIsSearching(false); });
-    return () => { cancelled = true; };
+      .then((results) => {
+        if (!cancelled) setSearchResults(results);
+      })
+      .catch(() => {
+        if (!cancelled) setSearchResults(null);
+      })
+      .finally(() => {
+        if (!cancelled) setIsSearching(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [throttledQuery, currentUser?.id]);
 
   const handleResultPress = (result: SearchResult) => {
@@ -102,7 +116,14 @@ export default function GlobalSearchScreen() {
     if (!q.trim()) return <Text className="text-gray-800">{text}</Text>;
     const parts = text.split(new RegExp(`(${q.trim()})`, "i"));
     return parts.map((part, i) => (
-      <Text key={i} className={part.toLowerCase() === q.toLowerCase().trim() ? "font-semibold text-black" : "text-gray-800"}>
+      <Text
+        key={i}
+        className={
+          part.toLowerCase() === q.toLowerCase().trim()
+            ? "font-semibold text-black"
+            : "text-gray-800"
+        }
+      >
         {part}
       </Text>
     ));
@@ -150,9 +171,11 @@ export default function GlobalSearchScreen() {
     const visibleWidth = tabBarVisibleWidth.current;
     if (!layout || !visibleWidth) return;
     let targetX =
-      tabIndex === 0 ? 0
-      : tabIndex === tabs.length - 1 ? 99999
-      : layout.x - visibleWidth / 2 + layout.width / 2;
+      tabIndex === 0
+        ? 0
+        : tabIndex === tabs.length - 1
+          ? 99999
+          : layout.x - visibleWidth / 2 + layout.width / 2;
     tabScrollRef.current?.scrollTo({ x: Math.max(0, targetX), animated: true });
   };
 
@@ -160,27 +183,53 @@ export default function GlobalSearchScreen() {
     const diff = touchStartX.current - e.nativeEvent.pageX;
     if (Math.abs(diff) < 50) return;
     const currentIndex = tabs.findIndex((t) => t.key === activeTab);
-    if (diff > 0 && currentIndex < tabs.length - 1) setActiveTab(tabs[currentIndex + 1].key as any);
-    if (diff < 0 && currentIndex > 0) setActiveTab(tabs[currentIndex - 1].key as any);
+    if (diff > 0 && currentIndex < tabs.length - 1)
+      setActiveTab(tabs[currentIndex + 1].key as any);
+    if (diff < 0 && currentIndex > 0)
+      setActiveTab(tabs[currentIndex - 1].key as any);
   };
 
   const PostCard = ({ result }: { result: SearchResult }) => (
-    <TouchableOpacity onPress={() => handleResultPress(result)} className="mb-3" activeOpacity={0.7}>
+    <TouchableOpacity
+      onPress={() => handleResultPress(result)}
+      className="mb-3"
+      activeOpacity={0.7}
+    >
       <View className="bg-white rounded-lg overflow-hidden border border-gray-100">
         {result.imageUrl && (
-          <Image source={{ uri: result.imageUrl }} className="w-full h-32" resizeMode="cover" />
+          <Image
+            source={{ uri: result.imageUrl }}
+            className="w-full h-32"
+            resizeMode="cover"
+          />
         )}
         <View className={result.imageUrl ? "p-2.5" : "p-3"}>
-          <Text className="text-xs font-semibold text-gray-900" numberOfLines={1}>{result.title}</Text>
+          <Text
+            className="text-xs font-semibold text-gray-900"
+            numberOfLines={1}
+          >
+            {result.title}
+          </Text>
           {result.subtitle && (
-            <Text className="text-xs text-gray-500 mt-1.5" numberOfLines={result.imageUrl ? 2 : 4}>{result.subtitle}</Text>
+            <Text
+              className="text-xs text-gray-500 mt-1.5"
+              numberOfLines={result.imageUrl ? 2 : 4}
+            >
+              {result.subtitle}
+            </Text>
           )}
         </View>
       </View>
     </TouchableOpacity>
   );
 
-  const SearchResultItem = ({ result, showTypeTag = false }: { result: SearchResult; showTypeTag?: boolean }) => {
+  const SearchResultItem = ({
+    result,
+    showTypeTag = false,
+  }: {
+    result: SearchResult;
+    showTypeTag?: boolean;
+  }) => {
     const isUser = result.type === "user";
     const typeColors: Record<string, string> = {
       user: "bg-blue-100 text-blue-700",
@@ -190,10 +239,18 @@ export default function GlobalSearchScreen() {
       post: "bg-pink-100 text-pink-700",
     };
     const typeLabels: Record<string, string> = {
-      user: "User", service: "Service", product: "Product", marketplace: "Marketplace", post: "Post",
+      user: "User",
+      service: "Service",
+      product: "Product",
+      marketplace: "Marketplace",
+      post: "Post",
     };
     const typeIcons: Record<string, string> = {
-      user: "person", service: "construct", product: "pricetag", marketplace: "storefront", post: "chatbubble",
+      user: "person",
+      service: "construct",
+      product: "pricetag",
+      marketplace: "storefront",
+      post: "chatbubble",
     };
 
     return (
@@ -202,30 +259,49 @@ export default function GlobalSearchScreen() {
         className="flex-row items-center bg-white rounded-lg p-3 mb-2 border border-gray-100"
         activeOpacity={0.7}
       >
-        <View className={`w-14 h-14 ${isUser ? "rounded-full" : "rounded-lg"} bg-gray-200 overflow-hidden mr-3`}>
+        <View
+          className={`w-14 h-14 ${isUser ? "rounded-full" : "rounded-lg"} bg-gray-200 overflow-hidden mr-3`}
+        >
           {result.imageUrl ? (
-            <Image source={{ uri: result.imageUrl }} className="w-full h-full" resizeMode="cover" />
+            <Image
+              source={{ uri: result.imageUrl }}
+              className="w-full h-full"
+              resizeMode="cover"
+            />
           ) : (
             <View className="w-full h-full items-center justify-center bg-gray-300">
-              <Ionicons name={typeIcons[result.type] as any} size={24} color="#9CA3AF" />
+              <Ionicons
+                name={typeIcons[result.type] as any}
+                size={24}
+                color="#9CA3AF"
+              />
             </View>
           )}
         </View>
         <View className="flex-1">
           <View className="flex-row items-center">
-            <Text className="text-base font-semibold text-gray-900 flex-1" numberOfLines={1}>
+            <Text
+              className="text-base font-semibold text-gray-900 flex-1"
+              numberOfLines={1}
+            >
               {highlightMatch(result.title, throttledQuery)}
             </Text>
             {showTypeTag && (
-              <View className={`ml-2 px-2 py-0.5 rounded-full ${typeColors[result.type] ?? "bg-gray-100 text-gray-700"}`}>
-                <Text className={`text-xs font-medium ${typeColors[result.type] ?? "bg-gray-100 text-gray-700"}`}>
+              <View
+                className={`ml-2 px-2 py-0.5 rounded-full ${typeColors[result.type] ?? "bg-gray-100 text-gray-700"}`}
+              >
+                <Text
+                  className={`text-xs font-medium ${typeColors[result.type] ?? "bg-gray-100 text-gray-700"}`}
+                >
                   {typeLabels[result.type] ?? ""}
                 </Text>
               </View>
             )}
           </View>
           {result.subtitle && (
-            <Text className="text-sm text-gray-500 mt-0.5" numberOfLines={1}>{result.subtitle}</Text>
+            <Text className="text-sm text-gray-500 mt-0.5" numberOfLines={1}>
+              {result.subtitle}
+            </Text>
           )}
         </View>
         <Ionicons name="chevron-forward" size={20} color="#D1D5DB" />
@@ -234,7 +310,9 @@ export default function GlobalSearchScreen() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#F9FAFB", paddingTop: insets.top }}>
+    <View
+      style={{ flex: 1, backgroundColor: "#F9FAFB", paddingTop: insets.top }}
+    >
       {/* Header */}
       <View className="flex-row items-center px-3 py-2 bg-white border-b border-gray-100">
         <TouchableOpacity
@@ -258,7 +336,10 @@ export default function GlobalSearchScreen() {
             onSubmitEditing={Keyboard.dismiss}
           />
           {query.length > 0 && (
-            <TouchableOpacity onPress={() => setQuery("")} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <TouchableOpacity
+              onPress={() => setQuery("")}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
               <Ionicons name="close-circle" size={18} color="#9CA3AF" />
             </TouchableOpacity>
           )}
@@ -270,7 +351,9 @@ export default function GlobalSearchScreen() {
         className="flex-1 px-4"
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        onTouchStart={(e) => { touchStartX.current = e.nativeEvent.pageX; }}
+        onTouchStart={(e) => {
+          touchStartX.current = e.nativeEvent.pageX;
+        }}
         onTouchEnd={handleTouchEnd}
       >
         {/* Searching indicator */}
@@ -292,12 +375,20 @@ export default function GlobalSearchScreen() {
         )}
 
         {/* Too short */}
-        {!isSearching && throttledQuery.length > 0 && throttledQuery.length < 2 && (
-          <View className="py-8 items-center">
-            <Ionicons name="information-circle-outline" size={48} color="#9CA3AF" />
-            <Text className="text-gray-500 mt-4 text-center">Type at least 2 characters to search</Text>
-          </View>
-        )}
+        {!isSearching &&
+          throttledQuery.length > 0 &&
+          throttledQuery.length < 2 && (
+            <View className="py-8 items-center">
+              <Ionicons
+                name="information-circle-outline"
+                size={48}
+                color="#9CA3AF"
+              />
+              <Text className="text-gray-500 mt-4 text-center">
+                Type at least 2 characters to search
+              </Text>
+            </View>
+          )}
 
         {/* Results with tabs */}
         {!isSearching && searchResults && throttledQuery.length >= 2 && (
@@ -308,7 +399,9 @@ export default function GlobalSearchScreen() {
               showsHorizontalScrollIndicator={false}
               className="mt-3 mb-3"
               contentContainerStyle={{ paddingHorizontal: 4 }}
-              onLayout={(e) => { tabBarVisibleWidth.current = e.nativeEvent.layout.width; }}
+              onLayout={(e) => {
+                tabBarVisibleWidth.current = e.nativeEvent.layout.width;
+              }}
             >
               {tabs.map((tab, index) => {
                 const count = getTabCount(tab.key);
@@ -324,17 +417,29 @@ export default function GlobalSearchScreen() {
                       };
                     }}
                     className={`mr-2 px-4 py-2 rounded-full flex-row items-center ${
-                      isActive ? "bg-primary" : "bg-white border border-gray-200"
+                      isActive
+                        ? "bg-primary"
+                        : "bg-white border border-gray-200"
                     }`}
                     activeOpacity={0.7}
                   >
-                    <Ionicons name={tab.icon as any} size={16} color={isActive ? "white" : "#6B7280"} />
-                    <Text className={`ml-1.5 text-sm font-msemibold ${isActive ? "text-white" : "text-gray-700"}`}>
+                    <Ionicons
+                      name={tab.icon as any}
+                      size={16}
+                      color={isActive ? "white" : "#6B7280"}
+                    />
+                    <Text
+                      className={`ml-1.5 text-sm font-msemibold ${isActive ? "text-white" : "text-gray-700"}`}
+                    >
                       {tab.label}
                     </Text>
                     {count > 0 && (
-                      <View className={`ml-1.5 px-1.5 py-0.5 rounded-full min-w-[18px] items-center ${isActive ? "bg-white/20" : "bg-gray-200"}`}>
-                        <Text className={`text-xs font-semibold ${isActive ? "text-white" : "text-gray-600"}`}>
+                      <View
+                        className={`ml-1.5 px-1.5 py-0.5 rounded-full min-w-[18px] items-center ${isActive ? "bg-white/20" : "bg-gray-200"}`}
+                      >
+                        <Text
+                          className={`text-xs font-semibold ${isActive ? "text-white" : "text-gray-600"}`}
+                        >
                           {count}
                         </Text>
                       </View>
@@ -347,16 +452,26 @@ export default function GlobalSearchScreen() {
             {activeTab === "all" ? (
               getFilteredResults().length > 0 ? (
                 (() => {
-                  const posts = getFilteredResults().filter((r) => r.type === "post");
-                  const others = getFilteredResults().filter((r) => r.type !== "post");
+                  const posts = getFilteredResults().filter(
+                    (r) => r.type === "post",
+                  );
+                  const others = getFilteredResults().filter(
+                    (r) => r.type !== "post",
+                  );
                   return (
                     <>
                       {others.map((result) => (
-                        <SearchResultItem key={result.id} result={result} showTypeTag />
+                        <SearchResultItem
+                          key={result.id}
+                          result={result}
+                          showTypeTag
+                        />
                       ))}
                       {posts.length > 0 && (
                         <>
-                          {others.length > 0 && <View className="border-t border-gray-200 my-4" />}
+                          {others.length > 0 && (
+                            <View className="border-t border-gray-200 my-4" />
+                          )}
                           <View className="flex-row flex-wrap justify-between">
                             {posts.map((result) => (
                               <View key={result.id} style={{ width: "48%" }}>
@@ -372,23 +487,25 @@ export default function GlobalSearchScreen() {
               ) : (
                 <View className="py-8 items-center">
                   <Ionicons name="search-outline" size={48} color="#9CA3AF" />
-                  <Text className="text-gray-500 mt-4 text-center">No results found for "{throttledQuery}"</Text>
-                  <Text className="text-gray-400 mt-2 text-center text-sm">Try different keywords</Text>
-                </View>
-              )
-            ) : (
-              getFilteredResults().length > 0 ? (
-                getFilteredResults().map((result) => (
-                  <SearchResultItem key={result.id} result={result} />
-                ))
-              ) : (
-                <View className="py-8 items-center">
-                  <Ionicons name="search-outline" size={48} color="#9CA3AF" />
                   <Text className="text-gray-500 mt-4 text-center">
-                    No {activeTab} found for "{throttledQuery}"
+                    No results found for &quot;{throttledQuery}&quot;
+                  </Text>
+                  <Text className="text-gray-400 mt-2 text-center text-sm">
+                    Try different keywords
                   </Text>
                 </View>
               )
+            ) : getFilteredResults().length > 0 ? (
+              getFilteredResults().map((result) => (
+                <SearchResultItem key={result.id} result={result} />
+              ))
+            ) : (
+              <View className="py-8 items-center">
+                <Ionicons name="search-outline" size={48} color="#9CA3AF" />
+                <Text className="text-gray-500 mt-4 text-center">
+                  No {activeTab} found for &quout;{throttledQuery}&quot;
+                </Text>
+              </View>
             )}
           </>
         )}
@@ -401,7 +518,10 @@ export default function GlobalSearchScreen() {
           visible={showImageViewer}
           images={selectedPost.images}
           initialIndex={0}
-          onClose={() => { setShowImageViewer(false); setSelectedPost(null); }}
+          onClose={() => {
+            setShowImageViewer(false);
+            setSelectedPost(null);
+          }}
           postContent={selectedPost.content}
           username={selectedPost.userName}
           likes={selectedPost.likes}

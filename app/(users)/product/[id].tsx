@@ -438,6 +438,7 @@ export default function ProductDetail() {
         className="flex-1"
         showsVerticalScrollIndicator={false}
         bounces={true}
+        contentContainerStyle={{ paddingBottom: isOwnProduct ? 16 : 120 }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -655,7 +656,7 @@ export default function ProductDetail() {
 
         {/* Content Card */}
         <View className="bg-white">
-          <View className={`px-6 pt-6 ${isOwnProduct ? "pb-10" : "pb-32"}`}>
+          <View className="px-6 pt-6 pb-8">
             {/* Category & Tags */}
             <View
               className="flex-row flex-wrap gap-2 mb-4"

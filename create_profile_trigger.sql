@@ -1,14 +1,26 @@
 -- Create a function to handle new user profile creation
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
+DECLARE
+  v_birth_date date := NULL;
 BEGIN
-  INSERT INTO public.profiles (id, name, phone, dzongkhag, email, created_at, updated_at)
+  IF NULLIF(NEW.raw_user_meta_data->>'birth_date', '') IS NOT NULL THEN
+    v_birth_date := (NEW.raw_user_meta_data->>'birth_date')::date;
+  END IF;
+
+  INSERT INTO public.profiles (
+    id, name, phone, dzongkhag, email, birth_date, age_verified,
+    age_verification_date, created_at, updated_at
+  )
   VALUES (
     NEW.id,
     NEW.raw_user_meta_data->>'name',
     NEW.raw_user_meta_data->>'phone',
     NEW.raw_user_meta_data->>'dzongkhag',
     NEW.email,
+    v_birth_date,
+    v_birth_date IS NOT NULL,
+    CASE WHEN v_birth_date IS NOT NULL THEN NOW() ELSE NULL END,
     NOW(),
     NOW()
   );

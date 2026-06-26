@@ -1,3 +1,4 @@
+import DateOfBirthPrompt from "@/components/modals/DateOfBirthPrompt";
 import FormInput from "@/components/ui/FormInput";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { useUser } from "@/contexts/UserContext";
@@ -65,6 +66,7 @@ export default function Login() {
   const [phonePromptLoading, setPhonePromptLoading] = useState(false);
   const [pendingUserData, setPendingUserData] = useState<any | null>(null);
   const [pendingResolvedEmail, setPendingResolvedEmail] = useState("");
+  const [showDobPrompt, setShowDobPrompt] = useState(false);
   const [popup, setPopup] = useState<{visible: boolean, type: 'success'|'error'|'warning'|'white', title: string, message: string}>({visible: false, type: 'success', title: '', message: ''});
   const { setCurrentUser } = useUser();
 
@@ -118,8 +120,18 @@ export default function Login() {
   };
 
   const completeLogin = async (userData: any, resolvedEmail: string) => {
+    // Mandatory age check: existing users without a date of birth must provide
+    // one before entering the app, so we can apply age-related content rules.
+    if (userData?.id && !userData?.birth_date) {
+      setPendingUserData(userData);
+      setPendingResolvedEmail(resolvedEmail);
+      setShowDobPrompt(true);
+      return;
+    }
+
     await AsyncStorage.setItem("currentUser", JSON.stringify(userData));
     setCurrentUser(userData);
+    setPendingUserData(null);
     setIdentifier("");
     setPassword("");
 
@@ -693,11 +705,13 @@ export default function Login() {
                     }
                     setShowPhonePrompt(false);
                     if (pendingUserData) {
+                      // completeLogin manages pendingUserData itself (it may
+                      // re-show a mandatory date-of-birth prompt), so don't
+                      // clear it here.
                       await completeLogin(
                         pendingUserData,
                         pendingResolvedEmail,
                       );
-                      setPendingUserData(null);
                     }
                   }}
                 >
@@ -715,11 +729,13 @@ export default function Login() {
                     }
                     setShowPhonePrompt(false);
                     if (pendingUserData) {
+                      // completeLogin manages pendingUserData itself (it may
+                      // re-show a mandatory date-of-birth prompt), so don't
+                      // clear it here.
                       await completeLogin(
                         pendingUserData,
                         pendingResolvedEmail,
                       );
-                      setPendingUserData(null);
                     }
                   }}
                 >
@@ -731,6 +747,20 @@ export default function Login() {
             </View>
           </View>
         </Modal>
+
+        {/* Mandatory date-of-birth prompt for existing users without one */}
+        {pendingUserData?.id && (
+          <DateOfBirthPrompt
+            visible={showDobPrompt}
+            userId={pendingUserData.id}
+            onSaved={async (birthDate) => {
+              const updatedUser = { ...pendingUserData, birth_date: birthDate };
+              setShowDobPrompt(false);
+              setPendingUserData(null);
+              await completeLogin(updatedUser, pendingResolvedEmail);
+            }}
+          />
+        )}
 
       {/* Popup */}
       <PopupMessage

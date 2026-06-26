@@ -83,7 +83,8 @@ export default function ChatImagePicker({
         content: null,
         created_at: new Date().toISOString(),
         is_read: false,
-        isOptimistic: true
+        isOptimistic: true,
+        localStatus: 'sending',
       };
 
       onOptimisticImage(optimisticMessage);

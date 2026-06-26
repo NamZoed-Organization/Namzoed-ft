@@ -6,6 +6,8 @@ import FormInput from "@/components/ui/FormInput";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { clamp, useResponsive } from "@/utils/responsive";
 import { useAppRouter } from "@/utils/navigation";
+import { formatDisplayDate, getAgeFromDate, toISODate } from "@/utils/age";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { Link } from "expo-router";
 import React, { useRef, useState } from "react";
 import {
@@ -29,6 +31,8 @@ export default function SignupTab2() {
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [birthDate, setBirthDate] = useState<Date | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
@@ -105,6 +109,7 @@ export default function SignupTab2() {
           data: {
             name,
             phone,
+            birth_date: birthDate ? toISODate(birthDate) : null,
             role: "user",
           },
         }
@@ -125,6 +130,7 @@ export default function SignupTab2() {
           setPassword("");
           setPhone("");
           setConfirmPassword("");
+          setBirthDate(null);
 
           // Send welcome SMS (non-blocking, only for 97517 numbers)
           sendWelcomeSMS(userPhone).then((success) => {
@@ -157,16 +163,34 @@ export default function SignupTab2() {
     }
   };
 
+  const onDateChange = (_event: any, selected?: Date) => {
+    if (Platform.OS === "android") setShowDatePicker(false);
+    if (selected) setBirthDate(selected);
+  };
+
+  // Default the picker to 18 years ago for a sensible starting point.
+  const defaultBirthDate = (() => {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() - 18);
+    return d;
+  })();
+
   const isValidBhutanesePhone = (input: string) =>
     (input.startsWith("17") || input.startsWith("77")) && input.length === 8;
 
   const isValidEmail = (input: string) =>
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input);
 
+  const isValidBirthDate =
+    birthDate !== null &&
+    getAgeFromDate(birthDate) >= 0 &&
+    getAgeFromDate(birthDate) <= 120;
+
   const isFormValid =
     name.trim().length > 0 &&
     isValidEmail(email) &&
     isValidBhutanesePhone(phone) &&
+    isValidBirthDate &&
     password.length >= 6 &&
     confirmPassword === password;
 
@@ -247,6 +271,52 @@ export default function SignupTab2() {
               </View>
             }
           />
+
+          {/* Date of Birth */}
+          <Pressable
+            onPress={() => setShowDatePicker(true)}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              borderWidth: 1,
+              borderColor: "#E5E7EB",
+              borderRadius: 12,
+              paddingVertical: 14,
+              paddingHorizontal: 16,
+              backgroundColor: "#F9FAFB",
+            }}
+          >
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+              <MaterialIcons name="cake" size={iconSize} color="#6B7280" />
+              <Text
+                className="font-regular"
+                style={{
+                  fontSize: clamp(ms(15), 13, 17),
+                  color: birthDate ? "#374151" : "#9CA3AF",
+                }}
+              >
+                {birthDate ? formatDisplayDate(birthDate) : "Date of Birth"}
+              </Text>
+            </View>
+            <MaterialIcons name="calendar-today" size={iconSize} color="#6B7280" />
+          </Pressable>
+          {showDatePicker && (
+            <DateTimePicker
+              value={birthDate ?? defaultBirthDate}
+              mode="date"
+              display={Platform.OS === "ios" ? "spinner" : "default"}
+              onChange={onDateChange}
+              maximumDate={new Date()}
+            />
+          )}
+          <Text
+            className="font-mlight text-gray-400"
+            style={{ fontSize: clamp(ms(12), 10, 14), marginTop: -fieldGap + 4 }}
+          >
+            Used to apply age-related content restrictions (e.g. adult health
+            items are hidden for users under 18).
+          </Text>
 
           {/* Password */}
           <FormInput

@@ -56,7 +56,9 @@ export default function MarketplaceScreen() {
   const [marketplaceItems, setMarketplaceItems] = useState<
     MarketplaceItemWithUser[]
   >([]);
-  const [verifiedUserIds, setVerifiedUserIds] = useState<Set<string>>(new Set());
+  const [verifiedUserIds, setVerifiedUserIds] = useState<Set<string>>(
+    new Set(),
+  );
   const [filters, setFilters] = useState({
     dzongkhag: "",
     minPrice: "",
@@ -77,7 +79,11 @@ export default function MarketplaceScreen() {
           .select("user_id, verification_status")
           .in("user_id", userIds);
         setVerifiedUserIds(
-          new Set((spData || []).filter((sp) => sp.verification_status === "verified").map((sp) => sp.user_id))
+          new Set(
+            (spData || [])
+              .filter((sp) => sp.verification_status === "verified")
+              .map((sp) => sp.user_id),
+          ),
         );
       }
     } catch (error) {
@@ -139,19 +145,50 @@ export default function MarketplaceScreen() {
                 style={{ width: 20, height: 20, borderRadius: 10 }}
               />
             ) : (
-              <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: '#e0e7ef', alignItems: 'center', justifyContent: 'center' }}>
-                <Text style={{ fontSize: 9, fontWeight: '700', color: '#094569' }}>
+              <View
+                style={{
+                  width: 20,
+                  height: 20,
+                  borderRadius: 10,
+                  backgroundColor: "#e0e7ef",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Text
+                  style={{ fontSize: 9, fontWeight: "700", color: "#094569" }}
+                >
                   {getInitials(item.profiles.name)}
                 </Text>
               </View>
             )}
-            <Text className="text-xs text-gray-500 font-medium" numberOfLines={1} style={{ flex: 1 }}>
+            <Text
+              className="text-xs text-gray-500 font-medium"
+              numberOfLines={1}
+              style={{ flex: 1 }}
+            >
               {item.profiles.name}
             </Text>
             {verifiedUserIds.has(item.user_id) && (
-              <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: "#EFF6FF", borderWidth: 1, borderColor: "#094569", borderRadius: 99, paddingHorizontal: 5, paddingVertical: 2, gap: 2 }}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  backgroundColor: "#EFF6FF",
+                  borderWidth: 1,
+                  borderColor: "#094569",
+                  borderRadius: 99,
+                  paddingHorizontal: 5,
+                  paddingVertical: 2,
+                  gap: 2,
+                }}
+              >
                 <Verified size={8} color="#094569" />
-                <Text style={{ fontSize: 8, fontWeight: "700", color: "#094569" }}>Verified</Text>
+                <Text
+                  style={{ fontSize: 8, fontWeight: "700", color: "#094569" }}
+                >
+                  Verified
+                </Text>
               </View>
             )}
           </View>
@@ -161,7 +198,7 @@ export default function MarketplaceScreen() {
         {(item.type === "rent" ||
           item.type === "second_hand" ||
           item.type === "job_vacancy") &&
-          item.price > 0 ? (
+        item.price > 0 ? (
           <View className="flex-row items-center justify-between mb-2">
             <Text className="text-base font-bold text-primary">
               Nu. {item.price}
@@ -169,14 +206,18 @@ export default function MarketplaceScreen() {
             {item.dzongkhag && (
               <View className="flex-row items-center gap-0.5">
                 <MapPin size={11} color="#9CA3AF" />
-                <Text className="text-xs text-gray-400" numberOfLines={1}>{item.dzongkhag}</Text>
+                <Text className="text-xs text-gray-400" numberOfLines={1}>
+                  {item.dzongkhag}
+                </Text>
               </View>
             )}
           </View>
         ) : item.dzongkhag ? (
           <View className="flex-row items-center mb-2 gap-0.5">
             <MapPin size={11} color="#9CA3AF" />
-            <Text className="text-xs text-gray-400" numberOfLines={1}>{item.dzongkhag}</Text>
+            <Text className="text-xs text-gray-400" numberOfLines={1}>
+              {item.dzongkhag}
+            </Text>
           </View>
         ) : null}
 
@@ -449,7 +490,13 @@ export default function MarketplaceScreen() {
     );
   };
 
-  const MARKETPLACE_TABS = ["job_vacancy", "rent", "second_hand", "swap", "free"];
+  const MARKETPLACE_TABS = [
+    "job_vacancy",
+    "rent",
+    "second_hand",
+    "swap",
+    "free",
+  ];
 
   const swipeGesture = Gesture.Pan()
     .runOnJS(true)
@@ -467,145 +514,149 @@ export default function MarketplaceScreen() {
 
   return (
     <GestureDetector gesture={swipeGesture}>
-    <View className="flex-1 bg-gray-50">
-      <ScrollView
-        className="flex-1"
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 72 + insets.bottom }}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={["#094569"]}
-          />
-        }
-      >
-        {/* Header */}
-        <View className="bg-gray-50">
-          <TopNavbar />
-          <View className="px-4 gap-2">
-            {/* SearchBar with Plus Button */}
-            <View className="flex-row items-center gap-2">
-              <View className="flex-1">
-                <SearchBar value={searchQuery} onChangeText={setSearchQuery} />
+      <View className="flex-1 bg-gray-50">
+        <ScrollView
+          className="flex-1"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 72 + insets.bottom }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={["#094569"]}
+            />
+          }
+        >
+          {/* Header */}
+          <View className="bg-gray-50">
+            <TopNavbar />
+            <View className="px-4 gap-2">
+              {/* SearchBar with Plus Button */}
+              <View className="flex-row items-center gap-2">
+                <View className="flex-1">
+                  <SearchBar
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                  />
+                </View>
+                <TouchableOpacity
+                  className="w-10 h-10 bg-primary rounded-lg items-center justify-center"
+                  onPress={() => {
+                    if (!currentUser) {
+                      setShowAuthModal(true);
+                      return;
+                    }
+                    setShowPostOverlay(true);
+                  }}
+                >
+                  <Plus size={24} color="white" />
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity
-                className="w-10 h-10 bg-primary rounded-lg items-center justify-center"
-                onPress={() => {
-                  if (!currentUser) {
-                    setShowAuthModal(true);
-                    return;
-                  }
-                  setShowPostOverlay(true);
+            </View>
+
+            <Banner />
+
+            {/* Tab Navigation — matches home screen pill design */}
+            <View style={{ marginTop: 8, marginBottom: 4 }}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  gap: 12,
+                  paddingHorizontal: 16,
                 }}
               >
-                <Plus size={24} color="white" />
-              </TouchableOpacity>
+                {(
+                  [
+                    { key: "job_vacancy", Icon: Briefcase },
+                    { key: "rent", Icon: Home },
+                    { key: "second_hand", Icon: ShoppingCart },
+                    { key: "swap", Icon: RefreshCw },
+                    { key: "free", Icon: Gift },
+                  ] as const
+                ).map(({ key, Icon }) => {
+                  const isActive = activeTab === key;
+                  return (
+                    <TouchableOpacity
+                      key={key}
+                      onPress={() => handleTabChange(key)}
+                      disabled={isLoading}
+                      style={{
+                        width: 42,
+                        height: 42,
+                        borderRadius: 21,
+                        backgroundColor: isActive ? "#094569" : "#f3f4f6",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        opacity: isLoading ? 0.5 : 1,
+                      }}
+                    >
+                      <Icon size={17} color={isActive ? "#fff" : "#9ca3af"} />
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <Text
+                className="text-2xl font-mbold text-gray-800"
+                style={{ marginTop: 10, paddingHorizontal: 16 }}
+              >
+                {
+                  (
+                    {
+                      job_vacancy: "Jobs & Vacancies",
+                      rent: "For Rent",
+                      second_hand: "Second Hand",
+                      swap: "Swap",
+                      free: "Free Items",
+                    } as Record<string, string>
+                  )[activeTab]
+                }
+              </Text>
             </View>
           </View>
 
-          <Banner />
+          {/* Marketplace Content */}
+          {renderTabContent()}
 
-          <View className="px-4 gap-2">
-            {/* Marketplace Options H1 */}
-            <Text className="text-2xl font-bold text-gray-900 mt-4 mb-4">
-              Marketplace Options
-            </Text>
+          {/* Bottom Spacing */}
+          <View className="h-20" />
+        </ScrollView>
 
-            {/* Tab Navigation */}
-            <View className="flex-row items-center w-full mx-auto mt-2 gap-2 mb-4">
-              <TouchableOpacity
-                onPress={() => handleTabChange("job_vacancy")}
-                className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm bg-white ${
-                  activeTab === "job_vacancy" ? "border-2 border-black" : ""
-                }`}
-                disabled={isLoading}
-              >
-                <Briefcase size={20} color={isLoading ? "#ccc" : "black"} />
-              </TouchableOpacity>
+        {renderFilterModal()}
 
-              <TouchableOpacity
-                onPress={() => handleTabChange("rent")}
-                className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm bg-white ${
-                  activeTab === "rent" ? "border-2 border-black" : ""
-                }`}
-                disabled={isLoading}
-              >
-                <Home size={20} color={isLoading ? "#ccc" : "black"} />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => handleTabChange("second_hand")}
-                className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm bg-white ${
-                  activeTab === "second_hand" ? "border-2 border-black" : ""
-                }`}
-                disabled={isLoading}
-              >
-                <ShoppingCart size={20} color={isLoading ? "#ccc" : "black"} />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => handleTabChange("swap")}
-                className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm bg-white ${
-                  activeTab === "swap" ? "border-2 border-black" : ""
-                }`}
-                disabled={isLoading}
-              >
-                <RefreshCw size={20} color={isLoading ? "#ccc" : "black"} />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => handleTabChange("free")}
-                className={`flex-1 items-center px-2 py-3 rounded-lg shadow-sm bg-white ${
-                  activeTab === "free" ? "border-2 border-black" : ""
-                }`}
-                disabled={isLoading}
-              >
-                <Gift size={20} color={isLoading ? "#ccc" : "black"} />
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-
-        {/* Marketplace Content */}
-        {renderTabContent()}
-
-        {/* Bottom Spacing */}
-        <View className="h-20" />
-      </ScrollView>
-
-      {renderFilterModal()}
-
-      {/* Marketplace Post Creation Modal */}
-      {showPostOverlay && (
-        <Modal
-          transparent
-          statusBarTranslucent
-          animationType="none"
-          visible={showPostOverlay}
-          onRequestClose={() => setShowPostOverlay(false)}
-        >
-          <Animated.View
-            entering={SlideInDown.springify()}
-            exiting={SlideOutDown}
-            style={{
-              height: "100%",
-              borderTopLeftRadius: 24,
-              borderTopRightRadius: 24,
-              overflow: "hidden",
-            }}
+        {/* Marketplace Post Creation Modal */}
+        {showPostOverlay && (
+          <Modal
+            transparent
+            statusBarTranslucent
+            animationType="none"
+            visible={showPostOverlay}
+            onRequestClose={() => setShowPostOverlay(false)}
           >
-            <MarketplacePostOverlay onClose={() => setShowPostOverlay(false)} />
-          </Animated.View>
-        </Modal>
-      )}
+            <Animated.View
+              entering={SlideInDown.springify()}
+              exiting={SlideOutDown}
+              style={{
+                height: "100%",
+                borderTopLeftRadius: 24,
+                borderTopRightRadius: 24,
+                overflow: "hidden",
+              }}
+            >
+              <MarketplacePostOverlay
+                onClose={() => setShowPostOverlay(false)}
+              />
+            </Animated.View>
+          </Modal>
+        )}
 
-      <AuthPromptModal
-        visible={showAuthModal}
-        onClose={() => setShowAuthModal(false)}
-        message="Sign in to post on the marketplace"
-      />
-    </View>
+        <AuthPromptModal
+          visible={showAuthModal}
+          onClose={() => setShowAuthModal(false)}
+          message="Sign in to post on the marketplace"
+        />
+      </View>
     </GestureDetector>
   );
 }

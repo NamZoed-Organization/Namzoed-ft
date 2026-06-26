@@ -31,9 +31,10 @@ export default function UsersTabsLayout() {
 
   // Same pattern as MongooseWorkerNavBar — full insets.bottom with platform minimum,
   // no division. Ensures the bar always clears the Android nav bar and iOS home indicator.
-  const tabBarBottomPad = Platform.OS === "android"
-    ? Math.max(insets.bottom, 12)
-    : Math.max(insets.bottom, 8);
+  const tabBarBottomPad =
+    Platform.OS === "android"
+      ? Math.max(insets.bottom, 12)
+      : Math.max(insets.bottom, 8);
 
   return (
     <View className="flex-1 bg-background">
@@ -96,10 +97,7 @@ export default function UsersTabsLayout() {
         }}
       >
         {/* Messages — mounted in the tab group for instant navigation; hidden from tab bar */}
-        <Tabs.Screen
-          name="messages"
-          options={{ href: null }}
-        />
+        <Tabs.Screen name="messages" options={{ href: null }} />
 
         <Tabs.Screen
           name="index"
@@ -108,7 +106,9 @@ export default function UsersTabsLayout() {
             tabBarButton: (props) => (
               <TabBarButton {...props} android_ripple={null} />
             ),
-            tabBarIcon: ({ focused }) => <HomeIcon focused={focused} size={sideIconSize} />,
+            tabBarIcon: ({ focused }) => (
+              <HomeIcon focused={focused} size={sideIconSize} />
+            ),
           }}
         />
 
@@ -132,7 +132,6 @@ export default function UsersTabsLayout() {
           name="feed"
           options={{
             title: "Feed",
-            tabBarShowLabel: false,
             tabBarLabel: () => null,
             tabBarButton: (props) => (
               <FeedTabButton {...props} android_ripple={null} />

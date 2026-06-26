@@ -16,6 +16,7 @@ import {
 import { useFonts } from "expo-font";
 import * as Linking from "expo-linking";
 import { Stack, useRouter } from "expo-router";
+import { setVideoCacheSizeAsync } from "expo-video";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect, useRef } from "react";
 import { Platform, StatusBar, View } from "react-native";
@@ -25,6 +26,7 @@ import "../global.css";
 
 // 1. import your Dzongkhag provider
 import { AppearanceProvider } from "@/contexts/AppearanceContext";
+import { SafetyProvider } from "@/contexts/SafetyContext";
 import { DzongkhagProvider } from "@/contexts/DzongkhagContext";
 import { LiveSessionProvider } from "@/contexts/LiveSessionProvider";
 import { NotificationsProvider } from "@/contexts/NotificationsContext";
@@ -67,6 +69,12 @@ export default function RootLayout() {
       SplashScreen.hideAsync();
     }
   }, [fontsLoaded, fontError]);
+
+  // Bound the persistent on-disk video cache (default is 1GB). Used by players
+  // created with `{ uri, useCaching: true }` so reels/feed clips aren't re-downloaded.
+  useEffect(() => {
+    setVideoCacheSizeAsync(512 * 1024 * 1024).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const resolveDestination = (
@@ -174,6 +182,7 @@ export default function RootLayout() {
           <UserProvider>
             <NetworkProvider>
             <AppearanceProvider>
+            <SafetyProvider>
             <UnreadMessagesProvider>
               <NotificationsProvider>
               <DzongkhagProvider>
@@ -220,6 +229,7 @@ export default function RootLayout() {
               </DzongkhagProvider>
               </NotificationsProvider>
             </UnreadMessagesProvider>
+            </SafetyProvider>
             </AppearanceProvider>
             </NetworkProvider>
           </UserProvider>

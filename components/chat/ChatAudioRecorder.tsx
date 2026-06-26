@@ -318,6 +318,7 @@ export default function ChatAudioRecorder({
         created_at: new Date().toISOString(),
         is_read: false,
         isOptimistic: true,
+        localStatus: "sending",
       });
 
       const convKey  = [currentUserUUID, chatPartnerId].sort().join("_");

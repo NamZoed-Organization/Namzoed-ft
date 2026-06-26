@@ -9,7 +9,7 @@ export const useVideoPlayerManager = (videoUri: string, videoId: string, isVisib
   const isMounted = useRef(true);
   const { registerPlayer, releasePlayer } = useVideoCache();
   
-  const player = useVideoPlayer(videoUri, (player) => {
+  const player = useVideoPlayer({ uri: videoUri, useCaching: true }, (player) => {
     player.loop = true;
     player.muted = true;
   });

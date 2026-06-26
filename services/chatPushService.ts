@@ -1,6 +1,6 @@
 import { supabase } from "@/lib/supabase";
 
-type ChatMessageType = "text" | "image" | "audio";
+type ChatMessageType = "text" | "image" | "audio" | "video" | "gif" | "sticker";
 
 interface ChatPushPayload {
   senderId: string;
@@ -57,6 +57,9 @@ const normalizePreview = (
 
   if (messageType === "image") return "Sent an image";
   if (messageType === "audio") return "Sent a voice message";
+  if (messageType === "video") return "Sent a video";
+  if (messageType === "gif") return "Sent a GIF";
+  if (messageType === "sticker") return "Sent a sticker";
   return "Sent a message";
 };
 

@@ -1,10 +1,18 @@
 import { parseMediaDisplay } from "@/lib/postMediaDisplay";
 import { fetchPostsCursor, PostWithUser } from "@/lib/postsService";
+import { readCache, writeCache } from "@/lib/queryCache";
 import { supabase } from "@/lib/supabase";
 import { PostData } from "@/types/post";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 const PAGE_SIZE = 15;
+
+// Cached first page so the feed renders instantly on mount, then revalidates.
+const FEED_CACHE_KEY = "feed:firstPage";
+interface FeedCachePayload {
+  raw: PostWithUser[];
+  verified: string[];
+}
 
 interface UseFeedInfiniteScrollResult {
   posts: PostData[];
@@ -34,6 +42,7 @@ function convertToPostData(
     profilePic: post.profiles?.avatar_url || undefined,
     content: post.content,
     images: post.images,
+    blurHashes: (post as any).blur_hashes ?? undefined,
     date: new Date(post.created_at),
     likes: post.likes,
     comments: post.comments,
@@ -43,6 +52,8 @@ function convertToPostData(
     tagged_products: (post as any).tagged_products ?? undefined,
     tagged_accounts: (post as any).tagged_accounts ?? undefined,
     isVerified: verifiedIds.has(post.user_id),
+    contentRating: (post as any).content_rating ?? 'general',
+    moderationStatus: (post as any).moderation_status ?? 'approved',
   };
 }
 
@@ -102,8 +113,10 @@ export function useFeedInfiniteScroll(): UseFeedInfiniteScrollResult {
     }
   }, []);
 
-  const refresh = useCallback(async () => {
-    setRefreshing(true);
+  // Fetch (and cache) the first page. `silent` skips the pull-to-refresh spinner
+  // when we already painted cached posts.
+  const fetchFirstPage = useCallback(async (silent: boolean) => {
+    if (!silent) setRefreshing(true);
     cursorRef.current = null;
     hasMoreRef.current = true;
     loadingRef.current = false;
@@ -113,6 +126,7 @@ export function useFeedInfiniteScroll(): UseFeedInfiniteScrollResult {
       const fetched = await fetchPostsCursor(null, PAGE_SIZE);
 
       if (fetched.length < PAGE_SIZE) {
+        hasMoreRef.current = false;
         setHasMore(false);
       }
 
@@ -125,22 +139,47 @@ export function useFeedInfiniteScroll(): UseFeedInfiniteScrollResult {
 
       const newPosts = fetched.map((p) => convertToPostData(p, verifiedIds));
       setPosts(newPosts);
+
+      // Persist for an instant render next time the feed mounts.
+      writeCache<FeedCachePayload>(FEED_CACHE_KEY, {
+        raw: fetched,
+        verified: [...verifiedIds],
+      });
     } catch (error) {
       console.error("Error refreshing posts:", error);
-      setPosts([]);
+      if (!silent) setPosts([]);
     } finally {
+      setLoading(false);
       setRefreshing(false);
     }
   }, []);
+
+  const refresh = useCallback(() => fetchFirstPage(false), [fetchFirstPage]);
 
   const removePost = useCallback((postId: string) => {
     setPosts((prev) => prev.filter((p) => p.id !== postId));
   }, []);
 
-  // Initial load
+  // Initial load: paint cached posts immediately, then revalidate in background.
   useEffect(() => {
-    loadMore();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    let cancelled = false;
+    (async () => {
+      const cached = await readCache<FeedCachePayload>(FEED_CACHE_KEY);
+      if (!cancelled && cached?.data?.raw?.length) {
+        const verifiedSet = new Set(cached.data.verified);
+        setPosts(cached.data.raw.map((p) => convertToPostData(p, verifiedSet)));
+        cursorRef.current = cached.data.raw[cached.data.raw.length - 1].created_at;
+        setLoading(false);
+        fetchFirstPage(true); // silent background revalidate
+      } else if (!cancelled) {
+        setLoading(true);
+        fetchFirstPage(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchFirstPage]);
 
   return { posts, loading, refreshing, hasMore, loadMore, refresh, removePost };
 }

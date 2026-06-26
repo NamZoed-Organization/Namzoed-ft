@@ -184,7 +184,9 @@ export default function ServicesSearchScreen() {
 
       {/* Body */}
       {loading ? (
-        <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+        <View
+          style={{ flex: 1, alignItems: "center", justifyContent: "center" }}
+        >
           <ActivityIndicator size="large" color="#094569" />
         </View>
       ) : query.trim().length === 0 ? (
@@ -226,7 +228,7 @@ export default function ServicesSearchScreen() {
               textAlign: "center",
             }}
           >
-            No services found for "{query}"
+            No services found for &quot;{query}&quot;
           </Text>
         </View>
       ) : (
@@ -284,7 +286,11 @@ export default function ServicesSearchScreen() {
 
                 <View style={{ flex: 1, marginLeft: 10 }}>
                   <Text
-                    style={{ fontSize: 14, fontWeight: "700", color: "#0F172A" }}
+                    style={{
+                      fontSize: 14,
+                      fontWeight: "700",
+                      color: "#0F172A",
+                    }}
                     numberOfLines={1}
                   >
                     {item.name}
@@ -334,8 +340,13 @@ export default function ServicesSearchScreen() {
                     >
                       by {providerName}
                     </Text>
-                    {item.service_providers?.verification_status === "verified" && (
-                      <Verified size={10} color="#094569" style={{ marginLeft: 4 }} />
+                    {item.service_providers?.verification_status ===
+                      "verified" && (
+                      <Verified
+                        size={10}
+                        color="#094569"
+                        style={{ marginLeft: 4 }}
+                      />
                     )}
                   </View>
                   {item.service_categories?.name && (

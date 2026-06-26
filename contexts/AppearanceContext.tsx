@@ -25,27 +25,49 @@ import React, {
 export type BubbleSkin = 'founding' | 'waitlist' | 'tester' | 'genesis';
 
 const KEY_BUBBLE = '@namzoed_bubble_skin';
+const KEY_GLOBAL_BG = '@namzoed_global_chat_bg';
+const KEY_LOCAL_BGS = '@namzoed_local_chat_bgs';
 
 interface AppearanceContextValue {
   bubbleSkin:   BubbleSkin;
   setBubbleSkin: (skin: BubbleSkin) => Promise<void>;
+  
+  globalChatBg: string;
+  setGlobalChatBg: (bgId: string) => Promise<void>;
+  
+  localChatBgs: Record<string, string>;
+  setLocalChatBg: (chatPartnerId: string, bgId: string | null) => Promise<void>;
 }
 
 const AppearanceContext = createContext<AppearanceContextValue>({
   bubbleSkin:   'founding',
   setBubbleSkin: async () => {},
+  
+  globalChatBg: 'default',
+  setGlobalChatBg: async () => {},
+  
+  localChatBgs: {},
+  setLocalChatBg: async () => {},
 });
 
 export function AppearanceProvider({ children }: { children: React.ReactNode }) {
   const [bubbleSkin, setBubbleSkinState] = useState<BubbleSkin>('founding');
+  const [globalChatBg, setGlobalChatBgState] = useState<string>('default');
+  const [localChatBgs, setLocalChatBgsState] = useState<Record<string, string>>({});
   const [ready, setReady] = useState(false);
 
   // Restore persisted preferences
   useEffect(() => {
     (async () => {
       try {
-        const bub = await AsyncStorage.getItem(KEY_BUBBLE);
+        const [bub, gBg, lBgs] = await Promise.all([
+          AsyncStorage.getItem(KEY_BUBBLE),
+          AsyncStorage.getItem(KEY_GLOBAL_BG),
+          AsyncStorage.getItem(KEY_LOCAL_BGS),
+        ]);
         if (bub) setBubbleSkinState(bub as BubbleSkin);
+        if (gBg) setGlobalChatBgState(gBg);
+        if (lBgs) setLocalChatBgsState(JSON.parse(lBgs));
       } catch {
         // ignore — fall back to defaults
       } finally {
@@ -59,17 +81,41 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
     try { await AsyncStorage.setItem(KEY_BUBBLE, skin); } catch {}
   }, []);
 
+  const setGlobalChatBg = useCallback(async (bgId: string) => {
+    setGlobalChatBgState(bgId);
+    try { await AsyncStorage.setItem(KEY_GLOBAL_BG, bgId); } catch {}
+  }, []);
+
+  const setLocalChatBg = useCallback(async (chatPartnerId: string, bgId: string | null) => {
+    setLocalChatBgsState(prev => {
+      const next = { ...prev };
+      if (bgId === null) {
+        delete next[chatPartnerId];
+      } else {
+        next[chatPartnerId] = bgId;
+      }
+      AsyncStorage.setItem(KEY_LOCAL_BGS, JSON.stringify(next)).catch(() => {});
+      return next;
+    });
+  }, []);
+
+  const value = {
+    bubbleSkin, setBubbleSkin,
+    globalChatBg, setGlobalChatBg,
+    localChatBgs, setLocalChatBg,
+  };
+
   // Don't block render — just expose defaults until storage is read
   if (!ready) {
     return (
-      <AppearanceContext.Provider value={{ bubbleSkin, setBubbleSkin }}>
+      <AppearanceContext.Provider value={value}>
         {children}
       </AppearanceContext.Provider>
     );
   }
 
   return (
-    <AppearanceContext.Provider value={{ bubbleSkin, setBubbleSkin }}>
+    <AppearanceContext.Provider value={value}>
       {children}
     </AppearanceContext.Provider>
   );

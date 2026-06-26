@@ -2,22 +2,24 @@
 import EarlyAccessBadge from '@/components/EarlyAccessBadge';
 import { useAppearance } from '@/contexts/AppearanceContext';
 import {
-  EarlyAccessBadgeType,
-  UserBadge,
-  getActiveBadge,
-  getUserBadges,
-  setActiveBadge,
+    EarlyAccessBadgeType,
+    UserBadge,
+    getActiveBadge,
+    getUserBadges,
+    setActiveBadge,
 } from '@/lib/earlyAccessService';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ArrowLeft, Check, Sparkles } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  ScrollView,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    ScrollView,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
+
+import ChatBackgroundPicker from './ChatBackgroundPicker';
 
 // -- Badge display metadata ---------------------------------------------------
 
@@ -105,7 +107,7 @@ interface Props {
 }
 
 export default function AppearanceManager({ onClose, userId }: Props) {
-  const { bubbleSkin, setBubbleSkin } = useAppearance();
+  const { bubbleSkin, setBubbleSkin, globalChatBg, setGlobalChatBg } = useAppearance();
   const [userBadges, setUserBadges]        = useState<UserBadge[]>([]);
   const [activeBadge, setActiveBadgeState] = useState<EarlyAccessBadgeType>(null);
   const [loading, setLoading]              = useState(true);
@@ -319,6 +321,23 @@ export default function AppearanceManager({ onClose, userId }: Props) {
                 </TouchableOpacity>
               );
             })}
+          </View>
+
+          {/* Global Chat Background */}
+          <Text style={{
+            fontSize: 12, fontWeight: '700', color: '#9ca3af',
+            textTransform: 'uppercase', marginBottom: 8, marginTop: 16
+          }}>
+            Global Chat Background
+          </Text>
+          <Text style={{ fontSize: 13, color: '#6b7280', marginBottom: 16 }}>
+            Set a default background for all your chats. (You can also set custom backgrounds for individual chats on the chat screen.)
+          </Text>
+          <View style={{ marginHorizontal: -16 }}>
+            <ChatBackgroundPicker 
+              selectedBgId={globalChatBg}
+              onSelectBg={setGlobalChatBg}
+            />
           </View>
 
           {/* Footer note */}

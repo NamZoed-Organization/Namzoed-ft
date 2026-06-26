@@ -36,6 +36,7 @@ function toPostData(post: PostWithUser): PostData {
     profilePic: post.profiles?.avatar_url || undefined,
     content: post.content,
     images: post.images,
+    blurHashes: (post as any).blur_hashes ?? undefined,
     date: new Date(post.created_at),
     likes: post.likes,
     comments: post.comments,

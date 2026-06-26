@@ -5,7 +5,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.4";
 type NotifyChatMessageRequest = {
   sender_id?: string;
   receiver_id?: string;
-  message_type?: "text" | "image" | "audio";
+  message_type?: "text" | "image" | "audio" | "video" | "gif" | "sticker";
   preview?: string;
 };
 
@@ -43,6 +43,9 @@ const buildPreview = (
 
   if (messageType === "image") return "Sent an image";
   if (messageType === "audio") return "Sent a voice message";
+  if (messageType === "video") return "Sent a video";
+  if (messageType === "gif") return "Sent a GIF";
+  if (messageType === "sticker") return "Sent a sticker";
   return "Sent a message";
 };
 

@@ -32,6 +32,7 @@ import {
   FlatList,
   Image,
   InteractionManager,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -57,6 +58,9 @@ const ACTIONS_TOTAL = ACTION_BTN_W * 2; // 160px — fully revealed area
 const FULL_SWIPE_THRESHOLD = SCREEN_WIDTH * 0.6;
 const DELETE_COLOR = "#FF3B30";
 const MUTE_COLOR = "#8E8E93";
+// Must match CHAT_DRAFT_KEY_PREFIX in app/(users)/chat/[id].tsx
+const CHAT_DRAFT_KEY_PREFIX = "@namzoed_chat_draft_";
+const DRAFT_LABEL_COLOR = "#EF4444";
 
 // Types
 interface IMessage {
@@ -83,7 +87,12 @@ const getUserData = (_phoneNumber: string): IUserData => ({
   following: [],
   followers: [],
   requests: [],
-  userProfile: { phoneNumber: _phoneNumber, followingCount: 0, followersCount: 0, requestsCount: 0 },
+  userProfile: {
+    phoneNumber: _phoneNumber,
+    followingCount: 0,
+    followersCount: 0,
+    requestsCount: 0,
+  },
 });
 
 /**
@@ -92,220 +101,219 @@ const getUserData = (_phoneNumber: string): IUserData => ({
  * auto-triggers delete. Uses RNGH v2 GestureDetector so gesture
  * runs on the UI thread — no JS-thread lag.
  */
-const SwipeableConversationRow = React.memo(
-  function SwipeableConversationRow({
-    children,
-    onDelete,
-    onMute,
-    onPress,
-    isMuted,
-  }: {
-    children: React.ReactNode;
-    onDelete: () => void;
-    onMute: () => void;
-    onPress: () => void;
-    isMuted?: boolean;
-  }) {
-    const translateX = useSharedValue(0);
-    // Starting offset for the current gesture (so open → drag works correctly)
-    const gestureStartX = useSharedValue(0);
-    const isFullSwiped = useSharedValue(false);
-    // Timing config — no bounce
-    const SNAP = { duration: 240 };
+const SwipeableConversationRow = React.memo(function SwipeableConversationRow({
+  children,
+  onDelete,
+  onMute,
+  onPress,
+  isMuted,
+}: {
+  children: React.ReactNode;
+  onDelete: () => void;
+  onMute: () => void;
+  onPress: () => void;
+  isMuted?: boolean;
+}) {
+  const translateX = useSharedValue(0);
+  // Starting offset for the current gesture (so open → drag works correctly)
+  const gestureStartX = useSharedValue(0);
+  const isFullSwiped = useSharedValue(false);
+  // Timing config — no bounce
+  const SNAP = { duration: 240 };
 
-    function triggerHaptic() {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
-    function doDelete() {
-      onDelete();
-    }
+  function triggerHaptic() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  }
+  function doDelete() {
+    onDelete();
+  }
 
-    const pan = Gesture.Pan()
-      .activeOffsetX([-10, 10])
-      .failOffsetY([-8, 8])
-      .onBegin(() => {
-        "worklet";
-        gestureStartX.value = translateX.value;
-      })
-      .onUpdate((e) => {
-        "worklet";
-        const next = gestureStartX.value + e.translationX;
-        translateX.value = Math.min(0, Math.max(-FULL_SWIPE_THRESHOLD, next));
+  const pan = Gesture.Pan()
+    .activeOffsetX([-10, 10])
+    .failOffsetY([-8, 8])
+    .onBegin(() => {
+      "worklet";
+      gestureStartX.value = translateX.value;
+    })
+    .onUpdate((e) => {
+      "worklet";
+      const next = gestureStartX.value + e.translationX;
+      translateX.value = Math.min(0, Math.max(-FULL_SWIPE_THRESHOLD, next));
 
-        if (translateX.value <= -FULL_SWIPE_THRESHOLD && !isFullSwiped.value) {
-          isFullSwiped.value = true;
-          runOnJS(triggerHaptic)();
-        } else if (translateX.value > -FULL_SWIPE_THRESHOLD * 0.8) {
-          isFullSwiped.value = false;
-        }
-      })
-      .onEnd(() => {
-        "worklet";
-        const pos = translateX.value;
+      if (translateX.value <= -FULL_SWIPE_THRESHOLD && !isFullSwiped.value) {
+        isFullSwiped.value = true;
+        runOnJS(triggerHaptic)();
+      } else if (translateX.value > -FULL_SWIPE_THRESHOLD * 0.8) {
+        isFullSwiped.value = false;
+      }
+    })
+    .onEnd(() => {
+      "worklet";
+      const pos = translateX.value;
 
-        if (pos <= -FULL_SWIPE_THRESHOLD || isFullSwiped.value) {
-          isFullSwiped.value = false;
-          translateX.value = withTiming(0, SNAP);
-          runOnJS(doDelete)();
-          return;
-        }
+      if (pos <= -FULL_SWIPE_THRESHOLD || isFullSwiped.value) {
+        isFullSwiped.value = false;
+        translateX.value = withTiming(0, SNAP);
+        runOnJS(doDelete)();
+        return;
+      }
 
-        // Snap open / shut — no bounce, plain ease-out
-        if (pos < -ACTIONS_TOTAL / 2) {
-          translateX.value = withTiming(-ACTIONS_TOTAL, SNAP);
-        } else {
-          translateX.value = withTiming(0, SNAP);
-        }
-      });
+      // Snap open / shut — no bounce, plain ease-out
+      if (pos < -ACTIONS_TOTAL / 2) {
+        translateX.value = withTiming(-ACTIONS_TOTAL, SNAP);
+      } else {
+        translateX.value = withTiming(0, SNAP);
+      }
+    });
 
-    // Row slides left
-    const rowStyle = useAnimatedStyle(() => ({
-      transform: [{ translateX: translateX.value }],
-    }));
+  // Row slides left
+  const rowStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }));
 
-    // Progress 0→1 as drag goes from ACTIONS_TOTAL to FULL_SWIPE_THRESHOLD
-    // (the "full-swipe expansion" zone)
+  // Progress 0→1 as drag goes from ACTIONS_TOTAL to FULL_SWIPE_THRESHOLD
+  // (the "full-swipe expansion" zone)
 
-    // Mute: fades out and collapses as drag enters the expansion zone
-    const muteStyle = useAnimatedStyle(() => {
-      const drag = Math.abs(translateX.value);
-      const p = interpolate(
+  // Mute: fades out and collapses as drag enters the expansion zone
+  const muteStyle = useAnimatedStyle(() => {
+    const drag = Math.abs(translateX.value);
+    const p = interpolate(
+      drag,
+      [ACTIONS_TOTAL, FULL_SWIPE_THRESHOLD * 0.7],
+      [1, 0],
+      Extrapolation.CLAMP,
+    );
+    return {
+      width: interpolate(
         drag,
         [ACTIONS_TOTAL, FULL_SWIPE_THRESHOLD * 0.7],
-        [1, 0],
+        [ACTION_BTN_W, 0],
         Extrapolation.CLAMP,
-      );
-      return {
-        width: interpolate(
-          drag,
-          [ACTIONS_TOTAL, FULL_SWIPE_THRESHOLD * 0.7],
-          [ACTION_BTN_W, 0],
-          Extrapolation.CLAMP,
-        ),
-        opacity: p,
-        overflow: "hidden" as const,
-      };
-    });
+      ),
+      opacity: p,
+      overflow: "hidden" as const,
+    };
+  });
 
-    // Delete: expands from ACTION_BTN_W to fill all revealed space
-    const deleteStyle = useAnimatedStyle(() => {
-      const drag = Math.abs(translateX.value);
-      return {
-        width: interpolate(
-          drag,
-          [ACTIONS_TOTAL, FULL_SWIPE_THRESHOLD],
-          [ACTION_BTN_W, FULL_SWIPE_THRESHOLD],
-          Extrapolation.CLAMP,
-        ),
-        backgroundColor: interpolateColor(
-          drag,
-          [0, ACTIONS_TOTAL, FULL_SWIPE_THRESHOLD],
-          ["#f2f2f7", DELETE_COLOR, DELETE_COLOR],
-        ),
-      };
-    });
+  // Delete: expands from ACTION_BTN_W to fill all revealed space
+  const deleteStyle = useAnimatedStyle(() => {
+    const drag = Math.abs(translateX.value);
+    return {
+      width: interpolate(
+        drag,
+        [ACTIONS_TOTAL, FULL_SWIPE_THRESHOLD],
+        [ACTION_BTN_W, FULL_SWIPE_THRESHOLD],
+        Extrapolation.CLAMP,
+      ),
+      backgroundColor: interpolateColor(
+        drag,
+        [0, ACTIONS_TOTAL, FULL_SWIPE_THRESHOLD],
+        ["#f2f2f7", DELETE_COLOR, DELETE_COLOR],
+      ),
+    };
+  });
 
-    // Close the row — no bounce
-    function closeRow() {
-      translateX.value = withTiming(0, SNAP);
-    }
+  // Close the row — no bounce
+  function closeRow() {
+    translateX.value = withTiming(0, SNAP);
+  }
 
-    return (
-      <GestureDetector gesture={pan}>
-        <View style={{ overflow: "hidden" }}>
-          {/* ── Action buttons (behind the row) ── */}
-          <View
-            style={{
-              position: "absolute",
-              right: 0,
-              top: 0,
-              bottom: 0,
-              width: FULL_SWIPE_THRESHOLD,
-              flexDirection: "row",
-              alignItems: "stretch",
-              justifyContent: "flex-end",
-              backgroundColor: "#f2f2f7",
-            }}
-          >
-            {/* Mute / Unmute — shrinks and fades as delete expands */}
-            <Reanimated.View style={muteStyle}>
-              <TouchableOpacity
-                onPress={() => {
-                  closeRow();
-                  onMute();
-                }}
-                style={{
-                  flex: 1,
-                  minWidth: ACTION_BTN_W,
-                  backgroundColor: MUTE_COLOR,
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <Ionicons
-                  name={isMuted ? "notifications" : "notifications-off"}
-                  size={22}
-                  color="white"
-                />
-                <Reanimated.Text
-                  style={{ color: "white", fontSize: 12, marginTop: 4 }}
-                >
-                  {isMuted ? "Unmute" : "Mute"}
-                </Reanimated.Text>
-              </TouchableOpacity>
-            </Reanimated.View>
-
-            {/* Delete — expands to fill revealed area on full swipe */}
-            <Reanimated.View style={deleteStyle}>
-              <TouchableOpacity
-                onPress={() => {
-                  closeRow();
-                  onDelete();
-                }}
-                style={{
-                  flex: 1,
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <Ionicons name="trash" size={22} color="white" />
-                <Reanimated.Text
-                  style={{ color: "white", fontSize: 12, marginTop: 4 }}
-                >
-                  Delete
-                </Reanimated.Text>
-              </TouchableOpacity>
-            </Reanimated.View>
-          </View>
-
-          {/* ── Main row content (slides left) ── */}
-          <Reanimated.View
-            style={[rowStyle, { backgroundColor: "white", width: "100%" }]}
-          >
+  return (
+    <GestureDetector gesture={pan}>
+      <View style={{ overflow: "hidden" }}>
+        {/* ── Action buttons (behind the row) ── */}
+        <View
+          style={{
+            position: "absolute",
+            right: 0,
+            top: 0,
+            bottom: 0,
+            width: FULL_SWIPE_THRESHOLD,
+            flexDirection: "row",
+            alignItems: "stretch",
+            justifyContent: "flex-end",
+            backgroundColor: "#f2f2f7",
+          }}
+        >
+          {/* Mute / Unmute — shrinks and fades as delete expands */}
+          <Reanimated.View style={muteStyle}>
             <TouchableOpacity
               onPress={() => {
-                if (translateX.value < -10) {
-                  closeRow();
-                } else {
-                  onPress();
-                }
+                closeRow();
+                onMute();
               }}
-              activeOpacity={0.7}
+              style={{
+                flex: 1,
+                minWidth: ACTION_BTN_W,
+                backgroundColor: MUTE_COLOR,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
             >
-              {children}
+              <Ionicons
+                name={isMuted ? "notifications" : "notifications-off"}
+                size={22}
+                color="white"
+              />
+              <Reanimated.Text
+                style={{ color: "white", fontSize: 12, marginTop: 4 }}
+              >
+                {isMuted ? "Unmute" : "Mute"}
+              </Reanimated.Text>
+            </TouchableOpacity>
+          </Reanimated.View>
+
+          {/* Delete — expands to fill revealed area on full swipe */}
+          <Reanimated.View style={deleteStyle}>
+            <TouchableOpacity
+              onPress={() => {
+                closeRow();
+                onDelete();
+              }}
+              style={{
+                flex: 1,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Ionicons name="trash" size={22} color="white" />
+              <Reanimated.Text
+                style={{ color: "white", fontSize: 12, marginTop: 4 }}
+              >
+                Delete
+              </Reanimated.Text>
             </TouchableOpacity>
           </Reanimated.View>
         </View>
-      </GestureDetector>
-    );
-  },
-);
+
+        {/* ── Main row content (slides left) ── */}
+        <Reanimated.View
+          style={[rowStyle, { backgroundColor: "white", width: "100%" }]}
+        >
+          <TouchableOpacity
+            onPress={() => {
+              if (translateX.value < -10) {
+                closeRow();
+              } else {
+                onPress();
+              }
+            }}
+            activeOpacity={0.7}
+          >
+            {children}
+          </TouchableOpacity>
+        </Reanimated.View>
+      </View>
+    </GestureDetector>
+  );
+});
 
 export default function MessageScreen() {
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
   const { currentUser } = useUser();
-  const { refreshUnreadCount, currentUserUUID, setIsOnMessagesScreen } = useUnreadMessages();
+  const { refreshUnreadCount, currentUserUUID, setIsOnMessagesScreen } =
+    useUnreadMessages();
 
   // Tell the unread-messages context we're on the conversations screen
   // so it suppresses in-app chat banners while we're here.
@@ -315,10 +323,45 @@ export default function MessageScreen() {
       return () => setIsOnMessagesScreen(false);
     }, [setIsOnMessagesScreen]),
   );
+
+  // Unsent composer drafts keyed by partnerId, shown as "Draft: …" in the list
+  // (WhatsApp-style). Refreshed each time the screen regains focus so a draft
+  // typed in a chat appears immediately on returning here.
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      (async () => {
+        try {
+          const keys = await AsyncStorage.getAllKeys();
+          const draftKeys = keys.filter((k) =>
+            k.startsWith(CHAT_DRAFT_KEY_PREFIX),
+          );
+          const next: Record<string, string> = {};
+          if (draftKeys.length > 0) {
+            const entries = await AsyncStorage.multiGet(draftKeys);
+            for (const [key, value] of entries) {
+              const text = (value ?? "").trim();
+              if (!text) continue;
+              const partnerId = key.slice(CHAT_DRAFT_KEY_PREFIX.length);
+              next[partnerId] = text;
+            }
+          }
+          if (active) setDrafts(next);
+        } catch {
+          if (active) setDrafts({});
+        }
+      })();
+      return () => {
+        active = false;
+      };
+    }, []),
+  );
   const router = useAppRouter();
   const { tab } = useLocalSearchParams();
   const [activeTab, setActiveTab] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [showFollowRequests, setShowFollowRequests] = useState(false);
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -327,8 +370,17 @@ export default function MessageScreen() {
   const [showMessageRequests, setShowMessageRequests] = useState(false);
   const [isLoadingConversations, setIsLoadingConversations] = useState(true);
   const [debugInfo, setDebugInfo] = useState<string>("");
-  const [popup, setPopup] = useState<{visible: boolean; type: 'success'|'warning'|'error'|'white'; title: string; message: string}>({visible: false, type: 'white', title: '', message: ''});
-  const showPopup = (type: 'success'|'warning'|'error'|'white', title: string, message: string) => setPopup({visible: true, type, title, message});
+  const [popup, setPopup] = useState<{
+    visible: boolean;
+    type: "success" | "warning" | "error" | "white";
+    title: string;
+    message: string;
+  }>({ visible: false, type: "white", title: "", message: "" });
+  const showPopup = (
+    type: "success" | "warning" | "error" | "white",
+    title: string,
+    message: string,
+  ) => setPopup({ visible: true, type, title, message });
   const [mongooseUsers, setMongooseUsers] = useState<any[]>([]);
   const [isLoadingMongoose, setIsLoadingMongoose] = useState(false);
   const [showBookingModal, setShowBookingModal] = useState(false);
@@ -367,7 +419,9 @@ export default function MessageScreen() {
   // Re-computes whenever either the raw list or the hidden set changes.
   const visibleConversations = useMemo(
     () =>
-      conversations.filter((c) => !hiddenConversations.has(String(c.partnerId))),
+      conversations.filter(
+        (c) => !hiddenConversations.has(String(c.partnerId)),
+      ),
     [conversations, hiddenConversations],
   );
 
@@ -466,14 +520,20 @@ export default function MessageScreen() {
     // Strip embedded metadata wrappers used by chat screen persistence.
     if (typeof content === "string") {
       for (let i = 0; i < 3; i++) {
-        if (content.startsWith("[product-meta]") && content.includes("[/product-meta]")) {
+        if (
+          content.startsWith("[product-meta]") &&
+          content.includes("[/product-meta]")
+        ) {
           const suffixIndex = content.indexOf("[/product-meta]");
           content = content
             .slice(suffixIndex + "[/product-meta]".length)
             .replace(/^\n/, "");
           continue;
         }
-        if (content.startsWith("[reply-meta]") && content.includes("[/reply-meta]")) {
+        if (
+          content.startsWith("[reply-meta]") &&
+          content.includes("[/reply-meta]")
+        ) {
           const suffixIndex = content.indexOf("[/reply-meta]");
           content = content
             .slice(suffixIndex + "[/reply-meta]".length)
@@ -485,14 +545,16 @@ export default function MessageScreen() {
     }
 
     if (message.message_type === "mongoose_invite")
-      return isMine ? "You:  Mongoose delivery request" : " Mongoose delivery request";
+      return isMine
+        ? "You:  Mongoose delivery request"
+        : " Mongoose delivery request";
     if (message.message_type === "image" || message.image_url) return "Photo";
     if (message.message_type === "audio" || message.audio_url)
       return "Voice message";
-    if (
-      typeof content === "string" &&
-      content.includes("📍 My Location:")
-    ) {
+    if (message.message_type === "gif") return isMine ? "You: GIF" : "GIF";
+    if (message.message_type === "sticker")
+      return isMine ? "You: Sticker" : "Sticker";
+    if (typeof content === "string" && content.includes("📍 My Location:")) {
       return "Location";
     }
     const preview = content || "No messages yet";
@@ -571,7 +633,9 @@ export default function MessageScreen() {
           return;
         }
 
-        const followingIds = (followData ?? []).map((r: any) => r.following_id as string);
+        const followingIds = (followData ?? []).map(
+          (r: any) => r.following_id as string,
+        );
 
         if (followingIds.length === 0) {
           // Not following anyone — no results to show
@@ -707,10 +771,10 @@ export default function MessageScreen() {
         let profiles: any[] = [];
 
         if (partnerIds.length > 0) {
-        const { data: profileData, error: profileError } = await supabase
-          .from("profiles")
-          .select("id, name, phone, avatar_url, email")
-          .in("id", partnerIds);
+          const { data: profileData, error: profileError } = await supabase
+            .from("profiles")
+            .select("id, name, phone, avatar_url, email")
+            .in("id", partnerIds);
 
           profiles = profileData || [];
         }
@@ -743,7 +807,10 @@ export default function MessageScreen() {
         const requestMap = new Map<string, { status: string; context: string }>(
           (incomingRequests ?? []).map((r: any) => [
             String(r.sender_id),
-            { status: String(r.status), context: String(r.context ?? "personal") },
+            {
+              status: String(r.status),
+              context: String(r.context ?? "personal"),
+            },
           ]),
         );
 
@@ -777,12 +844,17 @@ export default function MessageScreen() {
           const requestContext = requestEntry?.context ?? "personal";
           // Mongoose delivery users always land in the main inbox — they are
           // service accounts, not social contacts, so the follow gate doesn't apply.
-          const isMongoosePartner = String(convo.partnerProfile?.email ?? "").startsWith("mongoose@gmail.com");
+          const isMongoosePartner = String(
+            convo.partnerProfile?.email ?? "",
+          ).startsWith("mongoose@gmail.com");
 
           if (isMutual || requestStatus === "accepted" || isMongoosePartner) {
             // Mutual follow, accepted request, or mongoose service user → main inbox
             mainConvos.push(convo);
-          } else if (requestStatus === "pending" && requestContext === "commerce") {
+          } else if (
+            requestStatus === "pending" &&
+            requestContext === "commerce"
+          ) {
             // Commerce inquiry (product/marketplace) → always in main inbox,
             // no follow required — this is a legitimate buyer→seller interaction
             mainConvos.push(convo);
@@ -806,7 +878,9 @@ export default function MessageScreen() {
         setConversations(mainConvos);
         setRequestConversations(reqConvos);
         await refreshUnreadCount();
-        setDebugInfo(`${mainConvos.length} chats · ${reqConvos.length} requests`);
+        setDebugInfo(
+          `${mainConvos.length} chats · ${reqConvos.length} requests`,
+        );
       } catch (e) {
         console.error("Error fetching conversations:", e);
         setDebugInfo(`Error: ${(e as any).message}`);
@@ -1015,10 +1089,7 @@ export default function MessageScreen() {
               const partnerId = candidateUserIds.includes(senderId)
                 ? receiverId
                 : senderId;
-              if (
-                partnerId &&
-                hiddenConversationsRef.current.has(partnerId)
-              ) {
+              if (partnerId && hiddenConversationsRef.current.has(partnerId)) {
                 const next2 = new Set(hiddenConversationsRef.current);
                 next2.delete(partnerId);
                 setHiddenConversations(next2);
@@ -1088,7 +1159,11 @@ export default function MessageScreen() {
   const handleAcceptMessageRequest = async (senderId: string) => {
     const myId = currentUserUUID || currentUser?.id;
     if (!myId) {
-      showPopup('error', 'Account Error', 'Could not identify your account. Please try again.');
+      showPopup(
+        "error",
+        "Account Error",
+        "Could not identify your account. Please try again.",
+      );
       return;
     }
 
@@ -1105,7 +1180,11 @@ export default function MessageScreen() {
         console.error("Accept request error:", error.message);
         // If the table doesn't exist, still move the conversation optimistically
         if (!error.message.includes("does not exist")) {
-          showPopup('error', 'Accept Failed', 'Failed to accept request: ' + error.message);
+          showPopup(
+            "error",
+            "Accept Failed",
+            "Failed to accept request: " + error.message,
+          );
           return;
         }
       }
@@ -1118,11 +1197,18 @@ export default function MessageScreen() {
       });
     } catch (e: any) {
       console.error("Accept request exception:", e);
-      showPopup('error', 'Something Went Wrong', e?.message || 'An unexpected error occurred.');
+      showPopup(
+        "error",
+        "Something Went Wrong",
+        e?.message || "An unexpected error occurred.",
+      );
     }
   };
 
-  const handleDeclineMessageRequest = async (senderId: string, partnerName: string) => {
+  const handleDeclineMessageRequest = async (
+    senderId: string,
+    partnerName: string,
+  ) => {
     Alert.alert(
       "Delete Request",
       `Delete the message request from ${partnerName}? They won't be notified.`,
@@ -1134,21 +1220,30 @@ export default function MessageScreen() {
           onPress: async () => {
             const myId = currentUserUUID || currentUser?.id;
             if (!myId) {
-              showPopup('error', 'Account Error', 'Could not identify your account. Please try again.');
+              showPopup(
+                "error",
+                "Account Error",
+                "Could not identify your account. Please try again.",
+              );
               return;
             }
 
             try {
               // Upsert declined status (handles missing row gracefully)
-              const { error } = await supabase
-                .from("message_requests")
-                .upsert(
-                  { sender_id: senderId, receiver_id: myId, status: "declined" },
-                  { onConflict: "sender_id,receiver_id" },
-                );
+              const { error } = await supabase.from("message_requests").upsert(
+                {
+                  sender_id: senderId,
+                  receiver_id: myId,
+                  status: "declined",
+                },
+                { onConflict: "sender_id,receiver_id" },
+              );
 
               if (error) {
-                console.warn("Decline request error (proceeding anyway):", error.message);
+                console.warn(
+                  "Decline request error (proceeding anyway):",
+                  error.message,
+                );
               }
 
               // Always remove from UI regardless of DB result
@@ -1168,10 +1263,7 @@ export default function MessageScreen() {
     );
   };
 
-  const handleDeleteConversation = (
-    partnerId: string,
-    partnerName: string,
-  ) => {
+  const handleDeleteConversation = (partnerId: string, partnerName: string) => {
     Alert.alert(
       "Delete Chat?",
       `This will remove the conversation with ${partnerName} from your inbox. ${partnerName} will still be able to see it.`,
@@ -1204,8 +1296,13 @@ export default function MessageScreen() {
     const lastMessage = conversation.lastMessage;
     const senderId = String(lastMessage?.sender_id || "");
     const isLastMessageMine = candidateUserIds.includes(senderId);
-    const hasUnreadIncoming = !isLastMessageMine && conversation.unreadCount > 0;
+    const hasUnreadIncoming =
+      !isLastMessageMine && conversation.unreadCount > 0;
     const isMuted = mutedConversations.has(String(conversation.partnerId));
+    const draftText = drafts[String(conversation.partnerId)]?.replace(
+      /\s+/g,
+      " ",
+    );
 
     return (
       <SwipeableConversationRow
@@ -1216,16 +1313,41 @@ export default function MessageScreen() {
         onMute={() => toggleMuteConversation(String(conversation.partnerId))}
         isMuted={isMuted}
       >
-        <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 13, backgroundColor: "white", borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#e5e7eb" }}>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            paddingHorizontal: 16,
+            paddingVertical: 13,
+            backgroundColor: "white",
+            borderBottomWidth: StyleSheet.hairlineWidth,
+            borderBottomColor: "#e5e7eb",
+          }}
+        >
           {/* Avatar 56px */}
           {avatarUri ? (
             <Image
               source={{ uri: avatarUri }}
-              style={{ width: 56, height: 56, borderRadius: 28, marginRight: 12 }}
+              style={{
+                width: 56,
+                height: 56,
+                borderRadius: 28,
+                marginRight: 12,
+              }}
               resizeMode="cover"
             />
           ) : (
-            <View style={{ width: 56, height: 56, borderRadius: 28, marginRight: 12, backgroundColor: "#094569", alignItems: "center", justifyContent: "center" }}>
+            <View
+              style={{
+                width: 56,
+                height: 56,
+                borderRadius: 28,
+                marginRight: 12,
+                backgroundColor: "#094569",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
               <Text style={{ color: "white", fontWeight: "700", fontSize: 20 }}>
                 {userName?.charAt(0).toUpperCase() || "U"}
               </Text>
@@ -1235,16 +1357,39 @@ export default function MessageScreen() {
           {/* Right column */}
           <View style={{ flex: 1 }}>
             {/* Top row: name + timestamp */}
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 4, flex: 1, marginRight: 8 }}>
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 3,
+              }}
+            >
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 4,
+                  flex: 1,
+                  marginRight: 8,
+                }}
+              >
                 <Text
                   numberOfLines={1}
-                  style={{ fontSize: 15, color: "#111827", fontWeight: hasUnreadIncoming ? "700" : "600" }}
+                  style={{
+                    fontSize: 15,
+                    color: "#111827",
+                    fontWeight: hasUnreadIncoming ? "700" : "600",
+                  }}
                 >
                   {userName}
                 </Text>
                 {isMuted && (
-                  <Ionicons name="notifications-off" size={12} color="#8E8E93" />
+                  <Ionicons
+                    name="notifications-off"
+                    size={12}
+                    color="#8E8E93"
+                  />
                 )}
               </View>
               <Text style={{ fontSize: 12, color: "#9ca3af", flexShrink: 0 }}>
@@ -1253,22 +1398,72 @@ export default function MessageScreen() {
             </View>
 
             {/* Bottom row: preview + unread indicator */}
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
               <Text
                 numberOfLines={1}
-                style={{ fontSize: 13, flex: 1, marginRight: 8, color: hasUnreadIncoming ? "#1f2937" : "#6b7280", fontWeight: hasUnreadIncoming ? "600" : "400" }}
+                style={{
+                  fontSize: 13,
+                  flex: 1,
+                  marginRight: 8,
+                  color: hasUnreadIncoming ? "#1f2937" : "#6b7280",
+                  fontWeight: hasUnreadIncoming ? "600" : "400",
+                }}
               >
-                {formatConversationPreview(lastMessage, isLastMessageMine)}
-              </Text>
-              {conversation.unreadCount > 0 && (
-                conversation.unreadCount <= 9 ? (
-                  <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: "#094569" }} />
+                {draftText ? (
+                  <>
+                    <Text
+                      style={{
+                        color: DRAFT_LABEL_COLOR,
+                        fontWeight: "500",
+                      }}
+                    >
+                      Draft:{" "}
+                    </Text>
+                    {draftText}
+                  </>
                 ) : (
-                  <View style={{ minWidth: 18, height: 18, borderRadius: 9, backgroundColor: "#094569", paddingHorizontal: 4, alignItems: "center", justifyContent: "center" }}>
-                    <Text style={{ color: "white", fontSize: 10, fontWeight: "700" }}>9+</Text>
+                  formatConversationPreview(lastMessage, isLastMessageMine)
+                )}
+              </Text>
+              {conversation.unreadCount > 0 &&
+                (conversation.unreadCount <= 9 ? (
+                  <View
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: 5,
+                      backgroundColor: "#094569",
+                    }}
+                  />
+                ) : (
+                  <View
+                    style={{
+                      minWidth: 18,
+                      height: 18,
+                      borderRadius: 9,
+                      backgroundColor: "#094569",
+                      paddingHorizontal: 4,
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: "white",
+                        fontSize: 10,
+                        fontWeight: "700",
+                      }}
+                    >
+                      9+
+                    </Text>
                   </View>
-                )
-              )}
+                ))}
             </View>
           </View>
         </View>
@@ -1341,12 +1536,34 @@ export default function MessageScreen() {
       string,
       { label: string; bg: string; text: string; icon: string }
     > = {
-      pending: { label: "Pending", bg: "#fef3c7", text: "#92400e", icon: "time-outline" },
-      accepted: { label: "Accepted", bg: "#dbeafe", text: "#1e40af", icon: "checkmark-circle-outline" },
-      rejected: { label: "Rejected", bg: "#fee2e2", text: "#991b1b", icon: "close-circle-outline" },
-      completed: { label: "Delivered", bg: "#d1fae5", text: "#065f46", icon: "checkmark-done-outline" },
+      pending: {
+        label: "Pending",
+        bg: "#fef3c7",
+        text: "#92400e",
+        icon: "time-outline",
+      },
+      accepted: {
+        label: "Accepted",
+        bg: "#dbeafe",
+        text: "#1e40af",
+        icon: "checkmark-circle-outline",
+      },
+      rejected: {
+        label: "Rejected",
+        bg: "#fee2e2",
+        text: "#991b1b",
+        icon: "close-circle-outline",
+      },
+      completed: {
+        label: "Delivered",
+        bg: "#d1fae5",
+        text: "#065f46",
+        icon: "checkmark-done-outline",
+      },
     };
-    const statusCfg = userBooking ? bookingStatusConfig[userBooking.status] : null;
+    const statusCfg = userBooking
+      ? bookingStatusConfig[userBooking.status]
+      : null;
 
     return (
       <View
@@ -1375,8 +1592,12 @@ export default function MessageScreen() {
 
           {/* Name + email */}
           <View style={{ flex: 1 }}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <Text style={{ fontSize: 15, fontWeight: "600", color: "#111827" }}>
+            <View
+              style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+            >
+              <Text
+                style={{ fontSize: 15, fontWeight: "600", color: "#111827" }}
+              >
                 {userName}
               </Text>
               {/* Free / Busy badge */}
@@ -1431,7 +1652,11 @@ export default function MessageScreen() {
                   alignSelf: "flex-start",
                 }}
               >
-                <Ionicons name={statusCfg.icon as any} size={13} color={statusCfg.text} />
+                <Ionicons
+                  name={statusCfg.icon as any}
+                  size={13}
+                  color={statusCfg.text}
+                />
                 <Text
                   style={{
                     fontSize: 11,
@@ -1460,7 +1685,14 @@ export default function MessageScreen() {
               onPress={handleTrackPress}
             >
               <Ionicons name="navigate" size={17} color="white" />
-              <Text style={{ color: "white", fontWeight: "600", marginLeft: 5, fontSize: 13 }}>
+              <Text
+                style={{
+                  color: "white",
+                  fontWeight: "600",
+                  marginLeft: 5,
+                  fontSize: 13,
+                }}
+              >
                 Track
               </Text>
             </TouchableOpacity>
@@ -1476,11 +1708,19 @@ export default function MessageScreen() {
               }}
             >
               <Ionicons name="checkmark-done" size={17} color="#065f46" />
-              <Text style={{ color: "#065f46", fontWeight: "600", marginLeft: 5, fontSize: 13 }}>
+              <Text
+                style={{
+                  color: "#065f46",
+                  fontWeight: "600",
+                  marginLeft: 5,
+                  fontSize: 13,
+                }}
+              >
                 Done
               </Text>
             </View>
-          ) : userBooking?.status === "pending" || userBooking?.status === "accepted" ? (
+          ) : userBooking?.status === "pending" ||
+            userBooking?.status === "accepted" ? (
             <View
               style={{
                 backgroundColor: "#f3f4f6",
@@ -1489,7 +1729,9 @@ export default function MessageScreen() {
                 borderRadius: 10,
               }}
             >
-              <Text style={{ color: "#6b7280", fontWeight: "600", fontSize: 13 }}>
+              <Text
+                style={{ color: "#6b7280", fontWeight: "600", fontSize: 13 }}
+              >
                 Booked
               </Text>
             </View>
@@ -1507,7 +1749,14 @@ export default function MessageScreen() {
               disabled={isBusy}
             >
               <Ionicons name="calendar-outline" size={17} color="white" />
-              <Text style={{ color: "white", fontWeight: "600", marginLeft: 5, fontSize: 13 }}>
+              <Text
+                style={{
+                  color: "white",
+                  fontWeight: "600",
+                  marginLeft: 5,
+                  fontSize: 13,
+                }}
+              >
                 {isBusy ? "Busy" : "Book"}
               </Text>
             </TouchableOpacity>
@@ -1515,6 +1764,42 @@ export default function MessageScreen() {
         </View>
       </View>
     );
+  };
+
+  // ── Frequent contacts suggestion panel (hooks must be before early returns) ──
+  const recentContacts = useMemo(
+    () =>
+      visibleConversations.slice(0, 12).map((c) => ({
+        id: String(c.partnerId),
+        name: c.partnerProfile?.name || c.partnerProfile?.username || "Unknown",
+        avatar:
+          c.partnerProfile?.avatar_url || c.partnerProfile?.profile_url || null,
+      })),
+    [visibleConversations],
+  );
+
+  const suggestionProgress = useSharedValue(0);
+  const SUGGESTION_MAX_H = 315;
+
+  const suggestionStyle = useAnimatedStyle(() => ({
+    maxHeight: suggestionProgress.value * SUGGESTION_MAX_H,
+    opacity: suggestionProgress.value,
+    overflow: "hidden",
+  }));
+
+  const showSuggestions =
+    isSearchFocused && !searchQuery.trim() && recentContacts.length > 0;
+
+  useEffect(() => {
+    suggestionProgress.value = withTiming(showSuggestions ? 1 : 0, {
+      duration: showSuggestions ? 260 : 180,
+    });
+  }, [showSuggestions]);
+
+  const handleSuggestionPress = (contactId: string) => {
+    setIsSearchFocused(false);
+    setSearchQuery("");
+    router.push(`/(users)/chat/${contactId}`);
   };
 
   // Early returns AFTER all hooks are defined to avoid hook order violations
@@ -1599,7 +1884,13 @@ export default function MessageScreen() {
 
   return (
     <View className="flex-1 bg-background">
-      <PopupMessage visible={popup.visible} type={popup.type} title={popup.title} message={popup.message} onHide={() => setPopup(p => ({...p, visible: false}))} />
+      <PopupMessage
+        visible={popup.visible}
+        type={popup.type}
+        title={popup.title}
+        message={popup.message}
+        onHide={() => setPopup((p) => ({ ...p, visible: false }))}
+      />
       {/* Status Bar Space */}
       <View className="h-12 bg-white" />
 
@@ -1628,171 +1919,334 @@ export default function MessageScreen() {
       {activeTab === 0 && !showMessageRequests && (
         <>
           {/* Search Bar — lives outside FlatList so the keyboard never dismisses on re-render */}
-          <View style={{ paddingHorizontal: 16, paddingVertical: 10, backgroundColor: "white" }}>
-            <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: "#f3f4f6", borderRadius: 24, paddingHorizontal: 14, paddingVertical: 10 }}>
+          <View
+            style={{
+              paddingHorizontal: 16,
+              paddingVertical: 10,
+              backgroundColor: "white",
+            }}
+          >
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                backgroundColor: "#f3f4f6",
+                borderRadius: 24,
+                paddingHorizontal: 14,
+                paddingVertical: 10,
+              }}
+            >
               <Ionicons name="search" size={18} color="#9ca3af" />
               <TextInput
-                style={{ flex: 1, marginLeft: 8, fontSize: 15, color: "#000", paddingVertical: 0 }}
+                style={{
+                  flex: 1,
+                  marginLeft: 8,
+                  fontSize: 15,
+                  color: "#000",
+                  paddingVertical: 0,
+                }}
                 placeholderTextColor="#9ca3af"
                 placeholder="Search"
                 value={searchQuery}
                 onChangeText={setSearchQuery}
+                onFocus={() => setIsSearchFocused(true)}
+                onBlur={() => setIsSearchFocused(false)}
               />
               {isSearching && (
-                <ActivityIndicator size="small" color="#9ca3af" style={{ marginLeft: 6 }} />
+                <ActivityIndicator
+                  size="small"
+                  color="#9ca3af"
+                  style={{ marginLeft: 6 }}
+                />
               )}
             </View>
           </View>
+
+          {/* ── Frequent-contacts suggestion panel ── */}
+          <Reanimated.View style={suggestionStyle}>
+            <View
+              style={{
+                backgroundColor: "white",
+                borderBottomWidth: StyleSheet.hairlineWidth,
+                borderBottomColor: "#e5e7eb",
+                paddingBottom: 14,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 11,
+                  fontWeight: "600",
+                  color: "#9ca3af",
+                  letterSpacing: 0.6,
+                  textTransform: "uppercase",
+                  paddingHorizontal: 16,
+                  paddingTop: 10,
+                  paddingBottom: 10,
+                }}
+              >
+                Frequent Contacts
+              </Text>
+              {/* Vertical grid — 4 cols, max 3 rows visible, scrollable beyond */}
+              <ScrollView
+                nestedScrollEnabled
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                style={{ maxHeight: 87 * 3 }}
+                contentContainerStyle={{ paddingHorizontal: 8 }}
+              >
+                <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
+                  {recentContacts.map((contact) => (
+                    <TouchableOpacity
+                      key={contact.id}
+                      onPress={() => handleSuggestionPress(contact.id)}
+                      activeOpacity={0.75}
+                      style={{
+                        width: "25%",
+                        alignItems: "center",
+                        paddingVertical: 8,
+                        paddingHorizontal: 4,
+                      }}
+                    >
+                      {contact.avatar ? (
+                        <Image
+                          source={{ uri: contact.avatar }}
+                          style={{
+                            width: 52,
+                            height: 52,
+                            borderRadius: 26,
+                            backgroundColor: "#e5e7eb",
+                          }}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <View
+                          style={{
+                            width: 52,
+                            height: 52,
+                            borderRadius: 26,
+                            backgroundColor: "#094569",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <Text
+                            style={{
+                              color: "white",
+                              fontWeight: "700",
+                              fontSize: 20,
+                            }}
+                          >
+                            {contact.name.charAt(0).toUpperCase()}
+                          </Text>
+                        </View>
+                      )}
+                      <Text
+                        numberOfLines={1}
+                        style={{
+                          fontSize: 11,
+                          color: "#374151",
+                          marginTop: 5,
+                          textAlign: "center",
+                          width: "100%",
+                        }}
+                      >
+                        {contact.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </ScrollView>
+            </View>
+          </Reanimated.View>
 
           {isLoadingConversations && conversations.length === 0 ? (
             <View style={{ flex: 1, paddingBottom: listBottomPad }}>
               <ConversationSkeleton count={8} />
             </View>
           ) : (
-          <FlatList
-            style={{ flex: 1 }}
-            contentContainerStyle={{ paddingBottom: listBottomPad }}
-            keyboardShouldPersistTaps="handled"
-            data={searchQuery.trim() ? searchResults : visibleConversations}
-            renderItem={
-              searchQuery.trim() ? renderSearchResultItem : renderConversationItem
-            }
-            keyExtractor={(item) =>
-              item.id || item.partnerId || item.phone || item.phone_number
-            }
-            ListHeaderComponent={() => (
-              <>
-                {/* Message Requests banner */}
-              {!searchQuery.trim() && requestConversations.length > 0 && (
-                <TouchableOpacity
-                  onPress={() => setShowMessageRequests(true)}
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    paddingHorizontal: 16,
-                    paddingVertical: 14,
-                    backgroundColor: "white",
-                    borderBottomWidth: 1,
-                    borderBottomColor: "#f3f4f6",
-                  }}
-                >
-                  {/* Avatar stack */}
-                  <View style={{ width: 46, height: 46, marginRight: 12, position: "relative" }}>
-                    <View
+            <FlatList
+              style={{ flex: 1 }}
+              contentContainerStyle={{ paddingBottom: listBottomPad }}
+              keyboardShouldPersistTaps="handled"
+              data={searchQuery.trim() ? searchResults : visibleConversations}
+              renderItem={
+                searchQuery.trim()
+                  ? renderSearchResultItem
+                  : renderConversationItem
+              }
+              keyExtractor={(item) =>
+                item.id || item.partnerId || item.phone || item.phone_number
+              }
+              ListHeaderComponent={() => (
+                <>
+                  {/* Message Requests banner */}
+                  {!searchQuery.trim() && requestConversations.length > 0 && (
+                    <TouchableOpacity
+                      onPress={() => setShowMessageRequests(true)}
                       style={{
-                        width: 38,
-                        height: 38,
-                        borderRadius: 19,
-                        backgroundColor: "#e0e7ef",
+                        flexDirection: "row",
                         alignItems: "center",
-                        justifyContent: "center",
-                        position: "absolute",
-                        top: 0,
-                        left: 0,
-                        borderWidth: 2,
-                        borderColor: "white",
+                        paddingHorizontal: 16,
+                        paddingVertical: 14,
+                        backgroundColor: "white",
+                        borderBottomWidth: 1,
+                        borderBottomColor: "#f3f4f6",
                       }}
                     >
-                      <Ionicons name="person" size={18} color="#6b7280" />
-                    </View>
-                    {requestConversations.length > 1 && (
+                      {/* Avatar stack */}
                       <View
                         style={{
-                          width: 32,
-                          height: 32,
-                          borderRadius: 16,
-                          backgroundColor: "#cbd5e1",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          position: "absolute",
-                          bottom: 0,
-                          right: 0,
-                          borderWidth: 2,
-                          borderColor: "white",
+                          width: 46,
+                          height: 46,
+                          marginRight: 12,
+                          position: "relative",
                         }}
                       >
-                        <Ionicons name="person" size={14} color="#6b7280" />
+                        <View
+                          style={{
+                            width: 38,
+                            height: 38,
+                            borderRadius: 19,
+                            backgroundColor: "#e0e7ef",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            position: "absolute",
+                            top: 0,
+                            left: 0,
+                            borderWidth: 2,
+                            borderColor: "white",
+                          }}
+                        >
+                          <Ionicons name="person" size={18} color="#6b7280" />
+                        </View>
+                        {requestConversations.length > 1 && (
+                          <View
+                            style={{
+                              width: 32,
+                              height: 32,
+                              borderRadius: 16,
+                              backgroundColor: "#cbd5e1",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              position: "absolute",
+                              bottom: 0,
+                              right: 0,
+                              borderWidth: 2,
+                              borderColor: "white",
+                            }}
+                          >
+                            <Ionicons name="person" size={14} color="#6b7280" />
+                          </View>
+                        )}
                       </View>
-                    )}
-                  </View>
 
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 15, fontWeight: "600", color: "#111827" }}>
-                      Message Requests
-                    </Text>
-                    <Text style={{ fontSize: 13, color: "#6b7280", marginTop: 1 }}>
-                      {requestConversations.length}{" "}
-                      {requestConversations.length === 1 ? "request" : "requests"}
-                    </Text>
-                  </View>
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={{
+                            fontSize: 15,
+                            fontWeight: "600",
+                            color: "#111827",
+                          }}
+                        >
+                          Message Requests
+                        </Text>
+                        <Text
+                          style={{
+                            fontSize: 13,
+                            color: "#6b7280",
+                            marginTop: 1,
+                          }}
+                        >
+                          {requestConversations.length}{" "}
+                          {requestConversations.length === 1
+                            ? "request"
+                            : "requests"}
+                        </Text>
+                      </View>
 
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                    <View
-                      style={{
-                        minWidth: 20,
-                        height: 20,
-                        borderRadius: 10,
-                        backgroundColor: "#094569",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        paddingHorizontal: 5,
-                      }}
-                    >
-                      <Text style={{ color: "white", fontSize: 11, fontWeight: "700" }}>
-                        {requestConversations.length}
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 6,
+                        }}
+                      >
+                        <View
+                          style={{
+                            minWidth: 20,
+                            height: 20,
+                            borderRadius: 10,
+                            backgroundColor: "#094569",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            paddingHorizontal: 5,
+                          }}
+                        >
+                          <Text
+                            style={{
+                              color: "white",
+                              fontSize: 11,
+                              fontWeight: "700",
+                            }}
+                          >
+                            {requestConversations.length}
+                          </Text>
+                        </View>
+                        <Ionicons
+                          name="chevron-forward"
+                          size={16}
+                          color="#9ca3af"
+                        />
+                      </View>
+                    </TouchableOpacity>
+                  )}
+
+                  {/* Section label */}
+                  {searchQuery.trim() && searchResults.length > 0 && (
+                    <View className="px-4 py-2 bg-gray-50 border-b border-gray-200">
+                      <Text className="text-sm font-medium text-gray-600">
+                        Search Results ({searchResults.length})
                       </Text>
                     </View>
-                    <Ionicons name="chevron-forward" size={16} color="#9ca3af" />
-                  </View>
-                </TouchableOpacity>
+                  )}
+                  {!searchQuery.trim() && conversations.length > 0 && (
+                    <View className="px-4 py-2 bg-gray-50 border-b border-gray-200">
+                      <Text className="text-sm font-medium text-gray-600">
+                        Your Chats ({conversations.length})
+                      </Text>
+                    </View>
+                  )}
+                </>
               )}
-
-              {/* Section label */}
-              {searchQuery.trim() && searchResults.length > 0 && (
-                <View className="px-4 py-2 bg-gray-50 border-b border-gray-200">
-                  <Text className="text-sm font-medium text-gray-600">
-                    Search Results ({searchResults.length})
-                  </Text>
-                </View>
-              )}
-              {!searchQuery.trim() && conversations.length > 0 && (
-                <View className="px-4 py-2 bg-gray-50 border-b border-gray-200">
-                  <Text className="text-sm font-medium text-gray-600">
-                    Your Chats ({conversations.length})
-                  </Text>
-                </View>
-              )}
-            </>
-          )}
-          ListEmptyComponent={() => {
-            if (searchQuery.trim() && !isSearching) {
-              return (
-                <View className="items-center justify-center py-8 px-6">
-                  <Text className="text-gray-500 text-center">
-                    No followed users match "{searchQuery}".
-                  </Text>
-                  <Text className="text-gray-400 text-center text-xs mt-1">
-                    You can only message people you follow.
-                  </Text>
-                </View>
-              );
-            }
-            if (!searchQuery.trim()) {
-              return (
-                <View className="items-center justify-center py-8">
-                  <Text className="text-gray-500 text-center">
-                    No conversations yet.
-                  </Text>
-                  <Text className="text-gray-500 text-center mt-1">
-                    Search for someone you follow to start chatting.
-                  </Text>
-                </View>
-              );
-            }
-            return null;
-          }}
-          showsVerticalScrollIndicator={false}
-        />
+              ListEmptyComponent={() => {
+                if (searchQuery.trim() && !isSearching) {
+                  return (
+                    <View className="items-center justify-center py-8 px-6">
+                      <Text className="text-gray-500 text-center">
+                        No followed users match &quot;{searchQuery}&quot;.
+                      </Text>
+                      <Text className="text-gray-400 text-center text-xs mt-1">
+                        You can only message people you follow.
+                      </Text>
+                    </View>
+                  );
+                }
+                if (!searchQuery.trim()) {
+                  return (
+                    <View className="items-center justify-center py-8">
+                      <Text className="text-gray-500 text-center">
+                        No conversations yet.
+                      </Text>
+                      <Text className="text-gray-500 text-center mt-1">
+                        Search for someone you follow to start chatting.
+                      </Text>
+                    </View>
+                  );
+                }
+                return null;
+              }}
+              showsVerticalScrollIndicator={false}
+            />
           )}
         </>
       )}
@@ -1809,10 +2263,7 @@ export default function MessageScreen() {
               convo.partnerProfile?.name ||
               convo.partnerProfile?.username ||
               "Unknown";
-            const preview = formatConversationPreview(
-              convo.lastMessage,
-              false,
-            );
+            const preview = formatConversationPreview(convo.lastMessage, false);
             const initials = name.charAt(0).toUpperCase();
             return (
               <View
@@ -1849,7 +2300,13 @@ export default function MessageScreen() {
                           style={{ width: 50, height: 50, borderRadius: 25 }}
                         />
                       ) : (
-                        <Text style={{ fontSize: 18, fontWeight: "700", color: "#6b7280" }}>
+                        <Text
+                          style={{
+                            fontSize: 18,
+                            fontWeight: "700",
+                            color: "#6b7280",
+                          }}
+                        >
                           {initials}
                         </Text>
                       )}
@@ -1864,7 +2321,13 @@ export default function MessageScreen() {
                       router.push(`/(users)/chat/${convo.partnerId}`);
                     }}
                   >
-                    <Text style={{ fontSize: 15, fontWeight: "600", color: "#111827" }}>
+                    <Text
+                      style={{
+                        fontSize: 15,
+                        fontWeight: "600",
+                        color: "#111827",
+                      }}
+                    >
                       {name}
                     </Text>
                     <Text
@@ -1895,12 +2358,20 @@ export default function MessageScreen() {
                       alignItems: "center",
                     }}
                   >
-                    <Text style={{ color: "white", fontWeight: "600", fontSize: 14 }}>
+                    <Text
+                      style={{
+                        color: "white",
+                        fontWeight: "600",
+                        fontSize: 14,
+                      }}
+                    >
                       Accept
                     </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    onPress={() => handleDeclineMessageRequest(convo.partnerId, name)}
+                    onPress={() =>
+                      handleDeclineMessageRequest(convo.partnerId, name)
+                    }
                     style={{
                       flex: 1,
                       backgroundColor: "#f3f4f6",
@@ -1909,7 +2380,13 @@ export default function MessageScreen() {
                       alignItems: "center",
                     }}
                   >
-                    <Text style={{ color: "#374151", fontWeight: "600", fontSize: 14 }}>
+                    <Text
+                      style={{
+                        color: "#374151",
+                        fontWeight: "600",
+                        fontSize: 14,
+                      }}
+                    >
                       Delete
                     </Text>
                   </TouchableOpacity>
@@ -1935,7 +2412,9 @@ export default function MessageScreen() {
               >
                 <Ionicons name="arrow-back" size={22} color="#094569" />
               </TouchableOpacity>
-              <Text style={{ fontSize: 18, fontWeight: "700", color: "#111827" }}>
+              <Text
+                style={{ fontSize: 18, fontWeight: "700", color: "#111827" }}
+              >
                 Message Requests
               </Text>
               <View style={{ flex: 1 }} />
@@ -1946,7 +2425,13 @@ export default function MessageScreen() {
             </View>
           )}
           ListEmptyComponent={() => (
-            <View style={{ alignItems: "center", justifyContent: "center", paddingVertical: 48 }}>
+            <View
+              style={{
+                alignItems: "center",
+                justifyContent: "center",
+                paddingVertical: 48,
+              }}
+            >
               <Ionicons name="chatbubbles-outline" size={48} color="#d1d5db" />
               <Text style={{ color: "#6b7280", marginTop: 12, fontSize: 15 }}>
                 No message requests

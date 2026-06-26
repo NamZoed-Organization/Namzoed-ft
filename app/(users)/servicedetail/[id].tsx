@@ -2,42 +2,44 @@ import MarketplaceImageViewer from "@/components/modals/MarketplaceImageViewer";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { useUser } from "@/contexts/UserContext";
 import {
-    fetchProviderServiceById,
-    ProviderServiceWithDetails,
+  fetchProviderServiceById,
+  ProviderServiceWithDetails,
 } from "@/lib/servicesService";
 import { supabase } from "@/lib/supabase";
 import { useAppRouter } from "@/utils/navigation";
 import { getInitials } from "@/utils/initials";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
+import { Href, useFocusEffect, useLocalSearchParams } from "expo-router";
 import {
-    Href,
-    useFocusEffect,
-    useLocalSearchParams,
-} from "expo-router";
-import {
-    Bookmark,
-    ChevronLeft,
-    ChevronRight,
-    Clock,
-    MessageCircle,
-    Tag,
-    User,
-    Verified,
-    Wrench,
+  Bookmark,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  MessageCircle,
+  Tag,
+  User,
+  Verified,
+  Wrench,
 } from "lucide-react-native";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
-    BackHandler,
-    Dimensions,
-    Image,
-    RefreshControl,
-    Animated as RNAnimated,
-    ScrollView,
-    StatusBar,
-    Text,
-    TouchableOpacity,
-    View,
+  BackHandler,
+  Dimensions,
+  Image,
+  RefreshControl,
+  Animated as RNAnimated,
+  ScrollView,
+  StatusBar,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -125,7 +127,9 @@ export default function ServiceDetail() {
   const imageScrollX = useRef(new RNAnimated.Value(0)).current;
   const animatedHeroHeight = useRef(new RNAnimated.Value(IMAGE_HEIGHT)).current;
   const activeImageIndexRef = useRef(0);
-  const [imageAspectRatios, setImageAspectRatios] = useState<Record<number, number>>({});
+  const [imageAspectRatios, setImageAspectRatios] = useState<
+    Record<number, number>
+  >({});
   const [showImageViewer, setShowImageViewer] = useState(false);
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -141,7 +145,10 @@ export default function ServiceDetail() {
       ),
     [service?.images],
   );
-  const serviceImagesKey = useMemo(() => serviceImageUrls.join("||"), [serviceImageUrls]);
+  const serviceImagesKey = useMemo(
+    () => serviceImageUrls.join("||"),
+    [serviceImageUrls],
+  );
 
   const showSuccessPopup = (message: string, title: string = "Success") => {
     setPopupMessage(message);
@@ -157,29 +164,32 @@ export default function ServiceDetail() {
     setTimeout(() => setShowError(false), 2500);
   };
 
-  const loadService = useCallback(async (isRefreshing = false) => {
-    if (!id) return;
-    try {
-      if (!isRefreshing) setLoading(true);
-      const data = await fetchProviderServiceById(id);
-      setService(data);
+  const loadService = useCallback(
+    async (isRefreshing = false) => {
+      if (!id) return;
+      try {
+        if (!isRefreshing) setLoading(true);
+        const data = await fetchProviderServiceById(id);
+        setService(data);
 
-      if (currentUser) {
-        const { data: bookmarkData } = await supabase
-          .from("user_bookmarks")
-          .select("*")
-          .eq("user_id", currentUser.id)
-          .eq("service_id", id)
-          .single();
-        setIsBookmarked(!!bookmarkData);
+        if (currentUser) {
+          const { data: bookmarkData } = await supabase
+            .from("user_bookmarks")
+            .select("*")
+            .eq("user_id", currentUser.id)
+            .eq("service_id", id)
+            .single();
+          setIsBookmarked(!!bookmarkData);
+        }
+      } catch (error) {
+        console.error("Error loading service:", error);
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
       }
-    } catch (error) {
-      console.error("Error loading service:", error);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [id, currentUser]);
+    },
+    [id, currentUser],
+  );
 
   const handleRefresh = () => {
     setRefreshing(true);
@@ -216,7 +226,10 @@ export default function ServiceDetail() {
     } catch (err: any) {
       console.error("Bookmark error:", err);
       setIsBookmarked(previousState);
-      showErrorPopup(err?.message || "Failed to update bookmark", "Update Failed");
+      showErrorPopup(
+        err?.message || "Failed to update bookmark",
+        "Update Failed",
+      );
     }
   };
 
@@ -287,7 +300,9 @@ export default function ServiceDetail() {
         (width, height) => {
           if (cancelled || !width || !height) return;
           const ratio = width / height;
-          setImageAspectRatios((prev) => (prev[index] ? prev : { ...prev, [index]: ratio }));
+          setImageAspectRatios((prev) =>
+            prev[index] ? prev : { ...prev, [index]: ratio },
+          );
         },
         () => {
           // fallback
@@ -305,7 +320,10 @@ export default function ServiceDetail() {
       const ratio = imageAspectRatios[index] || imageAspectRatios[0];
       if (!ratio) return IMAGE_HEIGHT;
       const calculatedHeight = SCREEN_WIDTH / ratio;
-      return Math.min(MAX_IMAGE_HEIGHT, Math.max(MIN_IMAGE_HEIGHT, calculatedHeight));
+      return Math.min(
+        MAX_IMAGE_HEIGHT,
+        Math.max(MIN_IMAGE_HEIGHT, calculatedHeight),
+      );
     },
     [imageAspectRatios],
   );
@@ -326,7 +344,12 @@ export default function ServiceDetail() {
       duration: 220,
       useNativeDriver: false,
     }).start();
-  }, [activeImageIndex, serviceImageUrls.length, getImageHeightForIndex, animatedHeroHeight]);
+  }, [
+    activeImageIndex,
+    serviceImageUrls.length,
+    getImageHeightForIndex,
+    animatedHeroHeight,
+  ]);
 
   if (loading) return <DetailSkeleton />;
 
@@ -341,7 +364,7 @@ export default function ServiceDetail() {
           Service Not Found
         </Text>
         <Text className="text-gray-500 text-center mb-8">
-          We couldn't find this service. It may have been removed.
+          We couldn&apos;t find this service. It may have been removed.
         </Text>
         <TouchableOpacity
           className="bg-primary px-8 py-4 rounded-2xl shadow-lg"
@@ -388,7 +411,9 @@ export default function ServiceDetail() {
         }
       >
         {/* Hero Image Section */}
-        <RNAnimated.View style={{ height: animatedHeroHeight, overflow: "hidden" }}>
+        <RNAnimated.View
+          style={{ height: animatedHeroHeight, overflow: "hidden" }}
+        >
           {hasImages ? (
             <RNAnimated.ScrollView
               ref={imageScrollRef}
@@ -403,11 +428,16 @@ export default function ServiceDetail() {
                     const x = event?.nativeEvent?.contentOffset?.x || 0;
                     const rawIndex = x / SCREEN_WIDTH;
                     const leftIndex = Math.max(0, Math.floor(rawIndex));
-                    const rightIndex = Math.min(images.length - 1, leftIndex + 1);
+                    const rightIndex = Math.min(
+                      images.length - 1,
+                      leftIndex + 1,
+                    );
                     const t = Math.max(0, Math.min(1, rawIndex - leftIndex));
                     const leftHeight = getImageHeightForIndex(leftIndex);
                     const rightHeight = getImageHeightForIndex(rightIndex);
-                    animatedHeroHeight.setValue(leftHeight + (rightHeight - leftHeight) * t);
+                    animatedHeroHeight.setValue(
+                      leftHeight + (rightHeight - leftHeight) * t,
+                    );
 
                     const idx = Math.round(rawIndex);
                     if (idx !== activeImageIndexRef.current) {
@@ -424,7 +454,11 @@ export default function ServiceDetail() {
                 <TouchableOpacity
                   key={index}
                   activeOpacity={0.95}
-                  style={{ width: SCREEN_WIDTH, height: "100%", backgroundColor: "#0F172A" }}
+                  style={{
+                    width: SCREEN_WIDTH,
+                    height: "100%",
+                    backgroundColor: "#0F172A",
+                  }}
                   onPress={() => {
                     setActiveImageIndex(index);
                     setShowImageViewer(true);
@@ -544,17 +578,24 @@ export default function ServiceDetail() {
                   paddingVertical: 3,
                 }}
               >
-                <Text style={{ color: "#fff", fontSize: 11, fontWeight: "600" }}>
+                <Text
+                  style={{ color: "#fff", fontSize: 11, fontWeight: "600" }}
+                >
                   {activeImageIndex + 1} / {images.length}
                 </Text>
               </View>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+              >
                 {images.map((_, index) => (
                   <TouchableOpacity
                     key={index}
                     onPress={() => {
                       setActiveImageIndex(index);
-                      imageScrollRef.current?.scrollTo({ x: index * SCREEN_WIDTH, animated: true });
+                      imageScrollRef.current?.scrollTo({
+                        x: index * SCREEN_WIDTH,
+                        animated: true,
+                      });
                     }}
                     activeOpacity={0.8}
                   >
@@ -563,7 +604,10 @@ export default function ServiceDetail() {
                         height: 7,
                         borderRadius: 999,
                         width: activeImageIndex === index ? 22 : 7,
-                        backgroundColor: activeImageIndex === index ? "#fff" : "rgba(255,255,255,0.4)",
+                        backgroundColor:
+                          activeImageIndex === index
+                            ? "#fff"
+                            : "rgba(255,255,255,0.4)",
                       }}
                     />
                   </TouchableOpacity>
@@ -574,12 +618,10 @@ export default function ServiceDetail() {
         </RNAnimated.View>
 
         {/* Content Card */}
-        <View className="bg-white min-h-screen">
+        <View className="bg-white">
           <View className="px-6 pt-6 pb-32">
             {/* Category Badge */}
-            <View
-              className="flex-row flex-wrap gap-2 mb-4"
-            >
+            <View className="flex-row flex-wrap gap-2 mb-4">
               <View className="bg-primary/10 px-4 py-1.5 rounded-full flex-row items-center gap-1.5">
                 <Tag size={12} color="#094569" />
                 <Text className="text-xs font-semibold text-primary">
@@ -589,16 +631,12 @@ export default function ServiceDetail() {
             </View>
 
             {/* Service Name */}
-            <Text
-              className="text-2xl font-bold text-gray-900 mb-6 leading-tight"
-            >
+            <Text className="text-2xl font-bold text-gray-900 mb-6 leading-tight">
               {service.name}
             </Text>
 
             {/* Provider Card */}
-            <View
-              className="bg-gray-50 p-5 rounded-3xl mb-6"
-            >
+            <View className="bg-gray-50 p-5 rounded-3xl mb-6">
               <TouchableOpacity
                 activeOpacity={0.8}
                 onPress={handleViewProvider}
@@ -613,7 +651,13 @@ export default function ServiceDetail() {
                     />
                   ) : (
                     <View className="w-14 h-14 bg-[#e0e7ef] rounded-2xl items-center justify-center">
-                      <Text style={{ fontSize: 20, fontWeight: '700', color: '#094569' }}>
+                      <Text
+                        style={{
+                          fontSize: 20,
+                          fontWeight: "700",
+                          color: "#094569",
+                        }}
+                      >
                         {getInitials(providerName)}
                       </Text>
                     </View>
@@ -626,10 +670,13 @@ export default function ServiceDetail() {
                     <Text className="text-base font-bold text-gray-900">
                       {providerName}
                     </Text>
-                    {(service.service_providers as any)?.verification_status === "verified" && (
+                    {(service.service_providers as any)?.verification_status ===
+                      "verified" && (
                       <View className="flex-row items-center bg-blue-50 border border-[#094569] rounded-full px-2 py-0.5 gap-1">
                         <Verified size={11} color="#094569" />
-                        <Text className="text-[10px] font-msemibold text-[#094569] leading-none">Verified</Text>
+                        <Text className="text-[10px] font-msemibold text-[#094569] leading-none">
+                          Verified
+                        </Text>
                       </View>
                     )}
                   </View>
@@ -638,13 +685,19 @@ export default function ServiceDetail() {
                   </Text>
                   {service.service_providers?.email_active &&
                   service.service_providers?.email ? (
-                    <Text className="text-xs text-gray-500 mt-1" numberOfLines={1}>
+                    <Text
+                      className="text-xs text-gray-500 mt-1"
+                      numberOfLines={1}
+                    >
                       ✉ {service.service_providers.email}
                     </Text>
                   ) : null}
                   {service.service_providers?.contact_active &&
                   service.service_providers?.contact ? (
-                    <Text className="text-xs text-gray-500 mt-1" numberOfLines={1}>
+                    <Text
+                      className="text-xs text-gray-500 mt-1"
+                      numberOfLines={1}
+                    >
                       📞 {service.service_providers.contact}
                     </Text>
                   ) : null}
@@ -655,7 +708,6 @@ export default function ServiceDetail() {
                   <ChevronRight size={18} color="#094569" />
                 </View>
               </TouchableOpacity>
-
             </View>
 
             {/* Description Section */}
@@ -670,19 +722,18 @@ export default function ServiceDetail() {
             </View>
 
             {/* Details Grid */}
-            <View
-              className="flex-row flex-wrap gap-3 mb-6"
-            >
+            <View className="flex-row flex-wrap gap-3 mb-6">
               <View className="bg-gray-50 px-4 py-3 rounded-2xl flex-row items-center gap-2">
                 <Clock size={16} color="#6B7280" />
                 <Text className="text-sm text-gray-600">
-                  {new Date(
-                    (service as any).created_at,
-                  ).toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                  })}
+                  {new Date((service as any).created_at).toLocaleDateString(
+                    "en-US",
+                    {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                    },
+                  )}
                 </Text>
               </View>
             </View>
@@ -722,7 +773,10 @@ export default function ServiceDetail() {
             tint="light"
             className="border-t border-gray-100"
           >
-            <View className="px-6 py-4 flex-row gap-4" style={{ paddingBottom: Math.max(insets.bottom, 12) }}>
+            <View
+              className="px-6 py-4 flex-row gap-4"
+              style={{ paddingBottom: Math.max(insets.bottom, 12) }}
+            >
               {/* Message Provider Button */}
               <TouchableOpacity
                 onPress={handleMessageProvider}

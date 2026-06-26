@@ -1,25 +1,52 @@
 // Path: components/ProfileSettings.tsx
 import {
-    AboutApp,
-    AppVersion,
-    AppearanceManager,
-    ChangePassword,
-    CommunityGuidelines,
-    DataStorage,
-    DeleteAccount,
-    EditProfile,
-    EditWorkProfile,
-    HelpCenter,
-    LanguageRegion,
-    Notifications,
-    PrivacyPolicy,
-    SavedPosts,
-    SellerPolicy,
-    TermsOfService
-} from '@/components/settings';
-import { ArrowLeft, Bookmark, Key, LogOut, MessageSquare, Phone, ScrollText, Shield, Smartphone, Sparkles, Trash2 } from 'lucide-react-native';
+  AboutApp,
+  AppVersion,
+  AppearanceManager,
+  ChangePassword,
+  CommunityGuidelines,
+  DataStorage,
+  DeleteAccount,
+  EditProfile,
+  EditWorkProfile,
+  HelpCenter,
+  LanguageRegion,
+  Notifications,
+  PrivacyPolicy,
+  SavedPosts,
+  SellerPolicy,
+  TermsOfService,
+  Tutorials,
+} from "@/components/settings";
+import {
+  ArrowLeft,
+  Bookmark,
+  BookOpen,
+  EyeOff,
+  Key,
+  LogOut,
+  MessageSquare,
+  Phone,
+  ScrollText,
+  Shield,
+  Smartphone,
+  Sparkles,
+  Trash2,
+} from "lucide-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Animated, BackHandler, Dimensions, Linking, PanResponder, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import {
+  Animated,
+  BackHandler,
+  Dimensions,
+  Linking,
+  PanResponder,
+  ScrollView,
+  Switch,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { useSafety } from "@/contexts/SafetyContext";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 interface ProfileSettingsProps {
@@ -31,13 +58,23 @@ interface ProfileSettingsProps {
   initialModal?: string;
 }
 
-export default function ProfileSettings({ onClose, currentUser, onLogout, panHandlers, contentOpacity, initialModal }: ProfileSettingsProps) {
+export default function ProfileSettings({
+  onClose,
+  currentUser,
+  onLogout,
+  panHandlers,
+  contentOpacity,
+  initialModal,
+}: ProfileSettingsProps) {
   const insets = useSafeAreaInsets();
-  
-  const [modalStack, setModalStack] = useState<string[]>(initialModal ? [initialModal] : []);
+  const { safeView, setSafeView, isAdult } = useSafety();
 
-  const screenWidth = Dimensions.get('window').width;
-  const screenHeight = Dimensions.get('window').height;
+  const [modalStack, setModalStack] = useState<string[]>(
+    initialModal ? [initialModal] : [],
+  );
+
+  const screenWidth = Dimensions.get("window").width;
+  const screenHeight = Dimensions.get("window").height;
 
   // Horizontal slide for nested menus
   const slideAnim = useRef(new Animated.Value(0)).current;
@@ -69,7 +106,7 @@ export default function ProfileSettings({ onClose, currentUser, onLogout, panHan
 
   // --- Android back button: pop nested modal first, then close settings ---
   useEffect(() => {
-    const handler = BackHandler.addEventListener('hardwareBackPress', () => {
+    const handler = BackHandler.addEventListener("hardwareBackPress", () => {
       if (modalStack.length > 0) {
         closeActiveModal();
         return true;
@@ -86,7 +123,10 @@ export default function ProfileSettings({ onClose, currentUser, onLogout, panHan
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: (_, gestureState) => {
         // Activate if dragging down vertically more than horizontally
-        return Math.abs(gestureState.dy) > Math.abs(gestureState.dx) && gestureState.dy > 5;
+        return (
+          Math.abs(gestureState.dy) > Math.abs(gestureState.dx) &&
+          gestureState.dy > 5
+        );
       },
       onPanResponderMove: (_, gestureState) => {
         // Only allow dragging downwards
@@ -95,7 +135,8 @@ export default function ProfileSettings({ onClose, currentUser, onLogout, panHan
         }
       },
       onPanResponderRelease: (_, gestureState) => {
-        if (gestureState.dy > 100) { // Drag threshold to close
+        if (gestureState.dy > 100) {
+          // Drag threshold to close
           Animated.timing(panY, {
             toValue: screenHeight,
             duration: 200,
@@ -106,11 +147,11 @@ export default function ProfileSettings({ onClose, currentUser, onLogout, panHan
           Animated.spring(panY, {
             toValue: 0,
             useNativeDriver: false,
-            bounciness: 4
+            bounciness: 4,
           }).start();
         }
       },
-    })
+    }),
   ).current;
 
   const handleNavigation = (modalName: string) => {
@@ -118,13 +159,15 @@ export default function ProfileSettings({ onClose, currentUser, onLogout, panHan
     if (isAnimating.current) return;
     if (modalStack[modalStack.length - 1] === modalName) return;
     isAnimating.current = true;
-    setModalStack(prev => [...prev, modalName]);
+    setModalStack((prev) => [...prev, modalName]);
     slideAnim.setValue(screenWidth);
     Animated.timing(slideAnim, {
       toValue: 0,
       duration: 250,
       useNativeDriver: true,
-    }).start(() => { isAnimating.current = false; });
+    }).start(() => {
+      isAnimating.current = false;
+    });
   };
 
   const closeActiveModal = () => {
@@ -143,7 +186,7 @@ export default function ProfileSettings({ onClose, currentUser, onLogout, panHan
     }).start(({ finished }) => {
       isAnimating.current = false;
       if (finished) {
-        setModalStack(prev => prev.slice(0, -1));
+        setModalStack((prev) => prev.slice(0, -1));
         slideAnim.setValue(screenWidth);
       }
     });
@@ -151,29 +194,60 @@ export default function ProfileSettings({ onClose, currentUser, onLogout, panHan
 
   const renderModalContent = () => {
     switch (activeModal) {
-      case 'editProfile': return <EditProfile onClose={closeActiveModal} />;
-      case 'editWorkProfile': return <EditWorkProfile onClose={closeActiveModal} onSaved={onClose} />;
-      case 'appearance': return <AppearanceManager onClose={closeActiveModal} userId={currentUser?.id} />;
-      case 'savedPosts': return <SavedPosts onClose={closeActiveModal} userId={currentUser?.id} />;
-      case 'changePassword': return <ChangePassword onClose={closeActiveModal} />;
-      case 'privacyPolicy': return <PrivacyPolicy onClose={closeActiveModal} />;
-      case 'sellerPolicy': return <SellerPolicy onClose={closeActiveModal} />;
-      case 'termsOfService': return <TermsOfService onClose={closeActiveModal} />;
-      case 'communityGuidelines': return <CommunityGuidelines onClose={closeActiveModal} />;
-      case 'notifications': return <Notifications onClose={closeActiveModal} />;
-      case 'dataStorage': return <DataStorage onClose={closeActiveModal} />;
-      case 'languageRegion': return <LanguageRegion onClose={closeActiveModal} />;
-      case 'helpCenter': return <HelpCenter onClose={closeActiveModal} />;
-      case 'deleteAccount': return <DeleteAccount onClose={closeActiveModal} onAccountDeleted={onLogout} />;
-      case 'appVersion': return <AppVersion onClose={closeActiveModal} />;
-      case 'aboutApp': return <AboutApp onClose={closeActiveModal} />;
-      default: return null;
+      case "editProfile":
+        return <EditProfile onClose={closeActiveModal} />;
+      case "editWorkProfile":
+        return <EditWorkProfile onClose={closeActiveModal} onSaved={onClose} />;
+      case "appearance":
+        return (
+          <AppearanceManager
+            onClose={closeActiveModal}
+            userId={currentUser?.id}
+          />
+        );
+      case "savedPosts":
+        return (
+          <SavedPosts onClose={closeActiveModal} userId={currentUser?.id} />
+        );
+      case "changePassword":
+        return <ChangePassword onClose={closeActiveModal} />;
+      case "privacyPolicy":
+        return <PrivacyPolicy onClose={closeActiveModal} />;
+      case "sellerPolicy":
+        return <SellerPolicy onClose={closeActiveModal} />;
+      case "termsOfService":
+        return <TermsOfService onClose={closeActiveModal} />;
+      case "communityGuidelines":
+        return <CommunityGuidelines onClose={closeActiveModal} />;
+      case "notifications":
+        return <Notifications onClose={closeActiveModal} />;
+      case "dataStorage":
+        return <DataStorage onClose={closeActiveModal} />;
+      case "languageRegion":
+        return <LanguageRegion onClose={closeActiveModal} />;
+      case "helpCenter":
+        return <HelpCenter onClose={closeActiveModal} />;
+      case "deleteAccount":
+        return (
+          <DeleteAccount
+            onClose={closeActiveModal}
+            onAccountDeleted={onLogout}
+          />
+        );
+      case "appVersion":
+        return <AppVersion onClose={closeActiveModal} />;
+      case "aboutApp":
+        return <AboutApp onClose={closeActiveModal} />;
+      case "tutorials":
+        return <Tutorials onClose={closeActiveModal} />;
+      default:
+        return null;
     }
   };
 
   return (
     <View className="flex-1">
-      {/* Backdrop Tap Zone: 
+      {/* Backdrop Tap Zone:
         The transparent area above the sheet. Tapping here closes the sheet.
       */}
       <TouchableOpacity
@@ -187,19 +261,18 @@ export default function ProfileSettings({ onClose, currentUser, onLogout, panHan
         className="bg-white rounded-t-3xl overflow-hidden shadow-xl w-full"
         style={{
           flex: 1,
-          marginTop: '50%',
+          marginTop: "50%",
           marginBottom: -insets.bottom,
           paddingBottom: insets.bottom,
-          transform: [{ translateY: panY }]
+          transform: [{ translateY: panY }],
         }}
       >
-        
         {/* --- DRAG BAR AREA (ALWAYS ON TOP) --- */}
         {/* Placed OUTSIDE the scroll view. The nested modal slides underneath this.
            This prevents the "overlay on overlay" look.
         */}
-        <View 
-          {...panResponder.panHandlers} 
+        <View
+          {...panResponder.panHandlers}
           className="w-full items-center justify-center py-3 bg-white z-50 "
         >
           <View className="w-16 h-1.5 bg-gray-300 rounded-full" />
@@ -207,27 +280,28 @@ export default function ProfileSettings({ onClose, currentUser, onLogout, panHan
 
         {/* --- CONTENT CONTAINER --- */}
         <View className="flex-1 relative overflow-hidden">
-
-            {/* 1. MAIN SETTINGS LIST */}
-            <View className="flex-1">
-              <Animated.View
-                className="flex-1 bg-white"
-                style={{ opacity: contentOpacity || 1 }}
-              >
+          {/* 1. MAIN SETTINGS LIST */}
+          <View className="flex-1">
+            <Animated.View
+              className="flex-1 bg-white"
+              style={{ opacity: contentOpacity || 1 }}
+            >
               {/* Header */}
               <View className="flex-row items-center px-4 pb-4 pt-2">
                 <TouchableOpacity onPress={onClose} className="mr-3 p-1">
                   <ArrowLeft size={24} color="#000" />
                 </TouchableOpacity>
-                <Text className="text-lg font-semibold text-gray-900">Settings</Text>
+                <Text className="text-lg font-semibold text-gray-900">
+                  Settings
+                </Text>
               </View>
 
-              <ScrollView 
+              <ScrollView
                 showsVerticalScrollIndicator={false}
-                contentContainerStyle={{ 
+                contentContainerStyle={{
                   paddingHorizontal: 24,
                   paddingTop: 10,
-                  paddingBottom: (insets.bottom || 20) + 10
+                  paddingBottom: (insets.bottom || 20) + 10,
                 }}
               >
                 {/* Personalisation Section */}
@@ -238,28 +312,66 @@ export default function ProfileSettings({ onClose, currentUser, onLogout, panHan
                   <View className="bg-gray-50 rounded-xl overflow-hidden">
                     <TouchableOpacity
                       className="flex-row items-center justify-between px-4 py-4 border-b border-gray-200"
-                      onPress={() => handleNavigation('savedPosts')}
+                      onPress={() => handleNavigation("tutorials")}
                       activeOpacity={0.7}
                     >
                       <View className="flex-row items-center">
-                        <Bookmark size={20} color="#094569" style={{ marginRight: 12 }} />
+                        <BookOpen
+                          size={20}
+                          color="#0369a1"
+                          style={{ marginRight: 12 }}
+                        />
                         <View>
-                          <Text className="text-base font-medium text-gray-900">Saved Posts</Text>
-                          <Text className="text-xs text-gray-400 mt-0.5">View your bookmarked posts</Text>
+                          <Text className="text-base font-medium text-gray-900">
+                            Tutorials
+                          </Text>
+                          <Text className="text-xs text-gray-400 mt-0.5">
+                            How to add products & tag in posts
+                          </Text>
+                        </View>
+                      </View>
+                      <Text className="text-gray-400 font-bold text-lg">→</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      className="flex-row items-center justify-between px-4 py-4 border-b border-gray-200"
+                      onPress={() => handleNavigation("savedPosts")}
+                      activeOpacity={0.7}
+                    >
+                      <View className="flex-row items-center">
+                        <Bookmark
+                          size={20}
+                          color="#094569"
+                          style={{ marginRight: 12 }}
+                        />
+                        <View>
+                          <Text className="text-base font-medium text-gray-900">
+                            Saved Posts
+                          </Text>
+                          <Text className="text-xs text-gray-400 mt-0.5">
+                            View your bookmarked posts
+                          </Text>
                         </View>
                       </View>
                       <Text className="text-gray-400 font-bold text-lg">→</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       className="flex-row items-center justify-between px-4 py-4"
-                      onPress={() => handleNavigation('appearance')}
+                      onPress={() => handleNavigation("appearance")}
                       activeOpacity={0.7}
                     >
                       <View className="flex-row items-center">
-                        <Sparkles size={20} color="#c9a96e" style={{ marginRight: 12 }} />
+                        <Sparkles
+                          size={20}
+                          color="#c9a96e"
+                          style={{ marginRight: 12 }}
+                        />
                         <View>
-                          <Text className="text-base font-medium text-gray-900">Appearance</Text>
-                          <Text className="text-xs text-gray-400 mt-0.5">Badge style &amp; chat bubble skin</Text>
+                          <Text className="text-base font-medium text-gray-900">
+                            Appearance
+                          </Text>
+                          <Text className="text-xs text-gray-400 mt-0.5">
+                            Badge style &amp; chat bubble skin
+                          </Text>
                         </View>
                       </View>
                       <Text className="text-gray-400 font-bold text-lg">→</Text>
@@ -273,58 +385,119 @@ export default function ProfileSettings({ onClose, currentUser, onLogout, panHan
                     Privacy
                   </Text>
                   <View className="bg-gray-50 rounded-xl overflow-hidden">
+                    <View className="flex-row items-center justify-between px-4 py-4 border-b border-gray-200">
+                      <View className="flex-row items-center flex-1 pr-3">
+                        <EyeOff
+                          size={20}
+                          color="#374151"
+                          style={{ marginRight: 12 }}
+                        />
+                        <View className="flex-1">
+                          <Text className="text-base font-medium text-gray-900">
+                            Safe View
+                          </Text>
+                          <Text className="text-xs text-gray-400 mt-0.5">
+                            {isAdult
+                              ? "Hides 18+ and sensitive content from your feed"
+                              : "Always on — only verified adults (18+) can turn this off"}
+                          </Text>
+                        </View>
+                      </View>
+                      <Switch
+                        value={safeView}
+                        // Only verified adults may disable Safe View.
+                        disabled={!isAdult}
+                        onValueChange={(v) => {
+                          if (!isAdult) return;
+                          setSafeView(v);
+                        }}
+                        trackColor={{ false: "#e5e7eb", true: "#94c9e8" }}
+                        thumbColor={safeView ? "#094569" : "#f4f4f5"}
+                      />
+                    </View>
                     <TouchableOpacity
-                      className="flex-row items-center justify-between px-4 py-4 border-b border-gray-200"
+                      className="flex-row items-center justify-between px-4 py-4"
                       onPress={() => handleNavigation("changePassword")}
                       activeOpacity={0.7}
                     >
                       <View className="flex-row items-center gap-2">
                         <Key size={20} className="text-gray-700 mr-3" />
-                        <Text className="text-base font-medium text-gray-900">Change Password</Text>
+                        <Text className="text-base font-medium text-gray-900">
+                          Change Password
+                        </Text>
                       </View>
                       <Text className="text-gray-400 font-bold text-lg">→</Text>
                     </TouchableOpacity>
-                 
                   </View>
                 </View>
 
                 {/* Policies Section */}
                 <View className="mb-6">
-                  <Text className="text-sm font-msemibold text-gray-500 px-2 py-2 uppercase tracking-wide">Policies</Text>
+                  <Text className="text-sm font-msemibold text-gray-500 px-2 py-2 uppercase tracking-wide">
+                    Policies
+                  </Text>
                   <View className="bg-gray-50 rounded-xl overflow-hidden">
-                    <TouchableOpacity className="flex-row items-center justify-between px-4 py-4 border-b border-gray-200" onPress={() => handleNavigation("privacyPolicy")}>
+                    <TouchableOpacity
+                      className="flex-row items-center justify-between px-4 py-4 border-b border-gray-200"
+                      onPress={() => handleNavigation("privacyPolicy")}
+                    >
                       <View className="flex-row items-center gap-2">
                         <Shield size={20} className="text-gray-700 mr-3" />
-                        <Text className="text-base font-medium text-gray-900">Privacy Policy</Text>
+                        <Text className="text-base font-medium text-gray-900">
+                          Privacy Policy
+                        </Text>
                       </View>
                       <Text className="text-gray-400 font-bold text-lg">→</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity className="flex-row items-center justify-between px-4 py-4 border-b border-gray-200" onPress={() => handleNavigation("termsOfService")}>
+                    <TouchableOpacity
+                      className="flex-row items-center justify-between px-4 py-4 border-b border-gray-200"
+                      onPress={() => handleNavigation("termsOfService")}
+                    >
                       <View className="flex-row items-center gap-2">
                         <ScrollText size={20} className="text-gray-700 mr-3" />
-                        <Text className="text-base font-medium text-gray-900">Terms of Service</Text>
+                        <Text className="text-base font-medium text-gray-900">
+                          Terms of Service
+                        </Text>
                       </View>
                       <Text className="text-gray-400 font-bold text-lg">→</Text>
                     </TouchableOpacity>
-  
                   </View>
                 </View>
 
                 {/* Support Section */}
                 <View className="mb-6">
-                  <Text className="text-sm font-msemibold text-gray-500 px-2 py-2 uppercase tracking-wide">Support</Text>
+                  <Text className="text-sm font-msemibold text-gray-500 px-2 py-2 uppercase tracking-wide">
+                    Support
+                  </Text>
                   <View className="bg-gray-50 rounded-xl overflow-hidden">
-                    <TouchableOpacity className="flex-row items-center justify-between px-4 py-4 border-b border-gray-200" onPress={() => Linking.openURL('https://namzoed.com/support')}>
+                    <TouchableOpacity
+                      className="flex-row items-center justify-between px-4 py-4 border-b border-gray-200"
+                      onPress={() =>
+                        Linking.openURL("https://namzoed.com/support")
+                      }
+                    >
                       <View className="flex-row items-center gap-2">
                         <Phone size={20} className="text-gray-700 mr-3" />
-                        <Text className="text-base font-medium text-gray-900">Contact Us</Text>
+                        <Text className="text-base font-medium text-gray-900">
+                          Contact Us
+                        </Text>
                       </View>
                       <Text className="text-gray-400 font-bold text-lg">→</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity className="flex-row items-center justify-between px-4 py-4" onPress={() => Linking.openURL('https://namzoed.com/community')}>
+                    <TouchableOpacity
+                      className="flex-row items-center justify-between px-4 py-4"
+                      onPress={() =>
+                        Linking.openURL("https://namzoed.com/community")
+                      }
+                    >
                       <View className="flex-row items-center gap-2">
-                        <MessageSquare size={20} className="text-gray-700 mr-3" />
-                        <Text className="text-base font-medium text-gray-900">Send Feedback</Text>
+                        <MessageSquare
+                          size={20}
+                          className="text-gray-700 mr-3"
+                        />
+                        <Text className="text-base font-medium text-gray-900">
+                          Send Feedback
+                        </Text>
                       </View>
                       <Text className="text-gray-400 font-bold text-lg">→</Text>
                     </TouchableOpacity>
@@ -333,12 +506,19 @@ export default function ProfileSettings({ onClose, currentUser, onLogout, panHan
 
                 {/* App Info Section */}
                 <View className="mb-6">
-                  <Text className="text-sm font-msemibold text-gray-500 px-2 py-2 uppercase tracking-wide">About</Text>
+                  <Text className="text-sm font-msemibold text-gray-500 px-2 py-2 uppercase tracking-wide">
+                    About
+                  </Text>
                   <View className="bg-gray-50 rounded-xl overflow-hidden">
-                    <TouchableOpacity className="flex-row items-center justify-between px-4 py-4 border-b border-gray-200" onPress={() => handleNavigation("appVersion")}>
+                    <TouchableOpacity
+                      className="flex-row items-center justify-between px-4 py-4 border-b border-gray-200"
+                      onPress={() => handleNavigation("appVersion")}
+                    >
                       <View className="flex-row items-center gap-2">
                         <Smartphone size={20} className="text-gray-700 mr-3" />
-                        <Text className="text-base font-medium text-gray-900">App Version</Text>
+                        <Text className="text-base font-medium text-gray-900">
+                          App Version
+                        </Text>
                       </View>
                       <Text className="text-sm text-gray-500">v1.0.0</Text>
                     </TouchableOpacity>
@@ -346,7 +526,9 @@ export default function ProfileSettings({ onClose, currentUser, onLogout, panHan
                 </View>
                 {/* Account Section */}
                 <View className="mb-6">
-                  <Text className="text-sm font-msemibold text-gray-500 px-2 py-2 uppercase tracking-wide">Account</Text>
+                  <Text className="text-sm font-msemibold text-gray-500 px-2 py-2 uppercase tracking-wide">
+                    Account
+                  </Text>
                   <View className="bg-gray-50 rounded-xl overflow-hidden">
                     <TouchableOpacity
                       className="flex-row items-center justify-between px-4 py-4 border-b border-gray-200"
@@ -355,44 +537,47 @@ export default function ProfileSettings({ onClose, currentUser, onLogout, panHan
                     >
                       <View className="flex-row items-center gap-2">
                         <LogOut size={20} color="#6b7280" />
-                        <Text className="text-base font-medium text-gray-900">Logout</Text>
+                        <Text className="text-base font-medium text-gray-900">
+                          Logout
+                        </Text>
                       </View>
                       <Text className="text-gray-400 font-bold text-lg">→</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       className="flex-row items-center justify-between px-4 py-4"
-                      onPress={() => handleNavigation('deleteAccount')}
+                      onPress={() => handleNavigation("deleteAccount")}
                       activeOpacity={0.7}
                     >
                       <View className="flex-row items-center gap-2">
                         <Trash2 size={20} color="#ef4444" />
-                        <Text className="text-base font-medium text-red-500">Delete Account</Text>
+                        <Text className="text-base font-medium text-red-500">
+                          Delete Account
+                        </Text>
                       </View>
                       <Text className="text-gray-400 font-bold text-lg">→</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
               </ScrollView>
-              </Animated.View>
-            </View>
-            
+            </Animated.View>
+          </View>
 
-            {/* 2. NESTED MODAL (SLIDES OVER CONTENT, UNDER BAR) */}
-            {/* Key Fix: This is now absolute positioned INSIDE the 'Content Container',
+          {/* 2. NESTED MODAL (SLIDES OVER CONTENT, UNDER BAR) */}
+          {/* Key Fix: This is now absolute positioned INSIDE the 'Content Container',
                so it sits 'on top' of the settings list, but 'below' the drag handle
                (which is outside this container).
             */}
-            {activeModal && (
-              <Animated.View
-                className="absolute top-0 left-0 right-0 bottom-0 bg-white z-40"
-                style={{
-                  transform: [{ translateX: slideAnim }],
-                  paddingBottom: (insets.bottom || 20) + 10
-                }}
-              >
-                {renderModalContent()}
-              </Animated.View>
-            )}
+          {activeModal && (
+            <Animated.View
+              className="absolute top-0 left-0 right-0 bottom-0 bg-white z-40"
+              style={{
+                transform: [{ translateX: slideAnim }],
+                paddingBottom: (insets.bottom || 20) + 10,
+              }}
+            >
+              {renderModalContent()}
+            </Animated.View>
+          )}
         </View>
       </Animated.View>
     </View>

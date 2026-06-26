@@ -7,10 +7,15 @@ import { isMongooseUser } from "@/utils/roleCheck";
 import { usePathname } from "expo-router";
 import { Plus, Store, Wrench } from "lucide-react-native";
 import React from "react";
-import { Platform, Pressable, View } from "react-native";
+import { Platform, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-export default function BottomNavBar() {
+export default function BottomNavBar({
+  onTabPress,
+}: {
+  /** Intercept tab presses (e.g. to close an overlay before navigating). */
+  onTabPress?: (href: string) => void;
+} = {}) {
   const { currentUser } = useUser();
   const router = useAppRouter();
   const pathname = usePathname();
@@ -34,20 +39,25 @@ export default function BottomNavBar() {
   const tabs = [
     {
       key: "index",
+      label: "Home",
       href: "/",
       icon: (focused: boolean) => <HomeIcon focused={focused} />,
       isFab: false,
     },
     {
       key: "categories",
+      label: "Shop",
       href: "/categories",
       icon: (focused: boolean) => (
-        <CategoriesIcon focused={focused || pathname.includes("/categories/")} />
+        <CategoriesIcon
+          focused={focused || pathname.includes("/categories/")}
+        />
       ),
       isFab: false,
     },
     {
       key: "feed",
+      label: null, // FAB — no label, matches tabBarLabel: () => null in _layout
       href: "/feed",
       icon: (focused: boolean) => (
         <View
@@ -68,7 +78,7 @@ export default function BottomNavBar() {
         >
           <Plus
             size={plusSize}
-            stroke={focused ? "#094569" : "#9ca3af"}
+            stroke={focused ? "#EDC06D" : "#6b7280"}
             strokeWidth={2}
           />
         </View>
@@ -77,11 +87,12 @@ export default function BottomNavBar() {
     },
     {
       key: "marketplace",
+      label: "Market",
       href: "/marketplace",
       icon: (focused: boolean) => (
         <Store
           size={sideIconSize}
-          stroke={focused ? "#094569" : "#9ca3af"}
+          stroke={focused ? "#EDC06D" : "#6b7280"}
           strokeWidth={2}
         />
       ),
@@ -89,11 +100,12 @@ export default function BottomNavBar() {
     },
     {
       key: "services",
+      label: "Services",
       href: "/services",
       icon: (focused: boolean) => (
         <Wrench
           size={sideIconSize}
-          stroke={focused ? "#094569" : "#9ca3af"}
+          stroke={focused ? "#EDC06D" : "#6b7280"}
           strokeWidth={2}
         />
       ),
@@ -118,15 +130,35 @@ export default function BottomNavBar() {
     >
       <View style={{ flexDirection: "row" }}>
         {tabs.map((tab) => {
-          const focused = pathname === tab.href || pathname.startsWith(tab.href + "/");
+          const focused =
+            pathname === tab.href || pathname.startsWith(tab.href + "/");
           return (
             <Pressable
               key={tab.key}
               android_ripple={null}
-              onPress={() => router.push(tab.href as any)}
-              style={{ flex: 1, alignItems: "center", justifyContent: "center" }}
+              onPress={() =>
+                onTabPress ? onTabPress(tab.href) : router.push(tab.href as any)
+              }
+              style={{
+                flex: 1,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
             >
               {tab.icon(focused)}
+              {tab.label ? (
+                <Text
+                  style={{
+                    fontSize: 10,
+                    fontWeight: "500",
+                    marginTop: 2,
+                    color: focused ? "#094569" : "#6b7280",
+                  }}
+                  numberOfLines={1}
+                >
+                  {tab.label}
+                </Text>
+              ) : null}
             </Pressable>
           );
         })}

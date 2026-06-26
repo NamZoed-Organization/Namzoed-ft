@@ -1,7 +1,7 @@
 {
   "name": "namzoed",
   "main": "expo-router/entry",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "scripts": {
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
@@ -37,6 +37,7 @@
     "expo-device": "~55.0.10",
     "expo-file-system": "~55.0.11",
     "expo-font": "~55.0.4",
+    "expo-gl": "~55.0.13",
     "expo-haptics": "~55.0.9",
     "expo-image": "~55.0.6",
     "expo-image-manipulator": "~55.0.11",
@@ -55,6 +56,7 @@
     "expo-system-ui": "~55.0.11",
     "expo-video": "~55.0.11",
     "expo-web-browser": "~55.0.10",
+    "jpeg-js": "^0.4.4",
     "lucide-react-native": "^0.525.0",
     "nativewind": "^4.1.23",
     "onesignal-expo-plugin": "^2.0.4",
@@ -63,6 +65,7 @@
     "react-native": "0.83.4",
     "react-native-dropdown-picker": "^5.4.6",
     "react-native-flash-message": "^0.4.2",
+    "react-native-fs": "^2.20.0",
     "react-native-gesture-handler": "~2.30.0",
     "react-native-image-pan-zoom": "^2.1.12",
     "react-native-incall-manager": "^4.2.1",

@@ -3,40 +3,40 @@ import ReportProductModal from "@/components/modals/ReportProductModal";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { useUser } from "@/contexts/UserContext";
 import {
-    fetchMarketplaceItemById,
-    MarketplaceItemWithUser,
+  fetchMarketplaceItemById,
+  MarketplaceItemWithUser,
 } from "@/lib/postMarketPlace";
 import { supabase } from "@/lib/supabase";
 import { useAppRouter } from "@/utils/navigation";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import {
-    useFocusEffect,
-    useLocalSearchParams,
+  useFocusEffect,
+  useLocalSearchParams,
 } from "expo-router";
 import {
-    Bookmark,
-    Calendar,
-    ChevronLeft,
-    ChevronRight,
-    Flag,
-    MapPin,
-    MessageCircle,
-    Tag,
-    Verified,
+  Bookmark,
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
+  Flag,
+  MapPin,
+  MessageCircle,
+  Tag,
+  Verified,
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-    BackHandler,
-    Dimensions,
-    Image,
-    RefreshControl,
-    Animated as RNAnimated,
-    ScrollView,
-    StatusBar,
-    Text,
-    TouchableOpacity,
-    View,
+  BackHandler,
+  Dimensions,
+  Image,
+  RefreshControl,
+  Animated as RNAnimated,
+  ScrollView,
+  StatusBar,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -332,6 +332,7 @@ export default function MarketplaceDetailScreen() {
         className="flex-1"
         showsVerticalScrollIndicator={false}
         bounces
+        contentContainerStyle={{ paddingBottom: isOwnItem ? 16 : 120 }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -522,8 +523,8 @@ export default function MarketplaceDetailScreen() {
         </RNAnimated.View>
 
         {/* Content Card */}
-        <View className="bg-white min-h-screen">
-          <View className="px-6 pt-6 pb-32">
+        <View className="bg-white">
+          <View className="px-6 pt-6 pb-8">
             {/* Type badge + first 2 tags */}
             <View className="flex-row flex-wrap gap-2 mb-4">
               <View className="bg-primary/10 px-4 py-1.5 rounded-full flex-row items-center gap-1.5">

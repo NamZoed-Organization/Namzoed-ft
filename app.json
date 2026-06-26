@@ -2,7 +2,7 @@
   "expo": {
     "name": "Namzoed",
     "slug": "Namzoed",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./icon.png",
     "scheme": "namzoed",
@@ -148,7 +148,24 @@
       "oneSignalAppId": "3bb1f0be-d6be-424c-a13b-22336051d4cc",
       "router": {},
       "eas": {
-        "projectId": "713fdf5d-51e5-4851-b15b-426a1dcf750f"
+        "build": {
+          "experimental": {
+            "ios": {
+              "appExtensions": [
+                {
+                  "targetName": "OneSignalNotificationServiceExtension",
+                  "bundleIdentifier": "com.namzoed.Namzoed.OneSignalNotificationServiceExtension",
+                  "entitlements": {
+                    "com.apple.security.application-groups": [
+                      "group.com.namzoed.Namzoed.onesignal"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "projectId": "b8d9ae39-100f-4ef9-93cf-e42855f8d7a1"
       }
     }
   }

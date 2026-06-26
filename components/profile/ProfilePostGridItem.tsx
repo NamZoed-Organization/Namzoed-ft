@@ -7,7 +7,7 @@ import { Image, TouchableOpacity, View } from "react-native";
 const CELL_ASPECT = 9 / 12;
 
 function VideoThumb({ uri }: { uri: string }) {
-  const player = useVideoPlayer(uri, (p) => {
+  const player = useVideoPlayer({ uri, useCaching: true }, (p) => {
     p.muted = true;
     p.loop = false;
   });
