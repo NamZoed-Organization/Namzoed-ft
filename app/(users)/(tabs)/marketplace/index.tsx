@@ -5,6 +5,9 @@ import SearchBar from "@/components/modals/SearchBar";
 import ImageWithFallback from "@/components/ui/ImageWithFallback";
 import TopNavbar from "@/components/ui/TopNavbar";
 import { useUser } from "@/contexts/UserContext";
+import { useTabBarScroll } from "@/contexts/TabBarScrollContext";
+import { useScreenAnalytics } from "@/hooks/useAnalytics";
+import { Screens } from "@/lib/analyticsService";
 import { dzongkhagCenters } from "@/data/dzongkhag";
 import {
   fetchMarketplaceItems,
@@ -44,8 +47,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function MarketplaceScreen() {
   const insets = useSafeAreaInsets();
+  const { onTabBarScroll } = useTabBarScroll();
   const { currentUser } = useUser();
   const router = useAppRouter();
+  const { trackTap, trackFeature } = useScreenAnalytics(Screens.MARKETPLACE);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("job_vacancy");
   const [showFilters, setShowFilters] = useState(false);
@@ -107,6 +112,7 @@ export default function MarketplaceScreen() {
 
   const handleTabChange = (newTab: string) => {
     if (newTab === activeTab) return;
+    trackFeature("filter_apply", "filter_button", "tap", { category: newTab });
     setActiveTab(newTab);
   };
 
@@ -116,7 +122,10 @@ export default function MarketplaceScreen() {
     item: MarketplaceItemWithUser;
   }) => (
     <TouchableOpacity
-      onPress={() => router.push(`/(users)/marketplace/${item.id}` as any)}
+      onPress={() => {
+        trackTap("marketplace_card", "marketplace_view", { item_id: item.id, item_type: item.type });
+        router.push(`/(users)/marketplace/${item.id}` as any);
+      }}
       className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden"
     >
       {/* Product Image */}
@@ -519,6 +528,8 @@ export default function MarketplaceScreen() {
           className="flex-1"
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 72 + insets.bottom }}
+          onScroll={onTabBarScroll}
+          scrollEventThrottle={16}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}

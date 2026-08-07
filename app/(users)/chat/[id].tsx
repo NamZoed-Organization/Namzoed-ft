@@ -15,10 +15,12 @@ import {
 import WeChatVoiceRecorder from "@/components/chat/WeChatVoiceRecorder";
 import SingleLocationPicker from "@/components/location/SingleLocationPicker";
 import MapPinMarker from "@/components/maps/MapPinMarker";
+import ReportUserModal from "@/components/modals/ReportUserModal";
 import TrackMongooseModal from "@/components/modals/TrackMongooseModal";
 import ChatBackgroundPicker, {
   parseBackground,
 } from "@/components/settings/ChatBackgroundPicker";
+import ActionSheetModal from "@/components/ui/ActionSheetModal";
 import MongooseWorkerNavBar, {
   MONGOOSE_WORKER_NAV_BAR_HEIGHT,
 } from "@/components/ui/MongooseWorkerNavBar";
@@ -26,6 +28,7 @@ import PopupMessage from "@/components/ui/PopupMessage";
 import { useAppearance } from "@/contexts/AppearanceContext";
 import { useUnreadMessages } from "@/contexts/UnreadMessagesContext";
 import { useUser } from "@/contexts/UserContext";
+import { blockUser, isUserBlocked, unblockUser } from "@/lib/blockService";
 import {
   EarlyAccessBadgeType,
   getEarlyAccessBadge,
@@ -43,22 +46,15 @@ import {
 } from "@/utils/chatSounds";
 import { useAppRouter } from "@/utils/navigation";
 import { isMongooseUser } from "@/utils/roleCheck";
-import { Ionicons } from "@expo/vector-icons";
-import {
-  RecordingPresets,
-  requestRecordingPermissionsAsync,
-  setAudioModeAsync,
-  useAudioRecorder,
-} from "expo-audio";
+import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import * as Clipboard from "expo-clipboard";
-import * as FileSystem from "expo-file-system/legacy";
 import * as Haptics from "expo-haptics";
 import { Image as ExpoImage } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Location from "expo-location";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
-import { Bike, MoreVertical, Verified } from "lucide-react-native";
+import { AlertCircle, Ban, Bike, MoreVertical, Verified } from "lucide-react-native";
 
 import React, {
   useCallback,
@@ -69,6 +65,7 @@ import React, {
 } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Animated,
   Dimensions,
   Easing,
@@ -140,7 +137,6 @@ const REPLY_META_PREFIX = "[reply-meta]";
 const REPLY_META_SUFFIX = "[/reply-meta]";
 const PRODUCT_META_PREFIX = "[product-meta]";
 const PRODUCT_META_SUFFIX = "[/product-meta]";
-const CHAT_VOICE_MODE_KEY = "@namzoed_chat_voice_mode";
 const CHAT_DRAFT_KEY_PREFIX = "@namzoed_chat_draft_";
 const CHAT_DRAFT_DEBOUNCE_MS = 400;
 
@@ -160,7 +156,6 @@ type ProductMeta = {
 };
 
 type OutgoingDeliveryStatus = "sent" | "delivered" | "seen";
-type ChatVoiceMode = "standard" | "hold";
 type ComposerInputKind = "text" | "voice";
 
 type TypingUser = {
@@ -759,113 +754,6 @@ export default function ChatScreen() {
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const oldestCursorRef = useRef<string | null>(null);
-  // ── Header voice recorder ─────────────────────────────────────────────────────
-  const [headerRecording, setHeaderRecording] = useState(false);
-  const [headerRecordingSecs, setHeaderRecordingSecs] = useState(0);
-  const [headerUploading, setHeaderUploading] = useState(false);
-  const headerRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
-  const headerTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const headerIsSendingRef = useRef(false);
-
-  const headerStartRecording = async () => {
-    const perm = await requestRecordingPermissionsAsync();
-    if (perm.status !== "granted") return;
-    try {
-      await setAudioModeAsync({
-        allowsRecording: true,
-        playsInSilentMode: true,
-      });
-      await headerRecorder.prepareToRecordAsync();
-      headerRecorder.record();
-      setHeaderRecording(true);
-      setHeaderRecordingSecs(0);
-      headerTimerRef.current = setInterval(() => {
-        setHeaderRecordingSecs((s) => s + 1);
-      }, 1000);
-    } catch (_) {}
-  };
-
-  const headerStopAndSend = async () => {
-    if (headerIsSendingRef.current) return;
-    headerIsSendingRef.current = true;
-    if (headerTimerRef.current) {
-      clearInterval(headerTimerRef.current);
-      headerTimerRef.current = null;
-    }
-    const dur = Math.max(1, Math.round(headerRecorder.currentTime));
-    try {
-      await headerRecorder.stop();
-      const uri = headerRecorder.uri;
-      await setAudioModeAsync({
-        allowsRecording: false,
-        playsInSilentMode: true,
-      });
-      setHeaderRecording(false);
-      setHeaderRecordingSecs(0);
-      if (!uri) {
-        return;
-      }
-      setHeaderUploading(true);
-      const uid = currentUserUUID || contextUserUUID;
-      const pid = chatPartnerId;
-      const convKey = [uid, pid].sort().join("_");
-      const filePath = `${convKey}/hdr_${Date.now()}.m4a`;
-      const b64 = await FileSystem.readAsStringAsync(uri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-      const binary = atob(b64);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-      const { error: upErr } = await supabase.storage
-        .from("chat-audio")
-        .upload(filePath, bytes.buffer, {
-          contentType: "audio/m4a",
-          upsert: true,
-        });
-      if (upErr) throw upErr;
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from("chat-audio").getPublicUrl(filePath);
-      const { data: msg, error: msgErr } = await supabase
-        .from("messages")
-        .insert([
-          {
-            sender_id: uid,
-            receiver_id: pid,
-            message_type: "audio",
-            audio_url: publicUrl,
-            audio_duration: dur,
-            content: null,
-            is_read: false,
-          },
-        ])
-        .select()
-        .single();
-      if (msgErr) throw msgErr;
-    } catch (_) {
-    } finally {
-      setHeaderUploading(false);
-      headerIsSendingRef.current = false;
-    }
-  };
-
-  const headerCancel = async () => {
-    if (headerTimerRef.current) {
-      clearInterval(headerTimerRef.current);
-      headerTimerRef.current = null;
-    }
-    try {
-      await headerRecorder.stop();
-    } catch (_) {}
-    try {
-      await setAudioModeAsync({
-        allowsRecording: false,
-        playsInSilentMode: true,
-      });
-    } catch (_) {}
-    setHeaderRecording(false);
-    setHeaderRecordingSecs(0);
-  };
 
   const flatListRef = useRef<FlatList<any>>(null);
   const chatInputRef = useRef<TextInput>(null);
@@ -891,7 +779,6 @@ export default function ChatScreen() {
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const [iconsExpanded, setIconsExpanded] = useState(true);
   const [showGifStickerDrawer, setShowGifStickerDrawer] = useState(false);
-  const [voiceMode, setVoiceModeState] = useState<ChatVoiceMode>("standard");
   const [composerInputKind, setComposerInputKind] =
     useState<ComposerInputKind>("text");
   const [isHoldRecording, setIsHoldRecording] = useState(false);
@@ -915,26 +802,6 @@ export default function ChatScreen() {
     messageTextRef.current = messageText;
   }, [messageText]);
 
-  useEffect(() => {
-    AsyncStorage.getItem(CHAT_VOICE_MODE_KEY)
-      .then((saved) => {
-        if (saved === "standard" || saved === "hold") {
-          setVoiceModeState(saved);
-          setComposerInputKind(saved === "hold" ? "voice" : "text");
-        }
-      })
-      .catch(() => {});
-  }, []);
-
-  const setVoiceMode = useCallback(async (mode: ChatVoiceMode) => {
-    setVoiceModeState(mode);
-    setComposerInputKind(mode === "hold" ? "voice" : "text");
-    setShowGifStickerDrawer(false);
-    try {
-      await AsyncStorage.setItem(CHAT_VOICE_MODE_KEY, mode);
-    } catch {}
-  }, []);
-
   // Early-access badge types for gradient chat bubbles
   const [, setCurrentUserBadgeType] = useState<EarlyAccessBadgeType>(null);
   const [, setChatPartnerBadgeType] = useState<EarlyAccessBadgeType>(null);
@@ -942,6 +809,9 @@ export default function ChatScreen() {
     useAppearance();
 
   const [showBgPicker, setShowBgPicker] = useState(false);
+  const [showChatActionsMenu, setShowChatActionsMenu] = useState(false);
+  const [showReportChatModal, setShowReportChatModal] = useState(false);
+  const [isPartnerBlocked, setIsPartnerBlocked] = useState(false);
 
   const {
     id: chatPartnerRouteParam,
@@ -968,6 +838,68 @@ export default function ChatScreen() {
     ? chatPartnerRouteParam[0]
     : chatPartnerRouteParam;
   const effectiveCurrentUserUUID = currentUserUUID || contextUserUUID;
+
+  // Track whether the current user has blocked this chat partner, to render
+  // the correct Block/Unblock option in the chat actions menu.
+  useEffect(() => {
+    if (isMongooseChat || !effectiveCurrentUserUUID || !chatPartnerId) return;
+    let active = true;
+    isUserBlocked(effectiveCurrentUserUUID, chatPartnerId as string).then((blocked) => {
+      if (active) setIsPartnerBlocked(blocked);
+    });
+    return () => {
+      active = false;
+    };
+  }, [effectiveCurrentUserUUID, chatPartnerId, isMongooseChat]);
+
+  const handleBlockTogglePartner = () => {
+    if (!effectiveCurrentUserUUID || !chatPartnerId) return;
+    setShowChatActionsMenu(false);
+
+    if (isPartnerBlocked) {
+      Alert.alert(
+        "Unblock User",
+        `Unblock @${chatPartnerName || "this user"}?`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Unblock",
+            onPress: async () => {
+              const result = await unblockUser(effectiveCurrentUserUUID, chatPartnerId as string);
+              if (result.success) {
+                setIsPartnerBlocked(false);
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              } else {
+                Alert.alert("Unblock Failed", result.error || "Failed to unblock user.");
+              }
+            },
+          },
+        ],
+      );
+    } else {
+      Alert.alert(
+        "Block User",
+        `Are you sure you want to block @${chatPartnerName || "this user"}? You won't be able to message each other anymore.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Block",
+            style: "destructive",
+            onPress: async () => {
+              const result = await blockUser(effectiveCurrentUserUUID, chatPartnerId as string);
+              if (result.success) {
+                setIsPartnerBlocked(true);
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                router.back();
+              } else {
+                Alert.alert("Block Failed", result.error || "Failed to block user.");
+              }
+            },
+          },
+        ],
+      );
+    }
+  };
 
   // ── Draft message persistence (WhatsApp-style) ───────────────────────────────
   // Any unsent text in the composer is stored per-conversation so it reappears
@@ -3685,14 +3617,18 @@ export default function ChatScreen() {
   // No longer depends on isKeyboardVisible — collapse/expand is user-controlled
   // via iconsExpanded while the keyboard is up.
   const canShowComposerActions =
-    !headerRecording &&
     !isHoldRecording &&
     !messageText.trim() &&
     !replyingToMessage &&
     !isEditMode;
 
-  const showIcons = canShowComposerActions && iconsExpanded;
-  const showChevron = canShowComposerActions && !iconsExpanded;
+  // In voice mode, only the keypad-toggle icon shows — photo/gif/location
+  // icons and the collapse chevron are irrelevant once the pill takes over.
+  const showIcons =
+    canShowComposerActions && iconsExpanded && composerInputKind !== "voice";
+  const showChevron =
+    canShowComposerActions && !iconsExpanded && composerInputKind !== "voice";
+  const showMicToggle = canShowComposerActions;
 
   // Keep the old name so nothing else in the file breaks
   const showExpandedComposerActions = showIcons;
@@ -3793,6 +3729,84 @@ export default function ChatScreen() {
         />
       )}
 
+      {/* Chat Actions Menu */}
+      {!isMongooseChat && (
+        <ActionSheetModal
+          visible={showChatActionsMenu}
+          onClose={() => setShowChatActionsMenu(false)}
+        >
+          <View className="bg-white rounded-t-3xl pb-8">
+            <View className="px-6 py-4 border-b border-gray-200">
+              <Text className="text-lg font-mbold text-gray-900">Chat Actions</Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => {
+                setShowChatActionsMenu(false);
+                // ActionSheetModal's own native Modal is still mid-dismiss
+                // animation (~240ms) when this fires — presenting the
+                // background picker's Modal while it's still up causes iOS
+                // to silently drop the new presentation. Wait for the
+                // close animation to finish first.
+                setTimeout(() => setShowBgPicker(true), 300);
+              }}
+              className="flex-row items-center px-6 py-4 border-b border-gray-100"
+            >
+              <MoreVertical size={24} color="#374151" />
+              <Text className="ml-4 text-base font-msemibold text-gray-900">
+                Change Chat Background
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleBlockTogglePartner}
+              className="flex-row items-center px-6 py-4 border-b border-gray-100"
+            >
+              <Ban size={24} color={isPartnerBlocked ? "#10B981" : "#EF4444"} />
+              <View className="ml-4 flex-1">
+                <Text className="text-base font-msemibold text-gray-900">
+                  {isPartnerBlocked ? "Unblock User" : "Block User"}
+                </Text>
+                <Text className="text-sm text-gray-500 font-regular">
+                  {isPartnerBlocked
+                    ? "You'll be able to message again"
+                    : "They won't be able to message you"}
+                </Text>
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => {
+                setShowChatActionsMenu(false);
+                setShowReportChatModal(true);
+              }}
+              className="flex-row items-center px-6 py-4"
+            >
+              <AlertCircle size={24} color="#F59E0B" />
+              <View className="ml-4 flex-1">
+                <Text className="text-base font-msemibold text-gray-900">Report User</Text>
+                <Text className="text-sm text-gray-500 font-regular">
+                  Report for violating guidelines
+                </Text>
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setShowChatActionsMenu(false)}
+              className="mx-6 mt-4 py-3 rounded-2xl bg-gray-100"
+            >
+              <Text className="text-center text-gray-900 font-msemibold">Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </ActionSheetModal>
+      )}
+
+      {!isMongooseChat && effectiveCurrentUserUUID && chatPartnerId && (
+        <ReportUserModal
+          visible={showReportChatModal}
+          onClose={() => setShowReportChatModal(false)}
+          targetUserId={chatPartnerId as string}
+          targetUserName={chatPartnerName || "user"}
+          currentUserId={effectiveCurrentUserUUID}
+        />
+      )}
+
       {/* Chat Background Picker Modal */}
       <Modal
         visible={showBgPicker}
@@ -3862,57 +3876,6 @@ export default function ChatScreen() {
                 setShowBgPicker(false);
               }}
             />
-
-            <View style={{ paddingHorizontal: 20, marginTop: 18 }}>
-              <Text
-                style={{
-                  fontSize: 12,
-                  fontWeight: "800",
-                  color: "#9ca3af",
-                  letterSpacing: 0.8,
-                  textTransform: "uppercase",
-                  marginBottom: 10,
-                }}
-              >
-                Voice Input
-              </Text>
-              <View
-                style={{
-                  flexDirection: "row",
-                  backgroundColor: "#f3f4f6",
-                  borderRadius: 16,
-                  padding: 4,
-                }}
-              >
-                {(["standard", "hold"] as ChatVoiceMode[]).map((mode) => {
-                  const active = voiceMode === mode;
-                  return (
-                    <TouchableOpacity
-                      key={mode}
-                      onPress={() => void setVoiceMode(mode)}
-                      activeOpacity={0.8}
-                      style={{
-                        flex: 1,
-                        borderRadius: 12,
-                        paddingVertical: 10,
-                        alignItems: "center",
-                        backgroundColor: active ? "#094569" : "transparent",
-                      }}
-                    >
-                      <Text
-                        style={{
-                          color: active ? "#fff" : "#4b5563",
-                          fontSize: 13,
-                          fontWeight: "800",
-                        }}
-                      >
-                        {mode === "standard" ? "Standard" : "Hold to talk"}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
           </View>
         </TouchableOpacity>
       </Modal>
@@ -4042,7 +4005,9 @@ export default function ChatScreen() {
 
         <TouchableOpacity
           className="ml-2 w-10 h-10 rounded-full items-center justify-center bg-gray-100/50"
-          onPress={() => setShowBgPicker(true)}
+          onPress={() =>
+            isMongooseChat ? setShowBgPicker(true) : setShowChatActionsMenu(true)
+          }
         >
           <MoreVertical size={20} color="#374151" />
         </TouchableOpacity>
@@ -4072,6 +4037,24 @@ export default function ChatScreen() {
           onEndReachedThreshold={0.3}
           ListFooterComponent={loadingMoreFooterComponent}
         />
+
+        {/* Grey out the chat behind the mic while holding to talk, so the
+            recording UI (dome/waveform/pills) reads as the sole focus.
+            Sits above the message list but below the input bar it
+            precedes, so it never covers the recording controls themselves. */}
+        {isHoldRecording && (
+          <View
+            pointerEvents="none"
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: "rgba(17,24,39,0.20)",
+            }}
+          />
+        )}
 
         {/* Fixed Input Bar */}
         <View className="mb-0">
@@ -4186,7 +4169,7 @@ export default function ChatScreen() {
                   </TouchableOpacity>
                 )}
 
-                {/* Collapsible icons: photo, camera, location, mic */}
+                {/* Collapsible icons: photo, camera, location — hidden in voice mode */}
                 {showIcons && (
                   <View className="mr-1 flex-row items-center">
                     <ChatMultiMediaPicker
@@ -4221,44 +4204,43 @@ export default function ChatScreen() {
                         />
                       )}
                     </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => {
-                        if (voiceMode === "hold") {
-                          setComposerInputKind((prev) =>
-                            prev === "voice" ? "text" : "voice",
-                          );
-                          setShowGifStickerDrawer(false);
-                          Keyboard.dismiss();
-                          return;
-                        }
-                        void headerStartRecording();
-                      }}
-                      disabled={headerRecording || headerUploading}
-                      className="w-9 h-9 items-center justify-center"
-                    >
-                      {headerUploading ? (
-                        <ActivityIndicator size="small" color="#094569" />
-                      ) : (
-                        <Ionicons
-                          name={
-                            voiceMode === "hold" &&
-                            composerInputKind === "voice"
-                              ? "keypad-outline"
-                              : "mic-outline"
-                          }
-                          size={20}
-                          color={headerRecording ? "#ef4444" : "#6b7280"}
-                        />
-                      )}
-                    </TouchableOpacity>
                   </View>
                 )}
 
-                {/* Text input + send/edit buttons — hidden while recording */}
-                {!headerRecording && (
-                  <>
-                    {voiceMode === "hold" &&
-                    composerInputKind === "voice" &&
+                {/* Mic toggle — switches the composer into hold-to-talk mode */}
+                {showMicToggle && composerInputKind !== "voice" && (
+                  <TouchableOpacity
+                    onPress={() => {
+                      setComposerInputKind("voice");
+                      setShowGifStickerDrawer(false);
+                      Keyboard.dismiss();
+                    }}
+                    className="w-9 h-9 items-center justify-center mr-1"
+                  >
+                    <Ionicons name="mic-outline" size={20} color="#6b7280" />
+                  </TouchableOpacity>
+                )}
+
+                {/* Keyboard toggle — floats out of flex flow in voice mode so
+                    "Hold to talk" can center against the whole input field
+                    rather than the space left over next to this icon. */}
+                {showMicToggle && composerInputKind === "voice" && (
+                  <TouchableOpacity
+                    onPress={() => {
+                      setComposerInputKind("text");
+                      setShowGifStickerDrawer(false);
+                      Keyboard.dismiss();
+                    }}
+                    className="absolute left-2 top-0 bottom-0 w-9 items-center justify-center"
+                    style={{ zIndex: 10 }}
+                  >
+                    <MaterialIcons name="keyboard" size={22} color="#6b7280" />
+                  </TouchableOpacity>
+                )}
+
+                {/* Text input + send/edit buttons */}
+                <>
+                    {composerInputKind === "voice" &&
                     !isEditMode &&
                     !replyingToMessage &&
                     !pendingProductContext &&
@@ -4354,7 +4336,6 @@ export default function ChatScreen() {
                       </TouchableOpacity>
                     ) : null}
                   </>
-                )}
               </View>
               <GifStickerInlineDrawer
                 visible={showGifStickerDrawer}
@@ -4912,98 +4893,6 @@ export default function ChatScreen() {
         onClose={() => setShowImagePreview(false)}
       />
 
-      {/* Header voice recording overlay */}
-      {headerRecording && (
-        <View
-          style={{
-            position: "absolute",
-            bottom: 0,
-            left: 0,
-            right: 0,
-            backgroundColor: "white",
-            borderTopWidth: 1,
-            borderTopColor: "#e5e7eb",
-            paddingBottom: insets.bottom + 12,
-            paddingTop: 16,
-            paddingHorizontal: 24,
-            alignItems: "center",
-            shadowColor: "#000",
-            shadowOffset: { width: 0, height: -2 },
-            shadowOpacity: 0.08,
-            shadowRadius: 8,
-            elevation: 10,
-          }}
-        >
-          {/* Recording indicator */}
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              marginBottom: 20,
-            }}
-          >
-            <View
-              style={{
-                width: 10,
-                height: 10,
-                borderRadius: 5,
-                backgroundColor: "#ef4444",
-                marginRight: 8,
-              }}
-            />
-            <Text style={{ fontSize: 16, fontWeight: "600", color: "#111827" }}>
-              Recording...
-            </Text>
-            <Text
-              style={{
-                fontSize: 16,
-                fontWeight: "600",
-                color: "#ef4444",
-                marginLeft: 12,
-              }}
-            >
-              {`${Math.floor(headerRecordingSecs / 60)}:${(headerRecordingSecs % 60).toString().padStart(2, "0")}`}
-            </Text>
-          </View>
-
-          {/* Cancel and Send buttons */}
-          <View style={{ flexDirection: "row", gap: 16 }}>
-            <TouchableOpacity
-              onPress={headerCancel}
-              style={{
-                flex: 1,
-                height: 48,
-                borderRadius: 24,
-                borderWidth: 1,
-                borderColor: "#d1d5db",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <Text
-                style={{ fontSize: 15, fontWeight: "600", color: "#6b7280" }}
-              >
-                Cancel
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={headerStopAndSend}
-              style={{
-                flex: 1,
-                height: 48,
-                borderRadius: 24,
-                backgroundColor: "#094569",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <Text style={{ fontSize: 15, fontWeight: "600", color: "white" }}>
-                Send
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
 
       <MongooseWorkerNavBar />
     </View>

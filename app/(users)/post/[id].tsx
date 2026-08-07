@@ -10,6 +10,7 @@ import FeedPost from "@/components/FeedPost";
 import { useUser } from "@/contexts/UserContext";
 import { parseMediaDisplay } from "@/lib/postMediaDisplay";
 import { fetchPostById, PostWithUser } from "@/lib/postsService";
+import { trackPostView } from "@/lib/viewTrackingService";
 import { PostData } from "@/types/post";
 import { useAppRouter } from "@/utils/navigation";
 import { useLocalSearchParams } from "expo-router";
@@ -45,6 +46,7 @@ function toPostData(post: PostWithUser): PostData {
     locationName: (post as any).location_name ?? undefined,
     tagged_products: (post as any).tagged_products ?? undefined,
     tagged_accounts: (post as any).tagged_accounts ?? undefined,
+    view_count: (post as any).view_count ?? 0,
   };
 }
 
@@ -63,12 +65,19 @@ export default function PostDetailScreen() {
     setLoading(true);
     fetchPostById(id)
       .then((raw) => {
-        if (raw) setPost(toPostData(raw));
-        else setError(true);
+        if (raw) {
+          setPost(toPostData(raw));
+          // Track view (fire-and-forget, skips self-views)
+          if (currentUser?.id && currentUser.id !== raw.user_id) {
+            trackPostView(raw.id, currentUser.id, raw.user_id).catch(() => {});
+          }
+        } else {
+          setError(true);
+        }
       })
       .catch(() => setError(true))
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [id, currentUser?.id]);
 
   return (
     <View style={{ flex: 1, backgroundColor: "#f3f4f6" }}>

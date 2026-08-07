@@ -1,13 +1,19 @@
 import PopupMessage from "@/components/ui/PopupMessage";
+import ReportUserModal from "@/components/modals/ReportUserModal";
+import { blockUser } from "@/lib/blockService";
 import { useAppRouter } from "@/utils/navigation";
 import { Camera } from "expo-camera";
+import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import {
+    AlertCircle,
+    Ban,
     Check,
     ChevronDown,
     ChevronUp,
     Eye,
     Minimize2,
+    MoreVertical,
     Radio,
     X,
 } from "lucide-react-native";
@@ -20,6 +26,7 @@ import React, {
 } from "react";
 import {
     ActivityIndicator,
+    Alert,
     BackHandler,
     FlatList,
     Image,
@@ -1546,6 +1553,39 @@ const ActiveCallHeader: React.FC<ActiveCallHeaderProps> = ({
   const insets = useSafeAreaInsets();
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const router = useAppRouter();
+  const { currentUser } = useUser();
+  const currentUserId = (currentUser as any)?.id as string | undefined;
+
+  // Report/block state — viewers only, to satisfy App Store UGC moderation requirements
+  const [showHostActionsMenu, setShowHostActionsMenu] = useState(false);
+  const [showReportHostModal, setShowReportHostModal] = useState(false);
+  const canModerateHost =
+    role !== "host" && !!hostId && !!currentUserId && currentUserId !== hostId;
+
+  const handleBlockHost = () => {
+    if (!currentUserId || !hostId) return;
+    setShowHostActionsMenu(false);
+    Alert.alert(
+      "Block Host",
+      `Are you sure you want to block @${username || "this host"}? You'll leave this stream and won't see their content again.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Block",
+          style: "destructive",
+          onPress: async () => {
+            const result = await blockUser(currentUserId, hostId);
+            if (result.success) {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              void onClose();
+            } else {
+              Alert.alert("Block Failed", result.error || "Failed to block user.");
+            }
+          },
+        },
+      ],
+    );
+  };
 
   // Viewer invite state (host-only) — ActiveCallHeader lives inside StreamCall so hooks work
   const call = useCall();
@@ -1776,6 +1816,15 @@ const ActiveCallHeader: React.FC<ActiveCallHeaderProps> = ({
 
       {/* RIGHT: minimize + end/leave */}
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        {canModerateHost && (
+          <TouchableOpacity
+            onPress={() => setShowHostActionsMenu(true)}
+            className="rounded-full bg-white/20 p-2"
+            activeOpacity={0.85}
+          >
+            <MoreVertical color="#fff" size={16} />
+          </TouchableOpacity>
+        )}
         {onMinimize && (
           <TouchableOpacity
             onPress={onMinimize}
@@ -1800,6 +1849,72 @@ const ActiveCallHeader: React.FC<ActiveCallHeaderProps> = ({
         </TouchableOpacity>
       </View>
     </View>
+
+    {/* Host Actions Menu — report/block, viewers only */}
+    {canModerateHost && (
+      <Modal
+        visible={showHostActionsMenu}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowHostActionsMenu(false)}
+      >
+        <Pressable
+          style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" }}
+          onPress={() => setShowHostActionsMenu(false)}
+        >
+          <Pressable onPress={() => {}}>
+            <View className="bg-white rounded-t-3xl pb-8">
+              <View className="px-6 py-4 border-b border-gray-200">
+                <Text className="text-lg font-mbold text-gray-900">Host Actions</Text>
+              </View>
+              <TouchableOpacity
+                onPress={handleBlockHost}
+                className="flex-row items-center px-6 py-4 border-b border-gray-100"
+              >
+                <Ban size={24} color="#EF4444" />
+                <View className="ml-4 flex-1">
+                  <Text className="text-base font-msemibold text-gray-900">Block Host</Text>
+                  <Text className="text-sm text-gray-500 font-regular">
+                    Leave this stream and hide their content
+                  </Text>
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowHostActionsMenu(false);
+                  setShowReportHostModal(true);
+                }}
+                className="flex-row items-center px-6 py-4"
+              >
+                <AlertCircle size={24} color="#F59E0B" />
+                <View className="ml-4 flex-1">
+                  <Text className="text-base font-msemibold text-gray-900">Report Host</Text>
+                  <Text className="text-sm text-gray-500 font-regular">
+                    Report for violating guidelines
+                  </Text>
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setShowHostActionsMenu(false)}
+                className="mx-6 mt-4 py-3 rounded-2xl bg-gray-100"
+              >
+                <Text className="text-center text-gray-900 font-msemibold">Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    )}
+
+    {canModerateHost && currentUserId && hostId && (
+      <ReportUserModal
+        visible={showReportHostModal}
+        onClose={() => setShowReportHostModal(false)}
+        targetUserId={hostId}
+        targetUserName={username || "host"}
+        currentUserId={currentUserId}
+      />
+    )}
 
     {/* Viewers / Co-host Invite Modal — host only */}
     {role === "host" && (

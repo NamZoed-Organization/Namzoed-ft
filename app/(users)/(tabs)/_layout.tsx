@@ -1,20 +1,30 @@
 import { CategoriesIcon, HomeIcon } from "@/components/icons/index";
 import FeedTabButton from "@/components/ui/FeedTabButton";
+import FloatingTabBar from "@/components/ui/FloatingTabBar";
 import TabBarButton from "@/components/ui/TabBarButton";
+import { TabBarScrollProvider } from "@/contexts/TabBarScrollContext";
 import { useUser } from "@/contexts/UserContext";
+import { Actions, Elements, Features, Screens, trackInteraction } from "@/lib/analyticsService";
 import { clamp, useResponsive } from "@/utils/responsive";
 import { isMongooseUser } from "@/utils/roleCheck";
-import { BottomTabBar } from "@react-navigation/bottom-tabs";
 import { Tabs, usePathname, useRouter } from "expo-router";
 import { Plus, Store, Wrench } from "lucide-react-native";
-import React, { useEffect } from "react";
-import { Platform, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import React, { useEffect, useRef } from "react";
+import { View } from "react-native";
+
+const PATHNAME_TO_SCREEN: Record<string, string> = {
+  "/": Screens.HOME,
+  "/feed": Screens.FEED,
+  "/marketplace": Screens.MARKETPLACE,
+  "/categories": Screens.CATEGORIES,
+  "/services": Screens.SERVICES,
+};
 
 export default function UsersTabsLayout() {
   const pathname = usePathname();
   const router = useRouter();
   const { currentUser, isLoading: userLoading } = useUser();
+  const prevPathnameRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (userLoading) return;
@@ -22,72 +32,46 @@ export default function UsersTabsLayout() {
       router.replace("/mongoose-dashboard");
     }
   }, [currentUser, userLoading, router]);
-  const insets = useSafeAreaInsets();
-  const { ms, vs } = useResponsive();
-  const fabSize = clamp(ms(62), 56, 70);
-  const fabOffset = clamp(vs(24), 20, 30);
-  const plusSize = clamp(ms(28), 24, 32);
-  const sideIconSize = clamp(ms(22), 20, 24);
 
-  // Same pattern as MongooseWorkerNavBar — full insets.bottom with platform minimum,
-  // no division. Ensures the bar always clears the Android nav bar and iOS home indicator.
-  const tabBarBottomPad =
-    Platform.OS === "android"
-      ? Math.max(insets.bottom, 12)
-      : Math.max(insets.bottom, 8);
+  // Track tab switches whenever the active pathname changes
+  useEffect(() => {
+    if (prevPathnameRef.current === pathname) return;
+    prevPathnameRef.current = pathname;
+    const screen = PATHNAME_TO_SCREEN[pathname] ?? (pathname.replace(/^\//, "") || Screens.HOME);
+    trackInteraction({
+      userId: currentUser?.id,
+      screen,
+      feature: Features.TAB_SWITCH,
+      element: Elements.TAB_HOME,
+      action: Actions.TAP,
+      metadata: { pathname },
+    });
+  }, [pathname, currentUser?.id]);
+  const { ms } = useResponsive();
+  const sideIconSize = clamp(ms(19), 18, 21);
+  const plusCircleSize = clamp(ms(22), 20, 24) + 18;
+  const plusIconSize = clamp(ms(22), 20, 24) + 6;
 
   return (
     <View className="flex-1 bg-background">
+      <TabBarScrollProvider>
       <Tabs
         initialRouteName="index"
         backBehavior="history"
         safeAreaInsets={{ bottom: 0 }}
         // Pre-mount all screens so tab switching is always instant
         {...({ lazy: false } as any)}
-        tabBar={(props) => (
-          <View
-            style={{
-              backgroundColor: "#fff",
-              borderTopWidth: 0,
-              borderTopColor: "transparent",
-              elevation: Platform.OS === "android" ? 8 : 0,
-              shadowOpacity: 0,
-              shadowColor: "transparent",
-              position: "absolute",
-              bottom: 0,
-              left: 0,
-              right: 0,
-              width: "100%",
-              zIndex: 100,
-              paddingBottom: tabBarBottomPad,
-              paddingTop: 5,
-            }}
-          >
-            {/* Pass bottom:0 insets so BottomTabBar adds zero padding of its own */}
-            <BottomTabBar
-              {...props}
-              insets={{ ...props.insets, bottom: 0 }}
-              style={{
-                width: "100%",
-                borderTopWidth: 0,
-                borderTopColor: "transparent",
-                elevation: 0,
-                shadowOpacity: 0,
-                backgroundColor: "#fff",
-              }}
-            />
-          </View>
-        )}
+        tabBar={(props) => <FloatingTabBar {...props} />}
         screenOptions={{
           headerShown: false,
-          tabBarShowLabel: true,
+          tabBarShowLabel: false,
           tabBarActiveTintColor: "#094569",
           tabBarInactiveTintColor: "#6b7280",
-          tabBarLabelStyle: { fontSize: 10, fontWeight: "500", marginTop: 2 },
+          tabBarIconStyle: { height: 46 },
           animation: "none",
           tabBarBackground: () => null,
           tabBarStyle: {
-            backgroundColor: "#fff",
+            backgroundColor: "transparent",
             borderTopWidth: 0,
             borderTopColor: "transparent",
             elevation: 0,
@@ -132,23 +116,23 @@ export default function UsersTabsLayout() {
           name="feed"
           options={{
             title: "Feed",
-            tabBarLabel: () => null,
             tabBarButton: (props) => (
               <FeedTabButton {...props} android_ripple={null} />
             ),
             tabBarIcon: ({ focused }) => (
               <View
-                className="rounded-full bg-white items-center justify-center shadow-md shadow-black/20"
                 style={{
-                  width: fabSize,
-                  height: fabSize,
-                  borderRadius: fabSize / 2,
-                  top: -fabOffset,
+                  width: plusCircleSize,
+                  height: plusCircleSize,
+                  borderRadius: plusCircleSize / 2,
+                  backgroundColor: "rgba(0, 0, 0, 0.06)",
+                  alignItems: "center",
+                  justifyContent: "center",
                 }}
               >
                 <Plus
-                  size={plusSize}
-                  stroke={focused ? "#EDC06D" : "#6b7280"}
+                  size={plusIconSize}
+                  stroke={focused ? "#EDC06D" : "#0A0A0A"}
                   strokeWidth={2}
                 />
               </View>
@@ -166,7 +150,7 @@ export default function UsersTabsLayout() {
             tabBarIcon: ({ focused }) => (
               <Store
                 size={sideIconSize}
-                stroke={focused ? "#EDC06D" : "#6b7280"}
+                stroke={focused ? "#EDC06D" : "#0A0A0A"}
                 strokeWidth={2}
               />
             ),
@@ -183,13 +167,14 @@ export default function UsersTabsLayout() {
             tabBarIcon: ({ focused }) => (
               <Wrench
                 size={sideIconSize}
-                stroke={focused ? "#EDC06D" : "#6b7280"}
+                stroke={focused ? "#EDC06D" : "#0A0A0A"}
                 strokeWidth={2}
               />
             ),
           }}
         />
       </Tabs>
+      </TabBarScrollProvider>
     </View>
   );
 }

@@ -54,6 +54,7 @@ function convertToPostData(
     isVerified: verifiedIds.has(post.user_id),
     contentRating: (post as any).content_rating ?? 'general',
     moderationStatus: (post as any).moderation_status ?? 'approved',
+    view_count: (post as any).view_count ?? 0,
   };
 }
 

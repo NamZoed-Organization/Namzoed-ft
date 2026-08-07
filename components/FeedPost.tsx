@@ -16,6 +16,7 @@ import {
     togglePostBookmark,
 } from "@/lib/bookmarkService";
 import { getPostCommentCount } from "@/lib/commentsService";
+import { followUser, isFollowing } from "@/lib/followService";
 import {
     getFollowedLikers,
     getPostLikeCount,
@@ -23,7 +24,8 @@ import {
     togglePostLike,
 } from "@/lib/likesService";
 import { RATIO_PORTRAIT } from "@/lib/postMediaDisplay";
-import { deletePost, VideoReel } from "@/lib/postsService";
+import { deletePost, fetchVideoReels, VideoReel } from "@/lib/postsService";
+import { getPostSaveCount, trackPostView } from "@/lib/viewTrackingService";
 import { buildPostExternalSharePayload } from "@/lib/shareUtils";
 import { playSound } from "@/lib/soundUtils";
 import { PostData } from "@/types/post";
@@ -33,13 +35,15 @@ import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useVideoPlayer, VideoView } from "expo-video";
 import {
+  Eye,
   EyeOff,
     Bookmark,
     Heart,
     MessageCircle,
     MoreHorizontal,
     Play,
-    Share2,
+    RotateCcw,
+    Send,
     ShoppingBag,
     Tag,
     UserRound,
@@ -64,6 +68,14 @@ import {
     useWindowDimensions,
     View,
 } from "react-native";
+import AnimatedRN, {
+    FadeIn,
+    FadeOut,
+    interpolateColor,
+    useAnimatedStyle,
+    useSharedValue,
+    withTiming,
+} from "react-native-reanimated";
 
 export { default as PostSkeleton } from "@/components/ui/PostSkeleton";
 
@@ -208,6 +220,8 @@ interface MediaCarouselProps {
   onImagePress?: (index: number) => void;
   /** Opens the fullscreen reels player for the tapped video URL. */
   onVideoPress?: (uri: string) => void;
+  /** "Watch More" tapped from a video's end-of-playback overlay. */
+  onWatchMorePress?: (uri: string) => void;
   isVisible?: boolean;
   hasTaggedItems: boolean;
   onTagPress: () => void;
@@ -270,6 +284,8 @@ interface InlineVideoPlayerProps {
   isVisible: boolean;
   onDoubleTapAt?: (x: number, y: number) => void;
   onExpand?: () => void;
+  /** "Watch More" tapped from the end-of-video overlay — advance to the next reel. */
+  onWatchMore?: () => void;
 }
 
 // Top-level wrapper: only mounts the heavy ExoPlayer-backed component when the
@@ -277,7 +293,11 @@ interface InlineVideoPlayerProps {
 // holds several posts; without it, every video post in the window holds a
 // live ExoPlayer instance and crashes older devices with java.lang.OutOfMemoryError
 // in androidx.media3.exoplayer.ExoPlayerImplInternal.shouldContinueLoading.
-const InlineVideoPlayer = React.memo(function InlineVideoPlayer({ uri, frameWidth, slideHeight, isVisible, onDoubleTapAt, onExpand }: InlineVideoPlayerProps) {
+// Mounting only while visible also gives autoplay-on-50%-visible and
+// pause-on-scroll-out for free: the player (and its playback position) is
+// created fresh each time the slide re-enters view, and torn down the
+// moment it leaves — no explicit play()/pause() toggling needed for that.
+const InlineVideoPlayer = React.memo(function InlineVideoPlayer({ uri, frameWidth, slideHeight, isVisible, onDoubleTapAt, onExpand, onWatchMore }: InlineVideoPlayerProps) {
   if (!isVisible) {
     return <View style={{ width: frameWidth, height: slideHeight, backgroundColor: "#000" }} />;
   }
@@ -288,6 +308,7 @@ const InlineVideoPlayer = React.memo(function InlineVideoPlayer({ uri, frameWidt
       slideHeight={slideHeight}
       onDoubleTapAt={onDoubleTapAt}
       onExpand={onExpand}
+      onWatchMore={onWatchMore}
     />
   );
 });
@@ -298,16 +319,22 @@ interface ActiveVideoPlayerProps {
   slideHeight: number;
   onDoubleTapAt?: (x: number, y: number) => void;
   onExpand?: () => void;
+  onWatchMore?: () => void;
 }
 
-const ActiveVideoPlayer = React.memo(function ActiveVideoPlayer({ uri, frameWidth, slideHeight: videoH, onDoubleTapAt, onExpand }: ActiveVideoPlayerProps) {
+const ActiveVideoPlayer = React.memo(function ActiveVideoPlayer({ uri, frameWidth, slideHeight: videoH, onDoubleTapAt, onExpand, onWatchMore }: ActiveVideoPlayerProps) {
   const [isHolding, setIsHolding] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [shouldPlay, setShouldPlay] = useState(false);
+  // Mounting this component already means the slide is ≥50% visible (see
+  // InlineVideoPlayer above), so playback should start immediately —
+  // autoplay-on-visible falls out of that, not from a separate visibility
+  // effect here.
+  const [shouldPlay, setShouldPlay] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [hasEnded, setHasEnded] = useState(false);
   const hasAutoUnmutedRef = useRef(false);
   const playOverlayOpacity = useRef(new Animated.Value(1)).current;
   const holdTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -320,9 +347,11 @@ const ActiveVideoPlayer = React.memo(function ActiveVideoPlayer({ uri, frameWidt
   const [timerLabel, setTimerLabel] = useState("");
 
   // Cache to disk so the same clip isn't re-downloaded across feed re-renders or
-  // when opened in the fullscreen reels player.
+  // when opened in the fullscreen reels player. Looping is off here (unlike the
+  // fullscreen reels player) so the clip actually reaches its end and the
+  // "Watch More" / "Rewatch" overlay can appear, instead of silently restarting.
   const player = useVideoPlayer({ uri, useCaching: true }, (p) => {
-    p.loop = true;
+    p.loop = false;
     p.muted = true;
   });
 
@@ -334,12 +363,20 @@ const ActiveVideoPlayer = React.memo(function ActiveVideoPlayer({ uri, frameWidt
 
   useEffect(() => {
     if (!player) return;
-    if (shouldPlay && !isHolding) {
+    if (shouldPlay && !isHolding && !hasEnded) {
       player.play();
     } else {
       player.pause();
     }
-  }, [shouldPlay, isHolding, player]);
+  }, [shouldPlay, isHolding, hasEnded, player]);
+
+  useEffect(() => {
+    if (!player) return;
+    const sub = player.addListener("playToEnd", () => {
+      setHasEnded(true);
+    });
+    return () => sub.remove();
+  }, [player]);
 
   // Fade play-button overlay based on playing state
   useEffect(() => {
@@ -453,61 +490,176 @@ const ActiveVideoPlayer = React.memo(function ActiveVideoPlayer({ uri, frameWidt
           >
             {timerLabel}
           </Animated.Text>
-          {/* Center play button (visible when paused) */}
-          <Animated.View
-            pointerEvents="none"
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              alignItems: "center",
-              justifyContent: "center",
-              opacity: playOverlayOpacity,
-            }}
-          >
-            <View
+          {/* Center play button (visible when paused, hidden once ended — the
+              end-of-video overlay takes over at that point) */}
+          {!hasEnded && (
+            <Animated.View
+              pointerEvents="none"
               style={{
-                width: 64,
-                height: 64,
-                borderRadius: 32,
-                backgroundColor: "rgba(0,0,0,0.55)",
+                position: "absolute",
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
                 alignItems: "center",
                 justifyContent: "center",
+                opacity: playOverlayOpacity,
               }}
             >
-              <Play size={32} color="#fff" fill="#fff" />
-            </View>
-          </Animated.View>
+              <View
+                style={{
+                  width: 64,
+                  height: 64,
+                  borderRadius: 32,
+                  backgroundColor: "rgba(0,0,0,0.55)",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Play size={32} color="#fff" fill="#fff" />
+              </View>
+            </Animated.View>
+          )}
         </View>
       </TouchableWithoutFeedback>
       {/* Mute/unmute icon — tappable, sits above gesture layer */}
-      <TouchableOpacity
-        onPress={handleMutePress}
-        activeOpacity={0.8}
-        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        style={{
-          position: "absolute",
-          bottom: 12,
-          right: 12,
-        }}
-      >
-        <View
+      {!hasEnded && (
+        <TouchableOpacity
+          onPress={handleMutePress}
+          activeOpacity={0.8}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           style={{
-            backgroundColor: "rgba(0,0,0,0.4)",
-            borderRadius: 20,
-            padding: 6,
+            position: "absolute",
+            bottom: 12,
+            right: 12,
           }}
         >
-          {isMuted
-            ? <VolumeX size={16} color="#fff" />
-            : <Volume2 size={16} color="#fff" />}
+          <View
+            style={{
+              backgroundColor: "rgba(0,0,0,0.4)",
+              borderRadius: 20,
+              padding: 6,
+            }}
+          >
+            {isMuted
+              ? <VolumeX size={16} color="#fff" />
+              : <Volume2 size={16} color="#fff" />}
+          </View>
+        </TouchableOpacity>
+      )}
+      {/* End-of-video overlay: both options drop straight into the fullscreen
+          reels viewer — "Watch More" advances to the next reel, "Rewatch"
+          reopens this same one from the start. */}
+      {hasEnded && (
+        <View style={styles.videoEndOverlay} pointerEvents="box-none">
+          <TouchableOpacity
+            style={[styles.videoEndButton, styles.videoEndButtonSolid]}
+            activeOpacity={0.85}
+            onPress={() => onWatchMore?.()}
+          >
+            <Play size={16} color="#0A0A0A" fill="#0A0A0A" />
+            <Text style={styles.videoEndButtonTextSolid}>Watch More</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.videoEndButton, styles.videoEndButtonOutline]}
+            activeOpacity={0.85}
+            onPress={() => onExpand?.()}
+          >
+            <RotateCcw size={16} color="#fff" />
+            <Text style={styles.videoEndButtonText}>Rewatch</Text>
+          </TouchableOpacity>
         </View>
-      </TouchableOpacity>
+      )}
     </View>
   );
 });
+
+// Instagram/UIPageControl-style shrinking dot window: up to 3 "normal" dots
+// centered around the active one, tapering to a small then tiny dot on
+// whichever side(s) still have more images. The normal window trails 2
+// behind the active index, but reassigns any unused "before" slots forward
+// when active is near the start (and mirrors near the end) so the 3 normal
+// dots don't run out of room.
+type DotTier = "normal" | "small" | "tiny";
+interface DotEntry {
+  index: number;
+  tier: DotTier;
+}
+const DOT_SIZE: Record<DotTier, number> = { normal: 6, small: 4.5, tiny: 3 };
+
+function getDotWindow(active: number, total: number): DotEntry[] {
+  if (total <= 1) return [];
+  if (total <= 5) {
+    return Array.from({ length: total }, (_, i) => ({ index: i, tier: "normal" as const }));
+  }
+
+  let normalStart = active - 2;
+  let normalEnd = active;
+  if (normalStart < 0) {
+    normalEnd += -normalStart;
+    normalStart = 0;
+  }
+  if (normalEnd > total - 1) {
+    normalStart -= normalEnd - (total - 1);
+    normalEnd = total - 1;
+    normalStart = Math.max(0, normalStart);
+  }
+
+  const dots: DotEntry[] = [];
+  if (normalStart - 2 >= 0) dots.push({ index: normalStart - 2, tier: "tiny" });
+  if (normalStart - 1 >= 0) dots.push({ index: normalStart - 1, tier: "small" });
+  for (let i = normalStart; i <= normalEnd; i++) dots.push({ index: i, tier: "normal" });
+  if (normalEnd + 1 <= total - 1) dots.push({ index: normalEnd + 1, tier: "small" });
+  if (normalEnd + 2 <= total - 1) dots.push({ index: normalEnd + 2, tier: "tiny" });
+
+  return dots;
+}
+
+function CarouselDot({ tier, isActive }: { tier: DotTier; isActive: boolean }) {
+  const size = useSharedValue(DOT_SIZE[tier]);
+  const activeProgress = useSharedValue(isActive ? 1 : 0);
+
+  useEffect(() => {
+    size.value = withTiming(DOT_SIZE[tier], { duration: 180 });
+  }, [tier, size]);
+
+  useEffect(() => {
+    activeProgress.value = withTiming(isActive ? 1 : 0, { duration: 180 });
+  }, [isActive, activeProgress]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    width: size.value,
+    height: size.value,
+    borderRadius: size.value / 2,
+    backgroundColor: interpolateColor(
+      activeProgress.value,
+      [0, 1],
+      ["rgba(0, 0, 0, 0.2)", "#094569"],
+    ),
+  }));
+
+  return (
+    <AnimatedRN.View
+      entering={FadeIn.duration(150)}
+      exiting={FadeOut.duration(150)}
+      style={[{ marginHorizontal: 2.5 }, animatedStyle]}
+    />
+  );
+}
+
+function CarouselDots({ activeIndex, total }: { activeIndex: number; total: number }) {
+  const dots = useMemo(() => getDotWindow(activeIndex, total), [activeIndex, total]);
+
+  return (
+    <View style={styles.dotsRow}>
+      {dots.map(({ index, tier }) => {
+        return (
+          <CarouselDot key={index} tier={tier} isActive={index === activeIndex} />
+        );
+      })}
+    </View>
+  );
+}
 
 const MediaCarousel = React.memo(
   ({
@@ -517,6 +669,7 @@ const MediaCarousel = React.memo(
     onDoubleTapAt,
     onImagePress,
     onVideoPress,
+    onWatchMorePress,
     isVisible = true,
     hasTaggedItems,
     onTagPress,
@@ -554,10 +707,13 @@ const MediaCarousel = React.memo(
     const handleScroll = useCallback(
       (e: NativeSyntheticEvent<NativeScrollEvent>) => {
         const x = e.nativeEvent.contentOffset.x;
-        const idx = Math.round(x / frameWidth);
-        setActiveIndex(idx);
+        const idx = Math.min(
+          images.length - 1,
+          Math.max(0, Math.round(x / frameWidth)),
+        );
+        setActiveIndex((prev) => (prev === idx ? prev : idx));
       },
-      [frameWidth],
+      [frameWidth, images.length],
     );
 
     const renderItem = useCallback(
@@ -583,6 +739,7 @@ const MediaCarousel = React.memo(
                 isVisible={isVisible && activeIndex === index}
                 onDoubleTapAt={onDoubleTapAt}
                 onExpand={() => onVideoPress?.(item)}
+                onWatchMore={() => onWatchMorePress?.(item)}
               />
             </View>
           );
@@ -629,6 +786,8 @@ const MediaCarousel = React.memo(
             horizontal
             pagingEnabled
             showsHorizontalScrollIndicator={false}
+            directionalLockEnabled
+            alwaysBounceVertical={false}
             onScroll={handleScroll}
             scrollEventThrottle={16}
             style={{ height: slideH }}
@@ -655,6 +814,7 @@ const MediaCarousel = React.memo(
           </TouchableOpacity>
         )}
 
+        {multipleMedia && <CarouselDots activeIndex={activeIndex} total={images.length} />}
       </View>
     );
   },
@@ -844,8 +1004,18 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
   const [reelsVisible, setReelsVisible] = useState(false);
   const [reelsInitial, setReelsInitial] = useState<VideoReel[]>([]);
   const [reelsIndex, setReelsIndex] = useState(0);
+  const [reelsSourceRect, setReelsSourceRect] = useState<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
+  const mediaContainerRef = useRef<View>(null);
   const [flyingHearts, setFlyingHearts] = useState<Array<{ id: number; x: number; y: number }>>([]);
   const [isContentRevealed, setIsContentRevealed] = useState(post.contentRating === "general" || !post.contentRating);
+  const [captionExpanded, setCaptionExpanded] = useState(false);
+  const [captionOverflows, setCaptionOverflows] = useState(false);
+  const [captionMeasured, setCaptionMeasured] = useState(false);
   const flyHeartId = useRef(0);
 
   const hasTaggedProducts = (post.tagged_products?.length ?? 0) > 0;
@@ -857,6 +1027,68 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
   const isOwnPost = currentUser?.id === post.userId;
   const isAuthorLive = isAuthorLiveProp ?? false;
   const needsContentWarning = !!post.contentRating && post.contentRating !== "general";
+
+  // null = not checked yet — the follow pill next to the author's name only
+  // ever renders once we know for sure the viewer doesn't already follow them.
+  const [isFollowingAuthor, setIsFollowingAuthor] = useState<boolean | null>(null);
+  const [followBusy, setFollowBusy] = useState(false);
+  const [showFollowedPopup, setShowFollowedPopup] = useState(false);
+  const followedPopupTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!currentUser?.id || isOwnPost) return;
+    isFollowing(currentUser.id, post.userId).then(setIsFollowingAuthor);
+  }, [currentUser?.id, post.userId, isOwnPost]);
+
+  useEffect(() => {
+    return () => {
+      if (followedPopupTimeout.current) clearTimeout(followedPopupTimeout.current);
+    };
+  }, []);
+
+  const handleFollowAuthor = useCallback(async () => {
+    if (!currentUser?.id || followBusy) return;
+    setFollowBusy(true);
+    const prev = isFollowingAuthor;
+    setIsFollowingAuthor(true);
+    try {
+      const result = await followUser(currentUser.id, post.userId);
+      if (!result.success) {
+        setIsFollowingAuthor(prev);
+      } else {
+        setShowFollowedPopup(true);
+        if (followedPopupTimeout.current) clearTimeout(followedPopupTimeout.current);
+        followedPopupTimeout.current = setTimeout(() => setShowFollowedPopup(false), 1800);
+      }
+    } catch {
+      setIsFollowingAuthor(prev);
+    } finally {
+      setFollowBusy(false);
+    }
+  }, [currentUser?.id, post.userId, isFollowingAuthor, followBusy]);
+
+  // ── Private engagement stats (only shown to post owner) ──────────────
+  const [viewCount, setViewCount] = useState<number>(post.view_count ?? 0);
+  const [saveCount, setSaveCount] = useState<number>(0);
+  const viewTrackedRef = useRef(false);
+
+  // Track a view when the post becomes visible in the feed (once per mount)
+  useEffect(() => {
+    if (!isVisible) return;
+    if (!currentUser?.id) return;
+    if (viewTrackedRef.current) return;
+    viewTrackedRef.current = true;
+    trackPostView(post.id, currentUser.id, post.userId).catch(() => {
+      // Reset so it can be retried if the insert failed transiently
+      viewTrackedRef.current = false;
+    });
+  }, [isVisible, currentUser?.id, post.id, post.userId]);
+
+  // Load save count for own posts (once on mount)
+  useEffect(() => {
+    if (!isOwnPost) return;
+    getPostSaveCount(post.id).then(setSaveCount).catch(() => {});
+  }, [isOwnPost, post.id]);
 
   useEffect(() => {
     setIsContentRevealed(!needsContentWarning);
@@ -1008,14 +1240,9 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
     setShowShareComposer(true);
   };
 
-  // Open the fullscreen reels player at the tapped video. The viewer then loads
-  // an endless stream of every video in the system.
-  const handleVideoPress = useCallback(
-    (uri: string) => {
-      const videoUrls = (post.images || []).filter(isVideoUrl);
-      if (videoUrls.length === 0) return;
-      const startIndex = Math.max(0, videoUrls.indexOf(uri));
-      const initial: VideoReel[] = videoUrls.map((videoUri, i) => ({
+  const buildPostVideoReels = useCallback(
+    (videoUrls: string[]): VideoReel[] =>
+      videoUrls.map((videoUri, i) => ({
         id: `${post.id}::${i}`,
         uri: videoUri,
         postId: String(post.id),
@@ -1024,12 +1251,71 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
         avatarUrl: post.profilePic ?? null,
         content: post.content || "",
         createdAt: (post.date instanceof Date ? post.date : new Date(post.date)).toISOString(),
-      }));
-      setReelsInitial(initial);
-      setReelsIndex(startIndex);
+      })),
+    [post.id, post.userId, post.username, post.profilePic, post.content, post.date],
+  );
+
+  // Measures the on-screen video frame so the viewer can expand from it
+  // instead of just popping in fullscreen. Falls back to opening immediately
+  // (no measured rect → ReelsViewer just fills the screen) if the ref isn't
+  // attached yet for some reason.
+  const openReelsViewer = useCallback((reels: VideoReel[], index: number) => {
+    const openReels = () => {
+      setReelsInitial(reels);
+      setReelsIndex(index);
       setReelsVisible(true);
+    };
+    if (mediaContainerRef.current) {
+      mediaContainerRef.current.measureInWindow((x, y, width, height) => {
+        setReelsSourceRect({ x, y, width, height });
+        openReels();
+      });
+    } else {
+      setReelsSourceRect(null);
+      openReels();
+    }
+  }, []);
+
+  // Open the fullscreen reels player at the tapped video. The viewer then loads
+  // an endless stream of every video in the system.
+  const handleVideoPress = useCallback(
+    (uri: string) => {
+      const videoUrls = (post.images || []).filter(isVideoUrl);
+      if (videoUrls.length === 0) return;
+      const startIndex = Math.max(0, videoUrls.indexOf(uri));
+      openReelsViewer(buildPostVideoReels(videoUrls), startIndex);
     },
-    [post.images, post.id, post.userId, post.username, post.profilePic, post.content, post.date],
+    [post.images, buildPostVideoReels, openReelsViewer],
+  );
+
+  // "Watch More" from the end-of-video overlay: jump straight to the next
+  // video, either another one in this same post, or — if this was the last
+  // one — a fresh batch pulled from the global reels stream, so it's
+  // actually new content rather than looping back to what just ended.
+  const handleWatchMoreReels = useCallback(
+    async (uri: string) => {
+      const videoUrls = (post.images || []).filter(isVideoUrl);
+      if (videoUrls.length === 0) return;
+      const tappedIndex = Math.max(0, videoUrls.indexOf(uri));
+
+      if (tappedIndex + 1 < videoUrls.length) {
+        openReelsViewer(buildPostVideoReels(videoUrls), tappedIndex + 1);
+        return;
+      }
+
+      try {
+        const { reels } = await fetchVideoReels(null, 8);
+        const fresh = reels.filter((r) => r.uri !== uri);
+        if (fresh.length > 0) {
+          openReelsViewer(fresh, 0);
+          return;
+        }
+      } catch {
+        // Fall through to reopening this same reel if the fetch fails.
+      }
+      openReelsViewer(buildPostVideoReels(videoUrls), tappedIndex);
+    },
+    [post.images, buildPostVideoReels, openReelsViewer],
   );
 
   const postSharePayload = useMemo(
@@ -1124,14 +1410,30 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
             />
           </View>
         </TouchableOpacity>
+        {isFollowingAuthor === false && (
+          <TouchableOpacity
+            style={styles.headerFollowPill}
+            activeOpacity={0.75}
+            disabled={followBusy}
+            onPress={handleFollowAuthor}
+          >
+            <Text style={styles.headerFollowPillText}>Follow</Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity onPress={() => setShowActionSheet(true)}>
           <MoreHorizontal size={20} color="#666" />
         </TouchableOpacity>
       </View>
+      <PopupMessage
+        visible={showFollowedPopup}
+        type="success"
+        title="Followed"
+        message={`You followed ${post.username || "this user"}`}
+      />
 
       {/* Media */}
       {post.images.length > 0 && (
-        <View style={{ position: "relative" }}>
+        <View ref={mediaContainerRef} collapsable={false} style={{ position: "relative" }}>
           <MediaCarousel
             frameWidth={frameWidth}
             images={post.images}
@@ -1145,6 +1447,7 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
               setImageViewerVisible(true);
             }}
             onVideoPress={handleVideoPress}
+            onWatchMorePress={handleWatchMoreReels}
           />
           {/* Content Warning Overlay for sensitive/18+ posts */}
           {needsContentWarning && !isContentRevealed && (
@@ -1186,7 +1489,7 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
             <MessageCircle size={24} color="#262626" />
           </TouchableOpacity>
           <TouchableOpacity onPress={handleSharePost} style={styles.actionBtn}>
-            <Share2 size={24} color="#262626" />
+            <Send size={24} color="#262626" />
           </TouchableOpacity>
         </View>
         <TouchableOpacity onPress={handleBookmark}>
@@ -1215,14 +1518,67 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
         ) : null}
       </View>}
 
+      {/* Private stats — view count + save count, only visible to the post owner */}
+      {isOwnPost && (!needsContentWarning || isContentRevealed) && (viewCount > 0 || saveCount > 0) && (
+        <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingBottom: 4, gap: 12 }}>
+          {viewCount > 0 && (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+              <Eye size={13} color="#9CA3AF" strokeWidth={1.8} />
+              <Text style={{ fontSize: 12, color: "#9CA3AF", fontWeight: "500" }}>
+                {viewCount.toLocaleString()} {viewCount === 1 ? "view" : "views"}
+              </Text>
+            </View>
+          )}
+          {saveCount > 0 && (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+              <Bookmark size={13} color="#9CA3AF" strokeWidth={1.8} fill="none" />
+              <Text style={{ fontSize: 12, color: "#9CA3AF", fontWeight: "500" }}>
+                {saveCount.toLocaleString()} {saveCount === 1 ? "save" : "saves"}
+              </Text>
+            </View>
+          )}
+        </View>
+      )}
+
       {/* Caption */}
       {post.content && (!needsContentWarning || isContentRevealed) ? (
         <View style={styles.captionSection}>
-          <Text style={styles.captionText}>
-            <Text style={styles.captionUsername}>{post.username || "Unknown"}</Text>
-            {"  "}
-            {post.content}
-          </Text>
+          {/* Off-screen full-text measurer — determines whether the caption
+              overflows a single line, since numberOfLines clips the layout
+              reported to onTextLayout once it's actually limiting lines. */}
+          {!captionMeasured && (
+            <Text
+              style={[styles.captionText, styles.captionMeasurer]}
+              onTextLayout={(e) => {
+                setCaptionOverflows(e.nativeEvent.lines.length > 1);
+                setCaptionMeasured(true);
+              }}
+            >
+              <Text style={styles.captionUsername}>{post.username || "Unknown"}</Text>
+              {"  "}
+              {post.content}
+            </Text>
+          )}
+          <TouchableOpacity
+            activeOpacity={captionExpanded ? 0.6 : 1}
+            disabled={!captionExpanded}
+            onPress={() => setCaptionExpanded(false)}
+          >
+            <Text style={styles.captionText} numberOfLines={captionExpanded ? undefined : 1}>
+              <Text style={styles.captionUsername}>{post.username || "Unknown"}</Text>
+              {"  "}
+              {post.content}
+            </Text>
+          </TouchableOpacity>
+          {captionOverflows && !captionExpanded && (
+            <TouchableOpacity
+              onPress={() => setCaptionExpanded(true)}
+              activeOpacity={0.6}
+              style={styles.captionMoreOverlay}
+            >
+              <Text style={styles.captionMoreText}>...more</Text>
+            </TouchableOpacity>
+          )}
         </View>
       ) : null}
 
@@ -1333,15 +1689,13 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
         />
       )}
 
-      {showActionSheet && (
-        <PostActionSheet
-          visible={showActionSheet}
-          onClose={() => setShowActionSheet(false)}
-          isOwnPost={isOwnPost}
-          onDelete={handleDeletePress}
-          onReport={handleReportPress}
-        />
-      )}
+      <PostActionSheet
+        visible={showActionSheet}
+        onClose={() => setShowActionSheet(false)}
+        isOwnPost={isOwnPost}
+        onDelete={handleDeletePress}
+        onReport={handleReportPress}
+      />
 
       {showDeleteConfirmation && (
         <DeleteConfirmationModal
@@ -1400,6 +1754,7 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
         visible={reelsVisible}
         initialReels={reelsInitial}
         initialIndex={reelsIndex}
+        sourceRect={reelsSourceRect}
         onClose={() => setReelsVisible(false)}
       />
 
@@ -1434,18 +1789,67 @@ export default React.memo(FeedPost, (prev, next) =>
   prev.post.id === next.post.id &&
   prev.isVisible === next.isVisible &&
   prev.isAuthorLive === next.isAuthorLive &&
+  prev.post.view_count === next.post.view_count &&
   prev.post.locationName === next.post.locationName &&
   prev.post.images.length === next.post.images.length &&
   prev.post.images.every((u, i) => u === next.post.images[i])
 );
 
 const styles = StyleSheet.create({
+  videoEndOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.65)",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+  },
+  videoEndButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 22,
+    borderRadius: 24,
+    minWidth: 170,
+  },
+  videoEndButtonSolid: {
+    backgroundColor: "#fff",
+  },
+  videoEndButtonOutline: {
+    backgroundColor: "rgba(255,255,255,0.12)",
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.8)",
+  },
+  videoEndButtonText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  videoEndButtonTextSolid: {
+    color: "#0A0A0A",
+    fontSize: 15,
+    fontWeight: "700",
+  },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 14,
     paddingVertical: 10,
+  },
+  headerFollowPill: {
+    borderWidth: 1.2,
+    borderColor: "#094569",
+    borderRadius: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 12,
+    marginRight: 10,
+  },
+  headerFollowPillText: {
+    color: "#094569",
+    fontWeight: "700",
+    fontSize: 13,
   },
   avatar: {
     width: 36,
@@ -1509,6 +1913,13 @@ const styles = StyleSheet.create({
     color: "#9CA3AF",
     fontSize: 12,
     marginTop: 1,
+  },
+  dotsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 8,
+    backgroundColor: "#fff",
   },
   mediaCounterPill: {
     position: "absolute",
@@ -1590,6 +2001,33 @@ const styles = StyleSheet.create({
   },
   captionUsername: {
     fontWeight: "700",
+  },
+  captionMeasurer: {
+    position: "absolute",
+    opacity: 0,
+    left: 0,
+    right: 0,
+    top: 0,
+    zIndex: -1,
+  },
+  captionMoreOverlay: {
+    position: "absolute",
+    // captionSection has paddingHorizontal: 14 — absolute children anchor to
+    // the parent's outer edge in RN (padding is ignored), so this has to
+    // repeat that inset manually to land flush with the text and the
+    // bookmark button below, instead of sitting 14px further right.
+    right: 14,
+    bottom: 0,
+    height: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    paddingLeft: 6,
+  },
+  captionMoreText: {
+    fontSize: 13,
+    color: "#8e8e8e",
+    fontWeight: "600",
   },
   viewComments: {
     paddingHorizontal: 14,

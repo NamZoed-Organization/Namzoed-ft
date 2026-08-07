@@ -8,7 +8,15 @@ export type NotificationType =
   | "post_commented"
   | "user_went_live"
   | "new_post"
-  | "mongoose_booking_request";
+  | "mongoose_booking_request"
+  /** "You now have 100 followers!" — fires at milestone thresholds */
+  | "follower_milestone"
+  /** "Your post is gaining momentum!" — fires after 24h if ≥10 views */
+  | "post_traction"
+  /** Weekly digest: "Your posts got X views and Y people visited your profile" */
+  | "weekly_engagement"
+  /** Someone you follow added a new story */
+  | "new_story";
 
 export interface AppNotification {
   id: string;

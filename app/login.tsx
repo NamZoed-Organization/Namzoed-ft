@@ -120,9 +120,13 @@ export default function Login() {
   };
 
   const completeLogin = async (userData: any, resolvedEmail: string) => {
-    // Mandatory age check: existing users without a date of birth must provide
-    // one before entering the app, so we can apply age-related content rules.
-    if (userData?.id && !userData?.birth_date) {
+    // Optional age prompt: give existing users without a date of birth a chance
+    // to provide one (so we can apply age-related content rules), but they can skip it.
+    if (
+      userData?.id &&
+      !userData?.birth_date &&
+      !userData?.dob_prompt_skipped
+    ) {
       setPendingUserData(userData);
       setPendingResolvedEmail(resolvedEmail);
       setShowDobPrompt(true);
@@ -748,13 +752,22 @@ export default function Login() {
           </View>
         </Modal>
 
-        {/* Mandatory date-of-birth prompt for existing users without one */}
+        {/* Optional date-of-birth prompt for existing users without one */}
         {pendingUserData?.id && (
           <DateOfBirthPrompt
             visible={showDobPrompt}
             userId={pendingUserData.id}
             onSaved={async (birthDate) => {
               const updatedUser = { ...pendingUserData, birth_date: birthDate };
+              setShowDobPrompt(false);
+              setPendingUserData(null);
+              await completeLogin(updatedUser, pendingResolvedEmail);
+            }}
+            onSkip={async () => {
+              const updatedUser = {
+                ...pendingUserData,
+                dob_prompt_skipped: true,
+              };
               setShowDobPrompt(false);
               setPendingUserData(null);
               await completeLogin(updatedUser, pendingResolvedEmail);

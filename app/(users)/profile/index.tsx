@@ -21,12 +21,14 @@ import EarlyAccessBadge from "@/components/EarlyAccessBadge";
 import ProfilePostGridItem from "@/components/profile/ProfilePostGridItem";
 import ServiceProviderSection from "@/components/profile/ServiceProviderSection";
 import BottomNavBar from "@/components/ui/BottomNavBar";
+import { useBottomBarScroll } from "@/hooks/useBottomBarScroll";
 import PopupMessage from "@/components/ui/PopupMessage";
 import {
     deleteAvatar,
     updateUserProfile,
     uploadAvatar,
 } from "@/lib/profileService";
+import { getProfileViewCount7d } from "@/lib/viewTrackingService";
 import {
     deleteLicenseImage,
     deleteProviderAvatar,
@@ -98,6 +100,7 @@ export default function ProfileScreen() {
   const { currentUser, setCurrentUser, logout } = useUser();
   const router = useAppRouter();
   const insets = useSafeAreaInsets();
+  const { scale: bottomBarScale, onScroll: onBottomBarScroll } = useBottomBarScroll();
   const { tab } = useLocalSearchParams<{ tab?: string }>();
   const [mainTab, setMainTab] = useState<"main" | "work">(
     tab === "work" ? "work" : "main",
@@ -216,6 +219,13 @@ export default function ProfileScreen() {
     followingCount,
     setFollowingCount,
   } = useProfileData(refreshKey);
+
+  // 7-day rolling profile view count
+  const [profileViews7d, setProfileViews7d] = useState<number>(0);
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    getProfileViewCount7d(currentUser.id).then(setProfileViews7d).catch(() => {});
+  }, [currentUser?.id]);
 
   // Early-access badge for the logged-in user
   const badgeType = useEarlyAccessBadge(currentUser?.id);
@@ -1118,6 +1128,8 @@ export default function ProfileScreen() {
               showsVerticalScrollIndicator={false}
               nestedScrollEnabled
               contentContainerStyle={{ paddingBottom: 100 }}
+              onScroll={onBottomBarScroll}
+              scrollEventThrottle={16}
               refreshControl={
                 <RefreshControl
                   refreshing={refreshing}
@@ -1204,6 +1216,25 @@ export default function ProfileScreen() {
                           Following
                         </Text>
                       </TouchableOpacity>
+                      {/* Profile views — private 7-day rolling stat */}
+                      {profileViews7d > 0 && (
+                        <>
+                          <Text className="text-gray-300 text-xl font-light">|</Text>
+                          <View className="items-center">
+                            <View className="flex-row items-center" style={{ gap: 3 }}>
+                              <Eye size={14} color="#1F2937" />
+                              <Text className="text-lg font-mbold text-gray-900">
+                                {profileViews7d > 999
+                                  ? `${(profileViews7d / 1000).toFixed(1)}k`
+                                  : profileViews7d}
+                              </Text>
+                            </View>
+                            <Text className="text-xs font-regular text-gray-500">
+                              Profile views
+                            </Text>
+                          </View>
+                        </>
+                      )}
                     </View>
                     {badgeType && (
                       <TouchableOpacity
@@ -1561,6 +1592,8 @@ export default function ProfileScreen() {
               showsVerticalScrollIndicator={false}
               nestedScrollEnabled
               contentContainerStyle={{ paddingBottom: 100 }}
+              onScroll={onBottomBarScroll}
+              scrollEventThrottle={16}
               refreshControl={
                 <RefreshControl
                   refreshing={refreshing}
@@ -2235,7 +2268,7 @@ export default function ProfileScreen() {
         />
       )}
 
-      <BottomNavBar />
+      <BottomNavBar scale={bottomBarScale} />
     </View>
   );
 }

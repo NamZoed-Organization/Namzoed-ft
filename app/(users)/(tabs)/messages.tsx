@@ -8,6 +8,8 @@ import MongooseWorkerNavBar, {
 import PopupMessage from "@/components/ui/PopupMessage";
 import { useUnreadMessages } from "@/contexts/UnreadMessagesContext";
 import { useUser } from "@/contexts/UserContext";
+import { useScreenAnalytics } from "@/hooks/useAnalytics";
+import { Screens } from "@/lib/analyticsService";
 import { supabase } from "@/lib/supabase";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -24,6 +26,7 @@ import React, {
   useState,
 } from "react";
 import ConversationSkeleton from "@/components/ui/ConversationSkeleton";
+import EdgeSwipeBack from "@/components/ui/EdgeSwipeBack";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import {
   ActivityIndicator,
@@ -312,6 +315,7 @@ export default function MessageScreen() {
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
   const { currentUser } = useUser();
+  const { trackTap } = useScreenAnalytics(Screens.MESSAGES);
   const { refreshUnreadCount, currentUserUUID, setIsOnMessagesScreen } =
     useUnreadMessages();
 
@@ -1306,7 +1310,10 @@ export default function MessageScreen() {
 
     return (
       <SwipeableConversationRow
-        onPress={() => router.push(`/(users)/chat/${conversation.partnerId}`)}
+        onPress={() => {
+          trackTap("chat_row", "chat_open", { partner_id: conversation.partnerId });
+          router.push(`/(users)/chat/${conversation.partnerId}`);
+        }}
         onDelete={() =>
           handleDeleteConversation(conversation.partnerId, userName)
         }
@@ -1806,73 +1813,79 @@ export default function MessageScreen() {
   // Check if user is logged in
   if (!currentUser) {
     return (
-      <View className="flex-1 bg-background">
-        {/* Status Bar Space */}
-        <View className="h-12 bg-white" />
+      <EdgeSwipeBack onSwipeBack={() => router.back()}>
+        <View className="flex-1 bg-background">
+          {/* Status Bar Space */}
+          <View className="h-12 bg-white" />
 
-        <View className="flex-1 items-center justify-center px-4">
-          <Text className="text-base font-regular text-gray-500 text-center">
-            Please login to view messages
-          </Text>
+          <View className="flex-1 items-center justify-center px-4">
+            <Text className="text-base font-regular text-gray-500 text-center">
+              Please login to view messages
+            </Text>
+          </View>
         </View>
-      </View>
+      </EdgeSwipeBack>
     );
   }
 
   // Check if userData is available
   if (!userData) {
     return (
-      <View className="flex-1 bg-background">
-        {/* Status Bar Space */}
-        <View className="h-12 bg-white" />
+      <EdgeSwipeBack onSwipeBack={() => router.back()}>
+        <View className="flex-1 bg-background">
+          {/* Status Bar Space */}
+          <View className="h-12 bg-white" />
 
-        <View className="flex-1 items-center justify-center px-4">
-          <Text className="text-base font-regular text-gray-500 text-center">
-            No user data found
-          </Text>
+          <View className="flex-1 items-center justify-center px-4">
+            <Text className="text-base font-regular text-gray-500 text-center">
+              No user data found
+            </Text>
+          </View>
         </View>
-      </View>
+      </EdgeSwipeBack>
     );
   }
 
   // If showing follow requests, render the FollowRequests component
   if (showFollowRequests) {
     return (
-      <View className="flex-1 bg-background">
-        {/* Status Bar Space */}
-        <View className="h-12 bg-white" />
+      <EdgeSwipeBack onSwipeBack={() => router.back()}>
+        <View className="flex-1 bg-background">
+          {/* Status Bar Space */}
+          <View className="h-12 bg-white" />
 
-        {/* Fixed Header */}
-        <View className="bg-white px-4 py-6 border-b border-gray-200">
-          <View className="flex-row items-center">
-            <TouchableOpacity
-              onPress={() => setShowFollowRequests(false)}
-              className="mr-3"
-            >
-              <Ionicons name="arrow-back" size={24} color="#007AFF" />
-            </TouchableOpacity>
+          {/* Fixed Header */}
+          <View className="bg-white px-4 py-6 border-b border-gray-200">
+            <View className="flex-row items-center">
+              <TouchableOpacity
+                onPress={() => setShowFollowRequests(false)}
+                className="mr-3"
+              >
+                <Ionicons name="arrow-back" size={24} color="#007AFF" />
+              </TouchableOpacity>
 
-            <Text className="text-xl font-bold text-gray-800">
-              Follow Requests
-            </Text>
+              <Text className="text-xl font-bold text-gray-800">
+                Follow Requests
+              </Text>
 
-            <View className="flex-1" />
+              <View className="flex-1" />
 
-            {followRequests.length > 0 && (
-              <View className="bg-red-500 rounded-full w-6 h-6 items-center justify-center">
-                <Text className="text-white text-xs font-bold">
-                  {followRequests.length}
-                </Text>
-              </View>
-            )}
+              {followRequests.length > 0 && (
+                <View className="bg-red-500 rounded-full w-6 h-6 items-center justify-center">
+                  <Text className="text-white text-xs font-bold">
+                    {followRequests.length}
+                  </Text>
+                </View>
+              )}
+            </View>
           </View>
-        </View>
 
-        <FollowRequests
-          onClose={() => setShowFollowRequests(false)}
-          userId={currentUser.id || ""}
-        />
-      </View>
+          <FollowRequests
+            onClose={() => setShowFollowRequests(false)}
+            userId={currentUser.id || ""}
+          />
+        </View>
+      </EdgeSwipeBack>
     );
   }
 
@@ -1883,6 +1896,7 @@ export default function MessageScreen() {
     : tabBarHeight + insets.bottom + 16;
 
   return (
+    <EdgeSwipeBack onSwipeBack={() => router.back()}>
     <View className="flex-1 bg-background">
       <PopupMessage
         visible={popup.visible}
@@ -2502,5 +2516,6 @@ export default function MessageScreen() {
 
       <MongooseWorkerNavBar />
     </View>
+    </EdgeSwipeBack>
   );
 }

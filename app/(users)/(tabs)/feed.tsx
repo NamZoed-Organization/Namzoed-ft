@@ -2,6 +2,7 @@ import FeedPost, { PostSkeleton } from "@/components/FeedPost";
 import { VideoErrorBoundary } from "@/components/VideoErrorBoundary";
 import { useUser } from "@/contexts/UserContext";
 import { useSafety } from "@/contexts/SafetyContext";
+import { useTabBarScroll } from "@/contexts/TabBarScrollContext";
 import { useFeedInfiniteScroll } from "@/hooks/useFeedInfiniteScroll";
 import { canViewContent } from "@/lib/contentClassifier";
 import { getReportedPostIds } from "@/lib/reportService";
@@ -25,21 +26,37 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import LivesBar from "@/components/livestream/LivesBar";
 import AuthPromptModal from "@/components/modals/AuthPromptModal";
 import OnboardingTutorial from "@/components/onboarding/OnboardingTutorial";
+import StoriesBar from "@/components/stories/StoriesBar";
 import { useLivestreams } from "@/hooks/useLivestreams";
 import { useOnboardingTutorial } from "@/hooks/useOnboardingTutorial";
+import { useStories } from "@/hooks/useStories";
+import { useScreenAnalytics } from "@/hooks/useAnalytics";
+import { Screens } from "@/lib/analyticsService";
+import type { UserStoryGroup } from "@/lib/storiesService";
 import { feedEvents } from "@/utils/feedEvents";
 
 type CreatePostProps = { onClose?: () => void };
+type StoryComposerProps = { onClose?: () => void };
+type StoryViewerProps = {
+  visible: boolean;
+  onClose: () => void;
+  storyGroups: UserStoryGroup[];
+  initialGroupIndex: number;
+  currentUserId?: string;
+  onGroupSeen?: (userId: string) => void;
+};
 
 function FeedScreen() {
   const insets = useSafeAreaInsets();
+  const { onTabBarScroll } = useTabBarScroll();
   const { currentUser } = useUser();
   const { safeView, userAge, isAgeVerified } = useSafety();
-  const { streamId: deepLinkedStreamId } = useLocalSearchParams<{
+  const { trackTap, trackFeature } = useScreenAnalytics(Screens.FEED);
+  const { streamId: deepLinkedStreamId, storyUserId: deepLinkedStoryUserId } = useLocalSearchParams<{
     streamId?: string;
+    storyUserId?: string;
   }>();
   const [showCreatePost, setShowCreatePost] = useState(false);
   const [CreatePostComponent, setCreatePostComponent] =
@@ -52,6 +69,68 @@ function FeedScreen() {
   const visiblePostIdRef = useRef<string | null>(null);
   const [reportedPostIds, setReportedPostIds] = useState<string[]>([]);
   const { getLivestreamForUser } = useLivestreams();
+
+  // ── Stories ─────────────────────────────────────────────────────────────
+  const {
+    storyGroups,
+    loading: storiesLoading,
+    isUserSeen: isStoryUserSeen,
+    markGroupSeen: markStoryGroupSeen,
+    reload: reloadStories,
+  } = useStories(currentUser?.id);
+  const [showStoryComposer, setShowStoryComposer] = useState(false);
+  const [StoryComposerComponent, setStoryComposerComponent] =
+    useState<React.ComponentType<StoryComposerProps> | null>(null);
+  const [storyComposerLoading, setStoryComposerLoading] = useState(false);
+  const [viewingStoryGroups, setViewingStoryGroups] = useState<UserStoryGroup[] | null>(null);
+  const [viewingGroupIndex, setViewingGroupIndex] = useState(0);
+  const [StoryViewerComponent, setStoryViewerComponent] =
+    useState<React.ComponentType<StoryViewerProps> | null>(null);
+  const [storyViewerLoading, setStoryViewerLoading] = useState(false);
+
+  useEffect(() => {
+    if (showStoryComposer && !StoryComposerComponent && !storyComposerLoading) {
+      setStoryComposerLoading(true);
+      import("@/components/modals/StoryComposer")
+        .then((m) => {
+          setStoryComposerComponent(() => m.default);
+          setStoryComposerLoading(false);
+        })
+        .catch((err) => {
+          console.error("[Feed] Failed to load StoryComposer", err);
+          setStoryComposerLoading(false);
+        });
+    }
+  }, [showStoryComposer, StoryComposerComponent, storyComposerLoading]);
+
+  useEffect(() => {
+    if (viewingStoryGroups && !StoryViewerComponent && !storyViewerLoading) {
+      setStoryViewerLoading(true);
+      import("@/components/modals/StoryViewer")
+        .then((m) => {
+          setStoryViewerComponent(() => m.default);
+          setStoryViewerLoading(false);
+        })
+        .catch((err) => {
+          console.error("[Feed] Failed to load StoryViewer", err);
+          setStoryViewerLoading(false);
+        });
+    }
+  }, [viewingStoryGroups, StoryViewerComponent, storyViewerLoading]);
+
+  const handleAddStory = useCallback(() => {
+    trackFeature("story_add", "stories_bar", "tap");
+    setShowStoryComposer(true);
+  }, [trackFeature]);
+
+  const handleOpenStory = useCallback(
+    (_group: UserStoryGroup, index: number, allGroups: UserStoryGroup[]) => {
+      trackFeature("story_view", "stories_bar", "tap");
+      setViewingGroupIndex(index);
+      setViewingStoryGroups(allGroups);
+    },
+    [trackFeature],
+  );
 
   // ── Onboarding tutorial (first-time only) ──────────────────────────────
   const {
@@ -173,6 +252,21 @@ function FeedScreen() {
     }
   }, [deepLinkedStreamId]);
 
+  // Deep-link from notifications: /(users)/(tabs)/feed?storyUserId=xxx
+  // Stories are ephemeral (24h), so this waits for storyGroups to load and
+  // silently no-ops if that user's story has since expired — no error, the
+  // user just lands on the feed normally.
+  const storyDeepLinkHandledRef = useRef(false);
+  useEffect(() => {
+    if (!deepLinkedStoryUserId || storyDeepLinkHandledRef.current) return;
+    if (storiesLoading) return; // wait for the first load to resolve
+    const index = storyGroups.findIndex((g) => g.userId === deepLinkedStoryUserId);
+    storyDeepLinkHandledRef.current = true;
+    if (index !== -1) {
+      handleOpenStory(storyGroups[index], index, storyGroups);
+    }
+  }, [deepLinkedStoryUserId, storiesLoading, storyGroups, handleOpenStory]);
+
   const flatListRef = useRef<FlatList<PostData>>(null);
 
   const scrollToTop = useCallback((animated = true) => {
@@ -284,31 +378,51 @@ function FeedScreen() {
 
   const handleJoinLive = useCallback((stream: { id: string }) => {
     console.log("[FeedLive] handleJoinLive", { streamId: stream.id });
+    trackFeature("live_stream_join", "live_card", "tap", { stream_id: stream.id });
     setSelectedStreamId(stream.id);
     setShowLive(true);
-  }, []);
+  }, [trackFeature]);
 
   const handleGoLive = useCallback(() => {
     console.log("[FeedLive] handleGoLive", {
       selectedStreamId: null,
       openCreateOnMount: true,
     });
+    trackFeature("live_stream_start", "live_bar", "tap");
     setSelectedStreamId(null);
     setShowLive(true);
-  }, []);
+  }, [trackFeature]);
 
-  const handleCreatePost = useCallback(() => setShowCreatePost(true), []);
+  const handleCreatePost = useCallback(() => {
+    trackTap("create_post_fab", "post_create");
+    setShowCreatePost(true);
+  }, [trackTap]);
 
   const renderHeader = useCallback(
     () => (
-      <LivesBar
-        onJoin={handleJoinLive}
+      <StoriesBar
+        storyGroups={storyGroups}
+        isUserSeen={isStoryUserSeen}
+        onAddStory={handleAddStory}
+        onOpenStory={handleOpenStory}
         onGoLive={handleGoLive}
         onCreatePost={handleCreatePost}
-        refreshKey={liveRefreshKey}
+        onJoinLive={handleJoinLive}
+        liveRefreshKey={liveRefreshKey}
+        currentUserId={currentUser?.id}
       />
     ),
-    [handleJoinLive, handleGoLive, handleCreatePost, liveRefreshKey],
+    [
+      storyGroups,
+      isStoryUserSeen,
+      handleAddStory,
+      handleOpenStory,
+      currentUser?.id,
+      handleJoinLive,
+      handleGoLive,
+      handleCreatePost,
+      liveRefreshKey,
+    ],
   );
 
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -368,6 +482,8 @@ function FeedScreen() {
         ListFooterComponent={renderFooter}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 72 + insets.bottom }}
+        onScroll={onTabBarScroll}
+        scrollEventThrottle={16}
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
         removeClippedSubviews={true}
@@ -424,6 +540,44 @@ function FeedScreen() {
           )}
         </View>
       </Modal>
+
+      {/* Story Composer — mirrors CreatePost's Modal wrapper. */}
+      <Modal
+        visible={showStoryComposer}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        statusBarTranslucent={true}
+        onRequestClose={() => setShowStoryComposer(false)}
+      >
+        <View className="flex-1 bg-black">
+          {StoryComposerComponent ? (
+            <StoryComposerComponent
+              onClose={() => {
+                setShowStoryComposer(false);
+                reloadStories();
+              }}
+            />
+          ) : (
+            <View className="flex-1 items-center justify-center bg-black">
+              <ActivityIndicator size="large" color="#fff" />
+            </View>
+          )}
+        </View>
+      </Modal>
+
+      {/* Story Viewer — manages its own internal Modal, so it's rendered
+          directly (only mounted while a group is being viewed, matching the
+          Live Modal's "only rendered when open" convention below). */}
+      {viewingStoryGroups && StoryViewerComponent && (
+        <StoryViewerComponent
+          visible
+          onClose={() => setViewingStoryGroups(null)}
+          storyGroups={viewingStoryGroups}
+          initialGroupIndex={viewingGroupIndex}
+          currentUserId={currentUser?.id}
+          onGroupSeen={markStoryGroupSeen}
+        />
+      )}
 
       {/* Live Modal — TikTok-style endless scroll.
           Only rendered when open: a hidden Modal on Android blocks all touches,

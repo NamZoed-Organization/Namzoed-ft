@@ -3,6 +3,8 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { useAppRouter } from "@/utils/navigation";
 import { useFocusEffect } from "expo-router";
+import { useScreenAnalytics } from "@/hooks/useAnalytics";
+import { Screens } from "@/lib/analyticsService";
 import { Plus } from "lucide-react-native";
 import React, {
     useCallback,
@@ -28,6 +30,7 @@ import SearchBar from "@/components/modals/SearchBar";
 import CategorySkeleton from "@/components/ui/CategorySkeleton";
 import TopNavbar from "@/components/ui/TopNavbar";
 import { useUser } from "@/contexts/UserContext";
+import { useTabBarScroll } from "@/contexts/TabBarScrollContext";
 import { categories as categoryData, categoryNames } from "@/data/categories";
 import { supabase } from "@/lib/supabase";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -54,6 +57,8 @@ export default function CategoriesScreen() {
   const insets = useSafeAreaInsets();
   const router = useAppRouter();
   const { currentUser } = useUser();
+  const { trackTap } = useScreenAnalytics(Screens.CATEGORIES);
+  const { onTabBarScroll } = useTabBarScroll();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [isModalVisible, setModalVisible] = useState(false);
@@ -204,6 +209,7 @@ export default function CategoriesScreen() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         scrollEventThrottle={16}
+        onScroll={onTabBarScroll}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingBottom: 72 + insets.bottom }}
         refreshControl={

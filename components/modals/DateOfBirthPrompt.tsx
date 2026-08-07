@@ -17,18 +17,20 @@ interface DateOfBirthPromptProps {
   userId: string;
   /** Called after the date of birth has been saved successfully. */
   onSaved: (birthDate: string) => void;
+  /** Called when the user chooses not to provide a date of birth. */
+  onSkip: () => void;
 }
 
 /**
- * Mandatory date-of-birth collection for existing users who signed up before
- * we started collecting it. There is no dismiss/close action by design — we
- * need the birth date to apply age-related content restrictions before the
- * user can continue into the app.
+ * Optional date-of-birth collection for existing users who signed up before
+ * we started collecting it. Providing a birth date lets us apply age-related
+ * content restrictions, but the user can skip it and continue into the app.
  */
 export default function DateOfBirthPrompt({
   visible,
   userId,
   onSaved,
+  onSkip,
 }: DateOfBirthPromptProps) {
   // Default the picker to 18 years ago so the spinner opens at a sensible spot.
   const eighteenYearsAgo = new Date();
@@ -88,7 +90,7 @@ export default function DateOfBirthPrompt({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={() => {}}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onSkip}>
       <View className="flex-1 bg-black/45 justify-center px-6">
         <View className="bg-white rounded-2xl p-5">
           <View className="flex-row items-center mb-3">
@@ -99,10 +101,9 @@ export default function DateOfBirthPrompt({
           </View>
 
           <Text className="text-sm text-gray-600 mb-4 leading-5">
-            We need your date of birth to apply age-related content restrictions.
-            Some products and content — such as adult health items —
-            are not shown to users under the age of 18. This is required to
-            continue.
+            Sharing your date of birth lets us apply age-related content
+            restrictions — for example, hiding adult health items from users
+            under 18. This is optional; you can skip it and continue.
           </Text>
 
           <Pressable
@@ -144,6 +145,10 @@ export default function DateOfBirthPrompt({
             ) : (
               <Text className="text-white font-msemibold">Save & Continue</Text>
             )}
+          </Pressable>
+
+          <Pressable onPress={onSkip} disabled={saving} className="mt-2 py-3 items-center">
+            <Text className="text-gray-500 font-msemibold">Skip for now</Text>
           </Pressable>
         </View>
       </View>

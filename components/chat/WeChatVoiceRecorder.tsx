@@ -19,8 +19,10 @@ import {
   Modal,
   PanResponder,
   Text,
+  TouchableOpacity,
   View,
 } from "react-native";
+import Svg, { Path } from "react-native-svg";
 
 type WeChatVoiceRecorderProps = {
   currentUserUUID: string;
@@ -31,11 +33,92 @@ type WeChatVoiceRecorderProps = {
   onRecordingStateChange?: (isRecording: boolean) => void;
 };
 
+type DragZone = "none" | "cancel" | "lock";
+
 const PRIMARY = "#094569";
-const CANCEL_Y = -72;
-const BAR_COUNT = 29;
-const MIN_H = 5;
-const MAX_H = 34;
+// Forgiveness on each pill's measured hit zone, so landing just short of
+// its edge still registers.
+const PILL_HIT_TOLERANCE = 16;
+const BAR_COUNT = 14;
+// How tall the dome rises above the composer, and how far past it extends
+// downward so its curved top clears the true screen edge regardless of
+// safe-area/padding — the excess simply renders off-screen, harmlessly.
+const DOME_HEIGHT = 130;
+const DOME_EXTRA = 140;
+const DOME_TOTAL = DOME_HEIGHT + DOME_EXTRA;
+// A single quadratic bezier, not a circular corner radius, so the curve
+// keeps rising all the way to a true peak at the horizontal center instead
+// of either flattening into a plateau or reading as a round circular bulge.
+// DOME_CURVE_DEPTH is how far below the apex the arc's endpoints sit at the
+// box's own (off-screen) left/right edges — lower makes the curve read as
+// shallower across the visible width without changing the peak height;
+// raising it toward DOME_HEIGHT makes it a deeper, more pronounced arc. The
+// control point mirrors that depth above the apex, which is what pins the
+// peak at exactly y=0 regardless of the depth chosen — see
+// https://en.wikipedia.org/wiki/B%C3%A9zier_curve#Quadratic_B%C3%A9zier_curves.
+// x runs 0–100 (percent-of-width units, stretched to fill by
+// preserveAspectRatio="none") since the actual pixel width isn't known here.
+const DOME_CURVE_DEPTH = DOME_HEIGHT * 0.5;
+const DOME_PATH = `M0,${DOME_TOTAL} L0,${DOME_CURVE_DEPTH} Q50,${-DOME_CURVE_DEPTH} 100,${DOME_CURVE_DEPTH} L100,${DOME_TOTAL} Z`;
+// Cancel/lock pills — float above the dome and echo its arc: each is the
+// SAME half-arc shape as the dome's own edge (identical rise, just shifted
+// up by PILL_GAP), drawn as an open path and given a strokeWidth with
+// strokeLinecap="round". A stroke traces parallel offsets of the path on
+// both sides, which is what gives the pill BOTH a curved top edge and a
+// curved bottom edge (mimicking the dome's arc on each side) plus true
+// semicircle end caps — all from one path, rather than assembling flat or
+// rotated pieces. Authored in real pixels (not the dome's percent-stretch
+// trick) because a non-uniform horizontal stretch would squash the round
+// caps into ellipses.
+const PILL_GAP = 55; // clearance between the dome's peak and the pill's own highest point
+const PILL_STROKE_WIDTH = 70;
+// Headroom on every side so the stroke's round caps — which bulge past
+// their path endpoint by strokeWidth/2 in every direction — aren't clipped
+// by the SVG canvas edge, which is exactly the "corners not fully rounded"
+// bug: a cap flattens wherever it runs into the canvas boundary.
+const PILL_PAD = PILL_STROKE_WIDTH / 2 + 2;
+// How far short of the screen's true horizontal center each pill's inner
+// end stops — bigger than the round cap's own bulge radius (strokeWidth/2)
+// so the two caps clear each other with a visible gap instead of merely
+// touching or overlapping.
+const PILL_CENTER_GAP = PILL_STROKE_WIDTH / 2 + 10;
+// How much of the dome's own visible-side angle each pill's arc uses:
+// 1.0 = exactly as steep as the dome, 0.5 = half as steep, higher = more
+// pronounced curve. This is the one number to change to make the pills
+// more or less arced.
+const PILL_ARC_FACTOR = 1.7;
+// The composer that hosts this component has its own horizontal padding
+// (rounded input bar + row insets), so — same reason the dome uses
+// left/right:-100 — positioning the pill at left/right:0 stops short of
+// the true screen edge. This overhang pushes past that padding so the
+// pill's outer end actually reaches (and slightly bleeds past) the edge.
+const PILL_EDGE_OVERHANG = 250;
+// Total container width: the screen-edge-to-center reach, plus the edge
+// overhang, plus padding at BOTH ends for their own round caps.
+const PILL_CONTAINER_WIDTH_EXTRA = PILL_EDGE_OVERHANG + PILL_PAD * 2;
+// The waveform now lives in its own compact card above the dome and pills,
+// rather than inside the dome's content layer, so it needs its own anchor.
+const WAVEFORM_PANEL_HEIGHT = 88;
+// Bars are a fixed-height view scaled via transform (scaleY), not an
+// animated height — RN transforms scale around the view's own center by
+// default, which is what makes each bar grow up AND down symmetrically
+// instead of only upward from a bottom edge.
+const WAVEFORM_BAR_MAX_H = 48;
+const WAVEFORM_BAR_MIN_SCALE = 0.12;
+// How many bars at each end of the row taper toward the floor instead of
+// showing full amplitude, producing the fade-in/fade-out edges.
+const WAVEFORM_FADE_COUNT = 3;
+// How often we read the recorder's mic level and animate the bars to it.
+// Faster than the metering hook's old 80ms poll, and short enough that
+// consecutive scaleY animations overlap smoothly rather than visibly
+// stepping between samples.
+const WAVEFORM_SAMPLE_INTERVAL = 50;
+// A static, generous clearance rather than one computed from the pills'
+// actual (now dynamic, screen-size-dependent) height — the pills' rise is
+// capped well below DOME_HEIGHT+PILL_GAP by construction (see
+// domeEdgeAngleRad below), so this stays a safe upper bound regardless of
+// device width.
+const WAVEFORM_PANEL_BOTTOM = DOME_HEIGHT + PILL_GAP + 90;
 
 const formatSecs = (secs: number) =>
   `${Math.floor(secs / 60)}:${(secs % 60).toString().padStart(2, "0")}`;
@@ -48,11 +131,148 @@ export default function WeChatVoiceRecorder({
   onUploadError,
   onRecordingStateChange,
 }: WeChatVoiceRecorderProps) {
-  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
-  const recorderState = useAudioRecorderState(recorder, 80);
+  // isMeteringEnabled is required for recorderState.metering to ever report
+  // real values — without it every sample reads as undefined and the
+  // waveform has no live signal to animate from.
+  const recorder = useAudioRecorder({ ...RecordingPresets.HIGH_QUALITY, isMeteringEnabled: true });
+  const recorderState = useAudioRecorderState(recorder, WAVEFORM_SAMPLE_INTERVAL);
+  // Measured (not assumed from window width) so the two pills' inner ends
+  // land relative to THIS component's own actual center — since the
+  // composer's horizontal padding is symmetric, that measured center
+  // coincides with the screen's true center exactly, with no need to guess
+  // the padding amount the way the outer-edge overhang below still does.
+  const [contentWidth, setContentWidth] = useState(0);
+  // Real pixel width, not the dome's percent-stretch trick — needed here so
+  // the pill's stroke (round caps, band thickness) renders undistorted
+  // instead of squashed by a non-uniform horizontal scale.
+  const pillReach = Math.max(0, contentWidth / 2 - PILL_CENTER_GAP);
+  // The dome's own visible-side angle: the slope of the chord from where
+  // the dome is actually visible (the composer's edge — DOME_PATH's box is
+  // wider than that, per its own left/right:-100 overhang) up to its peak
+  // at screen center. y(t) = DOME_CURVE_DEPTH*(1-2t)^2 is DOME_PATH's own
+  // curve (a quadratic bezier symmetric about t=0.5 simplifies to exactly
+  // this); t here is where the composer's edge falls within the dome's
+  // 0–100 range, given its box width is contentWidth+200.
+  const domeEdgeAngleRad = useMemo(() => {
+    if (contentWidth <= 0) return 0;
+    const boxWidth = contentWidth + 200;
+    const t = 100 / boxWidth;
+    const edgeDrop = DOME_CURVE_DEPTH * (1 - 2 * t) ** 2;
+    const run = contentWidth / 2;
+    return Math.atan2(edgeDrop, run);
+  }, [contentWidth]);
+  // The pill's curve is a genuine CROP (De Casteljau subdivision) of a
+  // symmetric dome-shaped curve whose true peak sits PILL_CENTER_GAP
+  // further along than where we actually stop drawing — not a curve
+  // deliberately re-flattened to end horizontally at the cutoff. That
+  // earlier "force the control point to match the endpoint's height"
+  // approach guaranteed a flat tangent exactly at the visible tip, which
+  // is what read as an unnaturally sharp bend right where the two pills
+  // meet, and made the dome-to-pill gap look inconsistent along the curve.
+  // Cropping a real curve instead keeps it still gently rising at the
+  // cutoff, same as the dome itself still rising slightly short of ITS own
+  // center.
+  //
+  // virtualHalfRun is the edge-to-true-peak distance of that uncropped
+  // curve; frac is how far along it (0–1) our visible cutoff (pillReach)
+  // actually sits. S is the edge's drop-from-peak, sized so the edge's
+  // tangent angle is PILL_ARC_FACTOR of the dome's own (same formula the
+  // dome itself uses: slope = 2S/halfRun). Subdividing a symmetric
+  // low→peak→low bezier P0=(0,S) C=(H,-S) P2=(2H,S) at t=frac/2 (so
+  // x(t)=2Ht lands at pillReach) gives new control/end drops of
+  // S(1-frac) and S(1-frac)^2 respectively — see the bezier subdivision
+  // formula (De Casteljau).
+  const virtualHalfRun = pillReach + PILL_CENTER_GAP;
+  const targetAngle = domeEdgeAngleRad * PILL_ARC_FACTOR;
+  const edgeDrop = (virtualHalfRun * Math.tan(targetAngle)) / 2;
+  const frac = virtualHalfRun > 0 ? pillReach / virtualHalfRun : 0;
+  const controlDrop = edgeDrop * (1 - frac);
+  const endDrop = edgeDrop * (1 - frac) ** 2;
+  // How much further the straight extension drops over PILL_EDGE_OVERHANG,
+  // continuing the bezier's own tangent at its low end (unaffected by
+  // where it's cropped — B'(0) only depends on P0 and C) so the overhang
+  // joins without a visible kink.
+  const overhangDrop =
+    virtualHalfRun > 0 ? (2 * edgeDrop * PILL_EDGE_OVERHANG) / virtualHalfRun : 0;
+  const pillContainerHeight = edgeDrop + overhangDrop + PILL_PAD * 2;
+  // Container bottom is derived FROM pillContainerHeight (peak height =
+  // bottom + height - PILL_PAD) so the peak reference always lands at
+  // exactly DOME_HEIGHT + PILL_GAP above the baseline — independent of
+  // overhangDrop. Folding overhangDrop only into the height above but not
+  // here silently pushed the peak upward by that same amount, which is
+  // what kept reopening the gap regardless of PILL_GAP.
+  const pillContainerBottom = DOME_HEIGHT + PILL_GAP - pillContainerHeight + PILL_PAD;
+  const pillContainerWidth = pillReach + PILL_CONTAINER_WIDTH_EXTRA;
+  // Cancel: M is the far outer tip (straight extension, out in the
+  // overhang), L brings it in to the visible screen-edge point, then Q is
+  // the cropped dome-matched curve from there in to the inner/high end,
+  // which stays PILL_CENTER_GAP short of the screen's center so the two
+  // pills don't touch.
+  const cancelPillPath = useMemo(() => {
+    const edgeX = PILL_EDGE_OVERHANG + PILL_PAD;
+    const controlX = edgeX + pillReach / 2;
+    const endX = edgeX + pillReach;
+    const edgeY = PILL_PAD + edgeDrop;
+    const farY = edgeY + overhangDrop;
+    return `M${PILL_PAD},${farY} L${edgeX},${edgeY} Q${controlX},${PILL_PAD + controlDrop} ${endX},${PILL_PAD + endDrop}`;
+  }, [pillReach, edgeDrop, controlDrop, endDrop, overhangDrop]);
+  // Lock: mirror image of the above within the same container width.
+  const lockPillPath = useMemo(() => {
+    const edgeX = pillContainerWidth - (PILL_EDGE_OVERHANG + PILL_PAD);
+    const controlX = edgeX - pillReach / 2;
+    const endX = edgeX - pillReach;
+    const edgeY = PILL_PAD + edgeDrop;
+    const farY = edgeY + overhangDrop;
+    return `M${pillContainerWidth - PILL_PAD},${farY} L${edgeX},${edgeY} Q${controlX},${PILL_PAD + controlDrop} ${endX},${PILL_PAD + endDrop}`;
+  }, [pillContainerWidth, pillReach, edgeDrop, controlDrop, endDrop, overhangDrop]);
+  // Icon/label centered on the visible curve itself — its midpoint
+  // (t=0.5 on the Q segment) and tangent angle there — rather than a
+  // fixed corner offset, and tilted to match the curve's own slope at
+  // that point so the label visually follows the pill's arc. For a
+  // quadratic bezier, the t=0.5 point is 0.25*P0+0.5*C+0.25*P2, and its
+  // tangent simplifies to just P2-P0 (the two (1-t)/t terms cancel out at
+  // t=0.5), which is why the angle below is a plain atan2 of the
+  // edge→end delta rather than needing the control point at all.
+  const cancelLabel = useMemo(() => {
+    const edgeX = PILL_EDGE_OVERHANG + PILL_PAD;
+    const controlX = edgeX + pillReach / 2;
+    const endX = edgeX + pillReach;
+    const edgeY = PILL_PAD + edgeDrop;
+    const controlY = PILL_PAD + controlDrop;
+    const endY = PILL_PAD + endDrop;
+    return {
+      x: 0.25 * edgeX + 0.5 * controlX + 0.25 * endX,
+      y: 0.25 * edgeY + 0.5 * controlY + 0.25 * endY,
+      angleDeg: (Math.atan2(endY - edgeY, endX - edgeX) * 180) / Math.PI,
+    };
+  }, [pillReach, edgeDrop, controlDrop, endDrop]);
+  const lockLabel = useMemo(() => {
+    const edgeX = pillContainerWidth - (PILL_EDGE_OVERHANG + PILL_PAD);
+    const controlX = edgeX - pillReach / 2;
+    const endX = edgeX - pillReach;
+    const edgeY = PILL_PAD + edgeDrop;
+    const controlY = PILL_PAD + controlDrop;
+    const endY = PILL_PAD + endDrop;
+    return {
+      x: 0.25 * edgeX + 0.5 * controlX + 0.25 * endX,
+      y: 0.25 * edgeY + 0.5 * controlY + 0.25 * endY,
+      // Lock's edge sits to the right of its end (curve runs right→left
+      // toward center), so the raw endX-edgeX delta is negative and points
+      // the tangent vector backwards — landing near ±180° instead of a
+      // small tilt, which is what was flipping the text upside down.
+      // Reversing the delta gives the same line, correctly oriented.
+      angleDeg: (Math.atan2(edgeY - endY, edgeX - endX) * 180) / Math.PI,
+    };
+  }, [pillContainerWidth, pillReach, edgeDrop, controlDrop, endDrop]);
+  // Rough half-size of the icon+label row, for centering it on the point
+  // above — RN has no reliable percentage-based transform to center by
+  // measured size without an extra render pass, so this is an estimate.
+  const LABEL_HALF_W = 40;
+  const LABEL_HALF_H = 11;
   const [isRecording, setIsRecording] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [isCancelZone, setIsCancelZone] = useState(false);
+  const [isLocked, setIsLocked] = useState(false);
+  const [dragZone, setDragZone] = useState<DragZone>("none");
   const [displaySecs, setDisplaySecs] = useState(0);
   const [popup, setPopup] = useState<{
     visible: boolean;
@@ -65,21 +285,45 @@ export default function WeChatVoiceRecorder({
   const recordingRef = useRef(false);
   const startingRef = useRef(false);
   const pendingEndRef = useRef<"send" | "cancel" | null>(null);
-  const cancelRef = useRef(false);
-  const amplitudeRef = useRef(0);
+  const dragZoneRef = useRef<DragZone>("none");
+  const lockedRef = useRef(false);
+  // Measured absolute (window) bounds of each pill's actually visible
+  // curve, refreshed whenever the pill lays out. The gesture below checks
+  // the touch's real screen position against these instead of a fixed
+  // drag-distance threshold, which has no relationship to where the pills
+  // actually render and is what made the old dx-based check register
+  // inconsistently once the pills' size/position changed. Requiring the
+  // touch to also be within the pill's actual vertical span (not just past
+  // some x) is what makes a press on "Hold to talk" not immediately read
+  // as touching a pill — the pill sits well above it, so genuinely
+  // dragging up into that space is required, with no separate minimum-
+  // drag-distance constant needed to fake that guarantee.
+  const cancelZoneRef = useRef<{ right: number; top: number; bottom: number } | null>(null);
+  const lockZoneRef = useRef<{ left: number; top: number; bottom: number } | null>(null);
+  const cancelPillRef = useRef<View>(null);
+  const lockPillRef = useRef<View>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const sendingRef = useRef(false);
   const pulse = useRef(new Animated.Value(1)).current;
   const panelOpacity = useRef(new Animated.Value(0)).current;
   const barAnims = useRef(
-    Array.from({ length: BAR_COUNT }, () => new Animated.Value(MIN_H)),
+    Array.from({ length: BAR_COUNT }, () => new Animated.Value(WAVEFORM_BAR_MIN_SCALE)),
   ).current;
-
-  const parabolaWeights = useMemo(() => {
-    const center = (BAR_COUNT - 1) / 2;
+  // Rolling buffer of real mic levels (as scaleY factors), oldest first —
+  // each new metering sample shifts in from the right, so the bars scroll
+  // like an actual level-meter of what was just captured instead of a
+  // canned animation.
+  const levelHistoryRef = useRef<number[]>(Array(BAR_COUNT).fill(WAVEFORM_BAR_MIN_SCALE));
+  // Per-position taper so the oldest (leftmost) bars fade down toward the
+  // floor as they age out, and the newest (rightmost) bars fade up as they
+  // arrive, instead of every bar snapping abruptly to full amplitude right
+  // at the row's edge.
+  const waveformEnvelope = useMemo(() => {
     return Array.from({ length: BAR_COUNT }, (_, i) => {
-      const distance = Math.abs(i - center) / center;
-      return 1 - distance * distance;
+      const edgeDistance = Math.min(i, BAR_COUNT - 1 - i);
+      if (edgeDistance >= WAVEFORM_FADE_COUNT) return 1;
+      const t = (edgeDistance + 1) / (WAVEFORM_FADE_COUNT + 1);
+      return t * (2 - t); // ease-out, smoother than a linear ramp
     });
   }, []);
 
@@ -96,15 +340,23 @@ export default function WeChatVoiceRecorder({
     }
   };
 
+  const applyDragZone = (zone: DragZone) => {
+    if (dragZoneRef.current === zone) return;
+    dragZoneRef.current = zone;
+    setDragZone(zone);
+    void Haptics.selectionAsync();
+  };
+
   const resetInteraction = () => {
     startingRef.current = false;
     pendingEndRef.current = null;
-    cancelRef.current = false;
+    lockedRef.current = false;
     sendingRef.current = false;
     clearTimer();
+    applyDragZone("none");
     if (mountedRef.current) {
       setRecording(false);
-      setIsCancelZone(false);
+      setIsLocked(false);
       setDisplaySecs(0);
     }
   };
@@ -121,14 +373,8 @@ export default function WeChatVoiceRecorder({
   }, []);
 
   useEffect(() => {
-    if (!isRecording) return;
-    const db = recorderState.metering ?? -60;
-    amplitudeRef.current = Math.min(1, Math.max(0, (db + 60) / 60));
-  }, [isRecording, recorderState.metering]);
-
-  useEffect(() => {
     Animated.timing(panelOpacity, {
-      toValue: isRecording ? 1 : 0,
+      toValue: isRecording && !isLocked ? 1 : 0,
       duration: 140,
       useNativeDriver: true,
     }).start();
@@ -156,39 +402,43 @@ export default function WeChatVoiceRecorder({
         useNativeDriver: true,
       }).start();
     }
-  }, [isRecording]);
+  }, [isRecording, isLocked]);
 
   useEffect(() => {
     if (!isRecording) {
+      levelHistoryRef.current = Array(BAR_COUNT).fill(WAVEFORM_BAR_MIN_SCALE);
       barAnims.forEach((bar) =>
-        Animated.spring(bar, {
-          toValue: MIN_H,
-          useNativeDriver: false,
-          speed: 22,
-          bounciness: 0,
+        Animated.timing(bar, {
+          toValue: WAVEFORM_BAR_MIN_SCALE,
+          duration: 120,
+          useNativeDriver: true,
         }).start(),
       );
       return;
     }
 
-    const id = setInterval(() => {
-      const amp = Math.max(0.08, amplitudeRef.current);
-      const t = Date.now() / 220;
-      barAnims.forEach((bar, i) => {
-        const wave = (Math.sin(t + i * 0.58) + 1) / 2;
-        const shaped = parabolaWeights[i] * (0.55 + wave * 0.45);
-        const height = MIN_H + amp * shaped * (MAX_H - MIN_H);
-        Animated.spring(bar, {
-          toValue: Math.max(MIN_H, Math.min(MAX_H, height)),
-          useNativeDriver: false,
-          speed: 32,
-          bounciness: 4,
-        }).start();
-      });
-    }, 70);
-
-    return () => clearInterval(id);
-  }, [barAnims, isRecording, parabolaWeights]);
+    // Driven directly by each real metering sample from the recorder (not a
+    // fixed-interval synthetic animation), so the bars reflect actual
+    // captured loudness as it happens. Animates a scaleY transform (native
+    // driver, off the JS thread) instead of the height style — height
+    // can't be natively driven, and animating 28 of them on the JS thread
+    // every ~50ms was the source of the dropped frames.
+    const db = recorderState.metering ?? -60;
+    const amp = Math.min(1, Math.max(0, (db + 60) / 60));
+    const scale = WAVEFORM_BAR_MIN_SCALE + Math.max(0.08, amp) * (1 - WAVEFORM_BAR_MIN_SCALE);
+    const history = levelHistoryRef.current;
+    history.shift();
+    history.push(scale);
+    history.forEach((s, i) => {
+      const target =
+        WAVEFORM_BAR_MIN_SCALE + (s - WAVEFORM_BAR_MIN_SCALE) * waveformEnvelope[i];
+      Animated.timing(barAnims[i], {
+        toValue: target,
+        duration: WAVEFORM_SAMPLE_INTERVAL,
+        useNativeDriver: true,
+      }).start();
+    });
+  }, [barAnims, isRecording, recorderState.metering, waveformEnvelope]);
 
   const startRecording = async () => {
     if (recordingRef.current || startingRef.current || isUploading) return;
@@ -213,8 +463,7 @@ export default function WeChatVoiceRecorder({
       startingRef.current = false;
       if (mountedRef.current) {
         setDisplaySecs(0);
-        setIsCancelZone(false);
-        cancelRef.current = false;
+        applyDragZone("none");
         setRecording(true);
       }
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -331,9 +580,11 @@ export default function WeChatVoiceRecorder({
       await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
       if (mountedRef.current) {
         setRecording(false);
-        setIsCancelZone(false);
+        setIsLocked(false);
+        applyDragZone("none");
         setDisplaySecs(0);
       }
+      lockedRef.current = false;
       if (uri) {
         void triggerSendHaptic();
         await uploadAudio(uri, duration);
@@ -348,8 +599,7 @@ export default function WeChatVoiceRecorder({
   const cancelRecording = async () => {
     if (startingRef.current) {
       pendingEndRef.current = "cancel";
-      setIsCancelZone(true);
-      cancelRef.current = true;
+      applyDragZone("cancel");
       return;
     }
     clearTimer();
@@ -372,176 +622,411 @@ export default function WeChatVoiceRecorder({
         void startRecording();
       },
       onPanResponderMove: (_, gesture) => {
-        const nextCancel = gesture.dy < CANCEL_Y;
-        if (nextCancel !== cancelRef.current) {
-          cancelRef.current = nextCancel;
-          setIsCancelZone(nextCancel);
-          void Haptics.selectionAsync();
+        if (lockedRef.current) return;
+        // Real hit-testing against each pill's measured box (with
+        // PILL_HIT_TOLERANCE of forgiveness) — both axes. The pill sits
+        // well above where "Hold to talk" is pressed, so requiring the
+        // touch to be within its vertical span too is what naturally
+        // means the finger has to actually drag up into that space; no
+        // separate minimum-drag-distance constant needed to fake that.
+        // Horizontally there's no bound on the outer/off-screen side —
+        // once above the pill's row, continuing left (cancel) or right
+        // (lock) past the pill itself still counts.
+        const x = gesture.moveX;
+        const y = gesture.moveY;
+        const cancelZone = cancelZoneRef.current;
+        const lockZone = lockZoneRef.current;
+        const inCancelZone =
+          !!cancelZone &&
+          x <= cancelZone.right + PILL_HIT_TOLERANCE &&
+          y >= cancelZone.top - PILL_HIT_TOLERANCE &&
+          y <= cancelZone.bottom + PILL_HIT_TOLERANCE;
+        const inLockZone =
+          !!lockZone &&
+          x >= lockZone.left - PILL_HIT_TOLERANCE &&
+          y >= lockZone.top - PILL_HIT_TOLERANCE &&
+          y <= lockZone.bottom + PILL_HIT_TOLERANCE;
+        if (inCancelZone) {
+          applyDragZone("cancel");
+        } else if (inLockZone) {
+          if (!lockedRef.current) {
+            lockedRef.current = true;
+            applyDragZone("none");
+            if (mountedRef.current) setIsLocked(true);
+            void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          }
+        } else {
+          applyDragZone("none");
         }
       },
-      onPanResponderRelease: (_, gesture) => {
-        if (gesture.dy < CANCEL_Y || cancelRef.current) {
+      onPanResponderRelease: () => {
+        if (lockedRef.current) return;
+        if (dragZoneRef.current === "cancel") {
           void cancelRecording();
         } else {
           void stopAndSend();
         }
       },
       onPanResponderTerminate: () => {
+        if (lockedRef.current) return;
         void cancelRecording();
       },
     }),
   ).current;
 
+  const hintText =
+    dragZone === "cancel"
+      ? "Release to cancel"
+      : dragZone === "lock"
+        ? "Slide to lock"
+        : "Release to send";
+
   return (
     <>
-      <View style={{ flex: 1, position: "relative" }}>
-        {isRecording ? (
-          <Animated.View
-            pointerEvents="none"
-            style={{
-              position: "absolute",
-              left: 0,
-              right: 0,
-              bottom: 48,
-              alignItems: "center",
-              opacity: panelOpacity,
-            }}
-          >
+      <View
+        style={{ flex: 1, position: "relative" }}
+        onLayout={(e) => setContentWidth(e.nativeEvent.layout.width)}
+      >
+        {/* Stable gesture anchor — always the same mounted view across
+            idle/recording/locked so an in-progress drag never loses its
+            native responder. The dome below is purely presentational. */}
+        <Animated.View
+          {...panResponder.panHandlers}
+          style={{
+            minHeight: 38,
+            alignItems: "center",
+            justifyContent: "center",
+            transform: [{ scale: pulse }],
+            opacity: isRecording ? 0 : 1,
+          }}
+        >
+          {isUploading ? (
+            <ActivityIndicator size="small" color={PRIMARY} />
+          ) : (
+            <Text style={{ color: "#111827", fontSize: 15, fontWeight: "700" }}>
+              Hold to talk
+            </Text>
+          )}
+        </Animated.View>
+
+        {isRecording && (
+          <>
+            {/* Live waveform card — a separate, compact bordered panel
+                floating above the dome and pills, instead of being
+                squeezed into the dome's content layer. */}
             <View
+              pointerEvents="none"
               style={{
+                position: "absolute",
+                left: 24,
+                right: 24,
+                bottom: WAVEFORM_PANEL_BOTTOM,
+                height: WAVEFORM_PANEL_HEIGHT,
                 borderRadius: 24,
-                backgroundColor: "rgba(17,24,39,0.88)",
-                paddingHorizontal: 18,
-                paddingTop: 14,
-                paddingBottom: 12,
-                minWidth: 238,
+                borderWidth: 1.5,
+                borderColor: "rgba(255,255,255,0.15)",
+                backgroundColor: PRIMARY,
                 alignItems: "center",
+                justifyContent: "center",
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: 6 },
+                shadowOpacity: 0.12,
+                shadowRadius: 20,
               }}
             >
               <View
                 style={{
-                  width: 42,
-                  height: 42,
-                  borderRadius: 21,
-                  backgroundColor: isCancelZone ? "#ef4444" : PRIMARY,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  marginBottom: 10,
-                }}
-              >
-                <Ionicons
-                  name={isCancelZone ? "trash-outline" : "mic"}
-                  size={22}
-                  color="white"
-                />
-              </View>
-              <View
-                style={{
-                  height: 42,
                   flexDirection: "row",
                   alignItems: "center",
                   justifyContent: "center",
+                  height: WAVEFORM_BAR_MAX_H,
                 }}
               >
                 {barAnims.map((bar, i) => (
                   <Animated.View
                     key={i}
                     style={{
-                      width: 3,
-                      marginHorizontal: 1.4,
-                      borderRadius: 3,
-                      height: bar,
-                      backgroundColor: isCancelZone ? "#fecaca" : "#bfdbfe",
-                      transform: [
-                        {
-                          translateY: -Math.sin(
-                            (i / (BAR_COUNT - 1)) * Math.PI,
-                          ) * 8,
-                        },
-                      ],
+                      width: 4,
+                      height: WAVEFORM_BAR_MAX_H,
+                      marginHorizontal: 1.6,
+                      borderRadius: 4,
+                      backgroundColor: dragZone === "cancel" ? "#fca5a5" : "#ffffff",
+                      transform: [{ scaleY: bar }],
                     }}
                   />
                 ))}
               </View>
-              <Text
-                style={{
-                  color: isCancelZone ? "#fecaca" : "white",
-                  fontSize: 12,
-                  fontWeight: "700",
-                  marginTop: 8,
-                }}
-              >
-                {isCancelZone ? "Release to cancel" : "Release to send"}
-              </Text>
-              <Text
-                style={{
-                  color: "rgba(255,255,255,0.72)",
-                  fontSize: 11,
-                  marginTop: 3,
-                  fontVariant: ["tabular-nums"],
-                }}
-              >
-                {formatSecs(displaySecs)}
-              </Text>
             </View>
-            <View
-              style={{
-                marginTop: 8,
-                paddingHorizontal: 14,
-                paddingVertical: 6,
-                borderRadius: 999,
-                backgroundColor: isCancelZone ? "#fee2e2" : "#eff6ff",
-              }}
-            >
-              <Text
-                style={{
-                  color: isCancelZone ? "#dc2626" : PRIMARY,
-                  fontSize: 12,
-                  fontWeight: "700",
-                }}
-              >
-                {isCancelZone ? "Cancel voice message" : "Drag up to cancel"}
-              </Text>
-            </View>
-          </Animated.View>
-        ) : null}
 
-        <Animated.View
-          {...panResponder.panHandlers}
-          style={{
-            minHeight: 38,
-            borderRadius: 20,
-            backgroundColor: isRecording
-              ? isCancelZone
-                ? "#fee2e2"
-                : "#e0f2fe"
-              : "#ffffff",
-            borderWidth: 1,
-            borderColor: isRecording
-              ? isCancelZone
-                ? "#fecaca"
-                : "#bae6fd"
-              : "#e5e7eb",
-            alignItems: "center",
-            justifyContent: "center",
-            paddingHorizontal: 12,
-            transform: [{ scale: pulse }],
-          }}
-        >
-          {isUploading ? (
-            <ActivityIndicator size="small" color={PRIMARY} />
-          ) : (
-            <Text
+            {/* Dome shape — deliberately wider than its narrow parent so it
+                safely spans the full screen width regardless of the
+                composer's own horizontal padding. */}
+            <View
+              pointerEvents="none"
               style={{
-                color: isCancelZone ? "#dc2626" : "#111827",
-                fontSize: 15,
-                fontWeight: "700",
+                position: "absolute",
+                left: -100,
+                right: -100,
+                bottom: -DOME_EXTRA,
+                height: DOME_TOTAL,
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: -4 },
+                shadowOpacity: 0.1,
+                shadowRadius: 18,
               }}
             >
-              {isRecording ? "Listening..." : "Hold to talk"}
-            </Text>
-          )}
-        </Animated.View>
+              <Svg
+                width="100%"
+                height={DOME_TOTAL}
+                viewBox={`0 0 100 ${DOME_TOTAL}`}
+                preserveAspectRatio="none"
+              >
+                <Path d={DOME_PATH} fill="#ffffff" />
+              </Svg>
+            </View>
+            {/* zIndex pins the content layer above the dome background on
+                every platform — elevation (used for Android shadows) also
+                reorders siblings by itself, so it's deliberately left off
+                the dome shape above to avoid it painting over this. */}
+
+            {/* Content layer, aligned to the parent's own (narrower, more
+                accurately centered) width rather than the stretched dome. */}
+            <View
+              pointerEvents="box-none"
+              style={{
+                position: "absolute",
+                zIndex: 1,
+                left: 0,
+                right: 0,
+                bottom: -DOME_EXTRA,
+                height: DOME_HEIGHT + DOME_EXTRA,
+              }}
+            >
+              {/* Recording timer, near the dome's own peak */}
+              <View
+                pointerEvents="none"
+                style={{ position: "absolute", top: 22, left: 0, right: 0, alignItems: "center" }}
+              >
+                <Text
+                  style={{
+                    fontSize: 15,
+                    fontWeight: "700",
+                    color: "#374151",
+                    fontVariant: ["tabular-nums"],
+                  }}
+                >
+                  {formatSecs(displaySecs)}
+                </Text>
+              </View>
+
+              {/* Hint text, right below the timer — kept high in the dome
+                  so a holding thumb (which covers the lower/base area)
+                  doesn't block it. */}
+              {!isLocked && (
+                <Animated.View
+                  pointerEvents="none"
+                  style={{
+                    position: "absolute",
+                    top: 46,
+                    left: 0,
+                    right: 0,
+                    alignItems: "center",
+                    opacity: panelOpacity,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 13,
+                      fontWeight: "700",
+                      color: dragZone === "cancel" ? "#dc2626" : "#111827",
+                    }}
+                  >
+                    {hintText}
+                  </Text>
+                </Animated.View>
+              )}
+
+            </View>
+
+            {/* Cancel pill — a curved capsule floating above the dome,
+                echoing its arc (see PILL constants above). */}
+            <View
+              ref={cancelPillRef}
+              pointerEvents="box-none"
+              onLayout={() => {
+                cancelPillRef.current?.measureInWindow((x, y, width, height) => {
+                  // Only the visible curve counts as the zone — skip the
+                  // invisible far-tip overhang before PILL_EDGE_OVERHANG,
+                  // same region the tap target below excludes. No left
+                  // bound: anywhere at or past the inner edge, toward and
+                  // beyond the screen's left side, still reads as cancel.
+                  cancelZoneRef.current = { right: x + width, top: y, bottom: y + height };
+                });
+              }}
+              style={{
+                position: "absolute",
+                left: -(PILL_EDGE_OVERHANG + PILL_PAD),
+                bottom: pillContainerBottom,
+                width: pillContainerWidth,
+                height: pillContainerHeight,
+              }}
+            >
+              <Svg
+                width={pillContainerWidth}
+                height={pillContainerHeight}
+                style={{ position: "absolute", top: 0, left: 0 }}
+              >
+                <Path
+                  d={cancelPillPath}
+                  stroke={dragZone === "cancel" ? "#ef4444" : "#f3f4f6"}
+                  strokeWidth={PILL_STROKE_WIDTH}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  fill="none"
+                />
+              </Svg>
+              {/* The whole visible pill is the tap target once locked —
+                  not just the icon/label — so it excludes only the
+                  (invisible, off-screen) far-tip overhang before
+                  PILL_EDGE_OVERHANG. */}
+              {isLocked && (
+                <TouchableOpacity
+                  onPress={() => void cancelRecording()}
+                  style={{
+                    position: "absolute",
+                    left: PILL_EDGE_OVERHANG,
+                    top: 0,
+                    right: 0,
+                    bottom: 0,
+                  }}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                />
+              )}
+              <View
+                pointerEvents="none"
+                style={{
+                  position: "absolute",
+                  left: cancelLabel.x - LABEL_HALF_W,
+                  top: cancelLabel.y - LABEL_HALF_H,
+                  width: LABEL_HALF_W * 2,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  transform: [{ rotate: `${cancelLabel.angleDeg}deg` }],
+                }}
+              >
+                <Ionicons
+                  name="trash-outline"
+                  size={16}
+                  color={isLocked ? "#6b7280" : dragZone === "cancel" ? "#ffffff" : "#6b7280"}
+                />
+                <Text
+                  style={{
+                    marginLeft: 6,
+                    fontSize: 12,
+                    fontWeight: "700",
+                    color: isLocked ? "#6b7280" : dragZone === "cancel" ? "#ffffff" : "#6b7280",
+                  }}
+                >
+                  Cancel
+                </Text>
+              </View>
+            </View>
+
+            {/* Lock pill — mirrored. Becomes a Send button once locked. */}
+            <View
+              ref={lockPillRef}
+              pointerEvents="box-none"
+              onLayout={() => {
+                lockPillRef.current?.measureInWindow((x, y, width, height) => {
+                  // Mirror of the cancel zone: no right bound (anywhere at
+                  // or past the inner edge, toward and beyond the screen's
+                  // right side, still reads as lock).
+                  lockZoneRef.current = { left: x, top: y, bottom: y + height };
+                });
+              }}
+              style={{
+                position: "absolute",
+                right: -(PILL_EDGE_OVERHANG + PILL_PAD),
+                bottom: pillContainerBottom,
+                width: pillContainerWidth,
+                height: pillContainerHeight,
+              }}
+            >
+              <Svg
+                width={pillContainerWidth}
+                height={pillContainerHeight}
+                style={{ position: "absolute", top: 0, left: 0 }}
+              >
+                <Path
+                  d={lockPillPath}
+                  stroke={isLocked || dragZone === "lock" ? PRIMARY : "#f3f4f6"}
+                  strokeWidth={PILL_STROKE_WIDTH}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  fill="none"
+                />
+              </Svg>
+              {/* The whole visible pill is the tap target once locked —
+                  not just the icon/label — so it excludes only the
+                  (invisible, off-screen) far-tip overhang before
+                  PILL_EDGE_OVERHANG. */}
+              {isLocked && (
+                <TouchableOpacity
+                  onPress={() => void stopAndSend()}
+                  style={{
+                    position: "absolute",
+                    left: 0,
+                    top: 0,
+                    right: PILL_EDGE_OVERHANG,
+                    bottom: 0,
+                  }}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                />
+              )}
+              <View
+                pointerEvents="none"
+                style={{
+                  position: "absolute",
+                  left: lockLabel.x - LABEL_HALF_W,
+                  top: lockLabel.y - LABEL_HALF_H,
+                  width: LABEL_HALF_W * 2,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  transform: [{ rotate: `${lockLabel.angleDeg}deg` }],
+                }}
+              >
+                {isLocked ? (
+                  <>
+                    <Ionicons name="send" size={15} color="#ffffff" />
+                    <Text style={{ marginLeft: 6, fontSize: 12, fontWeight: "700", color: "#ffffff" }}>
+                      Send
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <Ionicons
+                      name="lock-closed-outline"
+                      size={16}
+                      color={dragZone === "lock" ? "#ffffff" : "#6b7280"}
+                    />
+                    <Text
+                      style={{
+                        marginLeft: 6,
+                        fontSize: 12,
+                        fontWeight: "700",
+                        color: dragZone === "lock" ? "#ffffff" : "#6b7280",
+                      }}
+                    >
+                      Lock
+                    </Text>
+                  </>
+                )}
+              </View>
+            </View>
+          </>
+        )}
       </View>
 
       <Modal visible={popup.visible} transparent animationType="none">

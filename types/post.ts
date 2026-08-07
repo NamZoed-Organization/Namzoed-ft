@@ -69,4 +69,6 @@ export interface PostData {
   moderationStatus?: ModerationStatus;
   /** Internal notes from moderators */
   moderationNotes?: string;
+  /** Denormalized view count from posts.view_count — only populated for feed display */
+  view_count?: number;
 }

@@ -99,6 +99,25 @@ export default function OneSignalBootstrap() {
           router.push("/(users)/(tabs)/feed" as any);
           break;
         }
+        case "follower_milestone": {
+          // Show own profile to see the updated follower count
+          router.push("/(users)/profile" as any);
+          break;
+        }
+        case "post_traction": {
+          const postId = String(additionalData?.reference_id ?? "");
+          if (postId) {
+            router.push(`/(users)/post/${postId}` as any);
+          } else {
+            router.push("/(users)/notifications" as any);
+          }
+          break;
+        }
+        case "weekly_engagement": {
+          // Navigate to own profile to see the view stats
+          router.push("/(users)/profile" as any);
+          break;
+        }
         default:
           // Unknown type — fall back to notifications screen
           router.push("/(users)/notifications" as any);

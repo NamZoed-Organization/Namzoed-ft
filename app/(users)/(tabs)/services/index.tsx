@@ -1,6 +1,9 @@
 import TopNavbar from "@/components/ui/TopNavbar";
 import { useUser } from "@/contexts/UserContext";
+import { useTabBarScroll } from "@/contexts/TabBarScrollContext";
 import { serviceCategories } from "@/data/servicecategory";
+import { useScreenAnalytics } from "@/hooks/useAnalytics";
+import { Screens } from "@/lib/analyticsService";
 import { useAppRouter } from "@/utils/navigation";
 import { Href } from "expo-router";
 import {
@@ -42,6 +45,8 @@ export default function ServiceScreen() {
   const router = useAppRouter();
   const insets = useSafeAreaInsets();
   const { currentUser } = useUser();
+  const { trackTap, trackFeature } = useScreenAnalytics(Screens.SERVICES);
+  const { onTabBarScroll } = useTabBarScroll();
 
   const { numColumns, itemSize, gap } = useMemo(() => {
     const horizontalPadding = 32;
@@ -69,14 +74,17 @@ export default function ServiceScreen() {
     String(currentUser?.username ?? "") === BETA_USER;
 
   const handleCategoryPress = (category: any) => {
+    trackTap("service_card", "category_select", { category: category.slug });
     router.push(`/services/${category.slug}` as Href);
   };
 
   const handleGamesPress = () => {
+    trackTap("service_card", "category_select", { category: "ground-bookings" });
     router.push(`/services/ground-bookings/ground-booking` as Href);
   };
 
   const handleHotelsPress = () => {
+    trackTap("service_card", "category_select", { category: "room-booking" });
     router.push(`/services/room-booking/room-booking` as Href);
   };
 
@@ -163,6 +171,8 @@ export default function ServiceScreen() {
         numColumns={numColumns}
         key={numColumns}
         showsVerticalScrollIndicator={false}
+        onScroll={onTabBarScroll}
+        scrollEventThrottle={16}
         ListHeaderComponent={
           <View>
             {/* Compact title */}

@@ -49,6 +49,7 @@ export interface Post {
   moderation_status?: ModerationStatus;
   moderation_notes?: string | null;
   is_flagged_for_review?: boolean;
+  view_count?: number;
 }
 
 // Extended post interface with user profile data
@@ -106,6 +107,7 @@ export const fetchPostsCursor = async (
     .from('posts')
     .select(`
       *,
+      view_count,
       profiles:user_id (
         name,
         email,
@@ -188,6 +190,7 @@ export const fetchPostById = async (postId: string): Promise<PostWithUser | null
     .from('posts')
     .select(`
       *,
+      view_count,
       profiles:user_id (
         name,
         email,

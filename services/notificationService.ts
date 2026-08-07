@@ -31,7 +31,7 @@ const profileCache = new Map<
 >();
 
 const postImageCache = new Map<string, string | null>();
-const POST_IMAGE_TYPES = new Set(["post_liked", "post_commented", "new_post"]);
+const POST_IMAGE_TYPES = new Set(["post_liked", "post_commented", "new_post", "post_traction"]);
 
 async function resolvePostImage(postId: string): Promise<string | null> {
   if (postImageCache.has(postId)) return postImageCache.get(postId)!;
@@ -483,5 +483,134 @@ export async function notifyNewPost(
     type: "new_post",
     data: { actor_id: posterId, reference_id: postId },
     actorAvatarUrl: actor.avatar_url,
+  }).catch(() => {});
+}
+
+export async function notifyNewStory(
+  posterId: string,
+  storyId: string,
+  followerIds: string[],
+): Promise<void> {
+  const actor = await resolveProfile(posterId);
+  const rows = followerIds.map((fid) => ({
+    user_id: fid,
+    type: "new_story" as const,
+    actor_id: posterId,
+    reference_id: storyId,
+    title: "New Story",
+    body: `${actor.name} added to their story`,
+    is_read: false,
+  }));
+
+  if (rows.length === 0) return;
+
+  const { error } = await supabase.from("notifications").insert(rows);
+  if (error) {
+    console.error("[NotifService] notifyNewStory error:", error.message);
+  }
+
+  // Push notification to all followers (fire-and-forget)
+  sendPushToUsers({
+    recipientIds: followerIds,
+    heading: "New Story",
+    content: `${actor.name} added to their story`,
+    type: "new_story",
+    data: { actor_id: posterId, reference_id: storyId },
+    actorAvatarUrl: actor.avatar_url,
+  }).catch(() => {});
+}
+
+// ─── engagement notifications ────────────────────────────────────────
+
+const FOLLOWER_MILESTONES = [10, 25, 50, 100, 250, 500, 1000];
+
+/**
+ * Check if the user just hit a follower milestone and send a push if so.
+ * Called after a successful follow insert. Uses the DB primary key as an
+ * atomic "already sent" guard (INSERT fails with 23505 if duplicate).
+ */
+export async function checkAndNotifyFollowerMilestone(userId: string): Promise<void> {
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("follower_count")
+    .eq("id", userId)
+    .maybeSingle();
+
+  const count: number = (profile as any)?.follower_count ?? 0;
+  const milestone = FOLLOWER_MILESTONES.find((m) => m === count);
+  if (!milestone) return;
+
+  // Attempt to insert the milestone record — if it already exists, the UNIQUE
+  // PK constraint throws code 23505, which means the notification was already sent.
+  const { error } = await supabase
+    .from("follower_milestone_notifications")
+    .insert({ user_id: userId, milestone });
+
+  if (error) {
+    if (error.code === "23505") return; // already sent for this milestone
+    console.warn("[NotifService] milestone insert error:", error.message);
+    return;
+  }
+
+  await notifyFollowerMilestone(userId, milestone);
+}
+
+/**
+ * Notify a user that they reached a follower milestone.
+ * actor_id = userId (self-notification — no external actor).
+ */
+export async function notifyFollowerMilestone(
+  userId: string,
+  milestone: number,
+): Promise<void> {
+  const title = "Follower Milestone!";
+  const body = `You now have ${milestone.toLocaleString()} followers. Keep it up!`;
+
+  await createNotification({
+    userId,
+    type: "follower_milestone",
+    actorId: userId,
+    title,
+    body,
+  });
+
+  sendPushToUsers({
+    recipientIds: [userId],
+    heading: title,
+    content: body,
+    type: "follower_milestone",
+    data: { milestone },
+    actorAvatarUrl: null,
+  }).catch(() => {});
+}
+
+/**
+ * Notify a post owner that their post is gaining traction.
+ * Called from the daily edge function for posts with ≥10 views in first 24h.
+ */
+export async function notifyPostTraction(
+  postOwnerId: string,
+  postId: string,
+  viewCount: number,
+): Promise<void> {
+  const title = "Your post is gaining momentum!";
+  const body = `Your post has been viewed ${viewCount} times in its first 24 hours.`;
+
+  await createNotification({
+    userId: postOwnerId,
+    type: "post_traction",
+    actorId: postOwnerId,
+    referenceId: postId,
+    title,
+    body,
+  });
+
+  sendPushToUsers({
+    recipientIds: [postOwnerId],
+    heading: title,
+    content: body,
+    type: "post_traction",
+    data: { reference_id: postId, view_count: viewCount },
+    actorAvatarUrl: null,
   }).catch(() => {});
 }

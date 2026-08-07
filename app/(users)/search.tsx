@@ -1,6 +1,8 @@
 import ImageViewer from "@/components/modals/ImageViewer";
 import { useUser } from "@/contexts/UserContext";
 import { searchAll, SearchResult, SearchResults } from "@/lib/searchService";
+import { useScreenAnalytics } from "@/hooks/useAnalytics";
+import { Screens } from "@/lib/analyticsService";
 import { useAppRouter } from "@/utils/navigation";
 import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useRef, useState } from "react";
@@ -20,6 +22,7 @@ export default function GlobalSearchScreen() {
   const router = useAppRouter();
   const insets = useSafeAreaInsets();
   const { currentUser } = useUser();
+  const { trackFeature } = useScreenAnalytics(Screens.SEARCH);
 
   const [query, setQuery] = useState("");
   const [throttledQuery, setThrottledQuery] = useState("");
@@ -49,9 +52,14 @@ export default function GlobalSearchScreen() {
 
   // Debounce query
   useEffect(() => {
-    const t = setTimeout(() => setThrottledQuery(query), 300);
+    const t = setTimeout(() => {
+      setThrottledQuery(query);
+      if (query.trim().length >= 2) {
+        trackFeature("search", "search_bar", "search", { query_length: query.trim().length });
+      }
+    }, 300);
     return () => clearTimeout(t);
-  }, [query]);
+  }, [query, trackFeature]);
 
   // Search on debounced query
   useEffect(() => {

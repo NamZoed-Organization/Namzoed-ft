@@ -12,6 +12,7 @@ import { followUser, isFollowing, unfollowUser } from "@/lib/followService";
 import { fetchUserPosts, Post } from "@/lib/postsService";
 import { fetchUserProducts, Product } from "@/lib/productsService";
 import { fetchUserProfile } from "@/lib/profileService";
+import { trackProfileView } from "@/lib/viewTrackingService";
 import {
     fetchServiceProviderProfile,
     fetchUserProviderServices,
@@ -142,7 +143,12 @@ export default function PublicProfileScreen() {
         const profile = await fetchUserProfile(id);
         setUserProfile(profile);
 
-        // 1b. Fetch early-access badge (non-blocking, fails silently)
+        // 1b. Track profile view (fire-and-forget, skips self-views)
+        if (currentUser?.id && currentUser.id !== id) {
+          trackProfileView(id, currentUser.id).catch(() => {});
+        }
+
+        // 1c. Fetch early-access badge (non-blocking, fails silently)
         getEarlyAccessBadge(id).then(setBadgeType).catch(() => {});
 
         // 2. Fetch Posts

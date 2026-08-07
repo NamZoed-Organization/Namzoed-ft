@@ -6,8 +6,11 @@ import { CARD_LIST_HEIGHT, ForYouSection } from "@/components/ForYou";
 import HomeCard from "@/components/HomeCard";
 import SearchBar from "@/components/modals/SearchBar";
 import TopNavbar from "@/components/ui/TopNavbar";
+import { useTabBarScroll } from "@/contexts/TabBarScrollContext";
 import { SortOrder, useForYouData } from "@/hooks/useForYouData";
 import { useLivestreams } from "@/hooks/useLivestreams";
+import { useScreenAnalytics } from "@/hooks/useAnalytics";
+import { Screens } from "@/lib/analyticsService";
 import { MarketplaceItem } from "@/lib/postMarketPlace";
 import { Product } from "@/lib/productsService";
 import { ProviderServiceWithDetails } from "@/lib/servicesService";
@@ -342,7 +345,9 @@ const LiveTab = React.memo(function LiveTab({
 // ─── Main screen ──────────────────────────────────────────────────────────────
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
+  const { onTabBarScroll } = useTabBarScroll();
   const router = useAppRouter();
+  const { trackTap, trackFeature } = useScreenAnalytics(Screens.HOME);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<TabType>("foryou");
   const [renderedTab, setRenderedTab] = useState<TabType>("foryou");
@@ -426,8 +431,9 @@ export default function HomeScreen() {
   } = useForYouData();
 
   const handleTabPress = useCallback((tab: TabType) => {
+    trackFeature("sort_change", "home_sort_chip", "tap", { sort: tab });
     setActiveTab(tab);
-  }, []);
+  }, [trackFeature]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -881,6 +887,7 @@ export default function HomeScreen() {
           return (
             <LiveTab
               onOpen={(id) => {
+                trackTap("live_card", "live_stream_join", { stream_id: id });
                 setLiveStreamId(id);
                 setShowLive(true);
               }}
@@ -916,6 +923,8 @@ export default function HomeScreen() {
         className="flex-1 bg-background"
         contentContainerStyle={{ paddingBottom: 72 + insets.bottom }}
         showsVerticalScrollIndicator={false}
+        onScroll={onTabBarScroll}
+        scrollEventThrottle={16}
         windowSize={5}
         maxToRenderPerBatch={3}
         initialNumToRender={2}

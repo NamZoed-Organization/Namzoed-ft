@@ -9,6 +9,8 @@
 
 import { useNotifications } from "@/contexts/NotificationsContext";
 import { getNotificationPermission, togglePushOptIn } from "@/services/oneSignalService";
+import { useScreenAnalytics } from "@/hooks/useAnalytics";
+import { Screens } from "@/lib/analyticsService";
 import type {
   AppNotification,
   NotificationSection,
@@ -118,9 +120,12 @@ function relativeTime(dateStr: string): string {
 
 const KNOWN_NOTIFICATION_TYPES = new Set([
   "post_liked",
+  "follower_milestone",
+  "post_traction",
+  "weekly_engagement",
 ]);
 
-const POST_CONTEXT_TYPES = new Set(["post_liked", "post_commented", "new_post"]);
+const POST_CONTEXT_TYPES = new Set(["post_liked", "post_commented", "new_post", "post_traction"]);
 
 function hasKnownIcon(type: string): boolean {
   return KNOWN_NOTIFICATION_TYPES.has(type);
@@ -140,6 +145,14 @@ function TypeIcon({ type }: { type: string }) {
       return <Ionicons name="radio" size={size} color={color} />;
     case "new_post":
       return <Ionicons name="document-text" size={size} color={color} />;
+    case "new_story":
+      return <Ionicons name="images" size={size} color={color} />;
+    case "follower_milestone":
+      return <Ionicons name="trophy" size={size} color={color} />;
+    case "post_traction":
+      return <Ionicons name="trending-up" size={size} color={color} />;
+    case "weekly_engagement":
+      return <Ionicons name="bar-chart" size={size} color={color} />;
     default:
       return null;
   }
@@ -157,6 +170,14 @@ function typeIconBg(type: string): string {
       return "#8b5cf6"; // purple
     case "new_post":
       return "#22c55e"; // green
+    case "new_story":
+      return "#ec4899"; // pink
+    case "follower_milestone":
+      return "#f59e0b"; // amber/gold
+    case "post_traction":
+      return "#10b981"; // emerald
+    case "weekly_engagement":
+      return "#6366f1"; // indigo
     default:
       return "#6b7280";
   }
@@ -281,6 +302,7 @@ function NotificationItem({
 export default function NotificationsScreen() {
   const router = useAppRouter();
   const insets = useSafeAreaInsets();
+  const { trackTap } = useScreenAnalytics(Screens.NOTIFICATIONS);
   const {
     notifications,
     unseenCount,
@@ -340,6 +362,7 @@ export default function NotificationsScreen() {
   // ── tap handler ──
   const handlePress = useCallback(
     async (n: AppNotification) => {
+      trackTap("notification_item", "notification_open", { notification_type: n.type, notification_id: n.id });
       if (!n.is_read) await markAsRead(n.id);
 
       switch (n.type) {
@@ -374,16 +397,43 @@ export default function NotificationsScreen() {
           }
           break;
 
+        case "new_story":
+          // Open the feed and auto-open that user's story tray. Stories are
+          // ephemeral (24h) — if it's since expired, feed.tsx just silently
+          // no-ops the deep link rather than erroring, so this always lands
+          // somewhere sensible.
+          router.push(`/(users)/(tabs)/feed?storyUserId=${n.actor_id}` as any);
+          break;
+
         case "mongoose_booking_request":
           // Open the chat with the person who sent the request
           router.push(`/(users)/chat/${n.actor_id}` as any);
+          break;
+
+        case "follower_milestone":
+          // Show own profile's followers
+          router.push("/(users)/profile" as any);
+          break;
+
+        case "post_traction":
+          // Navigate to the post that gained traction
+          if (n.reference_id) {
+            router.push(`/(users)/post/${n.reference_id}` as any);
+          } else {
+            router.push("/(users)/profile" as any);
+          }
+          break;
+
+        case "weekly_engagement":
+          // Navigate to own profile to see the stats
+          router.push("/(users)/profile" as any);
           break;
 
         default:
           break;
       }
     },
-    [markAsRead, router],
+    [markAsRead, router, trackTap],
   );
 
   // ── render ──

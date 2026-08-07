@@ -44,7 +44,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		13B07F961A680F5B00A75B9A /* Namzoed | SuperApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Namzoed | SuperApp.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		13B07F961A680F5B00A75B9A /* Namzoed.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Namzoed.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = Namzoed/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = Namzoed/Info.plist; sourceTree = "<group>"; };
 		36F7C4605A5F316C3455D8F6 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-Namzoed/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
@@ -148,7 +148,7 @@
 		83CBBA001A601CBA00E9B192 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				13B07F961A680F5B00A75B9A /* Namzoed | SuperApp.app */,
+				13B07F961A680F5B00A75B9A /* Namzoed.app */,
 				4C3CEC288F3A44C28DB7430A /* OneSignalNotificationServiceExtension.appex */,
 			);
 			name = Products;
@@ -214,7 +214,7 @@
 			);
 			name = Namzoed;
 			productName = Namzoed;
-			productReference = 13B07F961A680F5B00A75B9A /* Namzoed | SuperApp.app */;
+			productReference = 13B07F961A680F5B00A75B9A /* Namzoed.app */;
 			productType = "com.apple.product-type.application";
 		};
 		E7B6F0487E6F41F08CE3E862 /* OneSignalNotificationServiceExtension */ = {
@@ -521,7 +521,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.2;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -529,7 +529,7 @@
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
 				PRODUCT_BUNDLE_IDENTIFIER = com.namzoed.Namzoed;
-				PRODUCT_NAME = "Namzoed | SuperApp";
+				PRODUCT_NAME = Namzoed;
 				SWIFT_OBJC_BRIDGING_HEADER = "Namzoed/Namzoed-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
@@ -555,7 +555,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.2;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -563,7 +563,7 @@
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
 				PRODUCT_BUNDLE_IDENTIFIER = com.namzoed.Namzoed;
-				PRODUCT_NAME = "Namzoed | SuperApp";
+				PRODUCT_NAME = Namzoed;
 				SWIFT_OBJC_BRIDGING_HEADER = "Namzoed/Namzoed-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";

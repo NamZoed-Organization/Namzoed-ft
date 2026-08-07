@@ -1,4 +1,4 @@
-import { notifyNewFollower } from '@/services/notificationService';
+import { checkAndNotifyFollowerMilestone, notifyNewFollower } from '@/services/notificationService';
 import { supabase } from './supabase';
 
 // Follow a user
@@ -30,6 +30,11 @@ export const followUser = async (
     // Fire-and-forget notification to the followed user
     notifyNewFollower(followingId, followerId).catch((e) =>
       console.warn('[followService] notifyNewFollower failed:', e)
+    );
+
+    // Check if the followed user hit a follower milestone (10, 25, 50, 100, ...)
+    checkAndNotifyFollowerMilestone(followingId).catch((e) =>
+      console.warn('[followService] milestoneCheck failed:', e)
     );
 
     return { success: true };

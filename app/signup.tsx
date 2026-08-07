@@ -4,6 +4,8 @@ import {
 } from "@expo/vector-icons";
 import FormInput from "@/components/ui/FormInput";
 import PopupMessage from "@/components/ui/PopupMessage";
+import PrivacyPolicy from "@/components/settings/PrivacyPolicy";
+import TermsOfService from "@/components/settings/TermsOfService";
 import { clamp, useResponsive } from "@/utils/responsive";
 import { useAppRouter } from "@/utils/navigation";
 import { formatDisplayDate, getAgeFromDate, toISODate } from "@/utils/age";
@@ -14,6 +16,7 @@ import {
   Alert,
   Image,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -38,6 +41,7 @@ export default function SignupTab2() {
   const scrollRef = useRef<ScrollView>(null);
 
   const [loading, setLoading] = useState(false);
+  const [legalModal, setLegalModal] = useState<"privacy" | "terms" | null>(null);
   const [popup, setPopup] = useState<{visible: boolean, type: 'success'|'error'|'warning'|'white', title: string, message: string}>({visible: false, type: 'success', title: '', message: ''});
   const { ms, vs, wp } = useResponsive();
 
@@ -181,10 +185,10 @@ export default function SignupTab2() {
   const isValidEmail = (input: string) =>
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input);
 
+  // Date of birth is optional — only validate the range when the user chooses to provide one.
   const isValidBirthDate =
-    birthDate !== null &&
-    getAgeFromDate(birthDate) >= 0 &&
-    getAgeFromDate(birthDate) <= 120;
+    birthDate === null ||
+    (getAgeFromDate(birthDate) >= 0 && getAgeFromDate(birthDate) <= 120);
 
   const isFormValid =
     name.trim().length > 0 &&
@@ -296,7 +300,7 @@ export default function SignupTab2() {
                   color: birthDate ? "#374151" : "#9CA3AF",
                 }}
               >
-                {birthDate ? formatDisplayDate(birthDate) : "Date of Birth"}
+                {birthDate ? formatDisplayDate(birthDate) : "Date of Birth (optional)"}
               </Text>
             </View>
             <MaterialIcons name="calendar-today" size={iconSize} color="#6B7280" />
@@ -365,7 +369,20 @@ export default function SignupTab2() {
             style={{ fontSize: termsSize }}
           >
             By clicking the <Text className="text-red-600">Register</Text>{" "}
-            button, you agree to the public offer
+            button, you agree to the{" "}
+            <Text
+              className="text-primary font-msemibold"
+              onPress={() => setLegalModal("terms")}
+            >
+              Terms of Service
+            </Text>{" "}
+            and{" "}
+            <Text
+              className="text-primary font-msemibold"
+              onPress={() => setLegalModal("privacy")}
+            >
+              Privacy Policy
+            </Text>
           </Text>
 
           {/* Register Button */}
@@ -408,6 +425,19 @@ export default function SignupTab2() {
         message={popup.message}
         onHide={() => setPopup(p => ({ ...p, visible: false }))}
       />
+
+      {/* Terms of Service / Privacy Policy */}
+      <Modal
+        visible={legalModal !== null}
+        animationType="slide"
+        onRequestClose={() => setLegalModal(null)}
+      >
+        {legalModal === "terms" ? (
+          <TermsOfService onClose={() => setLegalModal(null)} />
+        ) : legalModal === "privacy" ? (
+          <PrivacyPolicy onClose={() => setLegalModal(null)} />
+        ) : null}
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
