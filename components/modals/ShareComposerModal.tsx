@@ -361,6 +361,11 @@ export default function ShareComposerModal({
         inAppContextParams?.context_source === "profile"
           ? inAppContextParams.context_source
           : "product",
+      caption: inAppContextParams?.context_caption || undefined,
+      date: inAppContextParams?.context_date || undefined,
+      location: inAppContextParams?.context_location || undefined,
+      username: inAppContextParams?.context_username || undefined,
+      isVerified: inAppContextParams?.context_verified === "true",
     };
 
     const metaBlock = `${PRODUCT_META_PREFIX}${encodeURIComponent(

@@ -147,7 +147,7 @@ export default function ReportPostModal({
       return;
     }
 
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     setSubmitting(true);
 
     const result = await reportPost({
@@ -188,7 +188,7 @@ export default function ReportPostModal({
   };
 
   const handleReasonSelect = (reasonId: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSelectedReason(reasonId);
   };
 

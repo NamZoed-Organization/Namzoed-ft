@@ -7,6 +7,9 @@ import MongooseResponderModal from "@/components/MongooseResponderModal";
 import AudioMessagePlayer from "@/components/chat/AudioMessagePlayer";
 import ChatImageViewer from "@/components/chat/ChatImageViewer";
 import ChatMultiMediaPicker from "@/components/chat/ChatMultiMediaPicker";
+import MessageStatusDot, {
+  type MessageStatusDotStatus,
+} from "@/components/chat/MessageStatusDot";
 import {
   GifStickerButton,
   GifStickerInlineDrawer,
@@ -47,6 +50,7 @@ import {
 import { useAppRouter } from "@/utils/navigation";
 import { isMongooseUser } from "@/utils/roleCheck";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
+import MaskedView from "@react-native-masked-view/masked-view";
 import { BlurView } from "expo-blur";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
@@ -76,6 +80,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
@@ -118,6 +123,21 @@ type User = {
   profileImg?: string | null;
 };
 
+// Shared by the message list's own horizontal inset and the input row's,
+// so an outgoing bubble's right edge and the input pill's right edge stay
+// pinned to the exact same value instead of two independently-hardcoded
+// numbers that only coincidentally match.
+const CHAT_HORIZONTAL_PADDING = 16;
+// Shared by the input pill's own corner radius and the floating input bar's
+// backdrop, so content scrolling out of view behind the bar disappears
+// behind a rounded top edge that matches the pill's curve exactly — a
+// seamless "tucks into the input field" cutoff (à la Instagram's comment
+// bar) instead of the pill floating over a flat-edged rectangle.
+const INPUT_PILL_RADIUS = 26;
+// Incoming-message avatar (partner only, never the current user's own) —
+// shown once per consecutive burst, at the LAST bubble in that burst (see
+// connectNext in renderMessage), not on every message in it.
+const MESSAGE_AVATAR_SIZE = 26;
 const CHAT_INPUT_LINE_HEIGHT = 20;
 const CHAT_INPUT_MAX_ROWS = 5;
 const CHAT_INPUT_MAX_HEIGHT = CHAT_INPUT_LINE_HEIGHT * CHAT_INPUT_MAX_ROWS;
@@ -139,6 +159,65 @@ const PRODUCT_META_PREFIX = "[product-meta]";
 const PRODUCT_META_SUFFIX = "[/product-meta]";
 const CHAT_DRAFT_KEY_PREFIX = "@namzoed_chat_draft_";
 const CHAT_DRAFT_DEBOUNCE_MS = 400;
+// Same glassmorphism recipe as the floating tab bar
+// (components/ui/FloatingTabBar.tsx) — a hairline-bordered, blurred circle —
+// reused here for the header's icon buttons so they read as one visual
+// system with the rest of the app's floating chrome.
+const HEADER_GLASS_BUTTON_SIZE = 40;
+const HEADER_GLASS_BUTTON_STYLE = {
+  width: HEADER_GLASS_BUTTON_SIZE,
+  height: HEADER_GLASS_BUTTON_SIZE,
+  borderRadius: HEADER_GLASS_BUTTON_SIZE / 2,
+  alignItems: "center" as const,
+  justifyContent: "center" as const,
+  overflow: "hidden" as const,
+  borderWidth: StyleSheet.hairlineWidth,
+  borderTopColor: "rgba(255,255,255,0.55)",
+  borderLeftColor: "rgba(255,255,255,0.25)",
+  borderRightColor: "rgba(255,255,255,0.25)",
+  borderBottomColor: "rgba(0,0,0,0.08)",
+  backgroundColor: Platform.OS === "ios" ? "transparent" : "rgba(255,255,255,0.77)",
+};
+// Backdrop for the full-width floating header/input bars themselves (as
+// opposed to the individual glass buttons above) — same recipe, flat rather
+// than circular. Android has no BlurView equivalent wired up here, so it
+// falls back to a solid-ish translucent fill instead of a true blur.
+const HEADER_BAR_ANDROID_BG = "rgba(255,255,255,0.85)";
+// Smoothstep (3t²-2t³): zero slope at BOTH ends, not just zero value. A
+// plain linear fade still has a non-zero slope right where it hits 0 alpha,
+// and that slope discontinuity is what the eye picks out as a faint seam
+// (a Mach-band edge) even though the value itself reaches true zero there.
+// Easing the slope to zero too is what actually makes the edge disappear.
+function smoothstep(t: number) {
+  return t * t * (3 - 2 * t);
+}
+// Builds the {colors, locations} pair for one blur layer's alpha mask:
+// fully opaque at the header's top (location 0), smoothly easing down to
+// fully transparent by `fadeTo` (both value and slope reach 0 there), then
+// implicitly staying transparent for the rest of the way down to the
+// message list — six stops is enough that no single linear segment between
+// them is coarse enough to be perceptible.
+function headerBlurFadeStops(fadeTo: number) {
+  const STEPS = 5;
+  const locations = Array.from(
+    { length: STEPS + 1 },
+    (_, i) => (i / STEPS) * fadeTo,
+  ) as unknown as [number, number, ...number[]];
+  const colors = Array.from({ length: STEPS + 1 }, (_, i) => {
+    const alpha = 1 - smoothstep(i / STEPS);
+    return `rgba(255,255,255,${alpha.toFixed(3)})`;
+  }) as unknown as [string, string, ...string[]];
+  return { colors, locations };
+}
+// Blur behind the whole header (status bar strip included — see the
+// header's render), eased in via a gradient alpha mask (see
+// headerBlurFadeStops) rather than switching on abruptly at the seam with
+// the message list, which is what would otherwise read as a hard line.
+// A single moderate-intensity layer, not several stacked ones: stacking
+// multiple BlurViews compounds "systemChromeMaterial"'s own built-in white
+// tint each time, which saturates into a flat white wash and loses the
+// visible frosted/blurred texture entirely — the opposite of "matte blur".
+const HEADER_BLUR_LAYERS = [{ intensity: 80, ...headerBlurFadeStops(1) }];
 
 type ReplyMeta = {
   id: string;
@@ -153,6 +232,26 @@ type ProductMeta = {
   price?: string;
   imageUrl?: string;
   source?: "product" | "marketplace" | "post" | "profile";
+  /** Post caption / product description / profile bio — the card's body text. */
+  caption?: string;
+  /** ISO date string — post/listing creation date. */
+  date?: string;
+  /** Free-text location — currently only populated for posts. */
+  location?: string;
+  /** Author / seller / profile handle. */
+  username?: string;
+  isVerified?: boolean;
+};
+
+const formatSharedCardDate = (iso?: string): string => {
+  if (!iso) return "";
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return parsed.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 };
 
 type OutgoingDeliveryStatus = "sent" | "delivered" | "seen";
@@ -493,7 +592,7 @@ const TypingIndicator = ({ users }: { users: TypingUser[] }) => {
 
 /** Fires haptic feedback — must be called via runOnJS from a worklet. */
 const triggerSwipeHaptic = () =>
-  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
 
 /**
  * SwipeableRow — wraps a chat message bubble in a native Pan gesture so the
@@ -782,12 +881,59 @@ export default function ChatScreen() {
   const [composerInputKind, setComposerInputKind] =
     useState<ComposerInputKind>("text");
   const [isHoldRecording, setIsHoldRecording] = useState(false);
+  // Drives a smooth fade for the grey dim (header/list/input-bar) and the
+  // header's own blur fading out to make room for it, instead of both
+  // popping on/off the instant isHoldRecording flips — kept in sync with
+  // the dome/pills morph timing in WeChatVoiceRecorder (~260ms in, 200ms
+  // out) so the whole screen reads as one continuous transition.
+  const holdRecordingOpacity = useRef(new Animated.Value(0)).current;
+  // The header's progressive blur (below) fades out through this same
+  // transition rather than hard-toggling, but staying mounted (just
+  // invisible) for the ENTIRE recording session would keep paying its
+  // render/composite cost the whole time for no visual benefit — this
+  // unmounts it only once the fade-out has actually finished, and remounts
+  // it immediately on the way back in so it's there to fade from.
+  const [showHeaderBlur, setShowHeaderBlur] = useState(true);
+  useEffect(() => {
+    if (isHoldRecording) {
+      Animated.timing(holdRecordingOpacity, {
+        toValue: 1,
+        duration: 260,
+        useNativeDriver: true,
+      }).start(({ finished }) => {
+        if (finished) setShowHeaderBlur(false);
+      });
+    } else {
+      setShowHeaderBlur(true);
+      Animated.timing(holdRecordingOpacity, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [isHoldRecording, holdRecordingOpacity]);
   // Reanimated keyboard — tracks keyboard height on the native UI thread (zero JS jank)
   const keyboard = useAnimatedKeyboard();
   const keyboardAwareStyle = useAnimatedStyle(() => ({
     paddingBottom: keyboard.height.value,
   }));
+  // The input bar now floats over the full-bleed message list (see the
+  // "Fixed Input Bar" render below) instead of sitting in normal flex flow,
+  // so it needs to rise with the keyboard under its own animation rather
+  // than via the list's shrinking flex box.
+  const inputBarKeyboardStyle = useAnimatedStyle(() => ({
+    bottom: keyboard.height.value,
+  }));
   const [inputBarHeight, setInputBarHeight] = useState(88);
+  // Measured height of just the input pill itself (not the pt-2 gap above
+  // it, not the bottom cushion below) — needed so the white backdrop can
+  // be sized to reach exactly halfway up the pill rather than only
+  // starting at its bottom edge.
+  const [inputPillHeight, setInputPillHeight] = useState(44);
+  // Measured total height of the floating header overlay (status bar inset
+  // + header row), so the message list can reserve exactly that much
+  // clearance at rest instead of guessing a fixed number.
+  const [headerHeight, setHeaderHeight] = useState(0);
   const [composerInputHeight, setComposerInputHeight] = useState(
     CHAT_INPUT_LINE_HEIGHT,
   );
@@ -820,6 +966,11 @@ export default function ChatScreen() {
     context_product_price,
     context_product_image,
     context_source,
+    context_caption,
+    context_date,
+    context_location,
+    context_username,
+    context_verified,
   } = useLocalSearchParams<{
     id?: string | string[];
     context_product_id?: string;
@@ -827,6 +978,11 @@ export default function ChatScreen() {
     context_product_price?: string;
     context_product_image?: string;
     context_source?: "product" | "marketplace" | "post" | "profile";
+    context_caption?: string;
+    context_date?: string;
+    context_location?: string;
+    context_username?: string;
+    context_verified?: string;
   }>();
   const isMongooseChat =
     typeof chatPartnerRouteParam === "string" &&
@@ -977,6 +1133,11 @@ export default function ChatScreen() {
         context_source === "profile"
           ? context_source
           : "product",
+      caption: context_caption ? String(context_caption) : undefined,
+      date: context_date ? String(context_date) : undefined,
+      location: context_location ? String(context_location) : undefined,
+      username: context_username ? String(context_username) : undefined,
+      isVerified: context_verified === "true",
     });
   }, [
     context_product_id,
@@ -984,6 +1145,11 @@ export default function ChatScreen() {
     context_product_price,
     context_product_image,
     context_source,
+    context_caption,
+    context_date,
+    context_location,
+    context_username,
+    context_verified,
   ]);
 
   useEffect(() => {
@@ -1937,6 +2103,16 @@ export default function ChatScreen() {
     return Math.max(14, Math.round(inputBarHeight * 0.2));
   }, [isKeyboardVisible, inputBarHeight]);
 
+  // Safe-area cushion below the input pill (bottom inset / home indicator
+  // clearance). Shared between the flex-row's own paddingBottom and the
+  // white backdrop below — the backdrop only covers this cushion strip now,
+  // not the pill or the gap above it, which are meant to stay transparent.
+  const inputBarBottomCushion =
+    (isKeyboardVisible ? 16 : Math.max(insets.bottom, 40)) +
+    (showMongooseWorkerNav && !isKeyboardVisible
+      ? MONGOOSE_WORKER_NAV_BAR_HEIGHT
+      : 0);
+
   // Extra settle pass for keyboard-close + layout update.
   useEffect(() => {
     if (isKeyboardVisible) return;
@@ -2806,7 +2982,7 @@ export default function ChatScreen() {
   const openMessageActions = useCallback(
     (message: any, pageY?: number, isCurrentUser?: boolean) => {
       if (!message || message.isOptimistic) return;
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
       setSelectedMessage(message);
       setSelectedMessagePageY(pageY ?? 0);
       setSelectedMessageIsCurrentUser(isCurrentUser ?? false);
@@ -2880,48 +3056,54 @@ export default function ChatScreen() {
       if (!isCurrentUser || (connectNext && localStatus !== "failed"))
         return null;
 
-      let label = "";
-      let tone = "text-gray-400";
       const canRetry = canRetryFailedMessage(message);
 
-      if (isOptimistic) {
-        if (localStatus === "failed") {
-          label = canRetry ? "Failed to send · Tap to retry" : "Failed to send";
-          tone = "text-red-500";
-        } else if (localStatus === "sent") {
-          label = "Sent";
-        } else {
-          label = "Sending...";
+      if (isOptimistic && localStatus === "failed") {
+        const label = canRetry
+          ? "Failed to send · Tap to retry"
+          : "Failed to send";
+        if (canRetry) {
+          return (
+            <TouchableOpacity
+              onPress={() => retryFailedMessage(message)}
+              className="mr-1.5 mb-1"
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text className="text-[11px] font-semibold text-red-500">
+                {label}
+              </Text>
+            </TouchableOpacity>
+          );
         }
-      } else if (isLatestOutgoingMessage) {
-        const status = outgoingStatusById[String(message?.id)];
-        if (message?.is_read || status === "seen") {
-          label = "Seen";
-          tone = "text-blue-500";
-        } else if (status === "delivered") {
-          label = "Delivered";
-        } else {
-          label = "Sent";
-        }
-      }
-
-      if (!label) return null;
-
-      if (isOptimistic && localStatus === "failed" && canRetry) {
         return (
-          <TouchableOpacity
-            onPress={() => retryFailedMessage(message)}
-            className="mt-1 mr-3"
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Text className={`text-[11px] font-semibold ${tone}`}>
-              {label}
-            </Text>
-          </TouchableOpacity>
+          <Text className="text-[11px] text-red-500 mr-1.5 mb-1">
+            {label}
+          </Text>
         );
       }
 
-      return <Text className={`text-[11px] mt-1 ${tone} mr-3`}>{label}</Text>;
+      let dotStatus: MessageStatusDotStatus | null = null;
+
+      if (isOptimistic) {
+        dotStatus = localStatus === "sent" ? "sent" : "sending";
+      } else if (isLatestOutgoingMessage) {
+        const status = outgoingStatusById[String(message?.id)];
+        if (message?.is_read || status === "seen") {
+          dotStatus = "seen";
+        } else if (status === "delivered") {
+          dotStatus = "delivered";
+        } else {
+          dotStatus = "sent";
+        }
+      }
+
+      if (!dotStatus) return null;
+
+      return (
+        <View className="mr-1.5 mb-1">
+          <MessageStatusDot status={dotStatus} />
+        </View>
+      );
     },
     [outgoingStatusById, retryFailedMessage],
   );
@@ -2931,6 +3113,48 @@ export default function ChatScreen() {
       const isCurrentUser = !!(
         effectiveCurrentUserUUID &&
         message.sender_id === effectiveCurrentUserUUID
+      );
+      // Reserves the avatar's column width for EVERY incoming message (so
+      // bubbles in the same burst stay aligned to the same left edge), but
+      // only actually renders the avatar image on the last message of a
+      // burst (!connectNext) — everywhere else it's an empty spacer of the
+      // same size.
+      const avatarSlot = isCurrentUser ? null : (
+        <View
+          style={{
+            width: MESSAGE_AVATAR_SIZE,
+            height: MESSAGE_AVATAR_SIZE,
+            marginRight: 6,
+          }}
+        >
+          {!connectNext &&
+            (chatPartnerAvatarUri ? (
+              <Image
+                source={{ uri: chatPartnerAvatarUri }}
+                style={{
+                  width: MESSAGE_AVATAR_SIZE,
+                  height: MESSAGE_AVATAR_SIZE,
+                  borderRadius: MESSAGE_AVATAR_SIZE / 2,
+                }}
+                resizeMode="cover"
+              />
+            ) : (
+              <View
+                style={{
+                  width: MESSAGE_AVATAR_SIZE,
+                  height: MESSAGE_AVATAR_SIZE,
+                  borderRadius: MESSAGE_AVATAR_SIZE / 2,
+                  backgroundColor: "#094569",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Text style={{ color: "white", fontSize: 11, fontWeight: "700" }}>
+                  {chatPartnerName.charAt(0).toUpperCase()}
+                </Text>
+              </View>
+            ))}
+        </View>
       );
       const isOptimistic = message.isOptimistic;
       const localStatus = message.localStatus;
@@ -2961,10 +3185,11 @@ export default function ChatScreen() {
       const RADIUS_LARGE = 20;
       const RADIUS_SMALL = 6;
       const rowSpacingClass = connectNext ? "mb-1" : "mb-3";
-      const productCardWidth = Math.round(screenWidth * 0.6);
       const bubbleMaxWidth = Math.round(
         screenWidth * CHAT_BUBBLE_MAX_WIDTH_RATIO,
       );
+      const productCardWidth = bubbleMaxWidth;
+      const productCardImageHeight = Math.round(productCardWidth * 0.62);
       // Reactions stored locally for this message
       const reactionsForMsg =
         message?.id != null ? messageReactions[String(message.id)] || [] : [];
@@ -3017,16 +3242,22 @@ export default function ChatScreen() {
           <View
             key={key}
             className={`${rowSpacingClass} ${isCurrentUser ? "items-end" : "items-start"}`}
+          style={{ marginRight: isCurrentUser ? -7 : 0 }}
           >
-            <MongooseInviteCard
-              messageId={String(message.id)}
-              rawContent={message.content}
-              isCurrentUser={isCurrentUser}
-              chatPartnerName={chatPartnerName}
-              onTapToRespond={handleMongooseInviteResponse}
-              onTrack={handleMongooseTrack}
-              onCancel={handleMongooseCancelRequest}
-            />
+            <View className="flex-row items-end">
+              {avatarSlot}
+              <View>
+                <MongooseInviteCard
+                  messageId={String(message.id)}
+                  rawContent={message.content}
+                  isCurrentUser={isCurrentUser}
+                  chatPartnerName={chatPartnerName}
+                  onTapToRespond={handleMongooseInviteResponse}
+                  onTrack={handleMongooseTrack}
+                  onCancel={handleMongooseCancelRequest}
+                />
+              </View>
+            </View>
           </View>
         );
       }
@@ -3037,37 +3268,43 @@ export default function ChatScreen() {
           <View
             key={key}
             className={`${rowSpacingClass} ${isCurrentUser ? "items-end" : "items-start"}`}
+          style={{ marginRight: isCurrentUser ? -7 : 0 }}
           >
-            <Pressable
-              onLongPress={(e) =>
-                openMessageActions(message, e.nativeEvent.pageY, isCurrentUser)
-              }
-              delayLongPress={400}
-            >
-              <View className={`${isCurrentUser ? "mr-2" : "ml-2"}`}>
-                <AudioMessagePlayer
-                  audioUrl={message.audio_url}
-                  duration={message.audio_duration}
-                  isCurrentUser={isCurrentUser}
-                  isOptimistic={isOptimistic}
-                />
+            <View className="flex-row items-end">
+              {avatarSlot}
+              {renderOutgoingStatus(
+                message,
+                isCurrentUser,
+                isOptimistic,
+                localStatus,
+                connectNext,
+                isLatestOutgoingMessage,
+              )}
+              <View>
+                <Pressable
+                  onLongPress={(e) =>
+                    openMessageActions(message, e.nativeEvent.pageY, isCurrentUser)
+                  }
+                  delayLongPress={400}
+                >
+                  <View className={`${isCurrentUser ? "mr-2" : "ml-2"}`}>
+                    <AudioMessagePlayer
+                      audioUrl={message.audio_url}
+                      duration={message.audio_duration}
+                      isCurrentUser={isCurrentUser}
+                      isOptimistic={isOptimistic}
+                    />
+                  </View>
+                </Pressable>
+                {reactionsForMsg.length > 0 && (
+                  <ReactionPill
+                    key={reactionsForMsg.join("-")}
+                    reactions={reactionsForMsg}
+                    isCurrentUser={isCurrentUser}
+                  />
+                )}
               </View>
-            </Pressable>
-            {reactionsForMsg.length > 0 && (
-              <ReactionPill
-                key={reactionsForMsg.join("-")}
-                reactions={reactionsForMsg}
-                isCurrentUser={isCurrentUser}
-              />
-            )}
-            {renderOutgoingStatus(
-              message,
-              isCurrentUser,
-              isOptimistic,
-              localStatus,
-              connectNext,
-              isLatestOutgoingMessage,
-            )}
+            </View>
           </View>
         );
       }
@@ -3085,68 +3322,74 @@ export default function ChatScreen() {
           <View
             key={key}
             className={`${rowSpacingClass} ${isCurrentUser ? "items-end" : "items-start"}`}
+          style={{ marginRight: isCurrentUser ? -7 : 0 }}
           >
-            <SwipeableRow
-              onTriggered={() => startReplyToMessage(message)}
-              isCurrentUser={isCurrentUser}
-            >
-              <Pressable
-                onLongPress={(e) =>
-                  openMessageActions(
-                    message,
-                    e.nativeEvent.pageY,
-                    isCurrentUser,
-                  )
-                }
-                delayLongPress={400}
-                className={`${isCurrentUser ? "mr-2" : "ml-2"} ${
-                  isOptimistic ? "opacity-70" : ""
-                }`}
-                style={[
-                  bubbleRadiusStyle,
-                  {
-                    overflow: "hidden",
-                    backgroundColor:
-                      gifStickerPayload.type === "sticker"
-                        ? "transparent"
-                        : "#111827",
-                  },
-                ]}
-              >
-                <ExpoImage
-                  source={{ uri: gifStickerPayload.url }}
-                  style={{ width: mediaWidth, height: mediaHeight }}
-                  contentFit="cover"
-                />
-                {isOptimistic && localStatus !== "failed" ? (
-                  <View className="absolute inset-0 bg-black/20 items-center justify-center">
-                    <ActivityIndicator color="white" />
-                  </View>
-                ) : null}
-                {localStatus === "failed" ? (
-                  <View className="absolute inset-0 bg-black/40 items-center justify-center">
-                    <Text className="text-white text-xs font-semibold">
-                      Failed to send
-                    </Text>
-                  </View>
-                ) : null}
-              </Pressable>
-            </SwipeableRow>
-            {reactionsForMsg.length > 0 && (
-              <ReactionPill
-                key={reactionsForMsg.join("-")}
-                reactions={reactionsForMsg}
-                isCurrentUser={isCurrentUser}
-              />
-            )}
-            {renderOutgoingStatus(
-              message,
-              isCurrentUser,
-              isOptimistic,
-              localStatus,
-              connectNext,
-              isLatestOutgoingMessage,
-            )}
+            <View className="flex-row items-end">
+              {avatarSlot}
+              {renderOutgoingStatus(
+                message,
+                isCurrentUser,
+                isOptimistic,
+                localStatus,
+                connectNext,
+                isLatestOutgoingMessage,
+              )}
+              <View>
+                <SwipeableRow
+                  onTriggered={() => startReplyToMessage(message)}
+                  isCurrentUser={isCurrentUser}
+                >
+                  <Pressable
+                    onLongPress={(e) =>
+                      openMessageActions(
+                        message,
+                        e.nativeEvent.pageY,
+                        isCurrentUser,
+                      )
+                    }
+                    delayLongPress={400}
+                    className={`${isCurrentUser ? "mr-2" : "ml-2"} ${
+                      isOptimistic ? "opacity-70" : ""
+                    }`}
+                    style={[
+                      bubbleRadiusStyle,
+                      {
+                        overflow: "hidden",
+                        backgroundColor:
+                          gifStickerPayload.type === "sticker"
+                            ? "transparent"
+                            : "#111827",
+                      },
+                    ]}
+                  >
+                    <ExpoImage
+                      source={{ uri: gifStickerPayload.url }}
+                      style={{ width: mediaWidth, height: mediaHeight }}
+                      contentFit="cover"
+                    />
+                    {isOptimistic && localStatus !== "failed" ? (
+                      <View className="absolute inset-0 bg-black/20 items-center justify-center">
+                        <ActivityIndicator color="white" />
+                      </View>
+                    ) : null}
+                    {localStatus === "failed" ? (
+                      <View className="absolute inset-0 bg-black/40 items-center justify-center">
+                        <Text className="text-white text-xs font-semibold">
+                          Failed to send
+                        </Text>
+                      </View>
+                    ) : null}
+                  </Pressable>
+                </SwipeableRow>
+                {reactionsForMsg.length > 0 && (
+                  <ReactionPill
+                    key={reactionsForMsg.join("-")}
+                    reactions={reactionsForMsg}
+                    isCurrentUser={isCurrentUser}
+                  />
+                )}
+              </View>
+            </View>
           </View>
         );
       }
@@ -3157,56 +3400,62 @@ export default function ChatScreen() {
           <View
             key={key}
             className={`${rowSpacingClass} ${isCurrentUser ? "items-end" : "items-start"}`}
+          style={{ marginRight: isCurrentUser ? -7 : 0 }}
           >
-            <Pressable
-              onPress={handleImagePress}
-              onLongPress={(e) =>
-                openMessageActions(message, e.nativeEvent.pageY, isCurrentUser)
-              }
-              delayLongPress={400}
-            >
-              <View
-                style={[
-                  bubbleRadiusStyle,
-                  {
-                    maxWidth: bubbleMaxWidth,
-                    overflow: "hidden",
-                    marginRight: isCurrentUser ? 8 : 0,
-                    marginLeft: isCurrentUser ? 0 : 8,
-                    opacity: isOptimistic ? 0.7 : 1,
-                  },
-                ]}
-              >
-                <Image
-                  source={{ uri: message.image_url }}
-                  style={{ width: 200, height: 200 }}
-                  resizeMode="cover"
-                />
-                {isOptimistic && (
-                  <View className="absolute inset-0 bg-black/30 items-center justify-center">
-                    <ActivityIndicator color="white" />
-                    <Text className="text-white text-xs mt-2">
-                      Uploading...
-                    </Text>
+            <View className="flex-row items-end">
+              {avatarSlot}
+              {renderOutgoingStatus(
+                message,
+                isCurrentUser,
+                isOptimistic,
+                localStatus,
+                connectNext,
+                isLatestOutgoingMessage,
+              )}
+              <View>
+                <Pressable
+                  onPress={handleImagePress}
+                  onLongPress={(e) =>
+                    openMessageActions(message, e.nativeEvent.pageY, isCurrentUser)
+                  }
+                  delayLongPress={400}
+                >
+                  <View
+                    style={[
+                      bubbleRadiusStyle,
+                      {
+                        maxWidth: bubbleMaxWidth,
+                        overflow: "hidden",
+                        marginRight: isCurrentUser ? 8 : 0,
+                        marginLeft: isCurrentUser ? 0 : 8,
+                        opacity: isOptimistic ? 0.7 : 1,
+                      },
+                    ]}
+                  >
+                    <Image
+                      source={{ uri: message.image_url }}
+                      style={{ width: 200, height: 200 }}
+                      resizeMode="cover"
+                    />
+                    {isOptimistic && (
+                      <View className="absolute inset-0 bg-black/30 items-center justify-center">
+                        <ActivityIndicator color="white" />
+                        <Text className="text-white text-xs mt-2">
+                          Uploading...
+                        </Text>
+                      </View>
+                    )}
                   </View>
+                </Pressable>
+                {reactionsForMsg.length > 0 && (
+                  <ReactionPill
+                    key={reactionsForMsg.join("-")}
+                    reactions={reactionsForMsg}
+                    isCurrentUser={isCurrentUser}
+                  />
                 )}
               </View>
-            </Pressable>
-            {reactionsForMsg.length > 0 && (
-              <ReactionPill
-                key={reactionsForMsg.join("-")}
-                reactions={reactionsForMsg}
-                isCurrentUser={isCurrentUser}
-              />
-            )}
-            {renderOutgoingStatus(
-              message,
-              isCurrentUser,
-              isOptimistic,
-              localStatus,
-              connectNext,
-              isLatestOutgoingMessage,
-            )}
+            </View>
           </View>
         );
       }
@@ -3217,88 +3466,94 @@ export default function ChatScreen() {
           <View
             key={key}
             className={`${rowSpacingClass} ${isCurrentUser ? "items-end" : "items-start"}`}
+          style={{ marginRight: isCurrentUser ? -7 : 0 }}
           >
-            <SwipeableRow
-              onTriggered={() => startReplyToMessage(message)}
-              isCurrentUser={isCurrentUser}
-            >
-              <Pressable
-                onPress={handleLocationPress}
-                onLongPress={(e) =>
-                  openMessageActions(
-                    message,
-                    e.nativeEvent.pageY,
-                    isCurrentUser,
-                  )
-                }
-                delayLongPress={400}
-                className={`overflow-hidden ${
-                  isCurrentUser ? "mr-2" : "ml-2"
-                } ${isOptimistic ? "opacity-70" : ""}`}
-                style={[bubbleRadiusStyle, { maxWidth: bubbleMaxWidth }]}
-              >
-                <View style={{ width: 250, height: 150 }} collapsable={false}>
-                  <MapView
-                    style={{ width: 250, height: 150 }}
-                    provider={androidMapProvider()}
-                    initialRegion={{
-                      latitude: coordinates.latitude,
-                      longitude: coordinates.longitude,
-                      latitudeDelta: 0.01,
-                      longitudeDelta: 0.01,
-                    }}
-                    scrollEnabled={false}
-                    zoomEnabled={false}
-                    rotateEnabled={false}
-                    pitchEnabled={false}
-                    toolbarEnabled={false}
-                  >
-                    <MapPinMarker
-                      coordinate={coordinates}
-                      preset="shared"
-                      size={34}
-                      title="Shared location"
-                    />
-                  </MapView>
-                </View>
-                <View
-                  className={`px-3 py-2 ${
-                    isCurrentUser ? "bg-primary" : "bg-gray-200"
-                  }`}
+            <View className="flex-row items-end">
+              {avatarSlot}
+              {renderOutgoingStatus(
+                message,
+                isCurrentUser,
+                isOptimistic,
+                localStatus,
+                connectNext,
+                isLatestOutgoingMessage,
+              )}
+              <View>
+                <SwipeableRow
+                  onTriggered={() => startReplyToMessage(message)}
+                  isCurrentUser={isCurrentUser}
                 >
-                  <View className="flex-row items-center">
-                    <Ionicons
-                      name="location"
-                      size={14}
-                      color={isCurrentUser ? "white" : "#007AFF"}
-                      style={{ marginRight: 4 }}
-                    />
-                    <Text
-                      className={`text-xs ${
-                        isCurrentUser ? "text-white" : "text-gray-700"
+                  <Pressable
+                    onPress={handleLocationPress}
+                    onLongPress={(e) =>
+                      openMessageActions(
+                        message,
+                        e.nativeEvent.pageY,
+                        isCurrentUser,
+                      )
+                    }
+                    delayLongPress={400}
+                    className={`overflow-hidden ${
+                      isCurrentUser ? "mr-2" : "ml-2"
+                    } ${isOptimistic ? "opacity-70" : ""}`}
+                    style={[bubbleRadiusStyle, { maxWidth: bubbleMaxWidth }]}
+                  >
+                    <View style={{ width: 250, height: 150 }} collapsable={false}>
+                      <MapView
+                        style={{ width: 250, height: 150 }}
+                        provider={androidMapProvider()}
+                        initialRegion={{
+                          latitude: coordinates.latitude,
+                          longitude: coordinates.longitude,
+                          latitudeDelta: 0.01,
+                          longitudeDelta: 0.01,
+                        }}
+                        scrollEnabled={false}
+                        zoomEnabled={false}
+                        rotateEnabled={false}
+                        pitchEnabled={false}
+                        toolbarEnabled={false}
+                      >
+                        <MapPinMarker
+                          coordinate={coordinates}
+                          preset="shared"
+                          size={34}
+                          title="Shared location"
+                        />
+                      </MapView>
+                    </View>
+                    <View
+                      className={`px-3 py-2 ${
+                        isCurrentUser ? "bg-primary" : "bg-gray-200"
                       }`}
                     >
-                      Tap to view full map
-                    </Text>
-                  </View>
-                </View>
-              </Pressable>
-            </SwipeableRow>
-            {reactionsForMsg.length > 0 && (
-              <ReactionPill
-                key={reactionsForMsg.join("-")}
-                reactions={reactionsForMsg}
-                isCurrentUser={isCurrentUser}
-              />
-            )}
-            {renderOutgoingStatus(
-              message,
-              isCurrentUser,
-              isOptimistic,
-              localStatus,
-              connectNext,
-              isLatestOutgoingMessage,
-            )}
+                      <View className="flex-row items-center">
+                        <Ionicons
+                          name="location"
+                          size={14}
+                          color={isCurrentUser ? "white" : "#007AFF"}
+                          style={{ marginRight: 4 }}
+                        />
+                        <Text
+                          className={`text-xs ${
+                            isCurrentUser ? "text-white" : "text-gray-700"
+                          }`}
+                        >
+                          Tap to view full map
+                        </Text>
+                      </View>
+                    </View>
+                  </Pressable>
+                </SwipeableRow>
+                {reactionsForMsg.length > 0 && (
+                  <ReactionPill
+                    key={reactionsForMsg.join("-")}
+                    reactions={reactionsForMsg}
+                    isCurrentUser={isCurrentUser}
+                  />
+                )}
+              </View>
+            </View>
           </View>
         );
       }
@@ -3308,13 +3563,25 @@ export default function ChatScreen() {
         <View
           key={key}
           className={`${rowSpacingClass} ${isCurrentUser ? "items-end" : "items-start"}`}
+          style={{ marginRight: isCurrentUser ? -7 : 0 }}
         >
+          <View className="flex-row items-end">
+          {avatarSlot}
+          {renderOutgoingStatus(
+            message,
+            isCurrentUser,
+            isOptimistic,
+            localStatus,
+            connectNext,
+            isLatestOutgoingMessage,
+          )}
+          <View>
           {embeddedProductMeta ? (
             <Pressable
               onPress={() => openProductContext(embeddedProductMeta)}
-              className={`mb-2 rounded-2xl border p-2.5 flex-row items-center ${
+              className={`mb-2 rounded-2xl overflow-hidden border ${
                 isCurrentUser
-                  ? "mr-2 border-primary/20 bg-[#e9f1f6]"
+                  ? "mr-2 border-primary/15 bg-white"
                   : "ml-2 border-gray-200 bg-white"
               }`}
               style={{ width: productCardWidth }}
@@ -3322,17 +3589,38 @@ export default function ChatScreen() {
               {embeddedProductMeta.imageUrl ? (
                 <Image
                   source={{ uri: embeddedProductMeta.imageUrl }}
-                  className="w-12 h-12 rounded-xl mr-2.5"
+                  style={{
+                    width: productCardWidth,
+                    height: productCardImageHeight,
+                  }}
                   resizeMode="cover"
                 />
-              ) : null}
-              <View className="flex-1">
-                <Text
-                  className={`text-[11px] font-semibold ${
-                    isCurrentUser ? "text-primary" : "text-primary"
-                  }`}
-                  numberOfLines={1}
+              ) : (
+                <View
+                  className="items-center justify-center bg-gray-100"
+                  style={{
+                    width: productCardWidth,
+                    height: productCardImageHeight,
+                  }}
                 >
+                  <Ionicons
+                    name={
+                      embeddedProductMeta.source === "profile"
+                        ? "person-circle-outline"
+                        : embeddedProductMeta.source === "post"
+                          ? "image-outline"
+                          : embeddedProductMeta.source === "marketplace"
+                            ? "storefront-outline"
+                            : "pricetag-outline"
+                    }
+                    size={44}
+                    color="#9ca3af"
+                  />
+                </View>
+              )}
+
+              <View className="px-3.5 pt-3 pb-2.5">
+                <Text className="text-[11px] font-semibold text-primary uppercase tracking-wide">
                   {embeddedProductMeta.source === "profile"
                     ? "Profile"
                     : embeddedProductMeta.source === "post"
@@ -3341,21 +3629,100 @@ export default function ChatScreen() {
                         ? "Marketplace"
                         : "Product"}
                 </Text>
-                <Text
-                  className="text-[13px] text-gray-800 font-medium"
-                  numberOfLines={2}
-                >
-                  {embeddedProductMeta.title}
-                </Text>
-                {embeddedProductMeta.source !== "profile" &&
-                embeddedProductMeta.price ? (
+
+                <View className="flex-row items-center mt-1">
                   <Text
-                    className="text-[12px] text-gray-500 mt-0.5"
+                    className="text-[15px] font-bold text-gray-900 flex-shrink"
+                    numberOfLines={2}
+                  >
+                    {embeddedProductMeta.title}
+                  </Text>
+                  {embeddedProductMeta.isVerified ? (
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={14}
+                      color="#094569"
+                      style={{ marginLeft: 4 }}
+                    />
+                  ) : null}
+                </View>
+
+                {embeddedProductMeta.username ? (
+                  <Text
+                    className="text-[12px] text-gray-400 mt-0.5"
                     numberOfLines={1}
                   >
+                    {embeddedProductMeta.source === "product" ||
+                    embeddedProductMeta.source === "marketplace"
+                      ? `Sold by ${embeddedProductMeta.username}`
+                      : `@${embeddedProductMeta.username}`}
+                  </Text>
+                ) : null}
+
+                {embeddedProductMeta.caption ? (
+                  <Text
+                    className="text-[13px] text-gray-600 mt-1.5"
+                    style={{ lineHeight: 18 }}
+                    numberOfLines={3}
+                  >
+                    {embeddedProductMeta.caption}
+                  </Text>
+                ) : null}
+
+                {embeddedProductMeta.date || embeddedProductMeta.location ? (
+                  <View className="flex-row items-center flex-wrap mt-2">
+                    {embeddedProductMeta.date ? (
+                      <View className="flex-row items-center mr-3 mb-0.5">
+                        <Ionicons
+                          name="calendar-outline"
+                          size={12}
+                          color="#9ca3af"
+                        />
+                        <Text className="text-[11px] text-gray-400 ml-1">
+                          {formatSharedCardDate(embeddedProductMeta.date)}
+                        </Text>
+                      </View>
+                    ) : null}
+                    {embeddedProductMeta.location ? (
+                      <View
+                        className="flex-row items-center mb-0.5"
+                        style={{ maxWidth: productCardWidth - 110 }}
+                      >
+                        <Ionicons
+                          name="location-outline"
+                          size={12}
+                          color="#9ca3af"
+                        />
+                        <Text
+                          className="text-[11px] text-gray-400 ml-1"
+                          numberOfLines={1}
+                        >
+                          {embeddedProductMeta.location}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+                ) : null}
+
+                {embeddedProductMeta.source !== "profile" &&
+                embeddedProductMeta.price ? (
+                  <Text className="text-[15px] font-bold text-primary mt-2">
                     Nu. {embeddedProductMeta.price}
                   </Text>
                 ) : null}
+              </View>
+
+              <View className="flex-row items-center justify-center border-t border-gray-100 py-2.5">
+                <Text className="text-[13px] font-semibold text-primary mr-1">
+                  {embeddedProductMeta.source === "profile"
+                    ? "View Profile"
+                    : embeddedProductMeta.source === "post"
+                      ? "Go to Post"
+                      : embeddedProductMeta.source === "marketplace"
+                        ? "View Listing"
+                        : "View Product"}
+                </Text>
+                <Ionicons name="arrow-forward" size={13} color="#094569" />
               </View>
             </Pressable>
           ) : null}
@@ -3507,14 +3874,8 @@ export default function ChatScreen() {
               </Text>
             </View>
           ) : null}
-          {renderOutgoingStatus(
-            message,
-            isCurrentUser,
-            isOptimistic,
-            localStatus,
-            connectNext,
-            isLatestOutgoingMessage,
-          )}
+          </View>
+          </View>
         </View>
       );
     },
@@ -3565,16 +3926,33 @@ export default function ChatScreen() {
   );
   const timelineContentContainerStyle = useMemo(
     () => ({
-      paddingHorizontal: 16,
+      paddingHorizontal: CHAT_HORIZONTAL_PADDING,
       paddingVertical: 8,
+      // Inverted list: raw paddingTop renders at the visual BOTTOM (behind
+      // the floating input bar), raw paddingBottom at the visual TOP
+      // (behind the floating header) — see the "Fixed Header"/"Fixed Input
+      // Bar" comments above. Both bars now float OVER the full-bleed list
+      // instead of squeezing it in flex flow, so their own heights have to
+      // be reserved here explicitly, or messages would rest hidden under
+      // them instead of just above.
+      // No added chatBottomPadding breathing gap here anymore — that left a
+      // visible sliver between the last message and the input bar's own
+      // top edge at rest. inputBarHeight alone lands the cutoff exactly on
+      // that edge, flush with where the (rounded) backdrop begins.
       paddingTop:
-        chatBottomPadding +
+        inputBarHeight +
         (showMongooseWorkerNav && !isKeyboardVisible
           ? MONGOOSE_WORKER_NAV_BAR_HEIGHT
           : 0),
+      paddingBottom: headerHeight + 8,
       flexGrow: 1,
     }),
-    [chatBottomPadding, showMongooseWorkerNav, isKeyboardVisible],
+    [
+      showMongooseWorkerNav,
+      isKeyboardVisible,
+      inputBarHeight,
+      headerHeight,
+    ],
   );
   const typingHeaderComponent = useMemo(
     () =>
@@ -3694,22 +4072,10 @@ export default function ChatScreen() {
     <View
       className="flex-1"
       style={
-        activeBg.type === "default" ? { backgroundColor: "#fcfcfc" } : undefined
+        activeBg.type === "default" ? { backgroundColor: "#ffffff" } : undefined
       }
     >
       {/* Background layer */}
-      {activeBg.type === "default" && (
-        <Image
-          source={require("@/assets/chatbackground/chatbg.png")}
-          style={{
-            position: "absolute",
-            width: "100%",
-            height: "100%",
-            resizeMode: "cover",
-            opacity: 0.8,
-          }}
-        />
-      )}
       {activeBg.type === "solid" && (
         <View
           style={{
@@ -3894,18 +4260,98 @@ export default function ChatScreen() {
           }))
         }
       />
-      {/* Status Bar Space */}
+      {/* Fixed Header — floats over the full-bleed message list (see the
+          list container below) instead of taking its own row in the flex
+          column, so content can scroll underneath and read through the
+          blur once it reaches this edge. */}
       <View
-        style={{ height: insets.top, backgroundColor: "white", zIndex: 10 }}
-      />
-
-      {/* Fixed Header */}
-      <View
-        className="flex-row items-center p-4 border-b border-gray-200 bg-white"
-        style={{ zIndex: 10 }}
+        pointerEvents="box-none"
+        onLayout={(e) => {
+          const measured = Math.round(e.nativeEvent.layout.height);
+          if (measured > 0 && Math.abs(measured - headerHeight) > 2) {
+            setHeaderHeight(measured);
+          }
+        }}
+        style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 10 }}
       >
-        <TouchableOpacity onPress={handleBackNavigation} className="mr-3">
-          <Ionicons name="chevron-back-outline" size={24} color="#007AFF" />
+        {/* Progressive blur behind the whole header, status bar strip
+            included — the gradient's strongest layer now lands at the very
+            top of the screen instead of stopping at the status bar's lower
+            edge. Fades out (rather than hard-toggling) while holding to
+            talk: the white wash it adds behind the grey scrim below is
+            what made the header's dim read lighter/different from the
+            plain grey used everywhere else, so it needs to be gone by the
+            time that scrim is fully in — sharing holdRecordingOpacity with
+            it is what keeps the two in sync instead of drifting apart. */}
+        {showHeaderBlur && (
+        <Animated.View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            opacity: holdRecordingOpacity.interpolate({
+              inputRange: [0, 1],
+              outputRange: [1, 0],
+            }),
+          }}
+        >
+            {Platform.OS === "ios" ? (
+              HEADER_BLUR_LAYERS.map((layer, i) => (
+                <MaskedView
+                  key={i}
+                  style={StyleSheet.absoluteFill}
+                  maskElement={
+                    <LinearGradient
+                      colors={layer.colors}
+                      locations={layer.locations}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 0, y: 1 }}
+                      style={StyleSheet.absoluteFill}
+                    />
+                  }
+                >
+                  <BlurView
+                    tint="systemChromeMaterial"
+                    intensity={layer.intensity}
+                    style={StyleSheet.absoluteFill}
+                  />
+                </MaskedView>
+              ))
+            ) : (
+              // No real blur on Android here — approximate the same ramp with
+              // a plain opacity gradient instead of a flat translucent fill.
+              <LinearGradient
+                colors={["rgba(255,255,255,0.35)", "rgba(255,255,255,0.92)"]}
+                start={{ x: 0, y: 1 }}
+                end={{ x: 0, y: 0 }}
+                style={StyleSheet.absoluteFill}
+              />
+            )}
+          </Animated.View>
+        )}
+
+        {/* Status Bar Space — layout spacer only now; the blur above
+            already extends through this area, so it's transparent rather
+            than the flat white cap it used to be. */}
+        <View pointerEvents="none" style={{ height: insets.top }} />
+
+        <View className="flex-row items-center p-4">
+        <TouchableOpacity
+          onPress={handleBackNavigation}
+          className="mr-3"
+          style={HEADER_GLASS_BUTTON_STYLE}
+        >
+          {Platform.OS === "ios" && (
+            <BlurView
+              tint="systemChromeMaterial"
+              intensity={50}
+              style={StyleSheet.absoluteFill}
+            />
+          )}
+          <Ionicons name="chevron-back-outline" size={22} color="#007AFF" />
         </TouchableOpacity>
 
         {/* Profile Image or Avatar */}
@@ -3976,11 +4422,18 @@ export default function ChatScreen() {
 
         {/* Optional: Add call or video call buttons */}
         <TouchableOpacity
-          className="ml-2 w-10 h-10 border border-blue-600 rounded-full items-center justify-center overflow-hidden"
+          className="ml-2"
           onPress={handleMongooseClick}
           disabled={isAnimatingMongoose}
-          style={{ position: "relative" }}
+          style={{ ...HEADER_GLASS_BUTTON_STYLE, position: "relative" }}
         >
+          {Platform.OS === "ios" && (
+            <BlurView
+              tint="systemChromeMaterial"
+              intensity={50}
+              style={StyleSheet.absoluteFill}
+            />
+          )}
           {isAnimatingMongoose ? (
             <View className="flex-row items-center justify-center">
               <Animated.View
@@ -4004,16 +4457,37 @@ export default function ChatScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity
-          className="ml-2 w-10 h-10 rounded-full items-center justify-center bg-gray-100/50"
+          className="ml-2"
           onPress={() =>
             isMongooseChat ? setShowBgPicker(true) : setShowChatActionsMenu(true)
           }
+          style={HEADER_GLASS_BUTTON_STYLE}
         >
+          {Platform.OS === "ios" && (
+            <BlurView
+              tint="systemChromeMaterial"
+              intensity={50}
+              style={StyleSheet.absoluteFill}
+            />
+          )}
           <MoreVertical size={20} color="#374151" />
         </TouchableOpacity>
+        </View>
+
+        {/* No separate grey scrim here anymore: with the header's own blur
+            skipped above while holding to talk, its backdrop is plain
+            transparent, so the message list's own grey dim (which already
+            extends the full screen height behind it) shows through as-is —
+            the exact same pixels rather than a second scrim stacked on top
+            of it, which is what made the header read darker/different. */}
       </View>
 
-      <Reanimated.View style={[{ flex: 1 }, keyboardAwareStyle]}>
+      {/* Full-bleed content layer: the message list now spans the entire
+          screen (behind the floating header above and the floating input
+          bar below) instead of being confined to the row between them, so
+          it can scroll underneath both and read through their blur. */}
+      <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}>
+        <Reanimated.View style={[{ flex: 1 }, keyboardAwareStyle]}>
         {/* Scrollable Messages Area */}
         <FlatList
           ref={flatListRef}
@@ -4041,31 +4515,85 @@ export default function ChatScreen() {
         {/* Grey out the chat behind the mic while holding to talk, so the
             recording UI (dome/waveform/pills) reads as the sole focus.
             Sits above the message list but below the input bar it
-            precedes, so it never covers the recording controls themselves. */}
-        {isHoldRecording && (
+            precedes, so it never covers the recording controls themselves.
+            Always mounted (unlike the header's blur above) — it's just a
+            flat color, cheap enough to leave in place and fade via opacity
+            rather than mount/unmount. */}
+        <Animated.View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(17,24,39,0.20)",
+            opacity: holdRecordingOpacity,
+          }}
+        />
+        </Reanimated.View>
+
+        {/* Fixed Input Bar — floats over the message list (see above)
+            instead of sitting in normal flex flow below it, so content can
+            scroll underneath and read through the blur. Rises with the
+            keyboard via its own animated style since it's no longer a flex
+            sibling whose position the list's own shrinking box used to
+            carry along for free. */}
+        <Reanimated.View
+          pointerEvents="box-none"
+          style={[
+            { position: "absolute", left: 0, right: 0, zIndex: 10 },
+            inputBarKeyboardStyle,
+          ]}
+        >
+          {/* Fixed white backdrop — reaches from the bottom safe-area
+              cushion up through the bottom HALF of the pill (not the pt-2
+              gap above it or the pill's own top half, which stay
+              transparent), so scrolled content still shows through near
+              the top of the pill instead of disappearing under a big blank
+              slab. Rounded top corners matching the pill's own radius so
+              content disappears behind a curved edge, not a flat line —
+              see INPUT_PILL_RADIUS. */}
           <View
             pointerEvents="none"
             style={{
               position: "absolute",
-              top: 0,
               left: 0,
               right: 0,
               bottom: 0,
-              backgroundColor: "rgba(17,24,39,0.20)",
+              height: inputBarBottomCushion + inputPillHeight / 2,
+              backgroundColor: "#ffffff",
+              borderTopLeftRadius: INPUT_PILL_RADIUS,
+              borderTopRightRadius: INPUT_PILL_RADIUS,
             }}
           />
-        )}
-
-        {/* Fixed Input Bar */}
-        <View className="mb-0">
+        {/* Same grey-out treatment as the header and message list, so the
+            whole screen dims uniformly while holding to talk. Matches the
+            backdrop above — just the bottom cushion, not the composer's
+            content, which stays on top and bright regardless. Always
+            mounted and opacity-driven, same reasoning as the message
+            list's scrim above. */}
+        <Animated.View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height: inputBarBottomCushion + inputPillHeight / 2,
+            backgroundColor: "rgba(17,24,39,0.20)",
+            borderTopLeftRadius: INPUT_PILL_RADIUS,
+            borderTopRightRadius: INPUT_PILL_RADIUS,
+            opacity: holdRecordingOpacity,
+          }}
+        />
+        <View className="mb-0" pointerEvents="box-none">
           <View
-            className={`flex-row items-center px-4 pt-2`}
+            pointerEvents="box-none"
+            className={`flex-row items-center pt-2`}
             style={{
-              paddingBottom:
-                (isKeyboardVisible ? 8 : Math.max(insets.bottom, 12)) +
-                (showMongooseWorkerNav && !isKeyboardVisible
-                  ? MONGOOSE_WORKER_NAV_BAR_HEIGHT
-                  : 0),
+              paddingHorizontal: CHAT_HORIZONTAL_PADDING,
+              paddingBottom: inputBarBottomCushion,
             }}
             onLayout={(e) => {
               const measured = Math.round(e.nativeEvent.layout.height);
@@ -4074,7 +4602,54 @@ export default function ChatScreen() {
               }
             }}
           >
-            <View className="w-full rounded-[26px] border border-gray-200 bg-gray-100">
+            <View
+              className="w-full"
+              style={{ borderRadius: INPUT_PILL_RADIUS }}
+              onLayout={(e) => {
+                const measured = Math.round(e.nativeEvent.layout.height);
+                if (measured > 0 && Math.abs(measured - inputPillHeight) > 2) {
+                  setInputPillHeight(measured);
+                }
+              }}
+            >
+              {/* Clipped separately from the actual content below — the
+                  voice recorder's dome deliberately rises ABOVE this pill
+                  via a negative-top absolute position (see
+                  WeChatVoiceRecorder), so overflow:hidden can't live on the
+                  same container as that content or it clips the dome away
+                  along with everything else. This background sibling gets
+                  the rounding + clipping instead, leaving the content
+                  below free to render outside the pill's own bounds. */}
+              <View
+                pointerEvents="none"
+                style={[
+                  StyleSheet.absoluteFill,
+                  {
+                    borderRadius: INPUT_PILL_RADIUS,
+                    overflow: "hidden",
+                    backgroundColor: Platform.OS === "ios" ? "transparent" : HEADER_BAR_ANDROID_BG,
+                  },
+                ]}
+              >
+                {Platform.OS === "ios" && (
+                  <BlurView
+                    tint="systemChromeMaterial"
+                    intensity={50}
+                    style={StyleSheet.absoluteFill}
+                  />
+                )}
+                {/* Grey tint layered ON TOP of the blur/base fill (not
+                    blended into it) so the pill reads as visibly grey
+                    against the white chat background, rather than a
+                    near-white frosted pill that barely stands out. */}
+                <View
+                  pointerEvents="none"
+                  style={[
+                    StyleSheet.absoluteFill,
+                    { backgroundColor: "rgba(209,213,219,0.2)" },
+                  ]}
+                />
+              </View>
               {replyingToMessage ? (
                 <View className="px-3 py-4 border-b border-gray-200/80 flex-row items-center">
                   <View className="flex-1">
@@ -4153,7 +4728,7 @@ export default function ChatScreen() {
                 </View>
               ) : null}
 
-              <View className="flex-row items-center px-2 py-2">
+              <View className="flex-row items-center px-2 py-1">
                 {/* Chevron — tap to bring back the icons while keyboard is up */}
                 {showChevron && (
                   <TouchableOpacity
@@ -4345,7 +4920,8 @@ export default function ChatScreen() {
             </View>
           </View>
         </View>
-      </Reanimated.View>
+        </Reanimated.View>
+      </View>
 
       {/* Full-Screen Map Modal */}
       <Modal
@@ -4577,7 +5153,7 @@ export default function ChatScreen() {
                           key={emoji}
                           onPress={() => {
                             Haptics.impactAsync(
-                              Haptics.ImpactFeedbackStyle.Light,
+                              Haptics.ImpactFeedbackStyle.Medium,
                             ).catch(() => {});
                             const msgId = String(selectedMessage.id);
                             // Build updated per-user reactions object

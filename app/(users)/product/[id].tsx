@@ -359,6 +359,10 @@ export default function ProductDetail() {
         context_product_price: String(product.current_price || product.price || ""),
         context_product_image: product.images?.[0] || "",
         context_source: "product",
+        context_caption: product.description || "",
+        context_date: product.created_at || "",
+        context_username: product.profiles?.name || "",
+        context_verified: product.isVerified ? "true" : "",
       },
     });
   };
@@ -976,6 +980,10 @@ export default function ProductDetail() {
             context_product_price: String(product.current_price || product.price || ""),
             context_product_image: product.images?.[0] || "",
             context_source: "product",
+            context_caption: product.description || "",
+            context_date: product.created_at || "",
+            context_username: product.profiles?.name || "",
+            context_verified: product.isVerified ? "true" : "",
           }}
         />
       )}

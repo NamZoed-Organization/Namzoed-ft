@@ -242,7 +242,7 @@ const FeaturedSellers = () => {
       const result = await followUser(currentUser.id, user.id);
 
       if (result.success) {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         // Add to newly followed IDs for UI update
         setNewlyFollowedIds(prev => [...prev, user.id]);
         // Update following IDs (will trigger reload on filter/search change)
@@ -268,7 +268,7 @@ const FeaturedSellers = () => {
       const result = await unfollowUser(currentUser.id, user.id);
 
       if (result.success) {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         // Mark as unfollowed (soft delete - keeps visible until reload)
         setUnfollowedIds(prev => [...prev, user.id]);
         // Remove from newly followed list if was just followed

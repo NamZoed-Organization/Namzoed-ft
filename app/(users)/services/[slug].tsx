@@ -93,7 +93,7 @@ export default function ServiceDetailScreen() {
 
   // Toggle sort order
   const toggleSortOrder = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     if (isShuffled) {
       // If shuffled, reset to sorted state
       setIsShuffled(false);
@@ -106,7 +106,7 @@ export default function ServiceDetailScreen() {
 
   // Shuffle services
   const handleShuffle = async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     setShuffling(true);
     setIsShuffled(true);
 
@@ -121,7 +121,7 @@ export default function ServiceDetailScreen() {
 
   // Toggle provider sort order
   const toggleProviderSortOrder = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     if (isProviderShuffled) {
       // If shuffled, reset to sorted state
       setIsProviderShuffled(false);
@@ -134,7 +134,7 @@ export default function ServiceDetailScreen() {
 
   // Shuffle providers
   const handleProviderShuffle = async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     setProviderShuffling(true);
     setIsProviderShuffled(true);
 

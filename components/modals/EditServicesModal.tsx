@@ -188,7 +188,7 @@ export default function EditServicesModal({
   };
 
   const toggleImageSelection = (index: number) => {
-    Haptics.impactAsync(ImpactFeedbackStyle.Light);
+    Haptics.impactAsync(ImpactFeedbackStyle.Medium);
     setSelectedImageIndices((prev) =>
       prev.includes(index) ? prev.filter((i) => i !== index) : [...prev, index],
     );
@@ -209,7 +209,7 @@ export default function EditServicesModal({
   };
 
   const handleCancelImageSelection = () => {
-    Haptics.impactAsync(ImpactFeedbackStyle.Light);
+    Haptics.impactAsync(ImpactFeedbackStyle.Medium);
     setIsImageSelectionMode(false);
     setSelectedImageIndices([]);
   };

@@ -691,7 +691,7 @@ export default function ProfileScreen() {
   };
 
   const handleEditService = (service: ProviderServiceWithDetails) => {
-    Haptics.impactAsync(ImpactFeedbackStyle.Medium);
+    Haptics.impactAsync(ImpactFeedbackStyle.Heavy);
     setServiceToEdit(service);
     setShowEditServiceModal(true);
   };
@@ -705,7 +705,7 @@ export default function ProfileScreen() {
   };
 
   const toggleServiceSelection = (serviceId: string) => {
-    Haptics.impactAsync(ImpactFeedbackStyle.Light);
+    Haptics.impactAsync(ImpactFeedbackStyle.Medium);
     setSelectedServiceIds((prev) =>
       prev.includes(serviceId)
         ? prev.filter((id) => id !== serviceId)
@@ -752,7 +752,7 @@ export default function ProfileScreen() {
   };
 
   const handleCancelSelection = () => {
-    Haptics.impactAsync(ImpactFeedbackStyle.Light);
+    Haptics.impactAsync(ImpactFeedbackStyle.Medium);
     setIsServiceSelectionMode(false);
     setSelectedServiceIds([]);
   };
@@ -1621,20 +1621,20 @@ export default function ProfileScreen() {
                   setShowSettings(true);
                 }}
                 onShowProviderAvatarMenu={() => {
-                  Haptics.impactAsync(ImpactFeedbackStyle.Light);
+                  Haptics.impactAsync(ImpactFeedbackStyle.Medium);
                   setShowProviderAvatarMenu(true);
                 }}
                 onViewProviderImage={() => {
-                  Haptics.impactAsync(ImpactFeedbackStyle.Light);
+                  Haptics.impactAsync(ImpactFeedbackStyle.Medium);
                   setShowProviderWorkImageViewer(true);
                 }}
                 onEditProviderProfile={() => {
-                  Haptics.impactAsync(ImpactFeedbackStyle.Light);
+                  Haptics.impactAsync(ImpactFeedbackStyle.Medium);
                   handleEditProviderProfile();
                 }}
                 onUploadLicense={handleUploadLicense}
                 onShowLicenseMenu={() => {
-                  Haptics.impactAsync(ImpactFeedbackStyle.Light);
+                  Haptics.impactAsync(ImpactFeedbackStyle.Medium);
                   setShowLicenseMenu(true);
                 }}
                 onServiceLongPress={handleServiceLongPress}
@@ -2264,6 +2264,9 @@ export default function ProfileScreen() {
               currentUser?.profileImg ||
               "",
             context_source: "profile",
+            context_caption: serviceProvider?.master_bio || "",
+            context_username: currentUser?.username || "",
+            context_verified: verificationStatus === "verified" ? "true" : "",
           }}
         />
       )}

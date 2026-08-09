@@ -78,7 +78,7 @@ export async function playReceiveSound(): Promise<void> {
  */
 export async function triggerSendHaptic(): Promise<void> {
   try {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   } catch {}
 }
 

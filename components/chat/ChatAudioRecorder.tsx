@@ -227,7 +227,7 @@ export default function ChatAudioRecorder({
         setDisplaySecs(0);
         _setRec(true);
       }
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       // Poll recorder.currentTime every 500ms — more reliable than useAudioRecorderState on Android
       timerRef.current = setInterval(() => {
         if (!isMountedRef.current) return;
@@ -284,7 +284,7 @@ export default function ChatAudioRecorder({
       setCancelZone(false);   cancelZoneRef.current = false;
       setDisplaySecs(0);
     }
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
   };
 
   const lockRecording = () => {

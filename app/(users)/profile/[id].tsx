@@ -338,7 +338,7 @@ export default function PublicProfileScreen() {
                 if (result.success) {
                   setIsFollowingUser(false);
                   setUserProfile((prev: any) => prev ? { ...prev, follower_count: Math.max(0, (prev.follower_count || 0) - 1) } : prev);
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
                 } else {
                   showPopup('error', 'Unfollow Failed', result.error || 'Failed to unfollow user.');
                 }
@@ -359,7 +359,7 @@ export default function PublicProfileScreen() {
         if (result.success) {
           setIsFollowingUser(true);
           setUserProfile((prev: any) => prev ? { ...prev, follower_count: (prev.follower_count || 0) + 1 } : prev);
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
         } else {
           showPopup('error', 'Follow Failed', result.error || 'Failed to follow user.');
         }
@@ -375,7 +375,7 @@ export default function PublicProfileScreen() {
   const handleBlockToggle = async () => {
     if (!currentUser?.id || typeof id !== "string") return;
 
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
 
     if (isBlocked) {
       // Show unblock confirmation
@@ -436,7 +436,7 @@ export default function PublicProfileScreen() {
   };
 
   const handleReport = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setShowBlockMenu(false);
     setShowReportModal(true);
   };
@@ -523,7 +523,7 @@ export default function PublicProfileScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                 setShowBlockMenu(true);
               }}
               className="w-10 h-10 items-center justify-center"
@@ -603,7 +603,7 @@ export default function PublicProfileScreen() {
                         className="items-center"
                         onPress={() => {
                           if (!id || typeof id !== "string") return;
-                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                           setFollowRequestsTab("followers");
                           setShowFollowRequests(true);
                         }}
@@ -620,7 +620,7 @@ export default function PublicProfileScreen() {
                         className="items-center"
                         onPress={() => {
                           if (!id || typeof id !== "string") return;
-                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                           setFollowRequestsTab("following");
                           setShowFollowRequests(true);
                         }}
@@ -693,7 +693,7 @@ export default function PublicProfileScreen() {
                     <TouchableOpacity
                       onPress={() => {
                         if (typeof id !== "string") return;
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                         router.push(`/(users)/chat/${id}` as any);
                       }}
                       className="flex-1 py-[9px] rounded-lg flex-row items-center justify-center gap-1.5 bg-gray-100 border border-gray-300"
@@ -1071,7 +1071,7 @@ export default function PublicProfileScreen() {
                         <TouchableOpacity
                           onPress={() => {
                             if (typeof id !== "string") return;
-                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                             router.push(`/(users)/chat/${id}` as any);
                           }}
                           className="flex-1 py-[9px] rounded-lg flex-row items-center justify-center gap-1.5 bg-gray-100 border border-gray-300"
@@ -1303,6 +1303,10 @@ export default function PublicProfileScreen() {
               userProfile?.image ||
               "",
             context_source: "profile",
+            context_caption: userProfile?.bio || "",
+            context_username: userProfile?.username || "",
+            context_verified:
+              serviceProvider?.verification_status === "verified" ? "true" : "",
           }}
         />
       )}

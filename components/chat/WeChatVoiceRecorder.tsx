@@ -3,6 +3,7 @@ import { supabase } from "@/lib/supabase";
 import { sendChatPushNotification } from "@/services/chatPushService";
 import { triggerSendHaptic } from "@/utils/chatSounds";
 import { Ionicons } from "@expo/vector-icons";
+import MaskedView from "@react-native-masked-view/masked-view";
 import {
   RecordingPresets,
   requestRecordingPermissionsAsync,
@@ -10,12 +11,14 @@ import {
   useAudioRecorder,
   useAudioRecorderState,
 } from "expo-audio";
+import { BlurView } from "expo-blur";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Haptics from "expo-haptics";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
+  Easing,
   Modal,
   PanResponder,
   Text,
@@ -36,6 +39,11 @@ type WeChatVoiceRecorderProps = {
 type DragZone = "none" | "cancel" | "lock";
 
 const PRIMARY = "#094569";
+// Translucent fills for the frosted-glass pills (layered over a BlurView,
+// masked to the pill's own curved stroke shape — see the pill JSX below).
+const PILL_TINT_IDLE = "rgba(107,114,128,0.42)"; // greyish matte
+const PILL_TINT_CANCEL = "#ef4444"; // solid red, no translucency
+const PILL_TINT_LOCK = PRIMARY; // solid PRIMARY blue, no translucency
 // Forgiveness on each pill's measured hit zone, so landing just short of
 // its edge still registers.
 const PILL_HIT_TOLERANCE = 16;
@@ -272,6 +280,12 @@ export default function WeChatVoiceRecorder({
   const [isRecording, setIsRecording] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
+  // Mirrors isRecording but lags behind it on the way to false — the dome
+  // and pills are a conditional mount (see the render below), so unmounting
+  // the instant isRecording flips false would cut off the fade-out
+  // animation mid-flight. This stays true through that animation and only
+  // flips once it's actually finished.
+  const [showRecordingUI, setShowRecordingUI] = useState(false);
   const [dragZone, setDragZone] = useState<DragZone>("none");
   const [displaySecs, setDisplaySecs] = useState(0);
   const [popup, setPopup] = useState<{
@@ -300,12 +314,25 @@ export default function WeChatVoiceRecorder({
   // drag-distance constant needed to fake that guarantee.
   const cancelZoneRef = useRef<{ right: number; top: number; bottom: number } | null>(null);
   const lockZoneRef = useRef<{ left: number; top: number; bottom: number } | null>(null);
+  // Last touch position seen by the responder, so a pill's zone — measured
+  // asynchronously via measureInWindow, which can resolve after a fast
+  // flick has already landed and gone still — can be re-checked the moment
+  // it becomes available instead of waiting on a move event that may never
+  // come again.
+  const lastTouchRef = useRef<{ x: number; y: number } | null>(null);
   const cancelPillRef = useRef<View>(null);
   const lockPillRef = useRef<View>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const sendingRef = useRef(false);
   const pulse = useRef(new Animated.Value(1)).current;
   const panelOpacity = useRef(new Animated.Value(0)).current;
+  // Drives the "Hold to talk" → dome morph: 0 = idle pill, 1 = fully grown
+  // dome+pills. Interpolated separately (and over different sub-ranges) by
+  // the dome, the pills, and the idle text below, rather than each of them
+  // mounting/fading independently — that shared single value is what makes
+  // the text crossfade and the dome grow feel like one continuous
+  // transition instead of three unrelated animations firing at once.
+  const domeProgress = useRef(new Animated.Value(0)).current;
   const barAnims = useRef(
     Array.from({ length: BAR_COUNT }, () => new Animated.Value(WAVEFORM_BAR_MIN_SCALE)),
   ).current;
@@ -347,11 +374,52 @@ export default function WeChatVoiceRecorder({
     void Haptics.selectionAsync();
   };
 
+  // Real hit-testing against each pill's measured box — both axes. The pill
+  // sits well above where "Hold to talk" is pressed, so requiring the touch
+  // to be within its vertical span too is what naturally means the finger
+  // has to actually drag up into that space. Horizontally there's no bound
+  // on the outer/off-screen side — once above the pill's row, continuing
+  // left (cancel) or right (lock) past the pill itself still counts. The
+  // inner (center-facing) edge, though, gets NO added tolerance: the two
+  // pills' inner edges sit only ~16px apart, so forgiveness on both sides
+  // would make them overlap — a diagonal drag from the (centered) start
+  // point up toward one pill would then transiently satisfy the OTHER
+  // pill's zone too, permanently locking when the user meant to cancel.
+  // Sharing this exact test between onPanResponderMove and the post-layout
+  // catch-up below (see lastTouchRef) is what a plain if/else-if inline in
+  // the responder can't do on its own.
+  const evaluateDragZone = (x: number, y: number) => {
+    if (lockedRef.current) return;
+    const cancelZone = cancelZoneRef.current;
+    const lockZone = lockZoneRef.current;
+    const inCancelZone =
+      !!cancelZone &&
+      x <= cancelZone.right &&
+      y >= cancelZone.top - PILL_HIT_TOLERANCE &&
+      y <= cancelZone.bottom + PILL_HIT_TOLERANCE;
+    const inLockZone =
+      !!lockZone &&
+      x >= lockZone.left &&
+      y >= lockZone.top - PILL_HIT_TOLERANCE &&
+      y <= lockZone.bottom + PILL_HIT_TOLERANCE;
+    if (inCancelZone) {
+      applyDragZone("cancel");
+    } else if (inLockZone) {
+      lockedRef.current = true;
+      applyDragZone("none");
+      if (mountedRef.current) setIsLocked(true);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } else {
+      applyDragZone("none");
+    }
+  };
+
   const resetInteraction = () => {
     startingRef.current = false;
     pendingEndRef.current = null;
     lockedRef.current = false;
     sendingRef.current = false;
+    lastTouchRef.current = null;
     clearTimer();
     applyDragZone("none");
     if (mountedRef.current) {
@@ -403,6 +471,31 @@ export default function WeChatVoiceRecorder({
       }).start();
     }
   }, [isRecording, isLocked]);
+
+  // The "Hold to talk" → dome morph. Kept separate from the effect above
+  // (which also reacts to isLocked) since mount/unmount timing should only
+  // ever be driven by isRecording itself — locking happens while the dome
+  // is already mounted and shouldn't re-trigger this.
+  useEffect(() => {
+    if (isRecording) {
+      setShowRecordingUI(true);
+      Animated.timing(domeProgress, {
+        toValue: 1,
+        duration: 260,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start();
+    } else {
+      Animated.timing(domeProgress, {
+        toValue: 0,
+        duration: 200,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }).start(({ finished }) => {
+        if (finished) setShowRecordingUI(false);
+      });
+    }
+  }, [isRecording]);
 
   useEffect(() => {
     if (!isRecording) {
@@ -466,7 +559,7 @@ export default function WeChatVoiceRecorder({
         applyDragZone("none");
         setRecording(true);
       }
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       timerRef.current = setInterval(() => {
         const secs = Math.floor(recorder.currentTime);
         setDisplaySecs(secs);
@@ -609,7 +702,7 @@ export default function WeChatVoiceRecorder({
       await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
     } catch {}
     resetInteraction();
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
   };
 
   const panResponder = useRef(
@@ -623,41 +716,8 @@ export default function WeChatVoiceRecorder({
       },
       onPanResponderMove: (_, gesture) => {
         if (lockedRef.current) return;
-        // Real hit-testing against each pill's measured box (with
-        // PILL_HIT_TOLERANCE of forgiveness) — both axes. The pill sits
-        // well above where "Hold to talk" is pressed, so requiring the
-        // touch to be within its vertical span too is what naturally
-        // means the finger has to actually drag up into that space; no
-        // separate minimum-drag-distance constant needed to fake that.
-        // Horizontally there's no bound on the outer/off-screen side —
-        // once above the pill's row, continuing left (cancel) or right
-        // (lock) past the pill itself still counts.
-        const x = gesture.moveX;
-        const y = gesture.moveY;
-        const cancelZone = cancelZoneRef.current;
-        const lockZone = lockZoneRef.current;
-        const inCancelZone =
-          !!cancelZone &&
-          x <= cancelZone.right + PILL_HIT_TOLERANCE &&
-          y >= cancelZone.top - PILL_HIT_TOLERANCE &&
-          y <= cancelZone.bottom + PILL_HIT_TOLERANCE;
-        const inLockZone =
-          !!lockZone &&
-          x >= lockZone.left - PILL_HIT_TOLERANCE &&
-          y >= lockZone.top - PILL_HIT_TOLERANCE &&
-          y <= lockZone.bottom + PILL_HIT_TOLERANCE;
-        if (inCancelZone) {
-          applyDragZone("cancel");
-        } else if (inLockZone) {
-          if (!lockedRef.current) {
-            lockedRef.current = true;
-            applyDragZone("none");
-            if (mountedRef.current) setIsLocked(true);
-            void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          }
-        } else {
-          applyDragZone("none");
-        }
+        lastTouchRef.current = { x: gesture.moveX, y: gesture.moveY };
+        evaluateDragZone(gesture.moveX, gesture.moveY);
       },
       onPanResponderRelease: () => {
         if (lockedRef.current) return;
@@ -681,6 +741,31 @@ export default function WeChatVoiceRecorder({
         ? "Slide to lock"
         : "Release to send";
 
+  // "Hold to talk" crossfades out exactly as the dome grows in — one
+  // shared value driving both is what reads as a morph rather than two
+  // separate, coincidentally-timed animations.
+  const holdToTalkOpacity = domeProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 0],
+  });
+  const domeOpacity = domeProgress;
+  const domeScale = domeProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.85, 1],
+  });
+  // Pills wait until the dome is most of the way in before they start
+  // appearing, then pop in over the remaining stretch — a light stagger
+  // that reads as "the dome arrives, then the pills follow" instead of
+  // everything growing in at once.
+  const pillsOpacity = domeProgress.interpolate({
+    inputRange: [0, 0.45, 1],
+    outputRange: [0, 0, 1],
+  });
+  const pillsScale = domeProgress.interpolate({
+    inputRange: [0, 0.45, 1],
+    outputRange: [0.7, 0.7, 1],
+  });
+
   return (
     <>
       <View
@@ -697,7 +782,7 @@ export default function WeChatVoiceRecorder({
             alignItems: "center",
             justifyContent: "center",
             transform: [{ scale: pulse }],
-            opacity: isRecording ? 0 : 1,
+            opacity: holdToTalkOpacity,
           }}
         >
           {isUploading ? (
@@ -709,12 +794,15 @@ export default function WeChatVoiceRecorder({
           )}
         </Animated.View>
 
-        {isRecording && (
+        {showRecordingUI && (
           <>
             {/* Live waveform card — a separate, compact bordered panel
                 floating above the dome and pills, instead of being
-                squeezed into the dome's content layer. */}
-            <View
+                squeezed into the dome's content layer. Animated in/out
+                with the dome (see domeOpacity/domeScale) rather than a
+                fresh wrapping View, which would've put it in a new
+                positioning context and broken its absolute offsets. */}
+            <Animated.View
               pointerEvents="none"
               style={{
                 position: "absolute",
@@ -732,6 +820,8 @@ export default function WeChatVoiceRecorder({
                 shadowOffset: { width: 0, height: 6 },
                 shadowOpacity: 0.12,
                 shadowRadius: 20,
+                opacity: domeOpacity,
+                transform: [{ scale: domeScale }],
               }}
             >
               <View
@@ -756,12 +846,12 @@ export default function WeChatVoiceRecorder({
                   />
                 ))}
               </View>
-            </View>
+            </Animated.View>
 
             {/* Dome shape — deliberately wider than its narrow parent so it
                 safely spans the full screen width regardless of the
                 composer's own horizontal padding. */}
-            <View
+            <Animated.View
               pointerEvents="none"
               style={{
                 position: "absolute",
@@ -773,6 +863,8 @@ export default function WeChatVoiceRecorder({
                 shadowOffset: { width: 0, height: -4 },
                 shadowOpacity: 0.1,
                 shadowRadius: 18,
+                opacity: domeOpacity,
+                transform: [{ scale: domeScale }],
               }}
             >
               <Svg
@@ -783,7 +875,7 @@ export default function WeChatVoiceRecorder({
               >
                 <Path d={DOME_PATH} fill="#ffffff" />
               </Svg>
-            </View>
+            </Animated.View>
             {/* zIndex pins the content layer above the dome background on
                 every platform — elevation (used for Android shadows) also
                 reorders siblings by itself, so it's deliberately left off
@@ -791,7 +883,7 @@ export default function WeChatVoiceRecorder({
 
             {/* Content layer, aligned to the parent's own (narrower, more
                 accurately centered) width rather than the stretched dome. */}
-            <View
+            <Animated.View
               pointerEvents="box-none"
               style={{
                 position: "absolute",
@@ -800,6 +892,8 @@ export default function WeChatVoiceRecorder({
                 right: 0,
                 bottom: -DOME_EXTRA,
                 height: DOME_HEIGHT + DOME_EXTRA,
+                opacity: domeOpacity,
+                transform: [{ scale: domeScale }],
               }}
             >
               {/* Recording timer, near the dome's own peak */}
@@ -846,11 +940,11 @@ export default function WeChatVoiceRecorder({
                 </Animated.View>
               )}
 
-            </View>
+            </Animated.View>
 
             {/* Cancel pill — a curved capsule floating above the dome,
                 echoing its arc (see PILL constants above). */}
-            <View
+            <Animated.View
               ref={cancelPillRef}
               pointerEvents="box-none"
               onLayout={() => {
@@ -861,6 +955,13 @@ export default function WeChatVoiceRecorder({
                   // bound: anywhere at or past the inner edge, toward and
                   // beyond the screen's left side, still reads as cancel.
                   cancelZoneRef.current = { right: x + width, top: y, bottom: y + height };
+                  // measureInWindow is async — if a fast flick already
+                  // landed and went still before this resolved, there's no
+                  // further move event to re-check it against, so catch up
+                  // immediately using the last known touch.
+                  if (lastTouchRef.current) {
+                    evaluateDragZone(lastTouchRef.current.x, lastTouchRef.current.y);
+                  }
                 });
               }}
               style={{
@@ -869,22 +970,48 @@ export default function WeChatVoiceRecorder({
                 bottom: pillContainerBottom,
                 width: pillContainerWidth,
                 height: pillContainerHeight,
+                // Opacity doesn't affect layout, so the measureInWindow
+                // calls above still return accurate bounds regardless of
+                // where this animation currently is.
+                opacity: pillsOpacity,
+                transform: [{ scale: pillsScale }],
               }}
             >
-              <Svg
-                width={pillContainerWidth}
-                height={pillContainerHeight}
-                style={{ position: "absolute", top: 0, left: 0 }}
+              <MaskedView
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: pillContainerWidth,
+                  height: pillContainerHeight,
+                }}
+                maskElement={
+                  <Svg width={pillContainerWidth} height={pillContainerHeight}>
+                    <Path
+                      d={cancelPillPath}
+                      stroke="#000000"
+                      strokeWidth={PILL_STROKE_WIDTH}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      fill="none"
+                    />
+                  </Svg>
+                }
               >
-                <Path
-                  d={cancelPillPath}
-                  stroke={dragZone === "cancel" ? "#ef4444" : "#f3f4f6"}
-                  strokeWidth={PILL_STROKE_WIDTH}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  fill="none"
+                <BlurView intensity={20} tint="dark" style={{ width: "100%", height: "100%" }} />
+                <View
+                  pointerEvents="none"
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor:
+                      !isLocked && dragZone === "cancel" ? PILL_TINT_CANCEL : PILL_TINT_IDLE,
+                  }}
                 />
-              </Svg>
+              </MaskedView>
               {/* The whole visible pill is the tap target once locked —
                   not just the icon/label — so it excludes only the
                   (invisible, off-screen) far-tip overhang before
@@ -918,23 +1045,23 @@ export default function WeChatVoiceRecorder({
                 <Ionicons
                   name="trash-outline"
                   size={16}
-                  color={isLocked ? "#6b7280" : dragZone === "cancel" ? "#ffffff" : "#6b7280"}
+                  color="#ffffff"
                 />
                 <Text
                   style={{
                     marginLeft: 6,
                     fontSize: 12,
                     fontWeight: "700",
-                    color: isLocked ? "#6b7280" : dragZone === "cancel" ? "#ffffff" : "#6b7280",
+                    color: "#ffffff",
                   }}
                 >
                   Cancel
                 </Text>
               </View>
-            </View>
+            </Animated.View>
 
             {/* Lock pill — mirrored. Becomes a Send button once locked. */}
-            <View
+            <Animated.View
               ref={lockPillRef}
               pointerEvents="box-none"
               onLayout={() => {
@@ -943,6 +1070,10 @@ export default function WeChatVoiceRecorder({
                   // or past the inner edge, toward and beyond the screen's
                   // right side, still reads as lock).
                   lockZoneRef.current = { left: x, top: y, bottom: y + height };
+                  // See the matching comment in the cancel pill's onLayout.
+                  if (lastTouchRef.current) {
+                    evaluateDragZone(lastTouchRef.current.x, lastTouchRef.current.y);
+                  }
                 });
               }}
               style={{
@@ -951,22 +1082,45 @@ export default function WeChatVoiceRecorder({
                 bottom: pillContainerBottom,
                 width: pillContainerWidth,
                 height: pillContainerHeight,
+                opacity: pillsOpacity,
+                transform: [{ scale: pillsScale }],
               }}
             >
-              <Svg
-                width={pillContainerWidth}
-                height={pillContainerHeight}
-                style={{ position: "absolute", top: 0, left: 0 }}
+              <MaskedView
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: pillContainerWidth,
+                  height: pillContainerHeight,
+                }}
+                maskElement={
+                  <Svg width={pillContainerWidth} height={pillContainerHeight}>
+                    <Path
+                      d={lockPillPath}
+                      stroke="#000000"
+                      strokeWidth={PILL_STROKE_WIDTH}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      fill="none"
+                    />
+                  </Svg>
+                }
               >
-                <Path
-                  d={lockPillPath}
-                  stroke={isLocked || dragZone === "lock" ? PRIMARY : "#f3f4f6"}
-                  strokeWidth={PILL_STROKE_WIDTH}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  fill="none"
+                <BlurView intensity={20} tint="dark" style={{ width: "100%", height: "100%" }} />
+                <View
+                  pointerEvents="none"
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor:
+                      isLocked || dragZone === "lock" ? PILL_TINT_LOCK : PILL_TINT_IDLE,
+                  }}
                 />
-              </Svg>
+              </MaskedView>
               {/* The whole visible pill is the tap target once locked —
                   not just the icon/label — so it excludes only the
                   (invisible, off-screen) far-tip overhang before
@@ -1009,14 +1163,14 @@ export default function WeChatVoiceRecorder({
                     <Ionicons
                       name="lock-closed-outline"
                       size={16}
-                      color={dragZone === "lock" ? "#ffffff" : "#6b7280"}
+                      color="#ffffff"
                     />
                     <Text
                       style={{
                         marginLeft: 6,
                         fontSize: 12,
                         fontWeight: "700",
-                        color: dragZone === "lock" ? "#ffffff" : "#6b7280",
+                        color: "#ffffff",
                       }}
                     >
                       Lock
@@ -1024,7 +1178,7 @@ export default function WeChatVoiceRecorder({
                   </>
                 )}
               </View>
-            </View>
+            </Animated.View>
           </>
         )}
       </View>

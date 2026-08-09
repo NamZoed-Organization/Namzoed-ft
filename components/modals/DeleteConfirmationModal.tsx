@@ -28,7 +28,7 @@ export default function DeleteConfirmationModal({
   };
 
   const handleCancel = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     onClose();
   };
 

@@ -83,7 +83,7 @@ export default function FollowRequests({ onClose, userId }: FollowRequestsProps)
   };
 
   const toggleSortOrder = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
   };
 
@@ -101,7 +101,7 @@ export default function FollowRequests({ onClose, userId }: FollowRequestsProps)
         <TouchableOpacity
           className="flex-row items-center bg-white p-4 rounded-2xl border border-gray-100"
           onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
             router.push(`/(users)/profile/${item.id}`);
           }}
           activeOpacity={0.7}
@@ -136,7 +136,7 @@ export default function FollowRequests({ onClose, userId }: FollowRequestsProps)
               <TouchableOpacity
                 onPress={(e) => {
                   e.stopPropagation();
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
                   handleAccept(item);
                 }}
                 className="bg-primary px-4 py-2 rounded-lg border border-primary"
@@ -147,7 +147,7 @@ export default function FollowRequests({ onClose, userId }: FollowRequestsProps)
               <TouchableOpacity
                 onPress={(e) => {
                   e.stopPropagation();
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
                   handleReject(item);
                 }}
                 className="bg-gray-50 px-4 py-2 rounded-lg border border-gray-200"

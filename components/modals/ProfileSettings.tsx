@@ -22,6 +22,7 @@ import {
   ArrowLeft,
   Bookmark,
   BookOpen,
+  Download,
   EyeOff,
   Key,
   LogOut,
@@ -40,6 +41,7 @@ import {
   Dimensions,
   Linking,
   PanResponder,
+  Platform,
   ScrollView,
   Switch,
   Text,
@@ -48,6 +50,8 @@ import {
 } from "react-native";
 import { useSafety } from "@/contexts/SafetyContext";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Constants from "expo-constants";
+import { openAppStoreForUpdate } from "@/utils/appUpdate";
 
 interface ProfileSettingsProps {
   onClose: () => void;
@@ -511,7 +515,9 @@ export default function ProfileSettings({
                   </Text>
                   <View className="bg-gray-50 rounded-xl overflow-hidden">
                     <TouchableOpacity
-                      className="flex-row items-center justify-between px-4 py-4 border-b border-gray-200"
+                      className={`flex-row items-center justify-between px-4 py-4 ${
+                        Platform.OS === "web" ? "" : "border-b border-gray-200"
+                      }`}
                       onPress={() => handleNavigation("appVersion")}
                     >
                       <View className="flex-row items-center gap-2">
@@ -520,8 +526,27 @@ export default function ProfileSettings({
                           App Version
                         </Text>
                       </View>
-                      <Text className="text-sm text-gray-500">v1.0.0</Text>
+                      <Text className="text-sm text-gray-500">
+                        v{Constants.expoConfig?.version || "1.0.0"}
+                      </Text>
                     </TouchableOpacity>
+                    {Platform.OS !== "web" && (
+                      <TouchableOpacity
+                        className="flex-row items-center justify-between px-4 py-4"
+                        onPress={() => void openAppStoreForUpdate()}
+                        activeOpacity={0.7}
+                      >
+                        <View className="flex-row items-center gap-2">
+                          <Download size={20} className="text-gray-700 mr-3" />
+                          <Text className="text-base font-medium text-gray-900">
+                            Update App
+                          </Text>
+                        </View>
+                        <Text className="text-gray-400 font-bold text-lg">
+                          →
+                        </Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 </View>
                 {/* Account Section */}

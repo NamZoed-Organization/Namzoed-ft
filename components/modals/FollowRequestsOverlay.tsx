@@ -65,7 +65,7 @@ export default function FollowRequestsOverlay({
 
   // Reset when switching tabs
   const handleTabChange = (tab: TabType) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     previousTab.current = activeTab;
     setActiveTab(tab);
   };
@@ -144,7 +144,7 @@ export default function FollowRequestsOverlay({
   };
 
   const toggleSortOrder = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
   };
 
@@ -164,7 +164,7 @@ export default function FollowRequestsOverlay({
         <TouchableOpacity
           className="flex-row items-center bg-white p-4 rounded-2xl border border-gray-100"
           onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
             router.push(`/(users)/profile/${item.id}`);
           }}
           activeOpacity={0.7}
@@ -206,7 +206,7 @@ export default function FollowRequestsOverlay({
             <TouchableOpacity
               onPress={(e) => {
                 e.stopPropagation();
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
                 if (isFollowing) {
                   handleUnfollow(item);
                 } else {

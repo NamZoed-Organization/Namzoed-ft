@@ -131,7 +131,7 @@ export default function ManageListingsOverlay({
 
   const toggleSection = useCallback(
     (section: "posts" | "products" | "marketplace" | "services") => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setCollapsedSections((prev) => ({ ...prev, [section]: !prev[section] }));
     },
     [],
@@ -143,7 +143,7 @@ export default function ManageListingsOverlay({
 
   // Reset selection when switching tabs
   const handleTabChange = (tab: TabType) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setActiveTab(tab);
     setIsSelectionMode(false);
     setSelectedIds([]);
@@ -167,7 +167,7 @@ export default function ManageListingsOverlay({
 
   // Toggle sort order
   const toggleSortOrder = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSortOrder((prev) => (prev === "latest" ? "oldest" : "latest"));
   };
 
@@ -176,14 +176,14 @@ export default function ManageListingsOverlay({
     setPreviousTab(activeTab); // Remember current tab (usually 'products')
     setProductToEdit(product);
     setActiveTab("edit"); // Switch to hidden edit tab
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
   };
 
   const handleEditMarketplaceItem = (item: MarketplaceItem) => {
     setPreviousTab(activeTab); // Remember current tab (usually 'marketplace')
     setMarketplaceItemToEdit(item);
     setActiveTab("edit"); // Switch to hidden edit tab
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
   };
 
   const handleExitEdit = () => {
@@ -276,7 +276,7 @@ export default function ManageListingsOverlay({
   // --- SELECTION LOGIC ---
 
   const toggleSelection = (id: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSelectedIds((prev) =>
       prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id],
     );
@@ -291,7 +291,7 @@ export default function ManageListingsOverlay({
   };
 
   const handleDeleteSelected = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     setShowDeleteConfirm(true);
   };
 

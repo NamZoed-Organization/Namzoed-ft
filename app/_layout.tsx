@@ -1,5 +1,6 @@
 // app/_layout.tsx
 
+import AppUpdateGate from "@/components/AppUpdateGate";
 import CustomFlashMessage from "@/components/CustomFlashMessage";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import InAppChatBanner from "@/components/chat/InAppChatBanner";
@@ -203,6 +204,7 @@ export default function RootLayout() {
                         />
                         <InAppChatBanner />
                         <InAppNotificationBanner />
+                        <AppUpdateGate />
                         {/* Transparent status bar with dark icons on Android;
                             iOS continues to follow the current appearance. */}
                         <StatusBar

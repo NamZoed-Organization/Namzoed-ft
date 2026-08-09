@@ -125,7 +125,7 @@ const SwipeableConversationRow = React.memo(function SwipeableConversationRow({
   const SNAP = { duration: 240 };
 
   function triggerHaptic() {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
   }
   function doDelete() {
     onDelete();
@@ -506,7 +506,7 @@ export default function MessageScreen() {
         next.delete(partnerId);
       } else {
         next.add(partnerId);
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       }
       setMutedConversations(next);
       if (mutedKey) {

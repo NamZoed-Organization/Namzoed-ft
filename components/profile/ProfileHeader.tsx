@@ -56,7 +56,7 @@ export default function ProfileHeader({
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => {
-              Haptics.impactAsync(ImpactFeedbackStyle.Light);
+              Haptics.impactAsync(ImpactFeedbackStyle.Medium);
               if (profileImage) {
                 onAvatarMenuPress();
               } else {

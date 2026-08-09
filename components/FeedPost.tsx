@@ -1747,6 +1747,11 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
           context_product_price: "",
           context_product_image: post.images?.[0] || "",
           context_source: "post",
+          context_caption: post.content || "",
+          context_date: post.date ? post.date.toISOString() : "",
+          context_location: post.locationName || "",
+          context_username: post.username || "",
+          context_verified: post.isVerified ? "true" : "",
         }}
       />
 

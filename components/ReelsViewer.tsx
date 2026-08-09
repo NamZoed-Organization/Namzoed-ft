@@ -308,7 +308,7 @@ function ReelItem({
     const prevCount = likeCount;
     setIsLiked(!prevLiked);
     setLikeCount(prevLiked ? prevCount - 1 : prevCount + 1);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
       const result = await togglePostLike(reel.postId, currentUserId, prevLiked);
       if (!result.success) {
@@ -1150,6 +1150,9 @@ export default function ReelsViewer({
             context_product_price: "",
             context_product_image: "",
             context_source: "post",
+            context_caption: shareReel.content || "",
+            context_date: shareReel.createdAt || "",
+            context_username: shareReel.username || "",
           }}
         />
       )}
