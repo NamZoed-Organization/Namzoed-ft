@@ -1,9 +1,9 @@
 import MapPinMarker from "@/components/maps/MapPinMarker";
+import CircularLoader from "@/components/ui/CircularLoader";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { Ionicons } from "@expo/vector-icons";
 import React, { useState } from "react";
 import {
-    ActivityIndicator,
     Dimensions,
     Modal,
     Pressable,
@@ -324,7 +324,7 @@ export default function LocationMapPicker({
             {loadingAddress && (
               <View className="absolute top-4 left-0 right-0 items-center">
                 <View className="bg-white px-4 py-2 rounded-full shadow-lg flex-row items-center">
-                  <ActivityIndicator size="small" color="#10b981" />
+                  <CircularLoader size="small" color="#10b981" />
                   <Text className="ml-2 text-sm text-gray-700">
                     Getting address...
                   </Text>

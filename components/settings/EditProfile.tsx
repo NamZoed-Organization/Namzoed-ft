@@ -1,9 +1,10 @@
 import PopupMessage from '@/components/ui/PopupMessage';
+import CircularLoader from '@/components/ui/CircularLoader';
 import { useUser } from '@/contexts/UserContext';
 import { updateUserProfile } from '@/lib/profileService';
 import { ArrowLeft } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface EditProfileProps {
@@ -85,7 +86,7 @@ export default function EditProfile({ onClose }: EditProfileProps) {
           className="bg-primary rounded-xl py-4 items-center mt-4"
         >
           {loading ? (
-            <ActivityIndicator color="#fff" />
+            <CircularLoader color="#fff" />
           ) : (
             <Text className="text-white font-semibold text-base">Save Changes</Text>
           )}

@@ -27,13 +27,13 @@ import React, {
 } from "react";
 import ConversationSkeleton from "@/components/ui/ConversationSkeleton";
 import EdgeSwipeBack from "@/components/ui/EdgeSwipeBack";
+import CircularLoader from "@/components/ui/CircularLoader";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { Image } from "expo-image";
 import {
-  ActivityIndicator,
   Alert,
   Dimensions,
   FlatList,
-  Image,
   InteractionManager,
   ScrollView,
   StyleSheet,
@@ -1341,7 +1341,8 @@ export default function MessageScreen() {
                 borderRadius: 28,
                 marginRight: 12,
               }}
-              resizeMode="cover"
+              contentFit="cover"
+              cachePolicy="memory-disk"
             />
           ) : (
             <View
@@ -1967,7 +1968,7 @@ export default function MessageScreen() {
                 onBlur={() => setIsSearchFocused(false)}
               />
               {isSearching && (
-                <ActivityIndicator
+                <CircularLoader
                   size="small"
                   color="#9ca3af"
                   style={{ marginLeft: 6 }}
@@ -2030,7 +2031,8 @@ export default function MessageScreen() {
                             borderRadius: 26,
                             backgroundColor: "#e5e7eb",
                           }}
-                          resizeMode="cover"
+                          contentFit="cover"
+                          cachePolicy="memory-disk"
                         />
                       ) : (
                         <View
@@ -2312,6 +2314,7 @@ export default function MessageScreen() {
                         <Image
                           source={{ uri: convo.partnerProfile.avatar_url }}
                           style={{ width: 50, height: 50, borderRadius: 25 }}
+                          cachePolicy="memory-disk"
                         />
                       ) : (
                         <Text

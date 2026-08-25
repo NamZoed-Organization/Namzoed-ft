@@ -1,3 +1,4 @@
+import CircularLoader from "@/components/ui/CircularLoader";
 import {
   fetchAllProviderServices,
   fetchProviderServicesByCategory,
@@ -9,7 +10,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { Verified } from "lucide-react-native";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   BackHandler,
   FlatList,
   Image,
@@ -227,7 +227,7 @@ export default function ServicesSearchModal({
         {/* Content */}
         {loading ? (
           <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-            <ActivityIndicator size="large" color="#094569" />
+            <CircularLoader size="large" color="#094569" />
           </View>
         ) : query.trim().length === 0 ? (
           <View

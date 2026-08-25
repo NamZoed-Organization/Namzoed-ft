@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useRef } from "react";
+import React, { createContext, useContext, useRef, useState } from "react";
 import type { NativeScrollEvent, NativeSyntheticEvent } from "react-native";
 import { useSharedValue, withTiming, type SharedValue } from "react-native-reanimated";
 
@@ -10,6 +10,13 @@ const DIRECTION_THRESHOLD = 6;
 type TabBarScrollContextValue = {
   pillScale: SharedValue<number>;
   onTabBarScroll: (e: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  /** True while a fullscreen overlay (e.g. PostDetailOverlay) is standing in
+   * for real navigation — FloatingTabBar renders nothing while this is set,
+   * since it otherwise floats on top of that overlay's own bottom bar (it's
+   * rendered by the Tabs navigator itself, outside any given screen's own
+   * view tree, so z-index inside a screen can never out-stack it). */
+  tabBarHidden: boolean;
+  setTabBarHidden: (hidden: boolean) => void;
 };
 
 const TabBarScrollContext = createContext<TabBarScrollContextValue | null>(null);
@@ -17,6 +24,7 @@ const TabBarScrollContext = createContext<TabBarScrollContextValue | null>(null)
 export function TabBarScrollProvider({ children }: { children: React.ReactNode }) {
   const pillScale = useSharedValue(1);
   const lastOffsetRef = useRef(0);
+  const [tabBarHidden, setTabBarHidden] = useState(false);
 
   const onTabBarScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const y = e.nativeEvent.contentOffset.y;
@@ -39,7 +47,7 @@ export function TabBarScrollProvider({ children }: { children: React.ReactNode }
   };
 
   return (
-    <TabBarScrollContext.Provider value={{ pillScale, onTabBarScroll }}>
+    <TabBarScrollContext.Provider value={{ pillScale, onTabBarScroll, tabBarHidden, setTabBarHidden }}>
       {children}
     </TabBarScrollContext.Provider>
   );

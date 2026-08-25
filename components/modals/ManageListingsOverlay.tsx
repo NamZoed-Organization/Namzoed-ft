@@ -3,6 +3,7 @@ import EditMarketplaceModal from "@/components/modals/EditMarketplaceModal";
 import EditProductModal from "@/components/modals/EditProductModal";
 import ImageViewer from "@/components/modals/ImageViewer";
 import ImageWithFallback from "@/components/ui/ImageWithFallback";
+import CircularLoader from "@/components/ui/CircularLoader";
 import PopupMessage from "@/components/ui/PopupMessage";
 import {
   fetchUserMarketplaceItems,
@@ -29,7 +30,6 @@ import {
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   FlatList,
   RefreshControl,
   Text,
@@ -930,7 +930,7 @@ export default function ManageListingsOverlay({
           <View className="flex-1">
             {loading ? (
               <View className="flex-1 items-center justify-center">
-                <ActivityIndicator size="large" color="#094569" />
+                <CircularLoader size="large" color="#094569" />
               </View>
             ) : (
               <FlatList
@@ -1043,9 +1043,6 @@ export default function ManageListingsOverlay({
           postId={selectedPost.id}
           postUserId={selectedPost.user_id}
           postContent={selectedPost.content}
-          username={selectedPost.userName}
-          likes={selectedPost.likes}
-          comments={selectedPost.comments}
         />
       )}
 

@@ -4,10 +4,11 @@ import { useUser } from "@/contexts/UserContext";
 import { clamp, useResponsive } from "@/utils/responsive";
 import { useAppRouter } from "@/utils/navigation";
 import { isMongooseUser } from "@/utils/roleCheck";
+import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import { usePathname } from "expo-router";
-import { Plus, Store, Wrench } from "lucide-react-native";
+import { Plus } from "lucide-react-native";
 import React from "react";
 import { Platform, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 import Animated, { useAnimatedStyle, type SharedValue } from "react-native-reanimated";
@@ -72,22 +73,18 @@ export default function BottomNavBar({
     {
       key: "feed",
       href: "/feed",
-      icon: (focused: boolean) => (
+      icon: () => (
         <View
           style={{
             width: plusCircleSize,
             height: plusCircleSize,
             borderRadius: plusCircleSize / 2,
-            backgroundColor: "rgba(0, 0, 0, 0.06)",
+            backgroundColor: "#EDC06D",
             alignItems: "center",
             justifyContent: "center",
           }}
         >
-          <Plus
-            size={plusIconSize}
-            stroke={focused ? "#EDC06D" : "#0A0A0A"}
-            strokeWidth={2}
-          />
+          <Plus size={plusIconSize} stroke="#0A0A0A" strokeWidth={2} />
         </View>
       ),
     },
@@ -95,10 +92,10 @@ export default function BottomNavBar({
       key: "marketplace",
       href: "/marketplace",
       icon: (focused: boolean) => (
-        <Store
+        <Ionicons
+          name={focused ? "storefront" : "storefront-outline"}
           size={sideIconSize}
-          stroke={focused ? "#EDC06D" : "#0A0A0A"}
-          strokeWidth={2}
+          color="#0A0A0A"
         />
       ),
     },
@@ -106,10 +103,10 @@ export default function BottomNavBar({
       key: "services",
       href: "/services",
       icon: (focused: boolean) => (
-        <Wrench
+        <Ionicons
+          name={focused ? "construct" : "construct-outline"}
           size={sideIconSize}
-          stroke={focused ? "#EDC06D" : "#0A0A0A"}
-          strokeWidth={2}
+          color="#0A0A0A"
         />
       ),
     },

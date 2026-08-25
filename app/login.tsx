@@ -1,5 +1,6 @@
 import DateOfBirthPrompt from "@/components/modals/DateOfBirthPrompt";
 import FormInput from "@/components/ui/FormInput";
+import CircularLoader from "@/components/ui/CircularLoader";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { useUser } from "@/contexts/UserContext";
 import { supabase } from "@/lib/supabase";
@@ -13,7 +14,6 @@ import { Link } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import React, { useState } from "react";
 import {
-    ActivityIndicator,
     Image,
     Keyboard,
     KeyboardAvoidingView,
@@ -316,7 +316,21 @@ export default function Login() {
         return;
       }
 
-      showPopup("error", "Login Failed", "OAuth completed but no app session was created. Please try again.");
+      // No code/tokens in the callback and no session — surface whatever
+      // Apple/Supabase actually sent back instead of a generic message.
+      const oauthErrorDescription =
+        callbackUrl.match(/[?&#]error_description=([^&#]+)/)?.[1];
+      const oauthError = callbackUrl.match(/[?&#]error=([^&#]+)/)?.[1];
+      console.error(`OAuth callback for ${provider} had no code/tokens:`, callbackUrl);
+      showPopup(
+        "error",
+        "Login Failed",
+        oauthErrorDescription
+          ? decodeURIComponent(oauthErrorDescription).replace(/\+/g, " ")
+          : oauthError
+          ? `OAuth error: ${decodeURIComponent(oauthError)}`
+          : "OAuth completed but no app session was created. Please try again.",
+      );
     } catch (error: any) {
       console.error("OAuth error:", error);
       showPopup("error", "Login Failed", error?.message || "OAuth sign-in failed");
@@ -509,7 +523,7 @@ export default function Login() {
               }}
             >
               {loading ? (
-                <ActivityIndicator color="#EDC06D" />
+                <CircularLoader color="#EDC06D" />
               ) : (
                 <Text
                   className="text-secondary text-center font-semibold"
@@ -542,7 +556,7 @@ export default function Login() {
               }}
             >
               {oauthLoading === "google" ? (
-                <ActivityIndicator color="#094569" />
+                <CircularLoader color="#094569" />
               ) : (
                 <>
                   <GoogleIcon size={clamp(ms(18), 16, 22)} />
@@ -567,7 +581,7 @@ export default function Login() {
                 }}
               >
                 {oauthLoading === "apple" ? (
-                  <ActivityIndicator color="white" />
+                  <CircularLoader color="white" />
                 ) : (
                   <>
                     <Ionicons
@@ -691,7 +705,7 @@ export default function Login() {
                 }`}
               >
                 {phonePromptLoading ? (
-                  <ActivityIndicator color="#fff" />
+                  <CircularLoader color="#fff" />
                 ) : (
                   <Text className="text-white font-msemibold">Save Number</Text>
                 )}

@@ -1,17 +1,25 @@
 import AddServicesModal from "@/components/modals/AddServicesModal";
+import CircularLoader from "@/components/ui/CircularLoader";
 import TopNavbar from "@/components/ui/TopNavbar";
 import { getServiceCategoryBySlug } from "@/data/servicecategory";
+import { useRankedFeed } from "@/hooks/useRankedFeed";
 import { fetchProviderServicesByCategory, ProviderServiceWithDetails } from "@/lib/servicesService";
+import { supabase } from "@/lib/supabase";
 import { useAppRouter } from "@/utils/navigation";
 import { getInitials } from "@/utils/initials";
 import { Href, useLocalSearchParams, useFocusEffect } from "expo-router";
+import { Image } from "expo-image";
 import { ArrowUpDown, Shuffle, ChevronLeft, Plus, Search, Verified } from "lucide-react-native";
 import React, { useEffect, useState, useMemo, useCallback } from "react";
-import { ActivityIndicator, FlatList, Image, StyleSheet, Text, TouchableOpacity, View, BackHandler } from "react-native";
+import { FlatList, StyleSheet, Text, TouchableOpacity, View, BackHandler } from "react-native";
 import * as Haptics from "expo-haptics";
 import { useUser } from "@/contexts/UserContext";
 
-type SortOrder = 'latest' | 'oldest';
+// 'ranked' = the fairness/boost weighted session order from useRankedFeed
+// (see lib/feedRanking.ts) — the default, so services that keep getting
+// buried eventually surface. 'latest'/'oldest' are explicit deterministic
+// overrides, same as before.
+type SortOrder = 'ranked' | 'latest' | 'oldest';
 
 export default function ServiceDetailScreen() {
   const router = useAppRouter();
@@ -19,19 +27,16 @@ export default function ServiceDetailScreen() {
   const { currentUser } = useUser();
 
   const [category, setCategory] = useState<any>(null);
-  const [services, setServices] = useState<ProviderServiceWithDetails[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<'services' | 'providers'>('services');
   const [providers, setProviders] = useState<any[]>([]);
   const [loadingProviders, setLoadingProviders] = useState(false);
-  const [sortOrder, setSortOrder] = useState<SortOrder>('latest');
-  const [isShuffled, setIsShuffled] = useState(false);
+  const [sortOrder, setSortOrder] = useState<SortOrder>('ranked');
   const [shuffling, setShuffling] = useState(false);
-  const [shuffleKey, setShuffleKey] = useState(0);
 
-  // Provider sorting and shuffling states
-  const [providerSortOrder, setProviderSortOrder] = useState<SortOrder>('latest');
+  // Provider sorting and shuffling states — providers are derived from
+  // services client-side (see loadProviders below) rather than their own
+  // ranked table, so they keep the old plain Fisher-Yates shuffle.
+  const [providerSortOrder, setProviderSortOrder] = useState<'latest' | 'oldest'>('latest');
   const [isProviderShuffled, setIsProviderShuffled] = useState(false);
   const [providerShuffling, setProviderShuffling] = useState(false);
   const [providerShuffleKey, setProviderShuffleKey] = useState(0);
@@ -39,25 +44,27 @@ export default function ServiceDetailScreen() {
   const [showAddModal, setShowAddModal] = useState(false);
   const canAddService = !!currentUser?.id && slug !== "government-services";
 
-
-  const loadServices = async () => {
+  useEffect(() => {
     if (!slug) return;
+    setCategory(getServiceCategoryBySlug(slug));
+  }, [slug]);
 
-    try {
-      setLoading(true);
-      const foundCategory = getServiceCategoryBySlug(slug);
-      if (foundCategory) {
-        setCategory(foundCategory);
-        const providerServices = await fetchProviderServicesByCategory(slug);
-        setServices(providerServices);
-        loadProviders(providerServices);
-      }
-    } catch (error) {
-      console.error('Error loading services:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const fetchPool = useCallback(() => (slug ? fetchProviderServicesByCategory(slug) : Promise.resolve([])), [slug]);
+  const trackImpressions = useCallback(async (ids: string[]) => {
+    const { error } = await supabase.rpc("increment_impressions_provider_services", { ids });
+    if (error) console.error("Error tracking service impressions:", error);
+  }, []);
+
+  const ranked = useRankedFeed<ProviderServiceWithDetails>({
+    fetchPool,
+    trackImpressions,
+    pageSize: 1000, // this screen has never paginated — one session, whole category pool
+    boostSlotCount: 2,
+    deps: [slug],
+  });
+  const services = ranked.items;
+  const loading = ranked.loading;
+  const refreshing = ranked.refreshing;
 
   const loadProviders = (serviceList: ProviderServiceWithDetails[]) => {
     setLoadingProviders(true);
@@ -85,37 +92,29 @@ export default function ServiceDetailScreen() {
     setLoadingProviders(false);
   };
 
+  // Providers list re-derives whenever the ranked services list changes.
+  useEffect(() => {
+    loadProviders(services);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [services]);
+
   const handleRefresh = async () => {
-    setRefreshing(true);
-    await loadServices();
-    setRefreshing(false);
+    await ranked.refresh();
   };
 
-  // Toggle sort order
+  // Toggle sort order: ranked → latest → oldest → ranked
   const toggleSortOrder = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    if (isShuffled) {
-      // If shuffled, reset to sorted state
-      setIsShuffled(false);
-      setSortOrder('latest');
-    } else {
-      // Toggle between latest and oldest
-      setSortOrder(prev => prev === 'latest' ? 'oldest' : 'latest');
-    }
+    setSortOrder(prev => (prev === 'ranked' ? 'latest' : prev === 'latest' ? 'oldest' : 'ranked'));
   };
 
-  // Shuffle services
+  // "Shuffle" draws a brand new fairness/boost-weighted random session
+  // (see lib/feedRanking.ts) rather than a plain unweighted reshuffle.
   const handleShuffle = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     setShuffling(true);
-    setIsShuffled(true);
-
-    // Increment shuffle key to force re-shuffle
-    setShuffleKey(prev => prev + 1);
-
-    // Simulate loading animation
-    await new Promise(resolve => setTimeout(resolve, 500));
-
+    setSortOrder('ranked');
+    await ranked.refresh();
     setShuffling(false);
   };
 
@@ -147,28 +146,21 @@ export default function ServiceDetailScreen() {
     setProviderShuffling(false);
   };
 
-  // Memoize sorted/shuffled services
+  // Memoize sorted services
   const displayedServices = useMemo(() => {
     // Filter out deactivated services (status === false)
     const activeServices = services.filter(service => service.status !== false);
 
-    if (isShuffled) {
-      // Fisher-Yates shuffle algorithm
-      const shuffled = [...activeServices];
-      for (let i = shuffled.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-      }
-      return shuffled;
-    } else {
-      // Sort by created_at
-      return [...activeServices].sort((a, b) => {
-        const dateA = new Date(a.created_at).getTime();
-        const dateB = new Date(b.created_at).getTime();
-        return sortOrder === 'latest' ? dateB - dateA : dateA - dateB;
-      });
+    if (sortOrder === 'ranked') {
+      // Keep the fairness/boost-weighted session order as-is.
+      return activeServices;
     }
-  }, [services, sortOrder, isShuffled, shuffleKey]);
+    return [...activeServices].sort((a, b) => {
+      const dateA = new Date(a.created_at).getTime();
+      const dateB = new Date(b.created_at).getTime();
+      return sortOrder === 'latest' ? dateB - dateA : dateA - dateB;
+    });
+  }, [services, sortOrder]);
 
   // Memoize sorted/shuffled providers
   const displayedProviders = useMemo(() => {
@@ -190,11 +182,6 @@ export default function ServiceDetailScreen() {
     }
   }, [providers, providerSortOrder, isProviderShuffled, providerShuffleKey]);
 
-  useEffect(() => {
-    loadServices();
-  }, [slug]);
-
-
   // Handle Android back button
   useFocusEffect(
     useCallback(() => {
@@ -215,7 +202,7 @@ export default function ServiceDetailScreen() {
     router.push('/services');
   };
 
-  const renderServiceCard = ({ item }: { item: ProviderServiceWithDetails }) => {
+  const renderServiceCard = ({ item, index }: { item: ProviderServiceWithDetails; index: number }) => {
     const providerName = item.service_providers?.name || item.service_providers?.profiles?.name || 'Unknown Provider';
     const providerImage = item.service_providers?.profiles?.avatar_url ||
                          item.service_providers?.profile_url;
@@ -234,8 +221,11 @@ export default function ServiceDetailScreen() {
         {item.images && item.images.length > 0 && (
           <Image
             source={{ uri: item.images[0] }}
-            className="w-full h-32"
-            resizeMode="cover"
+            style={{ width: "100%", height: 128 }}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            recyclingKey={item.id}
+            priority={index < 4 ? "high" : "normal"}
           />
         )}
 
@@ -253,7 +243,12 @@ export default function ServiceDetailScreen() {
           <View className="flex-row items-center pt-2 border-t border-gray-100">
             <View className="mr-1.5">
               {providerImage ? (
-                <Image source={{ uri: providerImage }} className="w-6 h-6 rounded-full" />
+                <Image
+                  source={{ uri: providerImage }}
+                  style={{ width: 24, height: 24, borderRadius: 12 }}
+                  contentFit="cover"
+                  cachePolicy="memory-disk"
+                />
               ) : (
                 <View
                   style={{
@@ -324,7 +319,12 @@ export default function ServiceDetailScreen() {
         <View className="items-center mb-2">
           <View className="mb-2">
             {providerImage ? (
-              <Image source={{ uri: providerImage }} className="w-16 h-16 rounded-full" />
+              <Image
+                source={{ uri: providerImage }}
+                style={{ width: 64, height: 64, borderRadius: 32 }}
+                contentFit="cover"
+                cachePolicy="memory-disk"
+              />
             ) : (
               <View
                 style={{
@@ -395,7 +395,7 @@ export default function ServiceDetailScreen() {
       <View className="flex-1 bg-background">
         <TopNavbar />
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#059669" />
+          <CircularLoader size="large" color="#059669" />
           <Text className="text-gray-500 mt-4">Loading services...</Text>
         </View>
       </View>
@@ -547,12 +547,12 @@ export default function ServiceDetailScreen() {
               <TouchableOpacity
                 onPress={toggleSortOrder}
                 className={`px-3 py-1.5 rounded-full border flex-row items-center gap-x-1 ${
-                  !isShuffled ? 'bg-primary border-primary' : 'bg-white border-gray-200'
+                  sortOrder !== 'ranked' ? 'bg-primary border-primary' : 'bg-white border-gray-200'
                 }`}
                 activeOpacity={0.8}
               >
-                <ArrowUpDown size={13} color={!isShuffled ? '#FFFFFF' : '#475569'} />
-                {!isShuffled && (
+                <ArrowUpDown size={13} color={sortOrder !== 'ranked' ? '#FFFFFF' : '#475569'} />
+                {sortOrder !== 'ranked' && (
                   <Text className="text-[11px] font-msemibold text-white">
                     {sortOrder === 'latest' ? 'Latest' : 'Oldest'}
                   </Text>
@@ -561,17 +561,17 @@ export default function ServiceDetailScreen() {
               <TouchableOpacity
                 onPress={handleShuffle}
                 className={`px-3 py-1.5 rounded-full border flex-row items-center gap-x-1 ${
-                  isShuffled ? 'bg-primary border-primary' : 'bg-white border-gray-200'
+                  sortOrder === 'ranked' ? 'bg-primary border-primary' : 'bg-white border-gray-200'
                 }`}
                 activeOpacity={0.8}
               >
-                <Shuffle size={13} color={isShuffled ? '#FFFFFF' : '#094569'} />
+                <Shuffle size={13} color={sortOrder === 'ranked' ? '#FFFFFF' : '#094569'} />
                 <Text
                   className={`text-[11px] font-msemibold ${
-                    isShuffled ? 'text-white' : 'text-primary'
+                    sortOrder === 'ranked' ? 'text-white' : 'text-primary'
                   }`}
                 >
-                  Shuffle
+                  For You
                 </Text>
               </TouchableOpacity>
             </>
@@ -627,12 +627,12 @@ export default function ServiceDetailScreen() {
       {activeTab === 'services' ? (
         shuffling ? (
           <View className="flex-1 items-center justify-center">
-            <ActivityIndicator size="large" color="#059669" />
+            <CircularLoader size="large" color="#059669" />
             <Text className="text-gray-500 mt-4 font-msemibold">Shuffling...</Text>
           </View>
         ) : (
           <FlatList
-            key={`${isShuffled ? 'shuffled' : sortOrder}-${shuffleKey}`}
+            key={sortOrder}
             data={displayedServices}
             renderItem={renderServiceCard}
             keyExtractor={(item) => item.id}
@@ -646,12 +646,12 @@ export default function ServiceDetailScreen() {
         )
       ) : loadingProviders ? (
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#059669" />
+          <CircularLoader size="large" color="#059669" />
           <Text className="text-gray-500 mt-4">Loading providers...</Text>
         </View>
       ) : providerShuffling ? (
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#059669" />
+          <CircularLoader size="large" color="#059669" />
           <Text className="text-gray-500 mt-4 font-msemibold">Shuffling...</Text>
         </View>
       ) : (
@@ -676,7 +676,7 @@ export default function ServiceDetailScreen() {
           userId={currentUser.id}
           onSuccess={() => {
             setShowAddModal(false);
-            loadServices();
+            ranked.refresh();
           }}
           lockedCategorySlug={slug}
         />

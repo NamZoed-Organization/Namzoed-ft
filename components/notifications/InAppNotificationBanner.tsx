@@ -2,11 +2,11 @@ import { useNotifications, type NotificationBanner } from "@/contexts/Notificati
 import { playSound } from "@/lib/soundUtils";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
+import { Image } from "expo-image";
 import { useAppRouter } from "@/utils/navigation";
 import React, { useEffect, useRef } from "react";
 import {
   Animated,
-  Image,
   PanResponder,
   Platform,
   StyleSheet,
@@ -234,6 +234,7 @@ export default function InAppNotificationBanner() {
                   <Image
                     source={{ uri: banner.actorAvatarUrl }}
                     style={{ width: 46, height: 46, borderRadius: 23 }}
+                    cachePolicy="memory-disk"
                   />
                 ) : (
                   <View

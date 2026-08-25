@@ -1,11 +1,11 @@
 import { Entypo } from "@expo/vector-icons";
+import CircularLoader from "@/components/ui/CircularLoader";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { useAppRouter } from "@/utils/navigation";
 import { useLocalSearchParams } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import { clamp, useResponsive } from "@/utils/responsive";
 import {
-    ActivityIndicator,
     Alert,
     Image,
     Keyboard,
@@ -337,7 +337,7 @@ export default function VerifyOTP() {
             style={{ paddingVertical: verifyPaddingY, borderRadius: verifyRadius }}
           >
             {loading ? (
-              <ActivityIndicator color="#EDC06D" />
+              <CircularLoader color="#EDC06D" />
             ) : (
               <Text
                 className="text-secondary text-center font-semibold"

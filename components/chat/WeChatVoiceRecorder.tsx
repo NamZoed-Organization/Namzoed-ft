@@ -1,3 +1,4 @@
+import CircularLoader from "@/components/ui/CircularLoader";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { supabase } from "@/lib/supabase";
 import { sendChatPushNotification } from "@/services/chatPushService";
@@ -16,7 +17,6 @@ import * as FileSystem from "expo-file-system/legacy";
 import * as Haptics from "expo-haptics";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Animated,
   Easing,
   Modal,
@@ -786,7 +786,7 @@ export default function WeChatVoiceRecorder({
           }}
         >
           {isUploading ? (
-            <ActivityIndicator size="small" color={PRIMARY} />
+            <CircularLoader size="small" color={PRIMARY} />
           ) : (
             <Text style={{ color: "#111827", fontSize: 15, fontWeight: "700" }}>
               Hold to talk

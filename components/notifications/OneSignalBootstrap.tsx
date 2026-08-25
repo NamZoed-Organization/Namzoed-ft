@@ -95,8 +95,10 @@ export default function OneSignalBootstrap() {
           break;
         }
         case "user_went_live": {
-          // Navigate to feed where LivesBar will surface the active stream
-          router.push("/(users)/(tabs)/feed" as any);
+          const streamId = String(additionalData?.reference_id ?? "");
+          if (streamId) {
+            router.push(`/(users)/(tabs)/feed?streamId=${streamId}` as any);
+          }
           break;
         }
         case "follower_milestone": {

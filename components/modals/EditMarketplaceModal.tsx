@@ -1,5 +1,6 @@
 import ImageCropOverlay from "@/components/modals/ImageCropOverlay";
 import ImagePickerSheet from "@/components/ui/ImagePickerSheet";
+import CircularLoader from "@/components/ui/CircularLoader";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { dzongkhagCenters } from "@/data/dzongkhag";
 import {
@@ -13,7 +14,6 @@ import * as ImagePicker from "expo-image-picker";
 import { Upload, X } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
     Image,
     KeyboardAvoidingView,
     Modal,
@@ -649,7 +649,7 @@ export default function EditMarketplaceModal({
                     }`}
                   >
                     {loading ? (
-                      <ActivityIndicator color="white" />
+                      <CircularLoader color="white" />
                     ) : (
                       <Text className="text-white font-mbold text-lg">
                         Update Item

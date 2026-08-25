@@ -1,5 +1,6 @@
 
 import EarlyAccessBadge from '@/components/EarlyAccessBadge';
+import CircularLoader from '@/components/ui/CircularLoader';
 import { useAppearance } from '@/contexts/AppearanceContext';
 import {
     EarlyAccessBadgeType,
@@ -12,7 +13,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { ArrowLeft, Check, Sparkles } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
     ScrollView,
     Text,
     TouchableOpacity,
@@ -158,7 +158,7 @@ export default function AppearanceManager({ onClose, userId }: Props) {
 
       {loading ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <ActivityIndicator color="#c9a96e" />
+          <CircularLoader color="#c9a96e" />
         </View>
       ) : (
         <ScrollView
@@ -218,7 +218,7 @@ export default function AppearanceManager({ onClose, userId }: Props) {
                       </Text>
                     </View>
                     {saving && isActive ? (
-                      <ActivityIndicator size="small" color={meta.accentColor} />
+                      <CircularLoader size="small" color={meta.accentColor} />
                     ) : isActive ? (
                       <View style={{
                         flexDirection: 'row', alignItems: 'center', gap: 4,

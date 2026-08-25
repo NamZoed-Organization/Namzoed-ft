@@ -1,4 +1,5 @@
 import ImagePickerSheet from "@/components/ui/ImagePickerSheet";
+import CircularLoader from "@/components/ui/CircularLoader";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { useDzongkhag } from "@/contexts/DzongkhagContext";
 import { useUser } from "@/contexts/UserContext";
@@ -22,7 +23,6 @@ import {
 } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
     Animated,
     Dimensions,
     Image,
@@ -740,7 +740,7 @@ export default function MarketplacePostOverlay({
                     }`}
                   >
                     {isSubmitting ? (
-                      <ActivityIndicator color="white" />
+                      <CircularLoader color="white" />
                     ) : (
                       <Text className="text-white font-msemibold text-base">
                         Create Post

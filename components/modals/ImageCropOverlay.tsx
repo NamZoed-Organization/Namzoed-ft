@@ -1,9 +1,9 @@
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Check, X } from 'lucide-react-native';
 import React, { useEffect, useState } from "react";
+import CircularLoader from '@/components/ui/CircularLoader';
 import PopupMessage from '@/components/ui/PopupMessage';
 import {
-  ActivityIndicator,
   Alert,
   Dimensions,
   Image,
@@ -211,7 +211,7 @@ export default function ImageCropOverlay({ imageUri, imageWidth, imageHeight, on
   if (!ready) {
       return (
           <View style={{ flex: 1, backgroundColor: 'white', alignItems: 'center', justifyContent: 'center' }}>
-              <ActivityIndicator color="#000" size="large" />
+              <CircularLoader color="#000" size="large" />
           </View>
       )
   }
@@ -238,7 +238,7 @@ export default function ImageCropOverlay({ imageUri, imageWidth, imageHeight, on
             style={{ padding: 10 }}
           >
             {isSaving ? (
-              <ActivityIndicator size="small" color="#22c55e" />
+              <CircularLoader size="small" color="#22c55e" />
             ) : (
               <Check size={24} color="#22c55e" />
             )}

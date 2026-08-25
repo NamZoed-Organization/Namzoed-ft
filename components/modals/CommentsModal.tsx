@@ -1,7 +1,15 @@
+import CommentMediaGallery from '@/components/comments/CommentMediaGallery';
+import CommentMediaMessage from '@/components/comments/CommentMediaMessage';
+import CommentMediaPicker, { PendingCommentMedia } from '@/components/comments/CommentMediaPicker';
+import CommentVoiceRecorder from '@/components/comments/CommentVoiceRecorder';
+import PendingMediaStrip, { PendingMediaItem } from '@/components/comments/PendingMediaStrip';
+import CircularLoader from '@/components/ui/CircularLoader';
 import { useUser } from '@/contexts/UserContext';
 import {
     addPostComment,
+    addPostCommentWithGallery,
     addReply,
+    addReplyWithGallery,
     CommentReply,
     deletePostComment,
     deleteReply,
@@ -12,16 +20,17 @@ import {
     toggleReplyLike,
 } from '@/lib/commentsService';
 import { playSound } from '@/lib/soundUtils';
-import { Ionicons } from '@expo/vector-icons';
-import { ChevronDown, ChevronUp, CornerDownRight, Crown, Send, Trash2, X } from 'lucide-react-native';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
+import { CornerDownRight, Send, Trash2, X } from 'lucide-react-native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Image } from 'expo-image';
 import {
-    ActivityIndicator,
     Animated,
     Dimensions,
     FlatList,
     Keyboard,
+    LayoutAnimation,
     Modal,
     PanResponder,
     Platform,
@@ -29,8 +38,17 @@ import {
     Text,
     TextInput,
     TouchableOpacity,
+    UIManager,
     View,
 } from 'react-native';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+// Animates the pill growing/shrinking as media is added/removed — same
+// spring feel as the pill's own open/close animations elsewhere in this file.
+const animateMediaLayout = () =>
+  LayoutAnimation.configureNext(LayoutAnimation.create(220, 'easeInEaseOut', 'opacity'));
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface CommentsModalProps {
@@ -48,7 +66,6 @@ interface CommentsModalProps {
 }
 
 const PRIMARY = '#094569';
-const AMBER = '#f59e0b';
 
 function fmt(dateStr: string): string {
   const diff = (Date.now() - new Date(dateStr).getTime()) / 1000;
@@ -82,8 +99,7 @@ function Avatar({ user, size = 36 }: { user?: PostComment['user']; size?: number
 function CreatorBadge() {
   return (
     <View style={styles.creatorBadge}>
-      <Crown size={9} color="#fff" />
-      <Text style={styles.creatorBadgeText}>Creator</Text>
+      <Text style={styles.creatorBadgeText}>Author liked</Text>
     </View>
   );
 }
@@ -114,7 +130,21 @@ export default function CommentsModal({
   const [loading, setLoading] = useState(true);
   const [posting, setPosting] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  // 'voice' swaps the text input for CommentVoiceRecorder's hold-to-talk area —
+  // mirrors chat's composerInputKind toggle.
+  const [composerInputKind, setComposerInputKind] = useState<'text' | 'voice'>('text');
+  const [isHoldRecording, setIsHoldRecording] = useState(false);
   const inputRef = useRef<TextInput>(null);
+  // Measured height of the floating input pill — the backdrop behind it only
+  // needs to reach up through half that height (same cutoff rule as the
+  // post-detail bottom bar / chat composer).
+  const [pillHeight, setPillHeight] = useState(52);
+  // Images/videos picked for the comment currently being composed — staged
+  // inline (see PendingMediaStrip) instead of in a separate modal, so the
+  // keyboard/caption stay live the whole time. Uploads happen in the
+  // background as soon as they're picked; sending just attaches whichever
+  // have finished by the time the user taps send.
+  const [pendingMedia, setPendingMedia] = useState<PendingMediaItem[]>([]);
 
   const SCREEN_H = Dimensions.get('window').height;
   const insets   = useSafeAreaInsets();
@@ -268,18 +298,34 @@ export default function CommentsModal({
 
   // ── post comment or reply ─────────────────────────────────────────
   const handlePost = async () => {
-    if (!text.trim() || !userId || posting) return;
+    const hasMedia = pendingMedia.length > 0;
+    const hasPendingUploads = pendingMedia.some((m) => m.uploading);
+    if ((!text.trim() && !hasMedia) || !userId || posting || hasPendingUploads) return;
     setPosting(true);
 
+    const media = pendingMedia
+      .filter((m) => m.uploadedUrl)
+      .map((m) => ({ url: m.uploadedUrl!, type: m.type, duration: m.duration }));
+
     if (replyTarget) {
-      const reply = await addReply(
-        replyTarget.commentId,
-        userId,
-        text,
-        postOwnerId,
-        replyTarget.commentOwnerId,
-        postId,
-      );
+      const reply = hasMedia
+        ? await addReplyWithGallery(
+            replyTarget.commentId,
+            userId,
+            text,
+            postOwnerId,
+            replyTarget.commentOwnerId,
+            postId,
+            media,
+          )
+        : await addReply(
+            replyTarget.commentId,
+            userId,
+            text,
+            postOwnerId,
+            replyTarget.commentOwnerId,
+            postId,
+          );
       if (reply) {
         void playSound('comment');
         setReplies((prev) => ({
@@ -297,7 +343,9 @@ export default function CommentsModal({
       }
       setReplyTarget(null);
     } else {
-      const comment = await addPostComment(postId, userId, text);
+      const comment = hasMedia
+        ? await addPostCommentWithGallery(postId, userId, text, media)
+        : await addPostComment(postId, userId, text);
       if (comment) {
         void playSound('comment');
         setComments((prev) => [...prev, comment]);
@@ -305,7 +353,91 @@ export default function CommentsModal({
       }
     }
     setText('');
+    animateMediaLayout();
+    setPendingMedia([]);
     setPosting(false);
+  };
+
+  // ── voice comment ────────────────────────────────────────────────
+  // CommentVoiceRecorder posts immediately on release (hold-to-talk has no
+  // separate "caption" step the way picking media does), so these mirror
+  // handlePost's reply-vs-top-level branching but keyed off the isReply flag
+  // the recorder already resolved internally.
+  const handleMediaOptimistic = (item: PostComment | CommentReply, isReply: boolean) => {
+    if (isReply) {
+      const reply = item as CommentReply;
+      setReplies((prev) => ({
+        ...prev,
+        [reply.comment_id]: [...(prev[reply.comment_id] ?? []), reply],
+      }));
+      setExpanded((prev) => new Set(prev).add(reply.comment_id));
+    } else {
+      setComments((prev) => [...prev, item as PostComment]);
+    }
+  };
+
+  const handleMediaUploadSuccess = (
+    item: PostComment | CommentReply,
+    optimisticId: string,
+    isReply: boolean,
+  ) => {
+    void playSound('comment');
+    if (isReply) {
+      const reply = item as CommentReply;
+      setReplies((prev) => ({
+        ...prev,
+        [reply.comment_id]: (prev[reply.comment_id] ?? []).map((r) =>
+          r.id === optimisticId ? reply : r,
+        ),
+      }));
+      setComments((prev) =>
+        prev.map((c) => (c.id === reply.comment_id ? { ...c, reply_count: c.reply_count + 1 } : c)),
+      );
+    } else {
+      setComments((prev) => prev.map((c) => (c.id === optimisticId ? (item as PostComment) : c)));
+      onCommentCountChange?.(comments.length + 1);
+    }
+  };
+
+  const handleMediaUploadError = (optimisticId: string, isReply: boolean) => {
+    if (isReply) {
+      setReplies((prev) => {
+        const next: Record<string, CommentReply[]> = {};
+        for (const [commentId, list] of Object.entries(prev)) {
+          next[commentId] = list.filter((r) => r.id !== optimisticId);
+        }
+        return next;
+      });
+    } else {
+      setComments((prev) => prev.filter((c) => c.id !== optimisticId));
+    }
+  };
+
+  // ── staged image/video attachments ──────────────────────────────────
+  const handleMediaPicked = (items: PendingCommentMedia[]) => {
+    animateMediaLayout();
+    setPendingMedia((prev) => [...prev, ...items.map((m) => ({ ...m, uploading: true }))]);
+    // The native picker backgrounds the app briefly, which drops keyboard
+    // focus — bring it back so the caption stays readily typeable.
+    setTimeout(() => inputRef.current?.focus(), 100);
+  };
+
+  const handlePendingMediaUploaded = (
+    id: string,
+    result: { url: string; type: 'image' | 'video'; duration?: number },
+  ) => {
+    setPendingMedia((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, uploading: false, uploadedUrl: result.url } : m)),
+    );
+  };
+
+  const handlePendingMediaFailed = (id: string) => {
+    setPendingMedia((prev) => prev.map((m) => (m.id === id ? { ...m, uploading: false, failed: true } : m)));
+  };
+
+  const removePendingMedia = (id: string) => {
+    animateMediaLayout();
+    setPendingMedia((prev) => prev.filter((m) => m.id !== id));
   };
 
   // ── delete comment ────────────────────────────────────────────────
@@ -428,10 +560,24 @@ export default function CommentsModal({
         <View style={{ flex: 1, marginLeft: 8 }}>
           <View style={styles.nameRow}>
             <Text style={styles.nameText}>{reply.user?.name ?? 'Unknown'}</Text>
-            <Text style={styles.timeText}>{fmt(reply.created_at)}</Text>
           </View>
-          <Text style={styles.bodyText}>{reply.text}</Text>
+          {!!reply.text && <Text style={styles.bodyText}>{reply.text}</Text>}
+          {reply.media_url && reply.media_type && (
+            <View style={{ marginTop: 6 }}>
+              <CommentMediaMessage
+                url={reply.media_url}
+                duration={reply.media_duration}
+                isOptimistic={reply.isOptimistic}
+              />
+            </View>
+          )}
+          {reply.media && reply.media.length > 0 && (
+            <View style={{ marginTop: 6 }}>
+              <CommentMediaGallery items={reply.media} />
+            </View>
+          )}
           <View style={styles.actionsRow}>
+            <Text style={styles.timeText}>{fmt(reply.created_at)}</Text>
             <TouchableOpacity
               onPress={() => handleReplyLike(reply.id, commentId)}
               style={styles.likeBtn}
@@ -448,8 +594,12 @@ export default function CommentsModal({
                 </Text>
               )}
             </TouchableOpacity>
-            {reply.creator_liked && <CreatorBadge />}
           </View>
+          {reply.creator_liked && (
+            <View style={{ marginTop: 6 }}>
+              <CreatorBadge />
+            </View>
+          )}
         </View>
         {isOwn && (
           <TouchableOpacity
@@ -478,12 +628,27 @@ export default function CommentsModal({
           <View style={{ flex: 1, marginLeft: 10 }}>
             <View style={styles.nameRow}>
               <Text style={styles.nameText}>{item.user?.name ?? 'Unknown'}</Text>
-              <Text style={styles.timeText}>{fmt(item.created_at)}</Text>
             </View>
-            <Text style={styles.bodyText}>{item.text}</Text>
+            {!!item.text && <Text style={styles.bodyText}>{item.text}</Text>}
+            {item.media_url && item.media_type && (
+              <View style={{ marginTop: 6 }}>
+                <CommentMediaMessage
+                  url={item.media_url}
+                  duration={item.media_duration}
+                  isOptimistic={item.isOptimistic}
+                />
+              </View>
+            )}
+            {item.media && item.media.length > 0 && (
+              <View style={{ marginTop: 6 }}>
+                <CommentMediaGallery items={item.media} />
+              </View>
+            )}
 
             {/* actions row */}
             <View style={styles.actionsRow}>
+              <Text style={styles.timeText}>{fmt(item.created_at)}</Text>
+
               {/* like */}
               <TouchableOpacity
                 onPress={() => handleCommentLike(item.id)}
@@ -502,8 +667,6 @@ export default function CommentsModal({
                 )}
               </TouchableOpacity>
 
-              {item.creator_liked && <CreatorBadge />}
-
               {/* reply button */}
               <TouchableOpacity
                 onPress={() => handleReplyTap(item)}
@@ -512,29 +675,31 @@ export default function CommentsModal({
               >
                 <Text style={styles.replyActionText}>Reply</Text>
               </TouchableOpacity>
-
-              {/* expand replies */}
-              {item.reply_count > 0 && (
-                <TouchableOpacity
-                  onPress={() => handleToggleReplies(item.id)}
-                  style={styles.replyActionBtn}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  {isLoadingR ? (
-                    <ActivityIndicator size="small" color={PRIMARY} style={{ marginLeft: 4 }} />
-                  ) : (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-                      {isExpanded
-                        ? <ChevronUp size={12} color={PRIMARY} />
-                        : <ChevronDown size={12} color={PRIMARY} />}
-                      <Text style={[styles.replyActionText, { color: PRIMARY }]}>
-                        {item.reply_count} {item.reply_count === 1 ? 'reply' : 'replies'}
-                      </Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
-              )}
             </View>
+
+            {item.creator_liked && (
+              <View style={{ marginTop: 6 }}>
+                <CreatorBadge />
+              </View>
+            )}
+
+            {/* expand replies */}
+            {item.reply_count > 0 && (
+              <TouchableOpacity
+                onPress={() => handleToggleReplies(item.id)}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 }}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <View style={{ width: 24, height: 1, backgroundColor: '#D1D5DB' }} />
+                {isLoadingR ? (
+                  <CircularLoader size="small" color={PRIMARY} />
+                ) : (
+                  <Text style={styles.replyActionText}>
+                    {isExpanded ? 'Hide replies' : `View ${item.reply_count} ${item.reply_count === 1 ? 'reply' : 'replies'}`}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            )}
           </View>
 
           {isOwn && (
@@ -557,6 +722,9 @@ export default function CommentsModal({
       </View>
     );
   };
+
+  const sendDisabled =
+    (!text.trim() && pendingMedia.length === 0) || posting || pendingMedia.some((m) => m.uploading);
 
   // ── modal ─────────────────────────────────────────────────────────
   return (
@@ -589,19 +757,23 @@ export default function CommentsModal({
             </TouchableOpacity>
           </View>
 
-          {/* list — description (headerContent) shows first, then comments */}
+          {/* list — description (headerContent) shows first, then comments.
+              Bottom padding clears the floating input pill (below), which
+              overlays the list rather than pushing it up, so the last
+              comment can still scroll fully into view above the pill. */}
           <FlatList
             data={loading ? [] : comments}
             keyExtractor={(item) => item.id}
             renderItem={renderComment}
             style={{ flex: 1 }}
+            contentContainerStyle={{ paddingBottom: pillHeight + (replyTarget ? 44 : 0) + (pendingMedia.length > 0 ? 66 : 0) + 24 }}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             ListHeaderComponent={headerContent ? <>{headerContent}</> : null}
             ListEmptyComponent={
               loading ? (
                 <View style={styles.emptyState}>
-                  <ActivityIndicator size="small" color={PRIMARY} />
+                  <CircularLoader size="small" color={PRIMARY} />
                 </View>
               ) : (
                 <View style={styles.emptyState}>
@@ -612,52 +784,150 @@ export default function CommentsModal({
             }
           />
 
-          {/* reply-to banner */}
-          {replyTarget && (
-            <View style={styles.replyBanner}>
-              <Text style={styles.replyBannerText}>
-                Replying to{' '}
-                <Text style={{ fontWeight: '700' }}>@{replyTarget.name}</Text>
-              </Text>
-              <TouchableOpacity onPress={() => setReplyTarget(null)}>
-                <X size={14} color="#6B7280" />
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* input bar – paddingBottom uses real safe-area inset so it works
-              for iOS home indicator, Android gesture nav, and button nav */}
-          <View style={[styles.inputBar, { paddingBottom: keyboardVisible ? 12 : (insets.bottom > 0 ? insets.bottom : 12) }]}>
-            <Avatar
-              user={{
-                id: userId,
-                name: currentUser?.name ?? 'U',
-                avatar_url: currentUser?.avatar_url,
+          {/* Floating input pill — overlays the list rather than sitting in
+              normal flex flow below it, same rounded/blurred/clipped
+              treatment (and half-pill backdrop cutoff) as the post-detail
+              fixed bottom bar and the chat composer's own input pill. */}
+          <View pointerEvents="box-none" style={{ position: 'absolute', left: 0, right: 0, bottom: 0 }}>
+            {/* Backdrop — reaches from the true bottom edge up through only
+                the bottom HALF of the pill, so list content scrolling
+                underneath fades away starting at the pill's midpoint rather
+                than only right at its very top edge. */}
+            <View
+              pointerEvents="none"
+              style={{
+                position: 'absolute',
+                left: 0,
+                right: 0,
+                bottom: 0,
+                height: (keyboardVisible ? 12 : (insets.bottom > 0 ? insets.bottom : 12)) + pillHeight / 2,
+                backgroundColor: '#fff',
+                borderTopLeftRadius: 26,
+                borderTopRightRadius: 26,
               }}
-              size={32}
             />
-            <TextInput
-              ref={inputRef}
-              value={text}
-              onChangeText={setText}
-              placeholder={replyTarget ? `Reply to ${replyTarget.name}…` : 'Add a comment…'}
-              placeholderTextColor="#9CA3AF"
-              multiline
-              maxLength={500}
-              style={styles.input}
-            />
-            <TouchableOpacity
-              onPress={handlePost}
-              disabled={!text.trim() || posting}
-              style={{ opacity: text.trim() && !posting ? 1 : 0.35 }}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+
+            {/* reply-to banner */}
+            {replyTarget && (
+              <View style={styles.replyBanner}>
+                <Text style={styles.replyBannerText}>
+                  Replying to{' '}
+                  <Text style={{ fontWeight: '700' }}>@{replyTarget.name}</Text>
+                </Text>
+                <TouchableOpacity onPress={() => setReplyTarget(null)}>
+                  <X size={14} color="#6B7280" />
+                </TouchableOpacity>
+              </View>
+            )}
+
+            <View
+              style={{ paddingHorizontal: 14, paddingTop: 8, paddingBottom: keyboardVisible ? 12 : (insets.bottom > 0 ? insets.bottom : 12) }}
             >
-              {posting ? (
-                <ActivityIndicator size="small" color={PRIMARY} />
-              ) : (
-                <Send size={20} color={PRIMARY} />
-              )}
-            </TouchableOpacity>
+              <View
+                style={{ borderRadius: 26 }}
+                onLayout={(e) => {
+                  const measured = Math.round(e.nativeEvent.layout.height);
+                  if (measured > 0 && Math.abs(measured - pillHeight) > 2) {
+                    setPillHeight(measured);
+                  }
+                }}
+              >
+                {/* Background clipped separately from the content, so the
+                    blur/tint's rounded corners stay crisp without also
+                    clipping anything the content row might need to overflow. */}
+                <View
+                  pointerEvents="none"
+                  style={[
+                    StyleSheet.absoluteFill,
+                    {
+                      borderRadius: 26,
+                      overflow: 'hidden',
+                      backgroundColor: Platform.OS === 'ios' ? 'transparent' : 'rgba(255,255,255,0.85)',
+                    },
+                  ]}
+                >
+                  {Platform.OS === 'ios' && (
+                    <BlurView tint="systemChromeMaterial" intensity={50} style={StyleSheet.absoluteFill} />
+                  )}
+                  <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(209,213,219,0.2)' }]} />
+                </View>
+
+                {/* Staged image/video attachments — the pill grows to fit
+                    this row in place, no separate modal, keyboard stays up. */}
+                <PendingMediaStrip items={pendingMedia} onRemove={removePendingMedia} />
+
+                <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8 }}>
+                  {composerInputKind === 'text' && (
+                    <CommentMediaPicker
+                      postId={postId}
+                      replyTarget={replyTarget ? { commentId: replyTarget.commentId, commentOwnerId: replyTarget.commentOwnerId } : null}
+                      existingCount={pendingMedia.length}
+                      onPicked={handleMediaPicked}
+                      onUploaded={handlePendingMediaUploaded}
+                      onFailed={handlePendingMediaFailed}
+                    />
+                  )}
+
+                  {isHoldRecording ? null : composerInputKind === 'text' ? (
+                    <TouchableOpacity
+                      onPress={() => setComposerInputKind('voice')}
+                      style={{ width: 32, height: 32, alignItems: 'center', justifyContent: 'center' }}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Ionicons name="mic-outline" size={22} color="#6B7280" />
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity
+                      onPress={() => setComposerInputKind('text')}
+                      style={{ width: 32, height: 32, alignItems: 'center', justifyContent: 'center' }}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <MaterialIcons name="keyboard" size={22} color="#6B7280" />
+                    </TouchableOpacity>
+                  )}
+
+                  {composerInputKind === 'voice' && !text.trim() ? (
+                    <View style={{ flex: 1, minHeight: 38, justifyContent: 'center' }}>
+                      <CommentVoiceRecorder
+                        currentUser={{ id: userId, name: currentUser?.name ?? 'U', avatar_url: currentUser?.avatar_url }}
+                        postId={postId}
+                        postOwnerId={postOwnerId}
+                        replyTarget={replyTarget ? { commentId: replyTarget.commentId, commentOwnerId: replyTarget.commentOwnerId } : null}
+                        onOptimistic={handleMediaOptimistic}
+                        onUploadSuccess={handleMediaUploadSuccess}
+                        onUploadError={handleMediaUploadError}
+                        onRecordingStateChange={setIsHoldRecording}
+                      />
+                    </View>
+                  ) : (
+                    <>
+                      <TextInput
+                        ref={inputRef}
+                        value={text}
+                        onChangeText={setText}
+                        placeholder={replyTarget ? `Reply to ${replyTarget.name}…` : 'Add a comment…'}
+                        placeholderTextColor="#9CA3AF"
+                        multiline
+                        maxLength={500}
+                        style={styles.input}
+                      />
+                      <TouchableOpacity
+                        onPress={handlePost}
+                        disabled={sendDisabled}
+                        style={{ opacity: sendDisabled ? 0.35 : 1 }}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        {posting || pendingMedia.some((m) => m.uploading) ? (
+                          <CircularLoader size="small" color={PRIMARY} />
+                        ) : (
+                          <Send size={20} color={PRIMARY} />
+                        )}
+                      </TouchableOpacity>
+                    </>
+                  )}
+                </View>
+              </View>
+            </View>
           </View>
         </View>
       </Animated.View>
@@ -702,11 +972,11 @@ const styles = StyleSheet.create({
   emptyState: { paddingVertical: 40, alignItems: 'center' },
   emptyTitle: { fontSize: 14, color: '#9CA3AF' },
   emptySubtitle: { fontSize: 12, color: '#D1D5DB', marginTop: 4 },
-  commentWrapper: { borderBottomWidth: 0.5, borderBottomColor: '#F3F4F6' },
-  commentRow: { flexDirection: 'row', paddingHorizontal: 14, paddingVertical: 10 },
+  commentWrapper: {},
+  commentRow: { flexDirection: 'row', paddingHorizontal: 14, paddingVertical: 14 },
   nameRow: { flexDirection: 'row', alignItems: 'center' },
-  nameText: { fontSize: 13, fontWeight: '600', color: '#111' },
-  timeText: { fontSize: 11, color: '#9CA3AF', marginLeft: 6 },
+  nameText: { fontSize: 13, fontWeight: '600', color: '#9ca3af' },
+  timeText: { fontSize: 11, color: '#9CA3AF' },
   bodyText: { fontSize: 14, color: '#374151', marginTop: 2, lineHeight: 20 },
   actionsRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6, gap: 10 },
   likeBtn: { flexDirection: 'row', alignItems: 'center', gap: 3 },
@@ -714,30 +984,23 @@ const styles = StyleSheet.create({
   replyActionBtn: { flexDirection: 'row', alignItems: 'center' },
   replyActionText: { fontSize: 12, color: '#6B7280', fontWeight: '500' },
   creatorBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 3,
-    backgroundColor: AMBER,
-    borderRadius: 6, paddingHorizontal: 5, paddingVertical: 2,
+    alignSelf: 'flex-start',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2,
   },
-  creatorBadgeText: { fontSize: 9, color: '#fff', fontWeight: '700' },
+  creatorBadgeText: { fontSize: 10, color: '#6B7280', fontWeight: '600' },
   repliesContainer: { paddingLeft: 12, paddingBottom: 6 },
   replyRow: { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 6, paddingRight: 14 },
   replyBanner: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 8,
     backgroundColor: '#F9FAFB',
-    borderTopWidth: 1, borderTopColor: '#F3F4F6',
   },
   replyBannerText: { fontSize: 12, color: '#6B7280' },
-  inputBar: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 14, paddingTop: 10,
-    borderTopWidth: 1, borderTopColor: '#F3F4F6',
-  },
   input: {
     flex: 1, marginHorizontal: 10,
     fontSize: 14, color: '#111',
-    maxHeight: 80, paddingVertical: 8, paddingHorizontal: 12,
-    backgroundColor: '#F9FAFB', borderRadius: 20,
+    maxHeight: 80, paddingVertical: 8, paddingHorizontal: 4,
   },
   avatarFallback: {
     backgroundColor: PRIMARY,

@@ -13,6 +13,7 @@ import { useLiveSession } from "@/contexts/LiveSessionProvider";
 import { useUser } from "@/contexts/UserContext";
 import { useLivestreams } from "@/hooks/useLivestreams";
 import { supabase } from "@/lib/supabase";
+import CircularLoader from "@/components/ui/CircularLoader";
 import PopupMessage from "@/components/ui/PopupMessage";
 import getStreamService, {
   type StreamIdentity,
@@ -51,7 +52,6 @@ import React, {
   useState,
 } from "react";
 import {
-  ActivityIndicator,
   BackHandler,
   Dimensions,
   FlatList,
@@ -249,7 +249,7 @@ function ActiveVideoContent({ stream }: { stream: Livestream }) {
   // Host is live but viewer is still joining the WebRTC call
   return (
     <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#000" }}>
-      <ActivityIndicator color="white" size="small" />
+      <CircularLoader color="white" size="small" />
       <Text style={{ color: "rgba(255,255,255,0.6)", marginTop: 10, fontSize: 13 }}>
         Connecting…
       </Text>
@@ -433,7 +433,7 @@ function LivePage({
               backgroundColor: "#000",
             }}
           >
-            <ActivityIndicator color="white" size="small" />
+            <CircularLoader color="white" size="small" />
             <Text
               style={{
                 color: "rgba(255,255,255,0.6)",
@@ -1130,7 +1130,7 @@ export default function LiveScrollScreen({
         }}
       >
         <StatusBar barStyle="light-content" />
-        <ActivityIndicator size="large" color="white" />
+        <CircularLoader size="large" color="white" />
         <Text
           style={{
             color: "rgba(255,255,255,0.6)",
@@ -1213,7 +1213,7 @@ export default function LiveScrollScreen({
           }}
         >
           {wrapperLoading ? (
-            <ActivityIndicator size="small" color="white" />
+            <CircularLoader size="small" color="white" />
           ) : (
             <>
               <Radio size={18} color="white" />
@@ -1471,7 +1471,7 @@ export default function LiveScrollScreen({
             zIndex: 30,
           }}
         >
-          <ActivityIndicator size="large" color="white" />
+          <CircularLoader size="large" color="white" />
           <Text style={{ color: "white", marginTop: 12, fontSize: 14 }}>
             Opening…
           </Text>

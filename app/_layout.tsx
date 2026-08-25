@@ -1,12 +1,14 @@
 // app/_layout.tsx
 
 import AppUpdateGate from "@/components/AppUpdateGate";
+import WhatsNewGate from "@/components/WhatsNewGate";
 import CustomFlashMessage from "@/components/CustomFlashMessage";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import InAppChatBanner from "@/components/chat/InAppChatBanner";
 import InAppNotificationBanner from "@/components/notifications/InAppNotificationBanner";
 import OneSignalBootstrap from "@/components/notifications/OneSignalBootstrap";
 import { UnreadMessagesProvider } from "@/contexts/UnreadMessagesContext";
+import { useAppUpdateCheck } from "@/hooks/useAppUpdateCheck";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import "@/utils/silenceLogs";
 import {
@@ -44,6 +46,7 @@ export default function RootLayout() {
   const router = useRouter();
   const lastHandledUrlRef = useRef<string | null>(null);
   const shouldMountOneSignalBootstrap = !(__DEV__ && Platform.OS === "android");
+  const appUpdate = useAppUpdateCheck();
 
   const fontMap = {
     // Load icon fonts directly from assets/fonts/ — node_modules requires fail in release builds
@@ -204,7 +207,11 @@ export default function RootLayout() {
                         />
                         <InAppChatBanner />
                         <InAppNotificationBanner />
-                        <AppUpdateGate />
+                        <AppUpdateGate
+                          status={appUpdate.status}
+                          message={appUpdate.message}
+                        />
+                        <WhatsNewGate updateStatus={appUpdate.status} />
                         {/* Transparent status bar with dark icons on Android;
                             iOS continues to follow the current appearance. */}
                         <StatusBar

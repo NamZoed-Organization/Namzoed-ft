@@ -3,16 +3,16 @@ import { isFollowing } from '@/lib/followService';
 import { getPostLikes } from '@/lib/likesService';
 import { useAppRouter } from '@/utils/navigation';
 import { X } from 'lucide-react-native';
+import CircularLoader from '@/components/ui/CircularLoader';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Image } from 'expo-image';
 import {
-    ActivityIndicator,
     FlatList,
-    Modal,
     Text,
     TouchableOpacity,
     View,
 } from 'react-native';
+import BottomSheetModal from './BottomSheetModal';
 
 interface LikeUser {
   id: string;
@@ -153,75 +153,46 @@ export default function LikesListModal({
   };
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
-    >
-      <TouchableOpacity
-        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' }}
-        activeOpacity={1}
-        onPress={onClose}
-      />
-      <View
-        style={{
-          backgroundColor: 'white',
-          borderTopLeftRadius: 24,
-          borderTopRightRadius: 24,
-          maxHeight: '65%',
-          paddingBottom: 40,
-        }}
-      >
-        {/* Handle */}
-        <View
-          style={{
-            width: 40,
-            height: 4,
-            backgroundColor: '#D1D5DB',
-            borderRadius: 2,
-            alignSelf: 'center',
-            marginTop: 12,
-            marginBottom: 8,
-          }}
-        />
-
-        {/* Header */}
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            paddingHorizontal: 16,
-            paddingBottom: 12,
-            borderBottomWidth: 1,
-            borderBottomColor: '#F3F4F6',
-          }}
-        >
-          <Text style={{ fontSize: 16, fontWeight: '700', color: '#111' }}>Likes</Text>
-          <TouchableOpacity onPress={onClose}>
-            <X size={20} color="#666" />
-          </TouchableOpacity>
-        </View>
-
-        {/* List */}
-        {loading ? (
-          <View style={{ paddingVertical: 40, alignItems: 'center' }}>
-            <ActivityIndicator size="small" color="#094569" />
+    <BottomSheetModal visible={visible} onClose={onClose}>
+      {(close) => (
+        <>
+          {/* Header */}
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              paddingHorizontal: 16,
+              paddingBottom: 12,
+              borderBottomWidth: 1,
+              borderBottomColor: '#F3F4F6',
+            }}
+          >
+            <Text style={{ fontSize: 16, fontWeight: '700', color: '#111' }}>Likes</Text>
+            <TouchableOpacity onPress={close}>
+              <X size={20} color="#666" />
+            </TouchableOpacity>
           </View>
-        ) : users.length === 0 ? (
-          <View style={{ paddingVertical: 40, alignItems: 'center' }}>
-            <Text style={{ fontSize: 14, color: '#9CA3AF' }}>No likes yet</Text>
-          </View>
-        ) : (
-          <FlatList
-            data={users}
-            keyExtractor={(item) => item.id}
-            renderItem={renderUser}
-            showsVerticalScrollIndicator={false}
-          />
-        )}
-      </View>
-    </Modal>
+
+          {/* List */}
+          {loading ? (
+            <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+              <CircularLoader size="small" color="#094569" />
+            </View>
+          ) : users.length === 0 ? (
+            <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+              <Text style={{ fontSize: 14, color: '#9CA3AF' }}>No likes yet</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={users}
+              keyExtractor={(item) => item.id}
+              renderItem={renderUser}
+              showsVerticalScrollIndicator={false}
+            />
+          )}
+        </>
+      )}
+    </BottomSheetModal>
   );
 }

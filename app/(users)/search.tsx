@@ -1,14 +1,15 @@
 import ImageViewer from "@/components/modals/ImageViewer";
+import CircularLoader from "@/components/ui/CircularLoader";
+import ProgressiveImage from "@/components/ui/ProgressiveImage";
 import { useUser } from "@/contexts/UserContext";
 import { searchAll, SearchResult, SearchResults } from "@/lib/searchService";
 import { useScreenAnalytics } from "@/hooks/useAnalytics";
 import { Screens } from "@/lib/analyticsService";
 import { useAppRouter } from "@/utils/navigation";
+import { TrendingEntry, useTrendingSubcategories } from "@/hooks/useTrendingSubcategories";
 import { Ionicons } from "@expo/vector-icons";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Image,
   Keyboard,
   ScrollView,
   Text,
@@ -43,6 +44,8 @@ export default function GlobalSearchScreen() {
     {},
   );
   const tabBarVisibleWidth = useRef(0);
+
+  const { trending } = useTrendingSubcategories();
 
   // Auto-focus on mount
   useEffect(() => {
@@ -173,18 +176,47 @@ export default function GlobalSearchScreen() {
     { key: "marketplace", label: "Market", icon: "storefront" },
   ];
 
-  const handleTabPress = (tabKey: string, tabIndex: number) => {
-    setActiveTab(tabKey as any);
+  // Shared by manual tab taps (layout already known by the time you can tap
+  // a rendered tab) and the trending-chip handler below (which sets the
+  // active tab before the results/tabs row has even mounted — see the
+  // effect that re-runs this once layout becomes available).
+  const scrollTabIntoView = useCallback((tabKey: string) => {
+    const tabIndex = tabs.findIndex((t) => t.key === tabKey);
     const layout = tabLayouts.current[tabKey];
     const visibleWidth = tabBarVisibleWidth.current;
-    if (!layout || !visibleWidth) return;
-    let targetX =
+    if (tabIndex === -1 || !layout || !visibleWidth) return;
+    const targetX =
       tabIndex === 0
         ? 0
         : tabIndex === tabs.length - 1
           ? 99999
           : layout.x - visibleWidth / 2 + layout.width / 2;
     tabScrollRef.current?.scrollTo({ x: Math.max(0, targetX), animated: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleTabPress = (tabKey: string, _tabIndex: number) => {
+    setActiveTab(tabKey as any);
+    scrollTabIntoView(tabKey);
+  };
+
+  // Trending chips can set the active tab before the tab row exists yet
+  // (tapped from the empty state, before any search has run) — once real
+  // results land and the tab row mounts, catch up and slide it into view.
+  useEffect(() => {
+    if (!searchResults) return;
+    const raf = requestAnimationFrame(() => scrollTabIntoView(activeTab));
+    return () => cancelAnimationFrame(raf);
+  }, [searchResults, activeTab, scrollTabIntoView]);
+
+  const handleTrendingPress = (entry: TrendingEntry) => {
+    trackFeature("search", "trending_chip", "search", {
+      subcategory: entry.subcategoryName,
+    });
+    Keyboard.dismiss();
+    setQuery(entry.subcategoryName);
+    setThrottledQuery(entry.subcategoryName);
+    setActiveTab("products");
   };
 
   const handleTouchEnd = (e: any) => {
@@ -205,10 +237,11 @@ export default function GlobalSearchScreen() {
     >
       <View className="bg-white rounded-lg overflow-hidden border border-gray-100">
         {result.imageUrl && (
-          <Image
-            source={{ uri: result.imageUrl }}
-            className="w-full h-32"
-            resizeMode="cover"
+          <ProgressiveImage
+            uri={result.imageUrl}
+            style={{ width: "100%", height: 128 }}
+            showProgress={false}
+            recyclingKey={result.id}
           />
         )}
         <View className={result.imageUrl ? "p-2.5" : "p-3"}>
@@ -271,10 +304,11 @@ export default function GlobalSearchScreen() {
           className={`w-14 h-14 ${isUser ? "rounded-full" : "rounded-lg"} bg-gray-200 overflow-hidden mr-3`}
         >
           {result.imageUrl ? (
-            <Image
-              source={{ uri: result.imageUrl }}
-              className="w-full h-full"
-              resizeMode="cover"
+            <ProgressiveImage
+              uri={result.imageUrl}
+              style={{ width: "100%", height: "100%" }}
+              showProgress={false}
+              recyclingKey={result.id}
             />
           ) : (
             <View className="w-full h-full items-center justify-center bg-gray-300">
@@ -367,7 +401,7 @@ export default function GlobalSearchScreen() {
         {/* Searching indicator */}
         {isSearching && (
           <View className="py-8 items-center">
-            <ActivityIndicator size="large" color="#094569" />
+            <CircularLoader size="large" color="#094569" />
             <Text className="text-gray-500 mt-2">Searching...</Text>
           </View>
         )}
@@ -376,9 +410,50 @@ export default function GlobalSearchScreen() {
         {!isSearching && !searchResults && throttledQuery.length === 0 && (
           <View className="py-16 items-center">
             <Ionicons name="search" size={48} color="#9CA3AF" />
-            <Text className="text-gray-500 mt-4 text-center">
+            <Text className="text-gray-500 mt-4 text-center px-6">
               Search for users, services, products, marketplace items, or posts
             </Text>
+
+            {trending.length > 0 && (
+              <View style={{ marginTop: 28, width: "100%" }}>
+                <Text
+                  style={{
+                    fontSize: 11,
+                    fontWeight: "700",
+                    color: "#9CA3AF",
+                    letterSpacing: 0.4,
+                    textTransform: "uppercase",
+                    textAlign: "center",
+                    marginBottom: 10,
+                  }}
+                >
+                  Trending
+                </Text>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    flexWrap: "wrap",
+                    justifyContent: "center",
+                    gap: 8,
+                    paddingHorizontal: 16,
+                  }}
+                >
+                  {trending.map((entry) => (
+                    <TouchableOpacity
+                      key={`${entry.categoryKey}-${entry.subcategoryName}`}
+                      onPress={() => handleTrendingPress(entry)}
+                      activeOpacity={0.8}
+                      className="px-3.5 py-2 rounded-full bg-gray-100 flex-row items-center gap-1.5"
+                    >
+                      <Ionicons name="trending-up" size={12} color="#094569" />
+                      <Text className="text-sm font-medium text-gray-700 capitalize">
+                        {entry.subcategoryName}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
           </View>
         )}
 
@@ -530,12 +605,9 @@ export default function GlobalSearchScreen() {
             setShowImageViewer(false);
             setSelectedPost(null);
           }}
-          postContent={selectedPost.content}
-          username={selectedPost.userName}
-          likes={selectedPost.likes}
-          comments={selectedPost.comments}
           postId={selectedPost.id}
           postUserId={selectedPost.user_id}
+          postContent={selectedPost.content}
         />
       )}
     </View>

@@ -8,6 +8,7 @@ export { default as CommunityGuidelines } from "./CommunityGuidelines";
 export { default as ContactUs } from "./ContactUs";
 export { default as DataStorage } from "./DataStorage";
 export { default as DeleteAccount } from "./DeleteAccount";
+export { default as DevComponents } from "./DevComponents";
 export { default as HelpCenter } from "./HelpCenter";
 export { default as LanguageRegion } from "./LanguageRegion";
 export { default as Notifications } from "./Notifications";

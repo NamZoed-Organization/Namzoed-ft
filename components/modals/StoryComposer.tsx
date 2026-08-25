@@ -1,4 +1,5 @@
 import ImagePickerSheet from "@/components/ui/ImagePickerSheet";
+import CircularLoader from "@/components/ui/CircularLoader";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { useUser } from "@/contexts/UserContext";
 import { moderateImage } from "@/lib/imageModeration";
@@ -16,7 +17,6 @@ import {
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   FlatList,
   Image,
   Modal,
@@ -298,7 +298,7 @@ export default function StoryComposer({ onClose }: StoryComposerProps) {
               style={{ padding: 10 }}
             >
               {isSubmitting ? (
-                <ActivityIndicator size="small" color="#4ade80" />
+                <CircularLoader size="small" color="#4ade80" />
               ) : (
                 <Text style={{ color: "#4ade80", fontWeight: "700", fontSize: 15 }}>Share</Text>
               )}
@@ -378,7 +378,7 @@ export default function StoryComposer({ onClose }: StoryComposerProps) {
 
             {loadingProducts ? (
               <View className="flex-1 items-center justify-center">
-                <ActivityIndicator size="small" color="#094569" />
+                <CircularLoader size="small" color="#094569" />
                 <Text className="text-sm text-gray-400 mt-2">Loading your products...</Text>
               </View>
             ) : userProducts.length === 0 ? (
@@ -480,7 +480,7 @@ export default function StoryComposer({ onClose }: StoryComposerProps) {
 
             {searchingAccounts ? (
               <View className="items-center py-8">
-                <ActivityIndicator size="small" color="#094569" />
+                <CircularLoader size="small" color="#094569" />
               </View>
             ) : accountSearch.length < 2 ? (
               <View className="items-center py-12 px-8">
@@ -574,7 +574,7 @@ export default function StoryComposer({ onClose }: StoryComposerProps) {
 
         {isScanning && (
           <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-            <ActivityIndicator color="#fff" size="large" />
+            <CircularLoader color="#fff" size="large" />
             <Text style={{ color: "rgba(255,255,255,0.7)", marginTop: 12 }}>Checking photo...</Text>
           </View>
         )}

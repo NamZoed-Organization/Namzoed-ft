@@ -1,7 +1,8 @@
+import CircularLoader from "@/components/ui/CircularLoader";
 import { useAppRouter } from "@/utils/navigation";
 import { useLocalSearchParams } from "expo-router";
 import React, { useEffect, useRef } from "react";
-import { ActivityIndicator, AppState, Share, Text, View } from "react-native";
+import { AppState, Share, Text, View } from "react-native";
 
 export default function ShareBridgeScreen() {
   const router = useAppRouter();
@@ -82,7 +83,7 @@ export default function ShareBridgeScreen() {
 
   return (
     <View className="flex-1 items-center justify-center bg-white">
-      <ActivityIndicator color="#094569" size="small" />
+      <CircularLoader color="#094569" size="small" />
       <Text className="mt-3 text-sm text-gray-500">Preparing share…</Text>
     </View>
   );

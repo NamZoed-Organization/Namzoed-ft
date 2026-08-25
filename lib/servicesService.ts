@@ -11,6 +11,10 @@ export interface ProviderService {
   images: string[];
   status: boolean;
   created_at: string;
+  impressions_shown?: number;
+  last_shown_at?: string | null;
+  boost_started_at?: string | null;
+  boost_expires_at?: string | null;
 }
 
 export interface ProviderServiceWithDetails extends ProviderService {

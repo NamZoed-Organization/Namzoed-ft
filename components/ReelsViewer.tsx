@@ -6,6 +6,7 @@ import { useBottomBarScroll } from "@/hooks/useBottomBarScroll";
 import { useAppRouter } from "@/utils/navigation";
 import { hasUserBookmarkedPost, togglePostBookmark } from "@/lib/bookmarkService";
 import { followUser, isFollowing } from "@/lib/followService";
+import LoadingBar from "@/components/ui/LoadingBar";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { getPostCommentCount } from "@/lib/commentsService";
 import { getPostLikeCount, hasUserLikedPost, togglePostLike } from "@/lib/likesService";
@@ -25,7 +26,6 @@ import {
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Animated,
   Dimensions,
   Easing,
@@ -380,12 +380,6 @@ function ReelItem({
               nativeControls={false}
               fullscreenOptions={{ enable: false }}
             />
-            {isLoading && (
-              <View style={styles.loaderOverlay} pointerEvents="none">
-                <ActivityIndicator size="large" color="#fff" />
-              </View>
-            )}
-
             {/* Center play affordance when paused */}
             <Animated.View
               pointerEvents="none"
@@ -496,6 +490,7 @@ function ReelItem({
           onSeek={handleScrubSeek}
           onScrubbingChange={handleItemScrubbingChange}
           bottom={scrubberBottom}
+          isBuffering={isLoading}
         />
       )}
 
@@ -532,6 +527,9 @@ interface VideoScrubberProps {
   onScrubbingChange: (scrubbing: boolean) => void;
   /** Distance from the screen bottom — sits right above the floating bar. */
   bottom: number;
+  /** True while the video is stalled/loading — shows the pulsing LoadingBar
+   *  directly on the bar itself instead of the normal static progress fill. */
+  isBuffering: boolean;
 }
 
 /** Instagram/TikTok-style scrub bar: full width, enlarges while dragging,
@@ -544,6 +542,7 @@ function VideoScrubber({
   onSeek,
   onScrubbingChange,
   bottom,
+  isBuffering,
 }: VideoScrubberProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [dragTime, setDragTime] = useState(0);
@@ -741,10 +740,14 @@ function VideoScrubber({
           }}
           {...scrubResponder.panHandlers}
         >
-          <Animated.View style={[styles.scrubberBar, { height: barHeight }]}>
-            <View style={styles.scrubberTrackBg} />
-            <View style={[styles.scrubberFill, { width: `${progress * 100}%` }]} />
-          </Animated.View>
+          {isBuffering ? (
+            <LoadingBar height={2.5} style={{ width: "100%" }} />
+          ) : (
+            <Animated.View style={[styles.scrubberBar, { height: barHeight }]}>
+              <View style={styles.scrubberTrackBg} />
+              <View style={[styles.scrubberFill, { width: `${progress * 100}%` }]} />
+            </Animated.View>
+          )}
         </View>
       </View>
     </>
@@ -1209,11 +1212,6 @@ const styles = StyleSheet.create({
     width: WINDOW_WIDTH,
     height: WINDOW_HEIGHT,
     backgroundColor: "#000",
-  },
-  loaderOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: "center",
-    justifyContent: "center",
   },
   centerPlay: {
     ...StyleSheet.absoluteFillObject,

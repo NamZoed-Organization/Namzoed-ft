@@ -1,5 +1,6 @@
 import ImageCropperOverlay from "@/components/modals/ImageCropperOverlay";
 import ImagePickerSheet from "@/components/ui/ImagePickerSheet";
+import CircularLoader from "@/components/ui/CircularLoader";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { categories } from "@/data/categories";
 import {
@@ -13,7 +14,6 @@ import * as ImagePicker from "expo-image-picker";
 import { Check, DollarSign, Upload, X } from "lucide-react-native";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-    ActivityIndicator,
     Image,
     KeyboardAvoidingView,
     Modal,
@@ -781,7 +781,7 @@ export default function EditProductModal({
                     }`}
                   >
                     {loading ? (
-                      <ActivityIndicator color="white" />
+                      <CircularLoader color="white" />
                     ) : (
                       <Text className="text-white font-mbold text-lg">
                         Update Product

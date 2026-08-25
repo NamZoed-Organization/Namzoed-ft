@@ -2,21 +2,13 @@
 
 import { LinearGradient } from "expo-linear-gradient";
 import { useAppRouter } from "@/utils/navigation";
-import { useFocusEffect } from "expo-router";
 import { useScreenAnalytics } from "@/hooks/useAnalytics";
 import { Screens } from "@/lib/analyticsService";
 import { Plus } from "lucide-react-native";
-import React, {
-    useCallback,
-    useEffect,
-    useMemo,
-    useRef,
-    useState,
-} from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
-    Animated,
-    ImageBackground,
-    ImageSourcePropType,
+    NativeScrollEvent,
+    NativeSyntheticEvent,
     RefreshControl,
     ScrollView,
     Text,
@@ -27,31 +19,24 @@ import {
 import AuthPromptModal from "@/components/modals/AuthPromptModal";
 import CreateProductModal from "@/components/modals/CreateProductModal";
 import SearchBar from "@/components/modals/SearchBar";
-import CategorySkeleton from "@/components/ui/CategorySkeleton";
+import GridCard, { GridCardSourceRect, gridCardHeight } from "@/components/GridCard";
+import MasonryGrid from "@/components/MasonryGrid";
 import TopNavbar from "@/components/ui/TopNavbar";
 import { useUser } from "@/contexts/UserContext";
 import { useTabBarScroll } from "@/contexts/TabBarScrollContext";
 import { categories as categoryData, categoryNames } from "@/data/categories";
+import { RATIO_SQUARE } from "@/lib/postMediaDisplay";
+import {
+    fetchProductsForRanking,
+    ProductWithUser,
+} from "@/lib/productsService";
+import { useRankedFeed } from "@/hooks/useRankedFeed";
+import { useTrendingSubcategories } from "@/hooks/useTrendingSubcategories";
 import { supabase } from "@/lib/supabase";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const slugify = (str: string): string => str;
-
-const categoryImages: Record<string, ImageSourcePropType> = {
-  "fashion-and-jewelry": require("@/assets/category/fashion_category.png"),
-  food: require("@/assets/category/food_category.png"),
-  beauty: require("@/assets/category/beauty_category.png"),
-  "kids-and-toys": require("@/assets/category/kids_category.png"),
-  electronics: require("@/assets/category/electronics_category.png"),
-  "home-and-living": require("@/assets/category/home_category.png"),
-  "real-estate-and-properties": require("@/assets/category/real_estate.png"),
-  "gifts-books-flowers-and-arts": require("@/assets/category/gifts_books_category.png"),
-};
-
-interface ProductSummary {
-  category: string;
-  tags: string[] | null;
-}
+const PAGE_SIZE = 20;
+const BOOST_SLOT_COUNT = 2;
 
 export default function CategoriesScreen() {
   const insets = useSafeAreaInsets();
@@ -62,134 +47,97 @@ export default function CategoriesScreen() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [isModalVisible, setModalVisible] = useState(false);
-  const [realProducts, setRealProducts] = useState<ProductSummary[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
 
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const currentUserId = currentUser?.id || "";
-
-  const fetchCounts = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("products")
-        .select("category, tags");
-
-      if (error) throw error;
-      setRealProducts(data || []);
-    } catch (error) {
-      console.error("Error fetching category counts:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchCounts();
-  }, []);
-
-  // Refresh data when screen comes into focus (after modal closes or navigation)
-  useFocusEffect(
-    useCallback(() => {
-      fetchCounts();
-    }, []),
+  // "all" is the default browse mode — every product, every category.
+  const [activeCategory, setActiveCategory] = useState<string>("all");
+  const [activeSubcategory, setActiveSubcategory] = useState<string | null>(
+    null,
   );
 
-  const onRefresh = async () => {
-    setRefreshing(true);
+  const currentUserId = currentUser?.id || "";
 
-    Animated.timing(fadeAnim, {
-      toValue: 0,
-      duration: 200,
-      useNativeDriver: true,
-    }).start();
+  const { trending, loading: countsLoading } = useTrendingSubcategories();
+  const categoryKeys = useMemo(() => Object.keys(categoryData), []);
 
-    await fetchCounts();
+  const subcategoriesForActive =
+    activeCategory !== "all" ? categoryData[activeCategory] || [] : [];
 
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 400,
-      useNativeDriver: true,
-    }).start();
+  const handleSelectCategory = useCallback(
+    (key: string) => {
+      trackTap("category_tab", "category_select", { category: key });
+      setActiveCategory(key);
+      setActiveSubcategory(null);
+    },
+    [trackTap],
+  );
 
-    setRefreshing(false);
-  };
+  // Rotating search-bar placeholder — trending subcategories, memoized so
+  // the effect driving the rotation (see SearchBar) doesn't restart on
+  // every render.
+  const trendingPlaceholders = useMemo(
+    () => trending.map((entry) => `Search "${entry.subcategoryName}"`),
+    [trending],
+  );
 
-  useEffect(() => {
-    if (!loading) {
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 400,
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [loading, fadeAnim]);
-
-  const processedCategories = useMemo(() => {
-    return Object.keys(categoryData).map((key) => {
-      const productsInCategory = realProducts.filter((p) => p.category === key);
-      const totalCount = productsInCategory.length;
-
-      const subcategories = categoryData[key].map((subStatic) => {
-        const count = productsInCategory.filter(
-          (p) => p.tags && p.tags.includes(subStatic.name),
-        ).length;
-        return { ...subStatic, count };
-      });
-
-      const topSubcategory =
-        subcategories.length > 0
-          ? subcategories.reduce((max, current) =>
-              current.count > max.count ? current : max,
-            )
-          : null;
-
-      return {
-        key,
-        totalCount,
-        topSubcategory,
-        image:
-          categoryImages[key] ||
-          require("@/assets/category/fashion_category.png"),
-      };
+  // Product pool for whatever's currently selected — fetched once per
+  // category+subcategory combo, ranked/randomized client-side (see
+  // lib/feedRanking.ts), same pattern the old per-category detail screen used.
+  const fetchPool = useCallback(
+    () =>
+      fetchProductsForRanking(
+        activeCategory === "all" ? null : activeCategory,
+        activeSubcategory,
+      ),
+    [activeCategory, activeSubcategory],
+  );
+  const trackImpressions = useCallback(async (ids: string[]) => {
+    const { error } = await supabase.rpc("increment_impressions_products", {
+      ids,
     });
-  }, [realProducts]);
+    if (error) console.error("Error tracking product impressions:", error);
+  }, []);
 
-  const filteredCategories = useMemo(() => {
-    if (!searchQuery) return processedCategories;
-    const lowerQuery = searchQuery.toLowerCase();
-    return processedCategories.filter((cat) => {
-      const matchesCategory = cat.key.toLowerCase().includes(lowerQuery);
-      const matchesSub = cat.topSubcategory?.name
-        .toLowerCase()
-        .includes(lowerQuery);
-      return matchesCategory || matchesSub;
-    });
-  }, [searchQuery, processedCategories]);
+  const ranked = useRankedFeed<ProductWithUser>({
+    fetchPool,
+    trackImpressions,
+    pageSize: PAGE_SIZE,
+    boostSlotCount: BOOST_SLOT_COUNT,
+    deps: [activeCategory, activeSubcategory],
+  });
 
-  const handleCategoryPress = (categoryKey: string) => {
-    const slug = slugify(categoryKey);
-    router.push({
-      pathname: "/(users)/categories/[slug]",
-      params: { slug },
-    });
-  };
+  const displayedProducts = useMemo(() => {
+    if (!searchQuery.trim()) return ranked.items;
+    const query = searchQuery.toLowerCase();
+    return ranked.items.filter(
+      (p) =>
+        p.name.toLowerCase().includes(query) ||
+        (p.description && p.description.toLowerCase().includes(query)) ||
+        (p.tags && p.tags.some((tag) => tag.toLowerCase().includes(query))),
+    );
+  }, [ranked.items, searchQuery]);
 
-  const handleSubcategoryPress = (
-    categoryKey: string,
-    subcategoryName: string,
-  ) => {
-    const slug = slugify(categoryKey);
-    router.push({
-      pathname: "/(users)/categories/[slug]",
-      params: {
-        slug,
-        filter: subcategoryName,
-      },
-    });
-  };
+  const handleScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      onTabBarScroll(e);
+      if (!ranked.hasMore || ranked.loading) return;
+      const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+      if (
+        layoutMeasurement.height + contentOffset.y >=
+        contentSize.height - 400
+      ) {
+        ranked.loadMore();
+      }
+    },
+    [onTabBarScroll, ranked],
+  );
 
-  const [showAuthModal, setShowAuthModal] = useState(false);
+  const handleProductPress = useCallback(
+    (productId: string, _rect: GridCardSourceRect) => {
+      router.push(`/(users)/product/${productId}` as any);
+    },
+    [router],
+  );
 
   const handleCreatePress = () => {
     if (!currentUserId) {
@@ -199,385 +147,179 @@ export default function CategoriesScreen() {
     setModalVisible(true);
   };
 
-  // Calculate card widths for proper 3-column layout
-  const { width: screenWidth } =
-    require("react-native").Dimensions.get("window");
-  const subcategoryCardWidth = (screenWidth - 32 - 24) / 3; // 32 = padding, 24 = gaps (12*2)
-
   return (
     <View className="flex-1 bg-[#f8f9fa]">
       <ScrollView
         showsVerticalScrollIndicator={false}
         scrollEventThrottle={16}
-        onScroll={onTabBarScroll}
+        onScroll={handleScroll}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingBottom: 72 + insets.bottom }}
+        stickyHeaderIndices={[1]}
         refreshControl={
           <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
+            refreshing={ranked.refreshing}
+            onRefresh={ranked.refresh}
             tintColor="#000"
             colors={["#000"]}
           />
         }
       >
-        <View>
+        {/* Header — scrolls away normally */}
+        <View className="bg-[#f8f9fa]">
           <TopNavbar />
-          <View className="px-4 gap-2">
-
-          {/* SEARCH BAR + POST BUTTON */}
-          <View className="flex-row items-center gap-3 mb-4">
-            <View className="flex-1">
-              <SearchBar
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                placeholder="Search categories..."
-              />
-            </View>
-
-            <TouchableOpacity
-              onPress={handleCreatePress}
-              activeOpacity={0.85}
-              style={{
-                justifyContent: "center",
-                alignItems: "center",
-                overflow: "hidden",
-                shadowColor: "#000",
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.2,
-                shadowRadius: 8,
-                elevation: 6,
-              }}
-              className="w-10 h-10 rounded-lg"
-            >
-              <LinearGradient
-                colors={["#094569", "#0a5a8a", "#0b6ba8"]}
-                start={[0, 0]}
-                end={[1, 1]}
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  justifyContent: "center",
-                  alignItems: "center",
-                }}
+          <View className="px-4" style={{ paddingBottom: 8 }}>
+            <View className="flex-row items-center gap-3">
+              <View className="flex-1">
+                <SearchBar
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  placeholder="Search products..."
+                  animatedPlaceholders={trendingPlaceholders}
+                />
+              </View>
+              <TouchableOpacity
+                onPress={handleCreatePress}
+                activeOpacity={0.85}
+                className="w-10 h-10 rounded-lg overflow-hidden"
               >
-                <Plus color="white" size={26} strokeWidth={2.5} />
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
-
-          {loading ? (
-            <CategorySkeleton />
-          ) : (
-            <Animated.View style={{ opacity: fadeAnim }}>
-              {/* Section 1: Main Category Cards */}
-              <View className="mb-6">
-                <View
+                <LinearGradient
+                  colors={["#094569", "#0a5a8a", "#0b6ba8"]}
+                  start={[0, 0]}
+                  end={[1, 1]}
                   style={{
-                    marginBottom: 16,
-                    flexDirection: "row",
+                    width: "100%",
+                    height: "100%",
+                    justifyContent: "center",
                     alignItems: "center",
                   }}
                 >
-                  <View
-                    style={{
-                      width: 3,
-                      height: 20,
-                      backgroundColor: "#094569",
-                      borderRadius: 2,
-                      marginRight: 10,
-                    }}
-                  />
-                  <View>
-                    <Text
-                      style={{
-                        fontSize: 22,
-                        fontWeight: "600",
-                        color: "#1a1a1a",
-                        letterSpacing: -0.3,
-                        marginBottom: 4,
-                      }}
-                    >
-                      {searchQuery ? "Search Results" : "Categories"}
-                    </Text>
-                    {!searchQuery && (
-                      <Text
-                        style={{
-                          fontSize: 14,
-                          color: "#888",
-                          fontWeight: "400",
-                        }}
-                      >
-                        Explore all products
-                      </Text>
-                    )}
-                  </View>
-                </View>
-              </View>
-
-              <View className="flex flex-row flex-wrap justify-between gap-y-4">
-                {filteredCategories.map((cat, index) => (
-                  <TouchableOpacity
-                    key={cat.key}
-                    className="w-[48%]"
-                    activeOpacity={0.95}
-                    onPress={() => handleCategoryPress(cat.key)}
-                    style={{
-                      shadowColor: "#000",
-                      shadowOffset: { width: 0, height: 4 },
-                      shadowOpacity: 0.1,
-                      shadowRadius: 12,
-                      elevation: 5,
-                    }}
-                  >
-                    <View
-                      style={{
-                        height: 220,
-                        borderRadius: 20,
-                        overflow: "hidden",
-                        backgroundColor: "#fff",
-                      }}
-                    >
-                      <ImageBackground
-                        source={cat.image}
-                        resizeMode="cover"
-                        style={{ flex: 1, width: "100%", height: "100%" }}
-                      >
-                        {/* Premium overlay with better gradient */}
-                        <View
-                          style={{
-                            position: "absolute",
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                          }}
-                        >
-                          <LinearGradient
-                            colors={[
-                              "rgba(0,0,0,0.1)",
-                              "rgba(0,0,0,0.3)",
-                              "rgba(0,0,0,0.9)",
-                            ]}
-                            locations={[0, 0.5, 1]}
-                            style={{ flex: 1 }}
-                          >
-                            <View
-                              style={{
-                                position: "absolute",
-                                bottom: 0,
-                                left: 0,
-                                right: 0,
-                                paddingHorizontal: 16,
-                                paddingBottom: 16,
-                                paddingTop: 8,
-                              }}
-                            >
-                              {/* Decorative line */}
-                              <View
-                                style={{
-                                  width: 32,
-                                  height: 3,
-                                  backgroundColor: "rgba(255, 255, 255, 0.9)",
-                                  borderRadius: 2,
-                                  marginBottom: 10,
-                                }}
-                              />
-
-                              <Text
-                                style={{
-                                  color: "white",
-                                  fontSize: 17,
-                                  fontWeight: "700",
-                                  marginBottom: 6,
-                                  letterSpacing: -0.3,
-                                  textShadowColor: "rgba(0, 0, 0, 0.3)",
-                                  textShadowOffset: { width: 0, height: 1 },
-                                  textShadowRadius: 3,
-                                }}
-                                className="capitalize"
-                              >
-                                {categoryNames[cat.key] || cat.key}
-                              </Text>
-
-                              <Text
-                                style={{
-                                  color: "rgba(255, 255, 255, 0.7)",
-                                  fontSize: 11,
-                                  fontWeight: "500",
-                                }}
-                              >
-                                {cat.totalCount} items
-                              </Text>
-                            </View>
-                          </LinearGradient>
-                        </View>
-                      </ImageBackground>
-                    </View>
-                  </TouchableOpacity>
-                ))}
-
-                {filteredCategories.length === 0 && (
-                  <View className="w-full py-10 items-center">
-                    <Text className="text-gray-500">No categories found.</Text>
-                  </View>
-                )}
-              </View>
-
-              {/* Section 2: Popular Sub Categories - 3 COLUMNS */}
-              {!searchQuery && (
-                <>
-                  <View className="mt-8 mb-5">
-                    <View
-                      style={{ flexDirection: "row", alignItems: "center" }}
-                    >
-                      <View
-                        style={{
-                          width: 3,
-                          height: 20,
-                          backgroundColor: "#094569",
-                          borderRadius: 2,
-                          marginRight: 10,
-                        }}
-                      />
-                      <View>
-                        <Text
-                          style={{
-                            fontSize: 22,
-                            fontWeight: "600",
-                            color: "#1a1a1a",
-                            letterSpacing: -0.3,
-                            marginBottom: 4,
-                          }}
-                        >
-                          Trending
-                        </Text>
-                        <Text
-                          style={{
-                            fontSize: 14,
-                            color: "#888",
-                            fontWeight: "400",
-                          }}
-                        >
-                          Popular right now
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
-
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      flexWrap: "wrap",
-                      gap: 10,
-                      marginBottom: 24,
-                    }}
-                  >
-                    {processedCategories.map((cat, idx) => {
-                      if (!cat.topSubcategory || cat.topSubcategory.count === 0)
-                        return null;
-
-                      return (
-                        <TouchableOpacity
-                          key={`${cat.key}-sub`}
-                          style={{
-                            width: subcategoryCardWidth,
-                            shadowColor: "#000",
-                            shadowOffset: { width: 0, height: 2 },
-                            shadowOpacity: 0.06,
-                            shadowRadius: 8,
-                            elevation: 3,
-                          }}
-                          activeOpacity={0.85}
-                          onPress={() =>
-                            handleSubcategoryPress(
-                              cat.key,
-                              cat.topSubcategory!.name,
-                            )
-                          }
-                        >
-                          <View
-                            style={{
-                              backgroundColor: "white",
-                              borderRadius: 14,
-                              padding: 12,
-                              height: 110,
-                              borderWidth: 1,
-                              borderColor: "rgba(0, 0, 0, 0.05)",
-                              justifyContent: "space-between",
-                            }}
-                          >
-                            <View>
-                              {/* Top accent line */}
-                              <View
-                                style={{
-                                  width: 20,
-                                  height: 2.5,
-                                  backgroundColor: "#094569",
-                                  borderRadius: 2,
-                                  marginBottom: 8,
-                                }}
-                              />
-
-                              {/* Category Badge */}
-                              <View
-                                style={{
-                                  backgroundColor: "rgba(0, 0, 0, 0.05)",
-                                  paddingHorizontal: 7,
-                                  paddingVertical: 3,
-                                  borderRadius: 5,
-                                  alignSelf: "flex-start",
-                                  marginBottom: 8,
-                                }}
-                              >
-                                <Text
-                                  style={{
-                                    fontSize: 8,
-                                    fontWeight: "700",
-                                    color: "#666",
-                                    textTransform: "uppercase",
-                                    letterSpacing: 0.5,
-                                  }}
-                                >
-                                  {categoryNames[cat.key] || cat.key}
-                                </Text>
-                              </View>
-
-                              {/* Subcategory Name */}
-                              <Text
-                                numberOfLines={2}
-                                style={{
-                                  fontSize: 13,
-                                  fontWeight: "700",
-                                  color: "#1a1a1a",
-                                  textTransform: "capitalize",
-                                  lineHeight: 17,
-                                }}
-                              >
-                                {cat.topSubcategory.name}
-                              </Text>
-                            </View>
-
-                            {/* Count - lighter, no box */}
-                            <Text
-                              style={{
-                                fontSize: 10,
-                                color: "#bbb",
-                                fontWeight: "500",
-                              }}
-                            >
-                              {cat.topSubcategory.count} items
-                            </Text>
-                          </View>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </>
-              )}
-            </Animated.View>
-          )}
+                  <Plus color="white" size={26} strokeWidth={2.5} />
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
           </View>
+        </View>
+
+        {/* Categories — sticky text bar, "All" first, matches Home/Marketplace. */}
+        <View className="bg-[#f8f9fa] px-4" style={{ paddingTop: 4, paddingBottom: 10 }}>
+          <Text
+            style={{
+              fontSize: 11,
+              fontWeight: "700",
+              color: "#9CA3AF",
+              letterSpacing: 0.4,
+              textTransform: "uppercase",
+              marginBottom: 8,
+            }}
+          >
+            Categories
+          </Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 18 }}>
+              {["all", ...categoryKeys].map((key) => {
+                const isActive = activeCategory === key;
+                const label = key === "all" ? "All" : categoryNames[key] || key;
+                return (
+                  <TouchableOpacity key={key} onPress={() => handleSelectCategory(key)}>
+                    <Text
+                      className={
+                        isActive
+                          ? "text-[17px] font-mbold text-gray-900"
+                          : "text-[15px] font-medium text-gray-400"
+                      }
+                    >
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </ScrollView>
+        </View>
+
+        {/* Subcategory filter — e.g. Men / Women / All — only for a specific
+            category, not while browsing "All". Pill chips (not plain text)
+            to read as a filter layered under the section tabs above, not a
+            third tab row. */}
+        {activeCategory !== "all" && subcategoriesForActive.length > 0 && (
+          <View className="px-4" style={{ paddingTop: 10, paddingBottom: 4 }}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                <TouchableOpacity
+                  onPress={() => setActiveSubcategory(null)}
+                  className={`px-4 py-2 rounded-full border ${
+                    activeSubcategory === null
+                      ? "bg-black border-black"
+                      : "bg-white border-gray-200"
+                  }`}
+                >
+                  <Text
+                    className={`text-sm font-medium ${
+                      activeSubcategory === null ? "text-white" : "text-gray-700"
+                    }`}
+                  >
+                    All
+                  </Text>
+                </TouchableOpacity>
+                {subcategoriesForActive.map((sub) => {
+                  const isActive = activeSubcategory === sub.name;
+                  return (
+                    <TouchableOpacity
+                      key={sub.name}
+                      onPress={() => setActiveSubcategory(sub.name)}
+                      className={`px-4 py-2 rounded-full border ${
+                        isActive ? "bg-black border-black" : "bg-white border-gray-200"
+                      }`}
+                    >
+                      <Text
+                        className={`text-sm font-medium capitalize ${
+                          isActive ? "text-white" : "text-gray-700"
+                        }`}
+                      >
+                        {sub.name}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </ScrollView>
+          </View>
+        )}
+
+        {/* Products */}
+        <View style={{ paddingTop: 12 }}>
+          <MasonryGrid
+            items={displayedProducts}
+            loading={ranked.loading || countsLoading}
+            keyExtractor={(product) => product.id}
+            getHeight={(_product, columnWidth) => gridCardHeight(RATIO_SQUARE, columnWidth)}
+            emptyText="No products found."
+            renderCard={(product, columnWidth, deferred, priority) => (
+              <GridCard
+                id={product.id}
+                width={columnWidth}
+                ratio={RATIO_SQUARE}
+                imageUri={product.images?.[0]}
+                title={product.name}
+                subtitle={product.profiles?.name || "Unknown"}
+                avatarUri={product.profiles?.avatar_url}
+                avatarLabel={product.profiles?.name}
+                deferred={deferred}
+                priority={priority}
+                footerRight={
+                  <Text style={{ fontSize: 13, fontWeight: "700", color: "#094569" }}>
+                    Nu.{" "}
+                    {(product.is_currently_active
+                      ? (product.current_price ?? product.price)
+                      : product.price
+                    ).toLocaleString()}
+                  </Text>
+                }
+                onPress={handleProductPress}
+              />
+            )}
+          />
         </View>
       </ScrollView>
 

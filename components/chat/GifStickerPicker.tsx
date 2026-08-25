@@ -1,9 +1,9 @@
+import CircularLoader from "@/components/ui/CircularLoader";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { Ionicons } from "@expo/vector-icons";
 import { Image as ExpoImage } from "expo-image";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Animated,
   FlatList,
   Modal,
@@ -311,7 +311,7 @@ export function GifStickerInlineDrawer({
           <View style={{ height: 292 }}>
             {isLoading ? (
               <View className="flex-1 items-center justify-center">
-                <ActivityIndicator size="small" color="#094569" />
+                <CircularLoader size="small" color="#094569" />
               </View>
             ) : (
               <FlatList
@@ -348,6 +348,7 @@ export function GifStickerInlineDrawer({
                       source={{ uri: item.previewUrl }}
                       style={{ width: "100%", height: "100%" }}
                       contentFit="cover"
+                      cachePolicy="memory-disk"
                     />
                   </TouchableOpacity>
                 )}

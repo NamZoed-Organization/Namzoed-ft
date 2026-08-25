@@ -10,6 +10,8 @@ interface PostActionSheetProps {
   isOwnPost: boolean;
   onDelete?: () => void;
   onReport?: () => void;
+  /** See ActionSheetModal — set when the caller already has a full-screen Modal open. */
+  embedded?: boolean;
 }
 
 export default function PostActionSheet({
@@ -17,7 +19,8 @@ export default function PostActionSheet({
   onClose,
   isOwnPost,
   onDelete,
-  onReport
+  onReport,
+  embedded,
 }: PostActionSheetProps) {
   const handleDelete = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
@@ -35,7 +38,7 @@ export default function PostActionSheet({
   };
 
   return (
-    <ActionSheetModal visible={visible} onClose={onClose}>
+    <ActionSheetModal visible={visible} onClose={onClose} embedded={embedded}>
       <View className="bg-white rounded-t-3xl">
         <View className="p-4 border-b border-gray-200">
           <Text className="text-lg font-semibold text-center">

@@ -10,6 +10,7 @@
  * Uploading: small activity indicator.
  */
 
+import CircularLoader from "@/components/ui/CircularLoader";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { supabase } from "@/lib/supabase";
 import { sendChatPushNotification } from "@/services/chatPushService";
@@ -26,7 +27,6 @@ import * as FileSystem from "expo-file-system/legacy";
 import * as Haptics from "expo-haptics";
 import React, { useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
     Animated,
     Modal,
     PanResponder,
@@ -425,7 +425,7 @@ export default function ChatAudioRecorder({
   if (isUploading) {
     return (
       <View style={[{ width: 36, height: 36, alignItems: "center", justifyContent: "center" }, style as any]}>
-        <ActivityIndicator size="small" color={PRIMARY} />
+        <CircularLoader size="small" color={PRIMARY} />
       </View>
     );
   }

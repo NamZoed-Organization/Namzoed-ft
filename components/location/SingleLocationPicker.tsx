@@ -4,10 +4,10 @@
  * The address is reverse-geocoded via OpenStreetMap Nominatim.
  */
 import MapPinMarker from "@/components/maps/MapPinMarker";
+import CircularLoader from "@/components/ui/CircularLoader";
 import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
     Dimensions,
     Modal,
     Platform,
@@ -148,7 +148,7 @@ export default function SingleLocationPicker({
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           >
             {geocoding ? (
-              <ActivityIndicator size="small" color="#2563eb" />
+              <CircularLoader size="small" color="#2563eb" />
             ) : (
               <Text
                 style={{
@@ -246,7 +246,7 @@ export default function SingleLocationPicker({
               }}
             >
               {geocoding ? (
-                <ActivityIndicator color="white" />
+                <CircularLoader color="white" />
               ) : (
                 <Text
                   style={{ color: "white", fontSize: 16, fontWeight: "700" }}

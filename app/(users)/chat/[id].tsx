@@ -24,6 +24,7 @@ import ChatBackgroundPicker, {
   parseBackground,
 } from "@/components/settings/ChatBackgroundPicker";
 import ActionSheetModal from "@/components/ui/ActionSheetModal";
+import CircularLoader from "@/components/ui/CircularLoader";
 import MongooseWorkerNavBar, {
   MONGOOSE_WORKER_NAV_BAR_HEIGHT,
 } from "@/components/ui/MongooseWorkerNavBar";
@@ -68,7 +69,6 @@ import React, {
   useState,
 } from "react";
 import {
-  ActivityIndicator,
   Alert,
   Animated,
   Dimensions,
@@ -3366,10 +3366,11 @@ export default function ChatScreen() {
                       source={{ uri: gifStickerPayload.url }}
                       style={{ width: mediaWidth, height: mediaHeight }}
                       contentFit="cover"
+                      cachePolicy="memory-disk"
                     />
                     {isOptimistic && localStatus !== "failed" ? (
                       <View className="absolute inset-0 bg-black/20 items-center justify-center">
-                        <ActivityIndicator color="white" />
+                        <CircularLoader color="white" />
                       </View>
                     ) : null}
                     {localStatus === "failed" ? (
@@ -3432,14 +3433,15 @@ export default function ChatScreen() {
                       },
                     ]}
                   >
-                    <Image
+                    <ExpoImage
                       source={{ uri: message.image_url }}
                       style={{ width: 200, height: 200 }}
-                      resizeMode="cover"
+                      contentFit="cover"
+                      cachePolicy="memory-disk"
                     />
                     {isOptimistic && (
                       <View className="absolute inset-0 bg-black/30 items-center justify-center">
-                        <ActivityIndicator color="white" />
+                        <CircularLoader color="white" />
                         <Text className="text-white text-xs mt-2">
                           Uploading...
                         </Text>
@@ -3986,7 +3988,7 @@ export default function ChatScreen() {
     () =>
       isLoadingMore ? (
         <View className="items-center py-3">
-          <ActivityIndicator size="small" color="#9ca3af" />
+          <CircularLoader size="small" color="#9ca3af" />
         </View>
       ) : null,
     [isLoadingMore],
@@ -4323,8 +4325,13 @@ export default function ChatScreen() {
             ) : (
               // No real blur on Android here — approximate the same ramp with
               // a plain opacity gradient instead of a flat translucent fill.
+              // Capped at 0.8 (not ~0.92) to match the ~0.77–0.85 "matte"
+              // translucency used by the rest of the app's floating chrome
+              // (HEADER_BAR_ANDROID_BG, HEADER_GLASS_BUTTON_STYLE,
+              // FloatingTabBar's ANDROID_BACKGROUND) — near-opaque read as
+              // "no blend" even though it was technically a gradient.
               <LinearGradient
-                colors={["rgba(255,255,255,0.35)", "rgba(255,255,255,0.92)"]}
+                colors={["rgba(255,255,255,0.3)", "rgba(255,255,255,0.8)"]}
                 start={{ x: 0, y: 1 }}
                 end={{ x: 0, y: 0 }}
                 style={StyleSheet.absoluteFill}

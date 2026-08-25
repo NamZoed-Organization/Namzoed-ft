@@ -1,12 +1,18 @@
 import CommentsModal from "@/components/modals/CommentsModal";
+import InlineComments, { type InlineCommentsHandle } from "@/components/InlineComments";
 import DeleteConfirmationModal from "@/components/modals/DeleteConfirmationModal";
 import ImageViewer from "@/components/modals/ImageViewer";
 import LikesListModal from "@/components/modals/LikesListModal";
+import PostViewersModal from "@/components/modals/PostViewersModal";
+import PostSaversModal from "@/components/modals/PostSaversModal";
 import PostActionSheet from "@/components/modals/PostActionSheet";
+import PostFeedbackOverlay from "@/components/modals/PostFeedbackOverlay";
 import ReportPostModal from "@/components/modals/ReportPostModal";
 import ReelsViewer from "@/components/ReelsViewer";
 import ShareComposerModal from "@/components/modals/ShareComposerModal";
 import TaggedItemsModal from "@/components/modals/TaggedItemsModal";
+import MaskedView from "@react-native-masked-view/masked-view";
+import LoadingBar from "@/components/ui/LoadingBar";
 import PopupMessage from "@/components/ui/PopupMessage";
 import ProgressiveImage from "@/components/ui/ProgressiveImage";
 import { ContentWarning } from "@/components/ContentWarning";
@@ -29,15 +35,19 @@ import { getPostSaveCount, trackPostView } from "@/lib/viewTrackingService";
 import { buildPostExternalSharePayload } from "@/lib/shareUtils";
 import { playSound } from "@/lib/soundUtils";
 import { PostData } from "@/types/post";
+import { registerEdgeGestureCarousel } from "@/utils/edgeGestureRegistry";
 import { feedEvents } from "@/utils/feedEvents";
 import { useAppRouter } from "@/utils/navigation";
+import { BlurView } from "expo-blur";
 import { Image } from "expo-image";
+import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { useVideoPlayer, VideoView } from "expo-video";
 import {
   Eye,
   EyeOff,
     Bookmark,
+    ChevronLeft,
     Heart,
     MessageCircle,
     MoreHorizontal,
@@ -60,6 +70,8 @@ import {
     Modal,
     NativeScrollEvent,
     NativeSyntheticEvent,
+    Platform,
+    ScrollView,
     StyleSheet,
     Text,
     type TextStyle,
@@ -68,6 +80,7 @@ import {
     useWindowDimensions,
     View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AnimatedRN, {
     FadeIn,
     FadeOut,
@@ -92,6 +105,70 @@ interface FeedPostProps {
   post: PostData;
   isVisible?: boolean;
   isAuthorLive?: boolean;
+  /** Shows a back button in the header, next to the avatar. Used by the standalone post-detail screen. */
+  onBack?: () => void;
+}
+
+// Smoothstep (3t²-2t³): zero slope at BOTH ends, not just zero value — a
+// plain linear fade still has a non-zero slope right where it hits 0 alpha,
+// and that slope discontinuity is what the eye picks out as a seam even
+// though the value itself reaches zero. Easing the slope to zero too is
+// what makes the header's blur trail off with no visible line at its edge.
+// Same recipe as app/(users)/chat/[id].tsx's headerBlurFadeStops.
+function smoothstep(t: number) {
+  return t * t * (3 - 2 * t);
+}
+function headerBlurFadeStops() {
+  const STEPS = 5;
+  const locations = Array.from(
+    { length: STEPS + 1 },
+    (_, i) => i / STEPS,
+  ) as unknown as [number, number, ...number[]];
+  const colors = Array.from({ length: STEPS + 1 }, (_, i) => {
+    const alpha = 1 - smoothstep(i / STEPS);
+    return `rgba(255,255,255,${alpha.toFixed(3)})`;
+  }) as unknown as [string, string, ...string[]];
+  return { colors, locations };
+}
+const HEADER_BLUR_FADE_STOPS = headerBlurFadeStops();
+
+// Same glassmorphism recipe as the chat header's icon buttons
+// (app/(users)/chat/[id].tsx HEADER_GLASS_BUTTON_STYLE) — a hairline-bordered,
+// blurred circle. Reused here so the post-detail header's back/menu buttons
+// read as one visual system with the rest of the app's floating chrome.
+const HEADER_GLASS_BUTTON_SIZE = 36;
+const HEADER_GLASS_BUTTON_STYLE = {
+  width: HEADER_GLASS_BUTTON_SIZE,
+  height: HEADER_GLASS_BUTTON_SIZE,
+  borderRadius: HEADER_GLASS_BUTTON_SIZE / 2,
+  alignItems: "center" as const,
+  justifyContent: "center" as const,
+  overflow: "hidden" as const,
+  borderWidth: StyleSheet.hairlineWidth,
+  borderTopColor: "rgba(255,255,255,0.55)",
+  borderLeftColor: "rgba(255,255,255,0.25)",
+  borderRightColor: "rgba(255,255,255,0.25)",
+  borderBottomColor: "rgba(0,0,0,0.08)",
+  backgroundColor: Platform.OS === "ios" ? "transparent" : "rgba(255,255,255,0.77)",
+};
+
+function HeaderGlassButton({
+  onPress,
+  children,
+  style,
+}: {
+  onPress: () => void;
+  children: React.ReactNode;
+  style?: object;
+}) {
+  return (
+    <TouchableOpacity onPress={onPress} style={[HEADER_GLASS_BUTTON_STYLE, style]}>
+      {Platform.OS === "ios" && (
+        <BlurView tint="systemChromeMaterial" intensity={50} style={StyleSheet.absoluteFill} />
+      )}
+      {children}
+    </TouchableOpacity>
+  );
 }
 
 const formatDate = (date: Date): string => {
@@ -117,6 +194,13 @@ const formatDate = (date: Date): string => {
     year: "numeric",
   });
 };
+
+/** "1234" as-is up to 4 digits, then abbreviated with one decimal: "12.3K", "1.2M". */
+function formatCount(n: number): string {
+  if (n < 10000) return n.toLocaleString();
+  if (n < 1000000) return `${(n / 1000).toFixed(1)}K`;
+  return `${(n / 1000000).toFixed(1)}M`;
+}
 
 const TIMESTAMP_ROTATE_MS = 3000;
 
@@ -225,54 +309,17 @@ interface MediaCarouselProps {
   isVisible?: boolean;
   hasTaggedItems: boolean;
   onTagPress: () => void;
+  /** Long-press anywhere on an image slide — used by the post-detail screen
+   * to surface post feedback (actions sheet for the owner, Report overlay
+   * for everyone else) now that its header button is Share. */
+  onLongPress?: () => void;
 }
 
-function VideoLoadingShimmer({ frameWidth }: { frameWidth: number }) {
-  const shimmer = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const anim = Animated.loop(
-      Animated.timing(shimmer, {
-        toValue: 1,
-        duration: 1100,
-        easing: Easing.inOut(Easing.ease),
-        useNativeDriver: true,
-      })
-    );
-    anim.start();
-    return () => anim.stop();
-  }, []);
-
-  const translateX = shimmer.interpolate({
-    inputRange: [0, 1],
-    outputRange: [-frameWidth, frameWidth],
-  });
-
+/** Sits right where a timeline would be — the bottom edge of the video frame. */
+function VideoLoadingShimmer() {
   return (
-    <View
-      pointerEvents="none"
-      style={{
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        height: 2,
-        backgroundColor: 'rgba(255,255,255,0.15)',
-        overflow: 'hidden',
-      }}
-    >
-      <Animated.View
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: frameWidth * 0.45,
-          height: 2,
-          borderRadius: 1,
-          backgroundColor: 'rgba(255,255,255,0.75)',
-          transform: [{ translateX }],
-        }}
-      />
+    <View pointerEvents="none" style={{ position: "absolute", bottom: 0, left: 0, right: 0 }}>
+      <LoadingBar height={2} style={{ width: "100%" }} />
     </View>
   );
 }
@@ -475,7 +522,7 @@ const ActiveVideoPlayer = React.memo(function ActiveVideoPlayer({ uri, frameWidt
             nativeControls={false}
             fullscreenOptions={{ enable: false }}
           />
-          {isLoading && <VideoLoadingShimmer frameWidth={frameWidth} />}
+          {isLoading && <VideoLoadingShimmer />}
           <Animated.Text
             style={{
               position: "absolute",
@@ -673,6 +720,7 @@ const MediaCarousel = React.memo(
     isVisible = true,
     hasTaggedItems,
     onTagPress,
+    onLongPress,
   }: MediaCarouselProps) => {
     const [activeIndex, setActiveIndex] = useState(0);
     const slideH = frameWidth / RATIO_PORTRAIT;
@@ -680,6 +728,30 @@ const MediaCarousel = React.memo(
     const multipleMedia = images.length > 1;
     const lastTapRef = useRef(0);
     const singleTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // Lets ContextDrop's edge-swipe-back gesture (see PostDetailOverlay)
+    // tell this carousel's "swipe right to see the previous image" apart
+    // from an actual back gesture — the two look identical when they start
+    // in the same edge zone. See utils/edgeGestureRegistry.ts.
+    const containerRef = useRef<View>(null);
+    const boundsRef = useRef<{ top: number; bottom: number } | null>(null);
+    const activeIndexRef = useRef(activeIndex);
+    activeIndexRef.current = activeIndex;
+
+    const remeasure = useCallback(() => {
+      containerRef.current?.measureInWindow((_x, y, _w, h) => {
+        boundsRef.current = { top: y, bottom: y + h };
+      });
+    }, []);
+
+    useEffect(() => {
+      if (!multipleMedia) return;
+      const unregister = registerEdgeGestureCarousel({
+        getBounds: () => boundsRef.current,
+        hasPrevious: () => activeIndexRef.current > 0,
+      });
+      return unregister;
+    }, [multipleMedia]);
 
     const handleImageTap = useCallback(
       (event: GestureResponderEvent, index: number) => {
@@ -715,6 +787,13 @@ const MediaCarousel = React.memo(
       },
       [frameWidth, images.length],
     );
+
+    // Bounds can drift if the screen scrolls this carousel out from under
+    // its mount-time position — refreshing whenever the page settles keeps
+    // it close enough for the edge-gesture veto above to stay accurate.
+    useEffect(() => {
+      remeasure();
+    }, [activeIndex, remeasure]);
 
     const renderItem = useCallback(
       ({ item, index }: { item: string; index: number }) => {
@@ -756,6 +835,8 @@ const MediaCarousel = React.memo(
           >
             <TouchableOpacity
               onPress={(e) => handleImageTap(e, index)}
+              onLongPress={onLongPress}
+              delayLongPress={350}
               activeOpacity={1}
               style={{ width: w, height: h }}
             >
@@ -777,7 +858,7 @@ const MediaCarousel = React.memo(
     if (images.length === 0) return null;
 
     return (
-      <View>
+      <View ref={containerRef} collapsable={false} onLayout={remeasure}>
         {multipleMedia ? (
           <FlatList
             data={images}
@@ -978,7 +1059,8 @@ const MiniAvatarRow = React.memo(({ users, totalLikes, onPress }: MiniAvatarRowP
   );
 });
 
-function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: FeedPostProps) {
+function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp, onBack }: FeedPostProps) {
+  const insets = useSafeAreaInsets();
   const { width: frameWidth } = useWindowDimensions();
   const feedMediaHeight = frameWidth / RATIO_PORTRAIT;
   const heartTargetY = HEADER_HEIGHT + feedMediaHeight + 22;
@@ -997,7 +1079,25 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
   const [popupMessage, setPopupMessage] = useState("");
   const [showTaggedItems, setShowTaggedItems] = useState(false);
   const [showComments, setShowComments] = useState(false);
+  // Detail mode (onBack): comments render inline instead of in a modal, so
+  // "view comments" scrolls to them within FeedPost's own ScrollView instead.
+  const detailScrollRef = useRef<ScrollView>(null);
+  const commentsSectionYRef = useRef(0);
+  const inlineCommentsRef = useRef<InlineCommentsHandle>(null);
+  // Measured height of the floating bottom pill — the backdrop behind it
+  // only needs to reach up through half that height (see its comment below).
+  const [bottomPillHeight, setBottomPillHeight] = useState(56);
+  const handleCommentsPress = useCallback(() => {
+    if (onBack) {
+      detailScrollRef.current?.scrollTo({ y: commentsSectionYRef.current, animated: true });
+    } else {
+      setShowComments(true);
+    }
+  }, [onBack]);
+  const [showFeedbackOverlay, setShowFeedbackOverlay] = useState(false);
   const [showLikesList, setShowLikesList] = useState(false);
+  const [showViewersList, setShowViewersList] = useState(false);
+  const [showSaversList, setShowSaversList] = useState(false);
   const [showShareComposer, setShowShareComposer] = useState(false);
   const [imageViewerVisible, setImageViewerVisible] = useState(false);
   const [imageViewerIndex, setImageViewerIndex] = useState(0);
@@ -1027,6 +1127,24 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
   const isOwnPost = currentUser?.id === post.userId;
   const isAuthorLive = isAuthorLiveProp ?? false;
   const needsContentWarning = !!post.contentRating && post.contentRating !== "general";
+
+  // Detail mode: the header's "..." slot is now Share, so long-pressing the
+  // image is how post feedback is reached instead — the post-owner still
+  // gets the old actions sheet (delete), everyone else gets the in-place
+  // Report overlay (see PostFeedbackOverlay).
+  const handleImageLongPress = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (isOwnPost) {
+      setShowActionSheet(true);
+    } else {
+      setShowFeedbackOverlay(true);
+    }
+  }, [isOwnPost]);
+
+  const handleReportFromOverlay = useCallback(() => {
+    setShowFeedbackOverlay(false);
+    setShowReportModal(true);
+  }, []);
 
   // null = not checked yet — the follow pill next to the author's name only
   // ever renders once we know for sure the viewer doesn't already follow them.
@@ -1084,11 +1202,12 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
     });
   }, [isVisible, currentUser?.id, post.id, post.userId]);
 
-  // Load save count for own posts (once on mount)
+  // Load save count for own posts, and also in detail mode (fixed bottom
+  // bar shows it to any viewer there, not just the owner).
   useEffect(() => {
-    if (!isOwnPost) return;
+    if (!isOwnPost && !onBack) return;
     getPostSaveCount(post.id).then(setSaveCount).catch(() => {});
-  }, [isOwnPost, post.id]);
+  }, [isOwnPost, onBack, post.id]);
 
   useEffect(() => {
     setIsContentRevealed(!needsContentWarning);
@@ -1358,10 +1477,77 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
     }
   };
 
+  // Detail mode (onBack set): the header is pinned above its own internal
+  // ScrollView so it stays fixed while the rest of the post scrolls beneath
+  // it, instead of scrolling away with the content like a normal feed card.
+  const ContentWrapper = onBack ? ScrollView : React.Fragment;
+  const contentWrapperProps = onBack
+    ? {
+        ref: detailScrollRef,
+        contentContainerStyle: {
+          paddingTop: insets.top + 56,
+          // Extra room to clear the fixed bottom bar (comment input + like/comment/save).
+          paddingBottom: insets.bottom + 84,
+        },
+        keyboardShouldPersistTaps: "handled" as const,
+      }
+    : {};
+
   return (
-    <View style={{ backgroundColor: "#fff" }}>
-      {/* Header */}
-      <View style={styles.header}>
+    <View style={[{ backgroundColor: "#fff" }, onBack && { flex: 1 }]}>
+    <View style={onBack ? { flex: 1, position: "relative" } : undefined}>
+      {/* Header — floats over the media with a translucent matte blur when
+          onBack is set (post-detail screen); plain in-flow header otherwise
+          (main feed, where every card needs its own normal header). */}
+      <View
+        style={[
+          styles.header,
+          onBack && {
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 10,
+            paddingTop: insets.top + 10,
+          },
+        ]}
+      >
+        {onBack && (
+          Platform.OS === "ios" ? (
+            <MaskedView
+              style={StyleSheet.absoluteFill}
+              maskElement={
+                <LinearGradient
+                  colors={HEADER_BLUR_FADE_STOPS.colors}
+                  locations={HEADER_BLUR_FADE_STOPS.locations}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 0, y: 1 }}
+                  style={StyleSheet.absoluteFill}
+                />
+              }
+            >
+              <BlurView
+                tint="systemChromeMaterial"
+                intensity={70}
+                style={StyleSheet.absoluteFill}
+              />
+            </MaskedView>
+          ) : (
+            // No real blur on Android — approximate the same smoothed fade
+            // with a plain opacity gradient instead of a flat translucent fill.
+            <LinearGradient
+              colors={["rgba(255,255,255,0.8)", "rgba(255,255,255,0)"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+          )
+        )}
+        {onBack && (
+          <HeaderGlassButton onPress={onBack} style={{ marginRight: 8 }}>
+            <ChevronLeft size={20} color="#111" />
+          </HeaderGlassButton>
+        )}
         <TouchableOpacity
           onPress={navigateToProfile}
           style={{ flexDirection: "row", alignItems: "center", flex: 1 }}
@@ -1400,14 +1586,20 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
           )}
           <View style={{ flex: 1, marginLeft: 12 }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-              <Text style={styles.username}>{post.username || "Unknown"}</Text>
+              <Text style={[styles.username, { flex: 1 }]} numberOfLines={1}>
+                {post.username || "Unknown"}
+              </Text>
               {post.isVerified && <Verified size={14} color="#094569" />}
             </View>
-            <TimestampLocationRotator
-              date={post.date}
-              locationName={post.locationName}
-              style={styles.timestamp}
-            />
+            {/* In detail mode this moves to its own row just above the
+                comments, instead of sitting in the compact header. */}
+            {!onBack && (
+              <TimestampLocationRotator
+                date={post.date}
+                locationName={post.locationName}
+                style={styles.timestamp}
+              />
+            )}
           </View>
         </TouchableOpacity>
         {isFollowingAuthor === false && (
@@ -1420,17 +1612,20 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
             <Text style={styles.headerFollowPillText}>Follow</Text>
           </TouchableOpacity>
         )}
-        <TouchableOpacity onPress={() => setShowActionSheet(true)}>
-          <MoreHorizontal size={20} color="#666" />
-        </TouchableOpacity>
+        {onBack ? (
+          // "..." moves to a long-press on the image in detail mode (see
+          // Media below) — this slot becomes Share instead, same glass button.
+          <HeaderGlassButton onPress={handleSharePost} style={{ marginLeft: 8 }}>
+            <Send size={18} color="#666" />
+          </HeaderGlassButton>
+        ) : (
+          <TouchableOpacity onPress={() => setShowActionSheet(true)}>
+            <MoreHorizontal size={20} color="#666" />
+          </TouchableOpacity>
+        )}
       </View>
-      <PopupMessage
-        visible={showFollowedPopup}
-        type="success"
-        title="Followed"
-        message={`You followed ${post.username || "this user"}`}
-      />
 
+      <ContentWrapper {...contentWrapperProps}>
       {/* Media */}
       {post.images.length > 0 && (
         <View ref={mediaContainerRef} collapsable={false} style={{ position: "relative" }}>
@@ -1448,12 +1643,20 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
             }}
             onVideoPress={handleVideoPress}
             onWatchMorePress={handleWatchMoreReels}
+            onLongPress={onBack ? handleImageLongPress : undefined}
           />
           {/* Content Warning Overlay for sensitive/18+ posts */}
           {needsContentWarning && !isContentRevealed && (
             <ContentWarning
               contentRating={post.contentRating}
               onDismiss={() => setIsContentRevealed(true)}
+            />
+          )}
+          {onBack && !isOwnPost && (
+            <PostFeedbackOverlay
+              visible={showFeedbackOverlay}
+              onClose={() => setShowFeedbackOverlay(false)}
+              onReport={handleReportFromOverlay}
             />
           )}
         </View>
@@ -1472,8 +1675,9 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
         </TouchableOpacity>
       )}
 
-      {/* Action Bar */}
-      {(!needsContentWarning || isContentRevealed) && <View style={styles.actionBar}>
+      {/* Action Bar — hidden in detail mode: like/comment/save moved to the
+          fixed bottom bar, Share moved to the header. */}
+      {!onBack && (!needsContentWarning || isContentRevealed) && <View style={styles.actionBar}>
         <View style={{ flexDirection: "row", alignItems: "center" }}>
           <TouchableOpacity onPress={handleLike} style={styles.actionBtn}>
             <Heart
@@ -1483,7 +1687,7 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
             />
           </TouchableOpacity>
           <TouchableOpacity
-            onPress={() => setShowComments(true)}
+            onPress={handleCommentsPress}
             style={styles.actionBtn}
           >
             <MessageCircle size={24} color="#262626" />
@@ -1501,8 +1705,9 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
         </TouchableOpacity>
       </View>}
 
-      {/* Likes */}
-      {(!needsContentWarning || isContentRevealed) && <View style={styles.likesSection}>
+      {/* Likes — hidden in detail mode, the like count already shows in the
+          fixed bottom bar. */}
+      {!onBack && (!needsContentWarning || isContentRevealed) && <View style={styles.likesSection}>
         {followedLikers.length > 0 ? (
           <MiniAvatarRow
             users={followedLikers}
@@ -1518,16 +1723,22 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
         ) : null}
       </View>}
 
-      {/* Private stats — view count + save count, only visible to the post owner */}
-      {isOwnPost && (!needsContentWarning || isContentRevealed) && (viewCount > 0 || saveCount > 0) && (
+      {/* Private stats — view count + save count, only visible to the post owner.
+          In detail mode this info moves elsewhere (views → the row above
+          comments, saves → the fixed bottom bar), so this block is feed-only. */}
+      {!onBack && isOwnPost && (!needsContentWarning || isContentRevealed) && (viewCount > 0 || saveCount > 0) && (
         <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingBottom: 4, gap: 12 }}>
           {viewCount > 0 && (
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+            <TouchableOpacity
+              onPress={() => setShowViewersList(true)}
+              style={{ flexDirection: "row", alignItems: "center", gap: 4 }}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
               <Eye size={13} color="#9CA3AF" strokeWidth={1.8} />
               <Text style={{ fontSize: 12, color: "#9CA3AF", fontWeight: "500" }}>
                 {viewCount.toLocaleString()} {viewCount === 1 ? "view" : "views"}
               </Text>
-            </View>
+            </TouchableOpacity>
           )}
           {saveCount > 0 && (
             <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
@@ -1540,13 +1751,14 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
         </View>
       )}
 
-      {/* Caption */}
+      {/* Caption — always shown in full in detail mode (onBack); truncated
+          to one line with "...more" in the normal feed. */}
       {post.content && (!needsContentWarning || isContentRevealed) ? (
-        <View style={styles.captionSection}>
+        <View style={[styles.captionSection, onBack && { paddingTop: 20 }]}>
           {/* Off-screen full-text measurer — determines whether the caption
               overflows a single line, since numberOfLines clips the layout
               reported to onTextLayout once it's actually limiting lines. */}
-          {!captionMeasured && (
+          {!onBack && !captionMeasured && (
             <Text
               style={[styles.captionText, styles.captionMeasurer]}
               onTextLayout={(e) => {
@@ -1561,16 +1773,24 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
           )}
           <TouchableOpacity
             activeOpacity={captionExpanded ? 0.6 : 1}
-            disabled={!captionExpanded}
+            disabled={!!onBack || !captionExpanded}
             onPress={() => setCaptionExpanded(false)}
           >
-            <Text style={styles.captionText} numberOfLines={captionExpanded ? undefined : 1}>
-              <Text style={styles.captionUsername}>{post.username || "Unknown"}</Text>
-              {"  "}
+            <Text
+              style={[
+                styles.captionText,
+                onBack && { fontSize: 18, lineHeight: 26, fontWeight: "600" },
+              ]}
+              numberOfLines={onBack || captionExpanded ? undefined : 1}
+            >
+              {!onBack && (
+                <Text style={styles.captionUsername}>{post.username || "Unknown"}</Text>
+              )}
+              {!onBack && "  "}
               {post.content}
             </Text>
           </TouchableOpacity>
-          {captionOverflows && !captionExpanded && (
+          {!onBack && captionOverflows && !captionExpanded && (
             <TouchableOpacity
               onPress={() => setCaptionExpanded(true)}
               activeOpacity={0.6}
@@ -1647,10 +1867,56 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
         </TouchableOpacity>
       )}
 
-      {/* View Comments */}
-      {commentsCount > 0 && (
+      {/* Timestamp/location (relocated from the header in detail mode) on the
+          left, view count (owner only) on the right — sits just above comments. */}
+      {onBack && (
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+            paddingHorizontal: 14,
+            paddingTop: 12,
+            paddingBottom: 8,
+          }}
+        >
+          <Text style={{ fontSize: 14, color: "#9CA3AF", fontWeight: "500" }}>
+            {formatDate(post.date)}
+            {post.locationName?.trim() ? `, ${post.locationName.trim()}` : ""}
+          </Text>
+          {isOwnPost && viewCount > 0 && (
+            <TouchableOpacity
+              onPress={() => setShowViewersList(true)}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 4,
+                borderWidth: 1,
+                borderColor: "#E5E7EB",
+                borderRadius: 999,
+                paddingHorizontal: 10,
+                paddingVertical: 4,
+              }}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Eye size={13} color="#9CA3AF" strokeWidth={1.8} />
+              <Text style={{ fontSize: 14, color: "#9CA3AF", fontWeight: "500" }}>
+                {formatCount(viewCount)} {viewCount === 1 ? "view" : "views"}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+
+      {onBack && (
+        <View style={{ height: 1, backgroundColor: "#F3F4F6", marginHorizontal: 14, marginTop: 7 }} />
+      )}
+
+      {/* View Comments — feed only; detail mode has comments inline plus
+          the comment icon/count in the fixed bottom bar already. */}
+      {!onBack && commentsCount > 0 && (
         <TouchableOpacity
-          onPress={() => setShowComments(true)}
+          onPress={handleCommentsPress}
           style={styles.viewComments}
         >
           <Text style={styles.viewCommentsText}>
@@ -1659,7 +1925,163 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
         </TouchableOpacity>
       )}
 
-      <View style={styles.separator} />
+      {/* Comments — inline in detail mode instead of behind a modal */}
+      {onBack && (
+        <View
+          onLayout={(e) => {
+            commentsSectionYRef.current = e.nativeEvent.layout.y;
+          }}
+        >
+          <InlineComments
+            ref={inlineCommentsRef}
+            postId={post.id}
+            postOwnerId={post.userId}
+            onCommentCountChange={(count) => {
+              setCommentsCount(count);
+              updateCache({ commentsCount: count });
+            }}
+            isOwnPost={isOwnPost}
+            likesCount={likesCount}
+            saveCount={saveCount}
+            onPressLikes={() => setShowLikesList(true)}
+            onPressSaves={() => setShowSaversList(true)}
+          />
+        </View>
+      )}
+
+      </ContentWrapper>
+
+      {/* Fixed bottom bar — detail mode only. A single floating blurred pill
+          (same rounded/clipped/blurred treatment as the chat composer's
+          input pill — see INPUT_PILL_RADIUS in chat/[id].tsx) rather than a
+          flush white bar, with the comment prompt and the three action
+          icons all living inside it like fields of one input control. */}
+      {onBack && (
+        <View pointerEvents="box-none" style={{ position: "absolute", left: 0, right: 0, bottom: 0 }}>
+          {/* Backdrop — reaches from the true bottom edge up through only the
+              bottom HALF of the pill (not its top half or the gap above it,
+              which stay transparent so scrolled comments read through the
+              blur near the pill's top edge), same cutoff rule as the chat
+              composer's own fixed white backdrop. Rounded top corners match
+              the pill's own radius so content disappears behind a curved
+              edge, not a flat line. */}
+          <View
+            pointerEvents="none"
+            style={{
+              position: "absolute",
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: Math.max(insets.bottom, 12) + bottomPillHeight / 2,
+              backgroundColor: "#fff",
+              borderTopLeftRadius: 26,
+              borderTopRightRadius: 26,
+            }}
+          />
+
+          <View
+            pointerEvents="box-none"
+            style={{ paddingHorizontal: 14, paddingTop: 8, paddingBottom: Math.max(insets.bottom, 12) }}
+          >
+            <View
+              style={{ borderRadius: 26 }}
+              onLayout={(e) => {
+                const measured = Math.round(e.nativeEvent.layout.height);
+                if (measured > 0 && Math.abs(measured - bottomPillHeight) > 2) {
+                  setBottomPillHeight(measured);
+                }
+              }}
+            >
+              {/* Background clipped separately from the content, so the
+                  blur/tint's rounded corners stay crisp without also
+                  clipping anything the content row might need to overflow. */}
+              <View
+                pointerEvents="none"
+                style={[
+                  StyleSheet.absoluteFill,
+                  {
+                    borderRadius: 26,
+                    overflow: "hidden",
+                    backgroundColor: Platform.OS === "ios" ? "transparent" : "rgba(255,255,255,0.85)",
+                  },
+                ]}
+              >
+                {Platform.OS === "ios" && (
+                  <BlurView tint="systemChromeMaterial" intensity={50} style={StyleSheet.absoluteFill} />
+                )}
+                <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(209,213,219,0.2)" }]} />
+              </View>
+
+              <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 11 }}>
+                <TouchableOpacity
+                  onPress={() => inlineCommentsRef.current?.open()}
+                  activeOpacity={0.7}
+                  style={{ flex: 1 }}
+                >
+                  <Text style={{ fontSize: 14, color: "#6B7280" }} numberOfLines={1}>
+                    Add a comment…
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={handleLike}
+                  style={{ flexDirection: "row", alignItems: "center", marginLeft: 16 }}
+                  hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                >
+                  <Heart
+                    size={22}
+                    color={isLiked ? "#e91e63" : "#262626"}
+                    fill={isLiked ? "#e91e63" : "none"}
+                  />
+                  {likesCount > 0 && (
+                    <Text style={{ fontSize: 12, color: "#374151", marginLeft: 4 }}>
+                      {formatCount(likesCount)}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={handleCommentsPress}
+                  style={{ flexDirection: "row", alignItems: "center", marginLeft: 16 }}
+                  hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                >
+                  <MessageCircle size={22} color="#262626" />
+                  {commentsCount > 0 && (
+                    <Text style={{ fontSize: 12, color: "#374151", marginLeft: 4 }}>
+                      {formatCount(commentsCount)}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={handleBookmark}
+                  style={{ flexDirection: "row", alignItems: "center", marginLeft: 16 }}
+                  hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                >
+                  <Bookmark
+                    size={22}
+                    color="#262626"
+                    fill={isBookmarked ? "#262626" : "none"}
+                  />
+                  {saveCount > 0 && (
+                    <Text style={{ fontSize: 12, color: "#374151", marginLeft: 4 }}>
+                      {formatCount(saveCount)}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+      )}
+    </View>
+
+      <PopupMessage
+        visible={showFollowedPopup}
+        type="success"
+        title="Followed"
+        message={`You followed ${post.username || "this user"}`}
+      />
 
       {/* Modals — lazy-rendered to avoid mounting heavy components in every post */}
       {showTaggedItems && (
@@ -1685,6 +2107,22 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
         <LikesListModal
           visible={showLikesList}
           onClose={() => setShowLikesList(false)}
+          postId={post.id}
+        />
+      )}
+
+      {showViewersList && (
+        <PostViewersModal
+          visible={showViewersList}
+          onClose={() => setShowViewersList(false)}
+          postId={post.id}
+        />
+      )}
+
+      {showSaversList && (
+        <PostSaversModal
+          visible={showSaversList}
+          onClose={() => setShowSaversList(false)}
           postId={post.id}
         />
       )}
@@ -1772,9 +2210,6 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp }: Fe
         postId={String(post.id)}
         postUserId={String(post.userId)}
         postContent={post.content}
-        username={post.username}
-        likes={likesCount}
-        comments={commentsCount}
       />
 
       {flyingHearts.map(h => (
@@ -1844,17 +2279,16 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   headerFollowPill: {
-    borderWidth: 1.2,
-    borderColor: "#094569",
-    borderRadius: 6,
+    backgroundColor: "#094569",
+    borderRadius: 999,
     paddingVertical: 4,
     paddingHorizontal: 12,
     marginRight: 10,
   },
   headerFollowPillText: {
-    color: "#094569",
+    color: "#fff",
     fontWeight: "700",
-    fontSize: 13,
+    fontSize: 15,
   },
   avatar: {
     width: 36,
@@ -2041,10 +2475,5 @@ const styles = StyleSheet.create({
   viewCommentsText: {
     fontSize: 13,
     color: "#9CA3AF",
-  },
-  separator: {
-    height: 1,
-    backgroundColor: "#F3F4F6",
-    marginTop: 12,
   },
 });

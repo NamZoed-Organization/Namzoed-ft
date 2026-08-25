@@ -1,10 +1,10 @@
+import CircularLoader from "@/components/ui/CircularLoader";
 import { supabase } from "@/lib/supabase";
 import { formatDisplayDate, getAgeFromDate, toISODate } from "@/utils/age";
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import React, { useState } from "react";
 import {
-  ActivityIndicator,
   Modal,
   Platform,
   Pressable,
@@ -141,7 +141,7 @@ export default function DateOfBirthPrompt({
             }`}
           >
             {saving ? (
-              <ActivityIndicator color="#fff" />
+              <CircularLoader color="#fff" />
             ) : (
               <Text className="text-white font-msemibold">Save & Continue</Text>
             )}

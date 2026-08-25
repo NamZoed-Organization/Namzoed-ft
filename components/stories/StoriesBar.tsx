@@ -19,12 +19,12 @@ import { useLivestreams } from "@/hooks/useLivestreams";
 import type { UserStoryGroup } from "@/lib/storiesService";
 import type { Livestream } from "@/services/livestreamService";
 import { BlurView } from "expo-blur";
+import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { Plus, Radio, Sparkles } from "lucide-react-native";
 import React, { useMemo, useRef, useState } from "react";
 import {
   FlatList,
-  Image,
   Modal,
   Platform,
   StyleSheet,
@@ -93,7 +93,8 @@ const RingAvatar = React.memo(function RingAvatar({
               <Image
                 source={{ uri: avatarUrl }}
                 style={{ width: 52, height: 52, borderRadius: 26 }}
-                resizeMode="cover"
+                contentFit="cover"
+                cachePolicy="memory-disk"
               />
             ) : (
               <View

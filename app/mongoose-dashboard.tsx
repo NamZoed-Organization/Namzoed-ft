@@ -1,4 +1,5 @@
 import LocationTrackingControl from "@/components/location/LocationTrackingControl";
+import CircularLoader from "@/components/ui/CircularLoader";
 import MongooseWorkerNavBar, {
   MONGOOSE_WORKER_NAV_BAR_HEIGHT,
 } from "@/components/ui/MongooseWorkerNavBar";
@@ -11,7 +12,6 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAppRouter } from "@/utils/navigation";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-    ActivityIndicator,
     Alert,
     Dimensions,
     Modal,
@@ -1206,7 +1206,7 @@ export default function MongooseDashboard() {
         <View
           style={{ flex: 1, backgroundColor: NZ.cream, justifyContent: "center", alignItems: "center" }}
         >
-          <ActivityIndicator size="large" color={NZ.navy} />
+          <CircularLoader size="large" color={NZ.navy} />
           <Text style={{ color: NZ.stone, marginTop: 16 }} className="text-base">
             Loading dashboard
           </Text>
@@ -1281,7 +1281,7 @@ export default function MongooseDashboard() {
                 </View>
                 <View className="flex-row items-center">
                   {updatingStatus && (
-                    <ActivityIndicator
+                    <CircularLoader
                       size="small"
                       color={NZ.navy}
                       style={{ marginRight: 8 }}

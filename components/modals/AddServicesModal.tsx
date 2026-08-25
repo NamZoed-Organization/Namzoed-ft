@@ -1,5 +1,6 @@
 import ImageCropperOverlay from "@/components/modals/ImageCropperOverlay";
 import ImagePickerSheet from "@/components/ui/ImagePickerSheet";
+import CircularLoader from "@/components/ui/CircularLoader";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { serviceCategories } from "@/data/servicecategory";
 import { createProviderService } from "@/lib/servicesService";
@@ -8,7 +9,6 @@ import * as ImagePicker from "expo-image-picker";
 import { ChevronDown, ChevronUp, Upload, X } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
     Image,
     KeyboardAvoidingView,
     Modal,
@@ -471,7 +471,7 @@ export default function AddServicesModal({
                     }`}
                   >
                     {loading ? (
-                      <ActivityIndicator color="white" />
+                      <CircularLoader color="white" />
                     ) : (
                       <Text className="text-white font-mbold text-lg">
                         Add Service

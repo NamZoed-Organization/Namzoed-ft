@@ -1,3 +1,4 @@
+import CircularLoader from "@/components/ui/CircularLoader";
 import { Ionicons } from "@expo/vector-icons";
 import {
     setAudioModeAsync,
@@ -6,7 +7,6 @@ import {
 } from 'expo-audio';
 import React, { useEffect, useRef } from "react";
 import {
-    ActivityIndicator,
     Animated,
     Text,
     TouchableOpacity,
@@ -100,7 +100,7 @@ export default function AudioMessagePlayer({
         className={`w-9 h-9 rounded-full items-center justify-center ${isCurrentUser ? 'bg-white/30' : 'bg-gray-300'}`}
       >
         {isLoading
-          ? <ActivityIndicator size="small" color={isCurrentUser ? 'white' : '#666'} />
+          ? <CircularLoader size="small" color={isCurrentUser ? 'white' : '#666'} />
           : <Ionicons name={status.playing ? 'pause' : 'play'} size={18} color={isCurrentUser ? 'white' : '#333'} />
         }
       </TouchableOpacity>
@@ -140,7 +140,7 @@ export default function AudioMessagePlayer({
       {/* Upload spinner for optimistic messages */}
       {isOptimistic && (
         <View style={{ marginLeft: 5 }}>
-          <ActivityIndicator size="small" color={isCurrentUser ? 'white' : '#666'} />
+          <CircularLoader size="small" color={isCurrentUser ? 'white' : '#666'} />
         </View>
       )}
     </View>

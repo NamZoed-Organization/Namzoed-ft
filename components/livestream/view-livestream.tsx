@@ -1,10 +1,11 @@
+import CircularLoader from "@/components/ui/CircularLoader";
 import {
   LivestreamPlayer,
   StreamCall,
   useCall,
 } from "@stream-io/video-react-native-sdk";
 import React, { useEffect } from "react";
-import { ActivityIndicator, View } from "react-native";
+import { View } from "react-native";
 
 type Props = {
   callId: string;
@@ -29,7 +30,7 @@ function ViewerLivestreamUI({ callId }: { callId: string }) {
   if (!call) {
     return (
       <View className="flex-1 bg-black items-center justify-center">
-        <ActivityIndicator color="white" />
+        <CircularLoader color="white" />
       </View>
     );
   }

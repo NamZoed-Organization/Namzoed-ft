@@ -14,6 +14,10 @@ export interface MarketplaceItem {
   created_at: string;
   updated_at: string;
   isVerified?: boolean;
+  impressions_shown?: number;
+  last_shown_at?: string | null;
+  boost_started_at?: string | null;
+  boost_expires_at?: string | null;
 }
 
 export interface MarketplaceItemWithUser extends MarketplaceItem {
@@ -78,6 +82,39 @@ export const fetchMarketplaceByType = async (type: 'rent' | 'swap' | 'second_han
   }
 
   return { items: (data || []) as MarketplaceItemWithUser[], totalCount: count || 0 };
+};
+
+// Fetches the full candidate pool for one feed-randomization session (see
+// lib/feedRanking.ts), optionally scoped to a type — no pagination, ranking
+// is done client-side over the whole pool, then sliced.
+export const fetchMarketplaceForRanking = async (
+  type?: 'rent' | 'swap' | 'second_hand' | 'free' | 'job_vacancy' | null,
+): Promise<MarketplaceItemWithUser[]> => {
+  let query = supabase
+    .from('marketplace')
+    .select(`
+      *,
+      profiles:user_id (
+        name,
+        email,
+        phone,
+        avatar_url
+      )
+    `)
+    .order('created_at', { ascending: false });
+
+  if (type) {
+    query = query.eq('type', type);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    console.error('Error fetching marketplace items for ranking:', error);
+    throw error;
+  }
+
+  return (data || []) as MarketplaceItemWithUser[];
 };
 
 // Fetch marketplace items by user ID

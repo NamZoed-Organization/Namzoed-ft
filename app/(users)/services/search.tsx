@@ -1,3 +1,4 @@
+import CircularLoader from "@/components/ui/CircularLoader";
 import {
   fetchAllProviderServices,
   fetchProviderServicesByCategory,
@@ -6,13 +7,12 @@ import {
 import { getInitials } from "@/utils/initials";
 import { useAppRouter } from "@/utils/navigation";
 import { Ionicons } from "@expo/vector-icons";
+import { Image } from "expo-image";
 import { ChevronLeft, Verified } from "lucide-react-native";
 import { useLocalSearchParams } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   FlatList,
-  Image,
   Text,
   TextInput,
   TouchableOpacity,
@@ -187,7 +187,7 @@ export default function ServicesSearchScreen() {
         <View
           style={{ flex: 1, alignItems: "center", justifyContent: "center" }}
         >
-          <ActivityIndicator size="large" color="#094569" />
+          <CircularLoader size="large" color="#094569" />
         </View>
       ) : query.trim().length === 0 ? (
         <View
@@ -268,6 +268,8 @@ export default function ServicesSearchScreen() {
                   <Image
                     source={{ uri: image }}
                     style={{ width: 52, height: 52, borderRadius: 10 }}
+                    contentFit="cover"
+                    cachePolicy="memory-disk"
                   />
                 ) : (
                   <View
@@ -306,6 +308,8 @@ export default function ServicesSearchScreen() {
                       <Image
                         source={{ uri: providerImage }}
                         style={{ width: 14, height: 14, borderRadius: 7 }}
+                        contentFit="cover"
+                        cachePolicy="memory-disk"
                       />
                     ) : (
                       <View

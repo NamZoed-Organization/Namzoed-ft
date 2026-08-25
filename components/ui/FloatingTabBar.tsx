@@ -18,16 +18,20 @@ const ANDROID_BACKGROUND = "rgba(255, 255, 255, 0.77)";
 export default function FloatingTabBar(props: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   const { width: screenWidth } = useWindowDimensions();
-  const { pillScale } = useTabBarScroll();
+  const { pillScale, tabBarHidden } = useTabBarScroll();
 
   const pillWidth = Math.min(
     PILL_MAX_WIDTH,
     Math.max(PILL_MIN_WIDTH, screenWidth - PILL_SIDE_MARGIN * 2)
   );
 
+  // useAnimatedStyle must run every render (rules of hooks) — the
+  // tabBarHidden early-out has to come after it, not before.
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: pillScale.value }],
   }));
+
+  if (tabBarHidden) return null;
 
   return (
     <View

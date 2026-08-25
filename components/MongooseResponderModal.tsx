@@ -11,6 +11,7 @@ import { MongooseInviteData } from "@/components/MongooseInviteCard";
 import SingleLocationPicker, {
     PickedLocation,
 } from "@/components/location/SingleLocationPicker";
+import CircularLoader from "@/components/ui/CircularLoader";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { supabase } from "@/lib/supabase";
 import { sendSMS } from "@/services/smsService";
@@ -18,7 +19,6 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import React, { useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
     Linking,
     Modal,
     ScrollView,
@@ -485,7 +485,7 @@ export default function MongooseResponderModal({
                 <View
                   style={{ alignItems: "center", paddingVertical: 24 }}
                 >
-                  <ActivityIndicator size="large" color="#2563eb" />
+                  <CircularLoader size="large" color="#2563eb" />
                   <Text
                     style={{
                       color: "#6b7280",
@@ -594,7 +594,7 @@ export default function MongooseResponderModal({
                 }}
               >
                 {submitting ? (
-                  <ActivityIndicator color="white" />
+                  <CircularLoader color="white" />
                 ) : (
                   <>
                     <Ionicons name="checkmark-circle" size={20} color="white" />

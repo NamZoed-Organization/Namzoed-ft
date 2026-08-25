@@ -129,6 +129,39 @@ export const reportPost = async (
   }
 };
 
+export interface CommentReport {
+  reporter_id: string;
+  target_id: string;  // Comment/reply author's ID
+  item_id: string;    // Comment or reply ID
+  reason: string;
+  details: string;
+}
+
+// Submit a report on a comment or reply (same generic reports table as posts/products)
+export const reportComment = async (
+  report: CommentReport
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const { error } = await supabase
+      .from('user_reports')
+      .insert({
+        reporter_id: report.reporter_id,
+        target_id: report.target_id,
+        item_id: report.item_id,
+        reason: report.reason,
+        details: report.details,
+        status: 'pending',
+        created_at: new Date().toISOString()
+      });
+
+    if (error) throw error;
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error reporting comment:', error);
+    return { success: false, error: error.message || 'Failed to submit report' };
+  }
+};
+
 /**
  * Get list of post IDs that the user has reported
  * Used to filter these posts out of the user's feed

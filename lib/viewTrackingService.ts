@@ -105,6 +105,40 @@ export async function getProfileViewCount7d(profileId: string): Promise<number> 
 }
 
 /**
+ * Fetch the list of users who viewed a post, most recent first.
+ * RLS (post_owner_can_read_views) restricts this to the post's owner —
+ * any other caller gets an empty result, not an error.
+ */
+export async function getPostViewers(postId: string) {
+  try {
+    const { data, error } = await supabase
+      .from("post_views")
+      .select(`
+        viewer_id,
+        created_at,
+        profiles:viewer_id (
+          id,
+          name,
+          email,
+          avatar_url
+        )
+      `)
+      .eq("post_id", postId)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error getting post viewers:", error);
+      return [];
+    }
+
+    return data || [];
+  } catch (error) {
+    console.error("Error in getPostViewers:", error);
+    return [];
+  }
+}
+
+/**
  * Fetch the save (bookmark) count for a specific post.
  * Only call for the post owner's own posts.
  */

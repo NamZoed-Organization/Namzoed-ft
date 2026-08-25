@@ -107,6 +107,37 @@ export const togglePostBookmark = async (
   }
 };
 
+// Get the list of users who bookmarked a specific post, most recent first.
+export const getPostSavers = async (postId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('user_bookmarks')
+      .select(`
+        id,
+        user_id,
+        created_at,
+        profiles:user_id (
+          id,
+          name,
+          email,
+          avatar_url
+        )
+      `)
+      .eq('post_id', postId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error getting post savers:', error);
+      return [];
+    }
+
+    return data || [];
+  } catch (error) {
+    console.error('Error in getPostSavers:', error);
+    return [];
+  }
+};
+
 // Get all bookmarked posts for a user
 export const getUserBookmarks = async (userId: string) => {
   try {

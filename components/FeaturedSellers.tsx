@@ -1,16 +1,16 @@
 import PopupMessage from '@/components/ui/PopupMessage';
+import CircularLoader from '@/components/ui/CircularLoader';
 import { useUser } from '@/contexts/UserContext';
 import { followUser, getFollowingIds, unfollowUser } from '@/lib/followService';
 import { FeaturedSellerProfile, fetchFeaturedSellers, fetchRandomSellers } from '@/lib/profileService';
 import * as Haptics from 'expo-haptics';
 import { useAppRouter } from "@/utils/navigation";
 import { getInitials } from '@/utils/initials';
+import { Image } from 'expo-image';
 import { Clock, MapPin, Package, Search, X } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   Dimensions,
-  Image,
   Modal,
   Text,
   TextInput,
@@ -43,7 +43,8 @@ const UserCard = ({ user, onPress, onFollow, onUnfollow, isFollowed }: {
         <Image
           source={{ uri: user.avatar_url }}
           className="w-16 h-16 rounded-full mb-2"
-          resizeMode="cover"
+          contentFit="cover"
+          cachePolicy="memory-disk"
         />
       ) : (
         <View className="w-16 h-16 bg-[#e0e7ef] rounded-full items-center justify-center mb-2">
@@ -410,7 +411,7 @@ const FeaturedSellers = () => {
       <View>
         {loading && users.length === 0 ? (
           <View className="items-center justify-center py-12">
-            <ActivityIndicator size="large" color="#094569" />
+            <CircularLoader size="large" color="#094569" />
             <Text className="text-sm text-gray-500 mt-2">Loading sellers...</Text>
           </View>
         ) : users.length === 0 ? (
@@ -453,7 +454,7 @@ const FeaturedSellers = () => {
                 className={`rounded-lg py-3 px-6 items-center mx-auto mb-4 mt-2 ${loading ? 'bg-gray-300' : 'bg-primary'}`}
               >
                 {loading ? (
-                  <ActivityIndicator size="small" color="#fff" />
+                  <CircularLoader size="small" color="#fff" />
                 ) : (
                   <Text className="text-white font-semibold text-base">Show More</Text>
                 )}

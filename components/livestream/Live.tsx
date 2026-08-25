@@ -1,9 +1,11 @@
+import CircularLoader from "@/components/ui/CircularLoader";
 import PopupMessage from "@/components/ui/PopupMessage";
 import ReportUserModal from "@/components/modals/ReportUserModal";
 import { blockUser } from "@/lib/blockService";
 import { useAppRouter } from "@/utils/navigation";
 import { Camera } from "expo-camera";
 import * as Haptics from "expo-haptics";
+import { ImageBackground } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import {
     AlertCircle,
@@ -25,12 +27,10 @@ import React, {
     useState,
 } from "react";
 import {
-    ActivityIndicator,
     Alert,
     BackHandler,
     FlatList,
     Image,
-    ImageBackground,
     Keyboard,
     KeyboardAvoidingView,
     Modal,
@@ -809,7 +809,7 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose, onMinimize, initialStr
             backgroundColor: "#000",
           }}
         >
-          <ActivityIndicator color="#fff" />
+          <CircularLoader color="#fff" />
         </View>
       );
     }
@@ -880,7 +880,7 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose, onMinimize, initialStr
         </StreamVideo>
         {initializingCall && (
           <View className="absolute inset-0 items-center justify-center bg-black/70">
-            <ActivityIndicator color="#fff" size="large" />
+            <CircularLoader color="#fff" size="large" />
             <Text className="mt-3 text-sm font-semibold text-white/80">
               Connecting to Stream…
             </Text>
@@ -1121,7 +1121,7 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose, onMinimize, initialStr
 
         {loadingStreams ? (
           <View className="flex-1 items-center justify-center">
-            <ActivityIndicator size="large" color="#DC2626" />
+            <CircularLoader size="large" color="#DC2626" />
             <Text className="mt-2 text-sm text-gray-500">
               Fetching active livestreams...
             </Text>
@@ -1253,7 +1253,7 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose, onMinimize, initialStr
               alignItems: "center", justifyContent: "center",
             }}
           >
-            <ActivityIndicator color="#fff" size="large" />
+            <CircularLoader color="#fff" size="large" />
             <Text style={{ color: "rgba(255,255,255,0.8)", marginTop: 12, fontSize: 14, fontWeight: "600" }}>
               Connecting to Stream…
             </Text>
@@ -1307,6 +1307,7 @@ const LivestreamCard: React.FC<LivestreamCardProps> = ({
       <ImageBackground
         source={{ uri: thumbnail }}
         style={{ height: 220, justifyContent: "flex-end" }}
+        cachePolicy="memory-disk"
       >
         <LinearGradient
           colors={["transparent", "rgba(0,0,0,0.8)"]}
@@ -1342,7 +1343,7 @@ const LivestreamCard: React.FC<LivestreamCardProps> = ({
       </ImageBackground>
       {loading && (
         <View className="absolute inset-0 items-center justify-center bg-black/40">
-          <ActivityIndicator color="#fff" />
+          <CircularLoader color="#fff" />
         </View>
       )}
     </TouchableOpacity>
@@ -1494,7 +1495,7 @@ const CreateLivestreamModal: React.FC<CreateLivestreamModalProps> = ({
               }`}
             >
               {loading ? (
-                <ActivityIndicator color="#fff" />
+                <CircularLoader color="#fff" />
               ) : (
                 <Text className="text-base font-semibold text-white">
                   Start{" "}
@@ -3960,7 +3961,7 @@ const ViewerCallContainer: React.FC<ViewerCallContainerProps> = ({
                 ) : showViewerConnecting ? (
                   <View className="flex-1 items-center justify-center">
                     {callingState === "joining" ? (
-                      <ActivityIndicator color="white" />
+                      <CircularLoader color="white" />
                     ) : (
                       <Ionicons name="radio-outline" size={34} color="white" />
                     )}

@@ -9,6 +9,7 @@ import ShareComposerModal from "@/components/modals/ShareComposerModal";
 import { useUser } from "@/contexts/UserContext";
 // Added import for profile services
 import AddServicesModal from "@/components/modals/AddServicesModal";
+import CreatePost from "@/components/modals/CreatePost";
 import EditServicesModal from "@/components/modals/EditServicesModal";
 // Custom hooks
 import { useProfileData } from "@/hooks/profile/useProfileData";
@@ -18,10 +19,13 @@ import { useUserProducts } from "@/hooks/profile/useUserProducts";
 import { useEarlyAccessBadge } from "@/hooks/useEarlyAccessBadge";
 // Profile components
 import EarlyAccessBadge from "@/components/EarlyAccessBadge";
-import ProfilePostGridItem from "@/components/profile/ProfilePostGridItem";
+import ProfilePostGridItem, { profileGridCellHeight } from "@/components/profile/ProfilePostGridItem";
+import ProgressiveImage from "@/components/ui/ProgressiveImage";
 import ServiceProviderSection from "@/components/profile/ServiceProviderSection";
 import BottomNavBar from "@/components/ui/BottomNavBar";
+import CircularLoader from "@/components/ui/CircularLoader";
 import { useBottomBarScroll } from "@/hooks/useBottomBarScroll";
+import { useGridReveal } from "@/hooks/useGridReveal";
 import PopupMessage from "@/components/ui/PopupMessage";
 import {
     deleteAvatar,
@@ -68,10 +72,8 @@ import {
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-    ActivityIndicator,
     Alert,
     Dimensions,
-    Image,
     InteractionManager,
     Modal,
     Platform,
@@ -110,6 +112,7 @@ export default function ProfileScreen() {
   >("images");
 
   // UI State
+  const [showCreatePost, setShowCreatePost] = useState(false);
   const [showImagePicker, setShowImagePicker] = useState(false);
   const [pendingImageOption, setPendingImageOption] = useState<
     "camera" | "gallery" | null
@@ -255,6 +258,10 @@ export default function ProfileScreen() {
     loadingPosts,
     postThumbnails,
   } = useUserPosts(refreshKey, showErrorPopup);
+  const postGridReveal = useGridReveal();
+  useEffect(() => {
+    postGridReveal.rearm();
+  }, [postThumbnails.length, postGridReveal.rearm]);
 
   // User products hook
   const { userProducts, setUserProducts, loadingProducts } = useUserProducts(
@@ -1156,10 +1163,11 @@ export default function ProfileScreen() {
                       className="w-[86px] h-[86px] rounded-full bg-gray-200 overflow-hidden border-2 border-gray-100"
                     >
                       {profileImage ? (
-                        <Image
-                          source={{ uri: profileImage }}
-                          className="w-full h-full"
-                          resizeMode="cover"
+                        <ProgressiveImage
+                          uri={profileImage}
+                          style={{ width: "100%", height: "100%" }}
+                          showProgress={false}
+                          priority="high"
                         />
                       ) : (
                         <View className="w-full h-full items-center justify-center bg-gray-100">
@@ -1388,27 +1396,34 @@ export default function ProfileScreen() {
               {/* Tab Content */}
               <View className="min-h-[300px]">
                 {activeTab === "images" && (
-                  <View className="flex-row flex-wrap">
+                  <View
+                    ref={postGridReveal.containerRef}
+                    collapsable={false}
+                    className="flex-row flex-wrap"
+                  >
                     {loadingPosts ? (
-                      <ActivityIndicator
-                        size="large"
-                        color="#059669"
-                        className="py-12 w-full"
-                      />
+                      <CircularLoader size="large" color="#059669" />
                     ) : postThumbnails.length > 0 ? (
-                      postThumbnails.map((thumb) => (
-                        <ProfilePostGridItem
-                          key={thumb.postId}
-                          thumbnailUrl={thumb.thumbnailUrl}
-                          isVideo={thumb.isVideo}
-                          mediaCount={thumb.mediaCount}
-                          onPress={() =>
-                            router.push(
-                              `/(users)/post/${thumb.postId}` as any,
-                            )
-                          }
-                        />
-                      ))
+                      postThumbnails.map((thumb, index) => {
+                        const cellHeight = profileGridCellHeight(SCREEN_WIDTH);
+                        const top = Math.floor(index / 3) * cellHeight;
+                        return (
+                          <ProfilePostGridItem
+                            key={thumb.postId}
+                            thumbnailUrl={thumb.thumbnailUrl}
+                            thumbnailBlurHash={thumb.thumbnailBlurHash}
+                            isVideo={thumb.isVideo}
+                            mediaCount={thumb.mediaCount}
+                            deferred={!postGridReveal.isNear(thumb.postId, top, cellHeight)}
+                            priority={postGridReveal.isAboveFold(top) ? "high" : "normal"}
+                            onPress={() =>
+                              router.push(
+                                `/(users)/post/${thumb.postId}` as any,
+                              )
+                            }
+                          />
+                        );
+                      })
                     ) : (
                       <View className="w-full py-16 items-center px-6">
                         <View className="w-14 h-14 rounded-full bg-blue-50 items-center justify-center mb-3">
@@ -1421,9 +1436,7 @@ export default function ProfileScreen() {
                           Your posts and media will show up here
                         </Text>
                         <TouchableOpacity
-                          onPress={() =>
-                            router.push("/(users)/(tabs)/feed" as any)
-                          }
+                          onPress={() => setShowCreatePost(true)}
                           className="mt-4 bg-primary px-5 py-2.5 rounded-full"
                         >
                           <Text className="text-white text-sm font-semibold">
@@ -1438,11 +1451,7 @@ export default function ProfileScreen() {
                 {activeTab === "products" && (
                   <View className="flex-row flex-wrap">
                     {loadingProducts ? (
-                      <ActivityIndicator
-                        size="large"
-                        color="#059669"
-                        className="py-12 w-full"
-                      />
+                      <CircularLoader size="large" color="#059669" />
                     ) : userProducts.length > 0 ? (
                       userProducts.map((product) => (
                         <View key={product.id} className="w-[50%] p-2">
@@ -1455,10 +1464,11 @@ export default function ProfileScreen() {
                             className="bg-white rounded-xl overflow-hidden border border-gray-100"
                           >
                             {product.images && product.images.length > 0 ? (
-                              <Image
-                                source={{ uri: product.images[0] }}
-                                className="w-full h-40"
-                                resizeMode="cover"
+                              <ProgressiveImage
+                                uri={product.images[0]}
+                                style={{ width: "100%", height: 160 }}
+                                showProgress={false}
+                                recyclingKey={product.id}
                               />
                             ) : (
                               <View className="w-full h-40 bg-gray-100 items-center justify-center">
@@ -1533,10 +1543,11 @@ export default function ProfileScreen() {
                             className="bg-transparent rounded-xl overflow-hidden border border-gray-100"
                           >
                             {service.images && service.images.length > 0 ? (
-                              <Image
-                                source={{ uri: service.images[0] }}
-                                className="w-full h-40"
-                                resizeMode="cover"
+                              <ProgressiveImage
+                                uri={service.images[0]}
+                                style={{ width: "100%", height: 160 }}
+                                showProgress={false}
+                                recyclingKey={service.id}
                               />
                             ) : (
                               <View className="w-full h-40 bg-gray-100 items-center justify-center">
@@ -2270,6 +2281,18 @@ export default function ProfileScreen() {
           }}
         />
       )}
+
+      <Modal
+        visible={showCreatePost}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        statusBarTranslucent
+        onRequestClose={() => setShowCreatePost(false)}
+      >
+        <View className="flex-1 bg-background">
+          <CreatePost onClose={() => setShowCreatePost(false)} />
+        </View>
+      </Modal>
 
       <BottomNavBar scale={bottomBarScale} />
     </View>

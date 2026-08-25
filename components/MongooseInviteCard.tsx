@@ -19,7 +19,8 @@ import {
   XCircle,
 } from "lucide-react-native";
 import React, { useMemo } from "react";
-import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
+import { Text, TouchableOpacity, View } from "react-native";
+import CircularLoader from "@/components/ui/CircularLoader";
 
 export interface MongooseInviteData {
   status:
@@ -262,7 +263,7 @@ export default function MongooseInviteCard({
               }}
             >
               {liveLoading ? (
-                <ActivityIndicator size="small" color="#b45309" />
+                <CircularLoader size="small" color="#b45309" />
               ) : (
                 <Ionicons name="time-outline" size={12} color="#b45309" />
               )}

@@ -50,6 +50,10 @@ export interface Post {
   moderation_notes?: string | null;
   is_flagged_for_review?: boolean;
   view_count?: number;
+  impressions_shown?: number;
+  last_shown_at?: string | null;
+  boost_started_at?: string | null;
+  boost_expires_at?: string | null;
 }
 
 // Extended post interface with user profile data
@@ -129,6 +133,40 @@ export const fetchPostsCursor = async (
 
   if (error) {
     console.error('Error fetching posts (cursor):', error);
+    throw error;
+  }
+
+  return (data || []).map((post: any) => ({
+    ...post,
+    likes: post.post_likes?.length || 0,
+  })) as PostWithUser[];
+};
+
+// Fetches the full candidate pool for one feed-randomization session (see
+// lib/feedRanking.ts) rather than a page — at this app's ~500-post scale a
+// single bulk fetch is simpler than a server-side ranked-session cache, and
+// lets the client compute the weighted/boosted order itself. Ordering here
+// doesn't matter since buildSessionOrder re-sorts it.
+export const fetchAllPostsForRanking = async (): Promise<PostWithUser[]> => {
+  const { data, error } = await supabase
+    .from('posts')
+    .select(`
+      *,
+      view_count,
+      profiles:user_id (
+        name,
+        email,
+        phone,
+        avatar_url
+      ),
+      post_likes (
+        id
+      )
+    `)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching posts (ranking pool):', error);
     throw error;
   }
 

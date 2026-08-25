@@ -1,8 +1,9 @@
 import { supabase } from '@/lib/supabase';
 import { AlertTriangle, ArrowLeft, Trash2 } from 'lucide-react-native';
 import React, { useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import PopupMessage from '@/components/ui/PopupMessage';
+import CircularLoader from '@/components/ui/CircularLoader';
 
 interface DeleteAccountProps {
   onClose?: () => void;
@@ -131,7 +132,7 @@ export default function DeleteAccount({ onClose, onAccountDeleted }: DeleteAccou
             activeOpacity={0.7}
           >
             {loading ? (
-              <ActivityIndicator size="small" color="#fff" />
+              <CircularLoader size="small" color="#fff" />
             ) : (
               <>
                 <Trash2 size={18} color={isConfirmed ? '#fff' : '#9ca3af'} style={{ marginRight: 8 }} />

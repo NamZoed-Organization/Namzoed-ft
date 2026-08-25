@@ -15,9 +15,14 @@ interface ActionSheetModalProps {
   visible: boolean;
   onClose: () => void;
   children: React.ReactNode;
+  /** Render as a plain absolute-fill overlay instead of a native Modal — use
+   * when the caller is already presenting a full-screen Modal, since nesting
+   * a native Modal inside an open one is unreliable (status bar / safe area
+   * math gets miscalculated on iOS regardless of statusBarTranslucent). */
+  embedded?: boolean;
 }
 
-export default function ActionSheetModal({ visible, onClose, children }: ActionSheetModalProps) {
+export default function ActionSheetModal({ visible, onClose, children, embedded }: ActionSheetModalProps) {
   const [mounted, setMounted] = useState(visible);
   const backdropOpacity = useSharedValue(0);
   const translateY = useSharedValue(SCREEN_HEIGHT);
@@ -44,15 +49,23 @@ export default function ActionSheetModal({ visible, onClose, children }: ActionS
 
   if (!mounted) return null;
 
+  const content = (
+    <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+      <AnimatedPressable
+        style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)' }, backdropStyle]}
+        onPress={onClose}
+      />
+      <Animated.View style={sheetStyle}>{children}</Animated.View>
+    </View>
+  );
+
+  if (embedded) {
+    return <View style={[StyleSheet.absoluteFill, { zIndex: 100 }]}>{content}</View>;
+  }
+
   return (
-    <Modal visible={mounted} transparent animationType="none" statusBarTranslucent onRequestClose={onClose}>
-      <View style={{ flex: 1, justifyContent: 'flex-end' }}>
-        <AnimatedPressable
-          style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)' }, backdropStyle]}
-          onPress={onClose}
-        />
-        <Animated.View style={sheetStyle}>{children}</Animated.View>
-      </View>
+    <Modal visible={mounted} transparent animationType="none" statusBarTranslucent={false} onRequestClose={onClose}>
+      {content}
     </Modal>
   );
 }

@@ -6,6 +6,7 @@ import { InteractionManager } from "react-native";
 export interface PostThumbnail {
   postId: string;
   thumbnailUrl: string;
+  thumbnailBlurHash: string | null;
   mediaCount: number;
   isVideo: boolean;
   post: Post;
@@ -53,6 +54,7 @@ export const useUserPosts = (
             thumbnails.push({
               postId: post.id,
               thumbnailUrl: post.images[0],
+              thumbnailBlurHash: (post as any).blur_hashes?.[0] ?? null,
               mediaCount: post.images.length,
               isVideo: isVideoUrl(post.images[0]),
               post,

@@ -1,10 +1,10 @@
 import { reportProduct } from '@/lib/reportService';
 import PopupMessage from '@/components/ui/PopupMessage';
+import CircularLoader from '@/components/ui/CircularLoader';
 import * as Haptics from 'expo-haptics';
 import { AlertCircle, X } from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
-    ActivityIndicator,
     KeyboardAvoidingView,
     Modal,
     ScrollView,
@@ -201,7 +201,7 @@ export default function ReportProductModal({
                   }`}
                 >
                   {submitting ? (
-                    <ActivityIndicator color="#fff" />
+                    <CircularLoader color="#fff" />
                   ) : (
                     <Text className="text-white text-center font-mbold text-base">
                       Submit Report

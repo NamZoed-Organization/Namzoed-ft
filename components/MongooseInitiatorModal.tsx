@@ -10,13 +10,13 @@
 import SingleLocationPicker, {
     PickedLocation,
 } from "@/components/location/SingleLocationPicker";
+import CircularLoader from "@/components/ui/CircularLoader";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import * as Location from "expo-location";
 import React, { useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
     Linking,
     Modal,
     Platform,
@@ -505,7 +505,7 @@ export default function MongooseInitiatorModal({
                     <View
                       style={{ alignItems: "center", paddingVertical: 28 }}
                     >
-                      <ActivityIndicator size="large" color="#2563eb" />
+                      <CircularLoader size="large" color="#2563eb" />
                       <Text
                         style={{
                           color: "#6b7280",
@@ -829,7 +829,7 @@ export default function MongooseInitiatorModal({
                     }}
                   >
                     {submitting ? (
-                      <ActivityIndicator color="white" />
+                      <CircularLoader color="white" />
                     ) : (
                       <>
                         <Text

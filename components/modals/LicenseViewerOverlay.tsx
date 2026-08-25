@@ -1,8 +1,8 @@
 import { Image } from 'expo-image';
 import { X } from 'lucide-react-native';
+import CircularLoader from '@/components/ui/CircularLoader';
 import React, { useState } from 'react';
 import {
-  ActivityIndicator,
   Dimensions,
   Modal,
   StatusBar,
@@ -62,7 +62,7 @@ export default function LicenseViewerOverlay({
         <View className="flex-1" style={{ marginTop: 80 }}>
           {imageLoading && (
             <View className="absolute z-20 left-0 right-0 top-0 bottom-0 items-center justify-center">
-              <ActivityIndicator size="large" color="#094569" />
+              <CircularLoader size="large" color="#094569" />
             </View>
           )}
 

@@ -5,12 +5,12 @@ import {
 } from "lucide-react-native";
 import React from "react";
 import {
-  ActivityIndicator,
   Image,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import CircularLoader from "@/components/ui/CircularLoader";
 import { Product } from "@/lib/productsService";
 import { useAppRouter } from "@/utils/navigation";
 
@@ -41,7 +41,7 @@ export default function ProfileTabContent({
     return (
       <>
         {loadingPosts ? (
-          <ActivityIndicator size="large" color="#059669" className="py-12" />
+          <CircularLoader size="large" color="#059669" />
         ) : userImages.length > 0 ? (
           <View className="flex-row flex-wrap">
             {userImages.map((imageUrl, index) => {
@@ -85,7 +85,7 @@ export default function ProfileTabContent({
     return (
       <>
         {loadingProducts ? (
-          <ActivityIndicator size="large" color="#059669" className="py-12" />
+          <CircularLoader size="large" color="#059669" />
         ) : userProducts.length > 0 ? (
           <View className="flex-row flex-wrap">
             {userProducts.map((product, index) => (

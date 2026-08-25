@@ -1,6 +1,7 @@
 import ClosingSaleBanner from "@/components/ClosingSaleBanner";
 import CountdownTimer from "@/components/CountdownTimer";
 import HomeCard from "@/components/HomeCard";
+import CircularLoader from "@/components/ui/CircularLoader";
 import { useForYouData, SortOrder } from "@/hooks/useForYouData";
 import { MarketplaceItem } from "@/lib/postMarketPlace";
 import { Product } from "@/lib/productsService";
@@ -10,7 +11,6 @@ import { useAppRouter } from "@/utils/navigation";
 import { ArrowUpDown } from "lucide-react-native";
 import React, { useCallback } from "react";
 import {
-  ActivityIndicator,
   ScrollView,
   Text,
   TouchableOpacity,
@@ -275,7 +275,7 @@ export default function ForYou() {
   if (loading) {
     return (
       <View className="flex-1 bg-background justify-center items-center">
-        <ActivityIndicator size="large" color="#094569" />
+        <CircularLoader size="large" color="#094569" />
         <Text className="text-gray-500 mt-2">Loading...</Text>
       </View>
     );

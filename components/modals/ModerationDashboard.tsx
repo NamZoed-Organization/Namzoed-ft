@@ -1,9 +1,9 @@
+import CircularLoader from '@/components/ui/CircularLoader';
 import { fetchModerationQueue, updatePostModerationStatus } from '@/lib/postsService';
 import type { ModerationStatus } from '@/types/post';
 import { Check, X } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
     Alert,
     FlatList,
     Modal,
@@ -128,7 +128,7 @@ export const ModerationDashboard: React.FC<ModerationDashboardProps> = ({
 
         {/* Queue List */}
         {loading ? (
-          <ActivityIndicator size="large" color="#007AFF" style={styles.loader} />
+          <CircularLoader size="large" color="#007AFF" style={styles.loader} />
         ) : queue.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyText}>All posts reviewed!</Text>

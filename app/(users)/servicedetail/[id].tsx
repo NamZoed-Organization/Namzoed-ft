@@ -1,5 +1,6 @@
 import MarketplaceImageViewer from "@/components/modals/MarketplaceImageViewer";
 import PopupMessage from "@/components/ui/PopupMessage";
+import ProgressiveImage from "@/components/ui/ProgressiveImage";
 import { useUser } from "@/contexts/UserContext";
 import {
   fetchProviderServiceById,
@@ -9,6 +10,7 @@ import { supabase } from "@/lib/supabase";
 import { useAppRouter } from "@/utils/navigation";
 import { getInitials } from "@/utils/initials";
 import { BlurView } from "expo-blur";
+import { Image as ExpoImage } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { Href, useFocusEffect, useLocalSearchParams } from "expo-router";
 import {
@@ -47,6 +49,13 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const IMAGE_HEIGHT = SCREEN_HEIGHT * 0.45;
 const MIN_IMAGE_HEIGHT = SCREEN_HEIGHT * 0.32;
 const MAX_IMAGE_HEIGHT = SCREEN_HEIGHT * 0.62;
+
+// Hero parallax only ever animates `transform` (translateX/scale) via style,
+// driven with useNativeDriver: false (it must share a JS listener with the
+// height-morph logic above) — so it's safe to swap the plain RN
+// Animated.Image for an animated wrapper around expo-image, picking up
+// cachePolicy caching without touching the animation itself.
+const AnimatedHeroImage = RNAnimated.createAnimatedComponent(ExpoImage);
 
 // Premium Skeleton Loader
 function DetailSkeleton() {
@@ -464,7 +473,7 @@ export default function ServiceDetail() {
                     setShowImageViewer(true);
                   }}
                 >
-                  <RNAnimated.Image
+                  <AnimatedHeroImage
                     source={{ uri: imageUrl }}
                     style={{
                       width: SCREEN_WIDTH,
@@ -494,7 +503,10 @@ export default function ServiceDetail() {
                         },
                       ],
                     }}
-                    resizeMode="contain"
+                    contentFit="contain"
+                    cachePolicy="memory-disk"
+                    recyclingKey={imageUrl}
+                    priority={index === 0 ? "high" : "normal"}
                   />
                 </TouchableOpacity>
               ))}
@@ -645,9 +657,12 @@ export default function ServiceDetail() {
                 {/* Avatar */}
                 <View className="relative">
                   {providerImage ? (
-                    <Image
-                      source={{ uri: providerImage }}
-                      className="w-14 h-14 rounded-2xl bg-gray-200"
+                    <ProgressiveImage
+                      uri={providerImage}
+                      style={{ width: 56, height: 56, borderRadius: 16 }}
+                      showProgress={false}
+                      priority="high"
+                      backgroundColor="#e5e7eb"
                     />
                   ) : (
                     <View className="w-14 h-14 bg-[#e0e7ef] rounded-2xl items-center justify-center">

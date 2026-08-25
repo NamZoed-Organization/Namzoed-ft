@@ -3,10 +3,10 @@ import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
 import { useAppRouter } from '@/utils/navigation';
 import { ArrowDownAZ, ArrowUpAZ, UserCheck, Users, X } from 'lucide-react-native';
+import CircularLoader from '@/components/ui/CircularLoader';
 import PopupMessage from '@/components/ui/PopupMessage';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Image,
   Modal,
   RefreshControl,
@@ -337,7 +337,7 @@ export default function FollowRequestsOverlay({
       {/* Content */}
       {loading ? (
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#094569" />
+          <CircularLoader size="large" color="#094569" />
         </View>
       ) : (
         <Animated.View

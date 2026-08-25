@@ -1,10 +1,10 @@
 import { Entypo, MaterialIcons } from "@expo/vector-icons";
 import FormInput from "@/components/ui/FormInput";
+import CircularLoader from "@/components/ui/CircularLoader";
 import { clamp, useResponsive } from "@/utils/responsive";
 import { useAppRouter } from "@/utils/navigation";
 import React, { useState } from "react";
 import {
-  ActivityIndicator,
   Image,
   Keyboard,
   Pressable,
@@ -270,7 +270,7 @@ export default function Forgot() {
             style={{ paddingVertical: submitPaddingY, borderRadius: submitRadius }}
           >
             {loading ? (
-              <ActivityIndicator color="#EDC06D" />
+              <CircularLoader color="#EDC06D" />
             ) : (
               <Text
                 className="text-secondary text-center font-semibold"

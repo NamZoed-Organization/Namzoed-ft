@@ -1,3 +1,4 @@
+import CircularLoader from "@/components/ui/CircularLoader";
 import { useUser } from "@/contexts/UserContext";
 import { supabase } from "@/lib/supabase";
 import { useAppRouter } from "@/utils/navigation";
@@ -18,7 +19,6 @@ import {
 } from "lucide-react-native";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-    ActivityIndicator,
     Animated,
     Dimensions,
     KeyboardAvoidingView,
@@ -720,7 +720,7 @@ export default function ShareComposerModal({
 
           {loadingUsers ? (
             <View className="h-20 items-center justify-center">
-              <ActivityIndicator color="#094569" />
+              <CircularLoader color="#094569" />
             </View>
           ) : (
             <View style={{ minHeight: FOLLOW_ROW_HEIGHT * FOLLOW_MIN_ROWS, maxHeight: FOLLOW_ROW_HEIGHT * FOLLOW_MIN_ROWS, marginBottom: 20 }}>
@@ -807,7 +807,7 @@ export default function ShareComposerModal({
                 }`}
               >
                 {sendingInApp ? (
-                  <ActivityIndicator color="#fff" size="small" />
+                  <CircularLoader color="#fff" size="small" />
                 ) : (
                   <Text className="text-white text-sm font-semibold">Send</Text>
                 )}

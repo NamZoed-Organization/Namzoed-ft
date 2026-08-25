@@ -1,4 +1,5 @@
 import TaggedItemsModal from "@/components/modals/TaggedItemsModal";
+import ProgressiveImage from "@/components/ui/ProgressiveImage";
 import {
   hydrateTaggedAccount,
   hydrateTaggedProduct,
@@ -204,10 +205,12 @@ function StoryGroupPage({
 
   return (
     <View style={{ width, flex: 1, backgroundColor: "#000" }}>
-      <ExpoImage
-        source={{ uri: story.image_url }}
+      <ProgressiveImage
+        uri={story.image_url}
         style={{ flex: 1 }}
-        contentFit="cover"
+        showProgress={false}
+        recyclingKey={story.id}
+        priority="high"
       />
 
       {/* Progress bars */}
@@ -245,6 +248,7 @@ function StoryGroupPage({
           <ExpoImage
             source={{ uri: group.avatarUrl }}
             style={{ width: 32, height: 32, borderRadius: 16 }}
+            cachePolicy="memory-disk"
           />
         ) : (
           <View

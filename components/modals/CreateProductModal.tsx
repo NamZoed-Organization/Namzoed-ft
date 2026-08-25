@@ -1,5 +1,6 @@
 import ImageCropperOverlay from "@/components/modals/ImageCropperOverlay";
 import ImagePickerSheet from "@/components/ui/ImagePickerSheet";
+import CircularLoader from "@/components/ui/CircularLoader";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { categories, categoryNames } from "@/data/categories";
 import { createProduct, uploadProductImages } from "@/lib/productsService";
@@ -8,7 +9,6 @@ import * as ImagePicker from "expo-image-picker";
 import { Check, ChevronDown, Upload, X } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
     Animated,
     Dimensions,
     Image,
@@ -609,7 +609,7 @@ export default function CreateProductModal({
                 }`}
               >
                 {loading ? (
-                  <ActivityIndicator color="white" />
+                  <CircularLoader color="white" />
                 ) : (
                   <Text className="text-white font-bold text-lg">
                     Post Item

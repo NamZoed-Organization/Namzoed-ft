@@ -7,6 +7,7 @@
  * relevant screen.
  */
 
+import CircularLoader from "@/components/ui/CircularLoader";
 import { useNotifications } from "@/contexts/NotificationsContext";
 import { getNotificationPermission, togglePushOptIn } from "@/services/oneSignalService";
 import { useScreenAnalytics } from "@/hooks/useAnalytics";
@@ -18,10 +19,9 @@ import type {
 import { Ionicons } from "@expo/vector-icons";
 import { useAppRouter } from "@/utils/navigation";
 import { Bell, BellOff, ChevronLeft } from "lucide-react-native";
+import { Image } from "expo-image";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
-  Image,
   InteractionManager,
   Linking,
   SectionList,
@@ -69,7 +69,8 @@ function PostThumbnail({ url }: { url: string }) {
         <Image
           source={{ uri: url }}
           style={{ width: 56, height: 56 }}
-          resizeMode="cover"
+          contentFit="cover"
+          cachePolicy="memory-disk"
         />
       )}
     </View>
@@ -212,6 +213,7 @@ function NotificationItem({
           <Image
             source={{ uri: item.actor_avatar_url }}
             className="w-12 h-12 rounded-full"
+            cachePolicy="memory-disk"
           />
         ) : (
           <View className="w-12 h-12 rounded-full bg-gray-200 items-center justify-center">
@@ -471,7 +473,7 @@ export default function NotificationsScreen() {
 
       {loading && notifications.length === 0 ? (
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#3b82f6" />
+          <CircularLoader size="large" color="#3b82f6" />
         </View>
       ) : notifications.length === 0 ? (
         <View className="flex-1 items-center justify-center px-6">

@@ -1,7 +1,7 @@
+import CircularLoader from "@/components/ui/CircularLoader";
 import { AlertCircle, Radio, X } from "lucide-react-native";
 import React, { useState } from "react";
 import {
-    ActivityIndicator,
     StyleSheet,
     Text,
     TouchableOpacity,
@@ -119,7 +119,7 @@ export default function LiveWrapper({ onClose, onMinimize, initialStreamId, show
           disabled={isRetrying}
         >
           {isRetrying ? (
-            <ActivityIndicator color="#fff" size="small" />
+            <CircularLoader color="#fff" size="small" />
           ) : (
             <>
               <Radio size={20} color="#fff" />

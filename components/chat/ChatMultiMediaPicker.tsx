@@ -1,3 +1,4 @@
+import CircularLoader from "@/components/ui/CircularLoader";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { supabase } from "@/lib/supabase";
 import { uploadFileToSupabase } from "@/lib/uploadFile";
@@ -6,7 +7,6 @@ import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from 'expo-image-picker';
 import React, { useState } from "react";
 import {
-    ActivityIndicator,
     Dimensions,
     Modal,
     StyleSheet,
@@ -215,7 +215,7 @@ export default function ChatMultiMediaPicker({
         className="mr-1 w-9 h-9 items-center justify-center"
       >
         {isUploading ? (
-          <ActivityIndicator size="small" color="#6b7280" />
+          <CircularLoader size="small" color="#6b7280" />
         ) : (
           <Ionicons
             name={mode === 'camera' ? 'camera-outline' : 'image-outline'}

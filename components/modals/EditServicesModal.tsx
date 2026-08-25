@@ -1,5 +1,6 @@
 import ImageCropperOverlay from "@/components/modals/ImageCropperOverlay";
 import ImagePickerSheet from "@/components/ui/ImagePickerSheet";
+import CircularLoader from "@/components/ui/CircularLoader";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { serviceCategories } from "@/data/servicecategory";
 import {
@@ -14,7 +15,6 @@ import * as ImagePicker from "expo-image-picker";
 import { Check, Trash2, Upload, X } from "lucide-react-native";
 import React, { useState } from "react";
 import {
-    ActivityIndicator,
     Image,
     KeyboardAvoidingView,
     Modal,
@@ -488,7 +488,7 @@ export default function EditServicesModal({
                     className="bg-primary rounded-[24px] py-4 shadow-md flex-row items-center justify-center"
                   >
                     {loading ? (
-                      <ActivityIndicator color="white" />
+                      <CircularLoader color="white" />
                     ) : (
                       <>
                         <Check size={20} color="white" strokeWidth={3} />

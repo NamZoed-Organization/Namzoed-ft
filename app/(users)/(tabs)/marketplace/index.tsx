@@ -1,38 +1,32 @@
 import Banner from "@/components/Banner";
+import GridCard, { gridCardHeight, GridCardSourceRect } from "@/components/GridCard";
+import MasonryGrid from "@/components/MasonryGrid";
 import AuthPromptModal from "@/components/modals/AuthPromptModal";
 import MarketplacePostOverlay from "@/components/modals/MarketplacePostOverlay";
 import SearchBar from "@/components/modals/SearchBar";
-import ImageWithFallback from "@/components/ui/ImageWithFallback";
+import CircularLoader from "@/components/ui/CircularLoader";
 import TopNavbar from "@/components/ui/TopNavbar";
 import { useUser } from "@/contexts/UserContext";
 import { useTabBarScroll } from "@/contexts/TabBarScrollContext";
+import { useRankedFeed } from "@/hooks/useRankedFeed";
 import { useScreenAnalytics } from "@/hooks/useAnalytics";
 import { Screens } from "@/lib/analyticsService";
 import { dzongkhagCenters } from "@/data/dzongkhag";
 import {
-  fetchMarketplaceItems,
+  fetchMarketplaceForRanking,
   MarketplaceItemWithUser,
 } from "@/lib/postMarketPlace";
 import { supabase } from "@/lib/supabase";
 import { Picker } from "@react-native-picker/picker";
 import { useAppRouter } from "@/utils/navigation";
-import { getInitials } from "@/utils/initials";
 import {
-  Briefcase,
   Filter,
-  Gift,
-  Home,
   MapPin,
   Plus,
-  RefreshCw,
-  ShoppingCart,
-  Verified,
   X,
 } from "lucide-react-native";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
-  ActivityIndicator,
-  Image,
   Modal,
   RefreshControl,
   ScrollView,
@@ -56,14 +50,6 @@ export default function MarketplaceScreen() {
   const [showFilters, setShowFilters] = useState(false);
   const [showPostOverlay, setShowPostOverlay] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [marketplaceItems, setMarketplaceItems] = useState<
-    MarketplaceItemWithUser[]
-  >([]);
-  const [verifiedUserIds, setVerifiedUserIds] = useState<Set<string>>(
-    new Set(),
-  );
   const [filters, setFilters] = useState({
     dzongkhag: "",
     minPrice: "",
@@ -71,44 +57,29 @@ export default function MarketplaceScreen() {
     tags: [],
   });
 
-  // Fetch marketplace items
-  const loadMarketplaceItems = async () => {
-    try {
-      setIsLoading(true);
-      const { items } = await fetchMarketplaceItems(0, 50);
-      setMarketplaceItems(items || []);
-      const userIds = [...new Set((items || []).map((i) => i.user_id))];
-      if (userIds.length > 0) {
-        const { data: spData } = await supabase
-          .from("service_providers")
-          .select("user_id, verification_status")
-          .in("user_id", userIds);
-        setVerifiedUserIds(
-          new Set(
-            (spData || [])
-              .filter((sp) => sp.verification_status === "verified")
-              .map((sp) => sp.user_id),
-          ),
-        );
-      }
-    } catch (error) {
-      console.error("Error loading marketplace items:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // Fetches the whole marketplace pool once per session — ranked/randomized
+  // client-side (see lib/feedRanking.ts) — then tab switches just re-filter
+  // the same pool client-side (matching the old single-fetch-then-filter
+  // pattern, which is what keeps the swipe-between-tabs gesture instant).
+  const fetchPool = useCallback(() => fetchMarketplaceForRanking(), []);
+  const trackImpressions = useCallback(async (ids: string[]) => {
+    const { error } = await supabase.rpc("increment_impressions_marketplace", { ids });
+    if (error) console.error("Error tracking marketplace impressions:", error);
+  }, []);
 
-  // Handle pull-to-refresh
+  const ranked = useRankedFeed<MarketplaceItemWithUser>({
+    fetchPool,
+    trackImpressions,
+    pageSize: 1000, // this screen has never paginated — one session, whole pool
+    boostSlotCount: 2,
+  });
+  const marketplaceItems = ranked.items;
+  const isLoading = ranked.loading;
+  const refreshing = ranked.refreshing;
+
   const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await loadMarketplaceItems();
-    setRefreshing(false);
-  }, []);
-
-  // Initial load
-  useEffect(() => {
-    loadMarketplaceItems();
-  }, []);
+    await ranked.refresh();
+  }, [ranked]);
 
   const handleTabChange = (newTab: string) => {
     if (newTab === activeTab) return;
@@ -116,139 +87,54 @@ export default function MarketplaceScreen() {
     setActiveTab(newTab);
   };
 
-  const renderMarketplaceCard = ({
-    item,
-  }: {
-    item: MarketplaceItemWithUser;
-  }) => (
-    <TouchableOpacity
-      onPress={() => {
-        trackTap("marketplace_card", "marketplace_view", { item_id: item.id, item_type: item.type });
-        router.push(`/(users)/marketplace/${item.id}` as any);
-      }}
-      className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden"
-    >
-      {/* Product Image */}
-      <ImageWithFallback
-        source={{ uri: item.images?.[0] || "" }}
-        className="w-full h-32"
-        resizeMode="cover"
-      />
+  const MARKETPLACE_CARD_RATIO = 4 / 3;
 
-      {/* Card Content */}
-      <View className="p-3">
-        {/* Title */}
-        <Text
-          className="text-sm font-semibold text-gray-900 mb-1.5"
-          numberOfLines={2}
-        >
-          {item.title}
-        </Text>
-
-        {/* Row 2: Seller avatar + name + verified badge */}
-        {item.profiles?.name && (
-          <View className="flex-row items-center mb-2 gap-1.5">
-            {(item.profiles as any)?.avatar_url ? (
-              <Image
-                source={{ uri: (item.profiles as any).avatar_url }}
-                style={{ width: 20, height: 20, borderRadius: 10 }}
-              />
-            ) : (
-              <View
-                style={{
-                  width: 20,
-                  height: 20,
-                  borderRadius: 10,
-                  backgroundColor: "#e0e7ef",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <Text
-                  style={{ fontSize: 9, fontWeight: "700", color: "#094569" }}
-                >
-                  {getInitials(item.profiles.name)}
-                </Text>
-              </View>
-            )}
-            <Text
-              className="text-xs text-gray-500 font-medium"
-              numberOfLines={1}
-              style={{ flex: 1 }}
-            >
-              {item.profiles.name}
-            </Text>
-            {verifiedUserIds.has(item.user_id) && (
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  backgroundColor: "#EFF6FF",
-                  borderWidth: 1,
-                  borderColor: "#094569",
-                  borderRadius: 99,
-                  paddingHorizontal: 5,
-                  paddingVertical: 2,
-                  gap: 2,
-                }}
-              >
-                <Verified size={8} color="#094569" />
-                <Text
-                  style={{ fontSize: 8, fontWeight: "700", color: "#094569" }}
-                >
-                  Verified
-                </Text>
-              </View>
-            )}
-          </View>
-        )}
-
-        {/* Row 3: Price + Location */}
-        {(item.type === "rent" ||
-          item.type === "second_hand" ||
-          item.type === "job_vacancy") &&
-        item.price > 0 ? (
-          <View className="flex-row items-center justify-between mb-2">
-            <Text className="text-base font-bold text-primary">
-              Nu. {item.price}
-            </Text>
-            {item.dzongkhag && (
-              <View className="flex-row items-center gap-0.5">
-                <MapPin size={11} color="#9CA3AF" />
-                <Text className="text-xs text-gray-400" numberOfLines={1}>
-                  {item.dzongkhag}
-                </Text>
-              </View>
-            )}
-          </View>
-        ) : item.dzongkhag ? (
-          <View className="flex-row items-center mb-2 gap-0.5">
-            <MapPin size={11} color="#9CA3AF" />
-            <Text className="text-xs text-gray-400" numberOfLines={1}>
-              {item.dzongkhag}
-            </Text>
-          </View>
-        ) : null}
-
-        {/* Tags */}
-        {item.tags && item.tags.length > 0 && (
-          <View
-            className="flex-row flex-wrap"
-            style={{ alignSelf: "flex-start" }}
-          >
-            {item.tags.slice(0, 2).map((tag: string, index: number) => (
-              <Text
-                key={index}
-                className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded mr-1 mb-1"
-              >
-                {tag}
-              </Text>
-            ))}
-          </View>
-        )}
-      </View>
-    </TouchableOpacity>
+  const handleMarketplacePress = useCallback(
+    (itemId: string, _rect: GridCardSourceRect) => {
+      const item = marketplaceItems.find((i) => i.id === itemId);
+      trackTap("marketplace_card", "marketplace_view", { item_id: itemId, item_type: item?.type });
+      router.push(`/(users)/marketplace/${itemId}` as any);
+    },
+    [marketplaceItems, router, trackTap],
   );
+
+  const renderMarketplaceCard = (
+    item: MarketplaceItemWithUser,
+    columnWidth: number,
+    deferred: boolean,
+    priority: "low" | "normal" | "high",
+  ) => {
+    const showPrice =
+      (item.type === "rent" || item.type === "second_hand" || item.type === "job_vacancy") &&
+      item.price > 0;
+    return (
+      <GridCard
+        id={item.id}
+        width={columnWidth}
+        ratio={MARKETPLACE_CARD_RATIO}
+        imageUri={item.images?.[0]}
+        title={item.title}
+        subtitle={item.profiles?.name}
+        avatarUri={item.profiles?.avatar_url}
+        avatarLabel={item.profiles?.name}
+        deferred={deferred}
+        priority={priority}
+        footerRight={
+          showPrice ? (
+            <Text style={{ fontSize: 13, fontWeight: "700", color: "#094569" }}>Nu. {item.price}</Text>
+          ) : item.dzongkhag ? (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
+              <MapPin size={11} color="#9CA3AF" />
+              <Text style={{ fontSize: 12, color: "#9CA3AF" }} numberOfLines={1}>
+                {item.dzongkhag}
+              </Text>
+            </View>
+          ) : undefined
+        }
+        onPress={handleMarketplacePress}
+      />
+    );
+  };
 
   const filterData = (data: MarketplaceItemWithUser[]) => {
     return data.filter((item: MarketplaceItemWithUser) => {
@@ -315,7 +201,7 @@ export default function MarketplaceScreen() {
     if (isLoading) {
       return (
         <View className="flex-1 items-center justify-center pt-20">
-          <ActivityIndicator size="large" color="#094569" />
+          <CircularLoader size="large" color="#094569" />
           <Text className="text-sm text-gray-600 mt-2">
             Loading marketplace...
           </Text>
@@ -324,33 +210,30 @@ export default function MarketplaceScreen() {
     }
 
     return (
-      <View className="px-3 pb-6">
-        <View className="flex-row items-center justify-between mb-3">
+      <View className="pb-6">
+        {/* Padded separately from MasonryGrid below — the grid already owns
+            its own horizontal inset (see GRID_PADDING in MasonryGrid.tsx)
+            sized for exactly that much padding; stacking this screen's own
+            px-3 on top of it made the column-width math assume more space
+            than was actually available, and the two columns overlapped. */}
+        <View className="flex-row items-center justify-between mb-3 px-3">
           <Text className="text-lg font-semibold text-gray-900">{title}</Text>
           <TouchableOpacity
             onPress={() => setShowFilters(true)}
-            className="bg-white border border-gray-300 rounded-lg p-2 shadow-sm"
+            className="bg-white border border-gray-300 rounded-lg p-2"
           >
             <Filter size={18} color="black" />
           </TouchableOpacity>
         </View>
 
-        {data.length === 0 ? (
-          <View className="items-center justify-center py-20">
-            <Text className="text-gray-500 text-base">No items found</Text>
-            <Text className="text-gray-400 text-sm mt-2">
-              Try adjusting your filters
-            </Text>
-          </View>
-        ) : (
-          <View className="flex-row flex-wrap gap-2 justify-between">
-            {data.map((item: MarketplaceItemWithUser) => (
-              <View key={item.id} className="w-[48%]">
-                {renderMarketplaceCard({ item })}
-              </View>
-            ))}
-          </View>
-        )}
+        <MasonryGrid
+          items={data}
+          loading={false}
+          keyExtractor={(item) => item.id}
+          getHeight={(_item, columnWidth) => gridCardHeight(MARKETPLACE_CARD_RATIO, columnWidth)}
+          emptyText="No items found — try adjusting your filters."
+          renderCard={renderMarketplaceCard}
+        />
       </View>
     );
   };
@@ -507,6 +390,14 @@ export default function MarketplaceScreen() {
     "free",
   ];
 
+  const MARKETPLACE_TAB_LABELS: Record<string, string> = {
+    job_vacancy: "Jobs",
+    rent: "Rent",
+    second_hand: "2nd Hand",
+    swap: "Swap",
+    free: "Free",
+  };
+
   const swipeGesture = Gesture.Pan()
     .runOnJS(true)
     .activeOffsetX([-20, 20])
@@ -530,6 +421,7 @@ export default function MarketplaceScreen() {
           contentContainerStyle={{ paddingBottom: 72 + insets.bottom }}
           onScroll={onTabBarScroll}
           scrollEventThrottle={16}
+          stickyHeaderIndices={[2]}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -538,7 +430,7 @@ export default function MarketplaceScreen() {
             />
           }
         >
-          {/* Header */}
+          {/* Header — scrolls away normally */}
           <View className="bg-gray-50">
             <TopNavbar />
             <View className="px-4 gap-2">
@@ -564,67 +456,64 @@ export default function MarketplaceScreen() {
                 </TouchableOpacity>
               </View>
             </View>
+          </View>
 
+          {/* Banner — scrolls away normally, same as Home */}
+          <View className="bg-gray-50">
             <Banner />
+          </View>
 
-            {/* Tab Navigation — matches home screen pill design */}
-            <View style={{ marginTop: 8, marginBottom: 4 }}>
-              <View
-                style={{
-                  flexDirection: "row",
-                  justifyContent: "center",
-                  alignItems: "center",
-                  gap: 12,
-                  paddingHorizontal: 16,
-                }}
-              >
-                {(
-                  [
-                    { key: "job_vacancy", Icon: Briefcase },
-                    { key: "rent", Icon: Home },
-                    { key: "second_hand", Icon: ShoppingCart },
-                    { key: "swap", Icon: RefreshCw },
-                    { key: "free", Icon: Gift },
-                  ] as const
-                ).map(({ key, Icon }) => {
-                  const isActive = activeTab === key;
-                  return (
-                    <TouchableOpacity
-                      key={key}
-                      onPress={() => handleTabChange(key)}
-                      disabled={isLoading}
-                      style={{
-                        width: 42,
-                        height: 42,
-                        borderRadius: 21,
-                        backgroundColor: isActive ? "#094569" : "#f3f4f6",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        opacity: isLoading ? 0.5 : 1,
-                      }}
+          {/* Tab Navigation — same plain-text style as Home's HomeTabs,
+              sticky (index 2 of stickyHeaderIndices above) so it stays
+              pinned once scrolled to, matching Home's own tab row. */}
+          <View className="bg-gray-50 px-4" style={{ paddingTop: 8, paddingBottom: 8 }}>
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "flex-start",
+                alignItems: "center",
+                gap: 18,
+              }}
+            >
+              {MARKETPLACE_TABS.map((key) => {
+                const isActive = activeTab === key;
+                return (
+                  <TouchableOpacity
+                    key={key}
+                    onPress={() => handleTabChange(key)}
+                    disabled={isLoading}
+                    style={{ opacity: isLoading ? 0.5 : 1 }}
+                  >
+                    <Text
+                      className={
+                        isActive
+                          ? "text-[17px] font-mbold text-gray-900"
+                          : "text-[15px] font-medium text-gray-400"
+                      }
                     >
-                      <Icon size={17} color={isActive ? "#fff" : "#9ca3af"} />
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-              <Text
-                className="text-2xl font-mbold text-gray-800"
-                style={{ marginTop: 10, paddingHorizontal: 16 }}
-              >
-                {
-                  (
-                    {
-                      job_vacancy: "Jobs & Vacancies",
-                      rent: "For Rent",
-                      second_hand: "Second Hand",
-                      swap: "Swap",
-                      free: "Free Items",
-                    } as Record<string, string>
-                  )[activeTab]
-                }
-              </Text>
+                      {MARKETPLACE_TAB_LABELS[key]}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
+          </View>
+
+          {/* Section title — scrolls away with the content below it */}
+          <View className="bg-gray-50 px-4" style={{ paddingBottom: 4 }}>
+            <Text className="text-2xl font-mbold text-gray-800">
+              {
+                (
+                  {
+                    job_vacancy: "Jobs & Vacancies",
+                    rent: "For Rent",
+                    second_hand: "Second Hand",
+                    swap: "Swap",
+                    free: "Free Items",
+                  } as Record<string, string>
+                )[activeTab]
+              }
+            </Text>
           </View>
 
           {/* Marketplace Content */}

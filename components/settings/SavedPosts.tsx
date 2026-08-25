@@ -1,13 +1,13 @@
+import CircularLoader from '@/components/ui/CircularLoader';
+import ProgressiveImage from '@/components/ui/ProgressiveImage';
 import { getUserBookmarks } from '@/lib/bookmarkService';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppRouter } from '@/utils/navigation';
 import { ArrowLeft, Bookmark, FileText, Play, ShoppingBag, Store } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
     Dimensions,
     FlatList,
-    Image,
     RefreshControl,
     Text,
     TouchableOpacity,
@@ -143,10 +143,12 @@ export default function SavedPosts({ onClose, userId }: SavedPostsProps) {
       >
         {hasImage || hasVideo ? (
           <>
-            <Image
-              source={{ uri: firstMedia }}
+            <ProgressiveImage
+              uri={firstMedia as string}
               style={{ width: '100%', height: '100%' }}
-              resizeMode="cover"
+              showProgress={false}
+              recyclingKey={post.id}
+              backgroundColor="#f3f4f6"
             />
             {hasVideo && (
               <View style={{
@@ -205,10 +207,12 @@ export default function SavedPosts({ onClose, userId }: SavedPostsProps) {
       >
         {firstImage ? (
           <>
-            <Image
-              source={{ uri: firstImage }}
+            <ProgressiveImage
+              uri={firstImage}
               style={{ width: '100%', height: '100%' }}
-              resizeMode="cover"
+              showProgress={false}
+              recyclingKey={product.id}
+              backgroundColor="#f3f4f6"
             />
             {/* Price badge */}
             <View style={{
@@ -269,10 +273,12 @@ export default function SavedPosts({ onClose, userId }: SavedPostsProps) {
       >
         {firstImage ? (
           <>
-            <Image
-              source={{ uri: firstImage }}
+            <ProgressiveImage
+              uri={firstImage}
               style={{ width: '100%', height: '100%' }}
-              resizeMode="cover"
+              showProgress={false}
+              recyclingKey={listing.id}
+              backgroundColor="#f3f4f6"
             />
             {/* Type badge */}
             <View style={{
@@ -401,7 +407,7 @@ export default function SavedPosts({ onClose, userId }: SavedPostsProps) {
 
       {loading ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <ActivityIndicator size="large" color="#094569" />
+          <CircularLoader size="large" color="#094569" />
         </View>
       ) : activeData.length === 0 ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40 }}>

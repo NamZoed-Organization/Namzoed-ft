@@ -1,12 +1,12 @@
 import { useUser } from "@/contexts/UserContext";
 import { supabase } from "@/lib/supabase";
 import PopupMessage from "@/components/ui/PopupMessage";
+import CircularLoader from "@/components/ui/CircularLoader";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import React, { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   Modal,
   Platform,
   Pressable,
@@ -252,7 +252,7 @@ export default function BookMongooseModal({
           <ScrollView className="px-5 py-4">
             {loading ? (
               <View className="items-center py-8">
-                <ActivityIndicator size="large" color="#10b981" />
+                <CircularLoader size="large" color="#10b981" />
                 <Text className="text-gray-600 mt-3">
                   Checking availability...
                 </Text>
@@ -524,7 +524,7 @@ export default function BookMongooseModal({
                     }`}
                   >
                     {submitting ? (
-                      <ActivityIndicator color="white" />
+                      <CircularLoader color="white" />
                     ) : (
                       <Text className="text-white font-semibold text-base">
                         Submit Booking Request

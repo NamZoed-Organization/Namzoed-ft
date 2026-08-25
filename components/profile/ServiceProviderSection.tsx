@@ -11,13 +11,13 @@ import {
 } from "lucide-react-native";
 import React from "react";
 import {
-  ActivityIndicator,
-  Image,
   Switch,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import CircularLoader from "@/components/ui/CircularLoader";
+import ProgressiveImage from "@/components/ui/ProgressiveImage";
 import { ProviderServiceWithDetails } from "@/lib/servicesService";
 import Animated, { FadeInRight, FadeOutLeft, Layout } from "react-native-reanimated";
 
@@ -80,7 +80,7 @@ export default function ServiceProviderSection({
 }: ServiceProviderSectionProps) {
   if (loadingServiceProvider) {
     return (
-      <ActivityIndicator size="large" color="#094569" className="py-12" />
+      <CircularLoader size="large" color="#094569" />
     );
   }
 
@@ -133,10 +133,11 @@ export default function ServiceProviderSection({
               className="w-[86px] h-[86px] rounded-full bg-gray-200 overflow-hidden border-2 border-gray-100"
             >
               {providerImageUri ? (
-                <Image
-                  source={{ uri: providerImageUri }}
-                  className="w-full h-full"
-                  resizeMode="cover"
+                <ProgressiveImage
+                  uri={providerImageUri}
+                  style={{ width: "100%", height: "100%" }}
+                  showProgress={false}
+                  priority="high"
                 />
               ) : (
                 <View className="w-full h-full items-center justify-center bg-gray-100">
@@ -221,7 +222,7 @@ export default function ServiceProviderSection({
 
         {uploadingLicense ? (
           <View className="flex-row items-center justify-center py-3">
-            <ActivityIndicator size="small" color="#094569" />
+            <CircularLoader size="small" color="#094569" />
             <Text className="text-primary font-msemibold ml-3">
               Processing document...
             </Text>
@@ -249,7 +250,7 @@ export default function ServiceProviderSection({
         </Text>
 
         {loadingProviderServices ? (
-          <ActivityIndicator size="large" color="#094569" className="py-8" />
+          <CircularLoader size="large" color="#094569" />
         ) : providerServices.length > 0 ? (
           <View className="space-y-3">
             {providerServices.map((service) => (
@@ -277,10 +278,11 @@ export default function ServiceProviderSection({
                   <View className="flex-row">
                     <View className="w-20 h-20 rounded-2xl overflow-hidden bg-gray-100 relative">
                       {service.images && service.images.length > 0 ? (
-                        <Image
-                          source={{ uri: service.images[0] }}
-                          className="w-full h-full"
-                          resizeMode="cover"
+                        <ProgressiveImage
+                          uri={service.images[0]}
+                          style={{ width: "100%", height: "100%" }}
+                          showProgress={false}
+                          recyclingKey={service.id}
                         />
                       ) : (
                         <View className="w-full h-full items-center justify-center">

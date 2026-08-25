@@ -3,7 +3,10 @@ import FollowRequestsOverlay from "@/components/modals/FollowRequestsOverlay";
 import ProfileImageViewer from "@/components/modals/ProfileImageViewer";
 import ReportUserModal from "@/components/modals/ReportUserModal";
 import ShareComposerModal from "@/components/modals/ShareComposerModal";
-import ProfilePostGridItem from "@/components/profile/ProfilePostGridItem";
+import ProfilePostGridItem, { profileGridCellHeight } from "@/components/profile/ProfilePostGridItem";
+import ProgressiveImage from "@/components/ui/ProgressiveImage";
+import { useGridReveal } from "@/hooks/useGridReveal";
+import CircularLoader from "@/components/ui/CircularLoader";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { useUser } from "@/contexts/UserContext";
 import { blockUser, isUserBlocked, unblockUser } from "@/lib/blockService";
@@ -37,10 +40,8 @@ import {
 } from "lucide-react-native";
 import React, { useEffect, useMemo, useState } from "react";
 import {
-    ActivityIndicator,
     Alert,
     Dimensions,
-    Image,
     Modal,
     Pressable,
     RefreshControl,
@@ -82,8 +83,12 @@ export default function PublicProfileScreen() {
 
   // Post thumbnails (grouped by post)
   const [postThumbnails, setPostThumbnails] = useState<
-    Array<{ postId: string; thumbnailUrl: string; mediaCount: number; isVideo: boolean; post: Post }>
+    Array<{ postId: string; thumbnailUrl: string; thumbnailBlurHash: string | null; mediaCount: number; isVideo: boolean; post: Post }>
   >([]);
+  const postGridReveal = useGridReveal();
+  useEffect(() => {
+    postGridReveal.rearm();
+  }, [postThumbnails.length, postGridReveal.rearm]);
   // Service provider state
   const [serviceProvider, setServiceProvider] = useState<any>(null);
   const [providerServices, setProviderServices] = useState<
@@ -163,6 +168,7 @@ export default function PublicProfileScreen() {
             thumbs.push({
               postId: post.id,
               thumbnailUrl: post.images[0],
+              thumbnailBlurHash: (post as any).blur_hashes?.[0] ?? null,
               mediaCount: post.images.length,
               isVideo: isVideoUrl(post.images[0]),
               post,
@@ -237,6 +243,7 @@ export default function PublicProfileScreen() {
             thumbs.push({
               postId: post.id,
               thumbnailUrl: post.images[0],
+              thumbnailBlurHash: (post as any).blur_hashes?.[0] ?? null,
               mediaCount: post.images.length,
               isVideo: isVideoUrl(post.images[0]),
               post,
@@ -455,7 +462,7 @@ export default function PublicProfileScreen() {
   if (loading) {
     return (
       <View className="flex-1 bg-background items-center justify-center">
-        <ActivityIndicator size="large" color="#059669" />
+        <CircularLoader size="large" color="#059669" />
       </View>
     );
   }
@@ -576,10 +583,11 @@ export default function PublicProfileScreen() {
                     className="w-[86px] h-[86px] rounded-full bg-gray-200 overflow-hidden border-2 border-gray-100"
                   >
                     {userProfile.avatar_url ? (
-                      <Image
-                        source={{ uri: userProfile.avatar_url }}
-                        className="w-full h-full"
-                        resizeMode="cover"
+                      <ProgressiveImage
+                        uri={userProfile.avatar_url}
+                        style={{ width: "100%", height: "100%" }}
+                        showProgress={false}
+                        priority="high"
                       />
                     ) : (
                       <View className="w-full h-full items-center justify-center bg-gray-100">
@@ -673,7 +681,7 @@ export default function PublicProfileScreen() {
                     }`}
                   >
                     {loadingFollow ? (
-                      <ActivityIndicator
+                      <CircularLoader
                         size="small"
                         color={isFollowingUser ? "#374151" : "white"}
                       />
@@ -799,21 +807,32 @@ export default function PublicProfileScreen() {
               {/* Tab Content */}
               <View className="min-h-[300px]">
                 {activeTab === "images" && (
-                  <View className="flex-row flex-wrap">
+                  <View
+                    ref={postGridReveal.containerRef}
+                    collapsable={false}
+                    className="flex-row flex-wrap"
+                  >
                     {postThumbnails.length > 0 ? (
-                      postThumbnails.map((thumb) => (
-                        <ProfilePostGridItem
-                          key={thumb.postId}
-                          thumbnailUrl={thumb.thumbnailUrl}
-                          isVideo={thumb.isVideo}
-                          mediaCount={thumb.mediaCount}
-                          onPress={() =>
-                            router.push(
-                              `/(users)/post/${thumb.postId}` as any,
-                            )
-                          }
-                        />
-                      ))
+                      postThumbnails.map((thumb, index) => {
+                        const cellHeight = profileGridCellHeight(SCREEN_WIDTH);
+                        const top = Math.floor(index / 3) * cellHeight;
+                        return (
+                          <ProfilePostGridItem
+                            key={thumb.postId}
+                            thumbnailUrl={thumb.thumbnailUrl}
+                            thumbnailBlurHash={thumb.thumbnailBlurHash}
+                            isVideo={thumb.isVideo}
+                            mediaCount={thumb.mediaCount}
+                            deferred={!postGridReveal.isNear(thumb.postId, top, cellHeight)}
+                            priority={postGridReveal.isAboveFold(top) ? "high" : "normal"}
+                            onPress={() =>
+                              router.push(
+                                `/(users)/post/${thumb.postId}` as any,
+                              )
+                            }
+                          />
+                        );
+                      })
                     ) : (
                       <View className="w-full py-16 items-center px-6">
                         <View className="w-14 h-14 rounded-full bg-gray-50 items-center justify-center mb-3">
@@ -844,10 +863,11 @@ export default function PublicProfileScreen() {
                             className="bg-transparent rounded-xl overflow-hidden border border-gray-100"
                           >
                             {product.images && product.images.length > 0 ? (
-                              <Image
-                                source={{ uri: product.images[0] }}
-                                className="w-full h-40"
-                                resizeMode="cover"
+                              <ProgressiveImage
+                                uri={product.images[0]}
+                                style={{ width: "100%", height: 160 }}
+                                showProgress={false}
+                                recyclingKey={product.id}
                               />
                             ) : (
                               <View className="w-full h-40 bg-gray-100 items-center justify-center">
@@ -904,10 +924,11 @@ export default function PublicProfileScreen() {
                             className="bg-transparent rounded-xl overflow-hidden border border-gray-100"
                           >
                             {service.images && service.images.length > 0 ? (
-                              <Image
-                                source={{ uri: service.images[0] }}
-                                className="w-full h-40"
-                                resizeMode="cover"
+                              <ProgressiveImage
+                                uri={service.images[0]}
+                                style={{ width: "100%", height: 160 }}
+                                showProgress={false}
+                                recyclingKey={service.id}
                               />
                             ) : (
                               <View className="w-full h-40 bg-gray-100 items-center justify-center">
@@ -971,11 +992,7 @@ export default function PublicProfileScreen() {
               }
             >
               {loadingServiceProvider ? (
-                <ActivityIndicator
-                  size="large"
-                  color="#094569"
-                  className="py-12"
-                />
+                <CircularLoader size="large" color="#094569" />
               ) : serviceProvider ? (
                 <View className="px-4 py-8">
 
@@ -1028,16 +1045,18 @@ export default function PublicProfileScreen() {
                         className="w-[86px] h-[86px] rounded-full bg-gray-200 overflow-hidden border-2 border-gray-100"
                       >
                         {serviceProvider.profile_url ? (
-                          <Image
-                            source={{ uri: serviceProvider.profile_url }}
-                            className="w-full h-full"
-                            resizeMode="cover"
+                          <ProgressiveImage
+                            uri={serviceProvider.profile_url}
+                            style={{ width: "100%", height: "100%" }}
+                            showProgress={false}
+                            priority="high"
                           />
                         ) : userProfile.avatar_url ? (
-                          <Image
-                            source={{ uri: userProfile.avatar_url }}
-                            className="w-full h-full"
-                            resizeMode="cover"
+                          <ProgressiveImage
+                            uri={userProfile.avatar_url}
+                            style={{ width: "100%", height: "100%" }}
+                            showProgress={false}
+                            priority="high"
                           />
                         ) : (
                           <View className="w-full h-full items-center justify-center bg-primary/10">
@@ -1059,7 +1078,7 @@ export default function PublicProfileScreen() {
                         }`}
                       >
                         {loadingFollow ? (
-                          <ActivityIndicator size="small" color={isFollowingUser ? "#374151" : "white"} />
+                          <CircularLoader size="small" color={isFollowingUser ? "#374151" : "white"} />
                         ) : (
                           <Text className={`text-sm font-semibold ${isFollowingUser ? "text-gray-800" : "text-white"}`}>
                             {isFollowingUser ? "Following" : "Follow"}
@@ -1110,10 +1129,11 @@ export default function PublicProfileScreen() {
                             <View className="flex-row">
                               <View className="w-20 h-20 rounded-2xl overflow-hidden bg-gray-100">
                                 {service.images && service.images.length > 0 ? (
-                                  <Image
-                                    source={{ uri: service.images[0] }}
-                                    className="w-full h-full"
-                                    resizeMode="cover"
+                                  <ProgressiveImage
+                                    uri={service.images[0]}
+                                    style={{ width: "100%", height: "100%" }}
+                                    showProgress={false}
+                                    recyclingKey={service.id}
                                   />
                                 ) : (
                                   <View className="w-full h-full items-center justify-center">

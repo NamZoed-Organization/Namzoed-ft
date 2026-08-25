@@ -1,9 +1,10 @@
 // app/index.tsx
+import CircularLoader from "@/components/ui/CircularLoader";
 import { useUser } from "@/contexts/UserContext";
 import { isMongooseUser } from "@/utils/roleCheck";
 import { Redirect } from "expo-router";
 import React from "react";
-import { ActivityIndicator, View } from "react-native";
+import { View } from "react-native";
 
 export default function Index() {
   const { currentUser, isLoading } = useUser();
@@ -11,7 +12,7 @@ export default function Index() {
   if (isLoading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#0000ff" />
+        <CircularLoader size="large" color="#0000ff" />
       </View>
     );
   }

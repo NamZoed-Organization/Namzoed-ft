@@ -1,29 +1,45 @@
 /**
  * Post detail screen
  *
- * Navigated to from notifications when a user taps a post_liked,
- * post_commented, or new_post notification.
- * Shows the single post using the existing FeedPost component.
+ * Navigated to from notifications, profile grids, saved posts, chat, deep
+ * links, etc. — everywhere except the Home "For You" grid tap (which morphs
+ * into PostDetailOverlay instead). Shows the single post using the existing
+ * FeedPost component.
+ *
+ * Wrapped in the same ContextDrop gesture PostDetailOverlay uses (edge-swipe
+ * back, with a "drop to Contact Author" dome) so that behavior isn't
+ * Home-grid-exclusive — the native-stack edge-swipe is turned off for this
+ * screen so it doesn't fight ContextDrop's own edge gesture for the same
+ * touch zone.
+ *
+ * Presented as a transparentModal (not the navigator's default opaque
+ * "card") so whatever screen this was opened from — notifications, a
+ * profile grid, chat, etc. — stays mounted and visible underneath instead
+ * of being detached, matching PostDetailOverlay's own "real screen shows
+ * through while dragging" behavior even though this route is a genuine
+ * stack push rather than an in-tree overlay.
  */
 
+import ContextDrop, { ContextDropTarget } from "@/components/ContextDrop";
 import FeedPost from "@/components/FeedPost";
+import CircularLoader from "@/components/ui/CircularLoader";
 import { useUser } from "@/contexts/UserContext";
 import { parseMediaDisplay } from "@/lib/postMediaDisplay";
 import { fetchPostById, PostWithUser } from "@/lib/postsService";
 import { trackPostView } from "@/lib/viewTrackingService";
 import { PostData } from "@/types/post";
 import { useAppRouter } from "@/utils/navigation";
-import { useLocalSearchParams } from "expo-router";
-import { ChevronLeft } from "lucide-react-native";
-import React, { useEffect, useState } from "react";
+import { Stack, useLocalSearchParams } from "expo-router";
+import { MessageCircle } from "lucide-react-native";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-    ActivityIndicator,
-    ScrollView,
     Text,
     TouchableOpacity,
     View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+const PRIMARY = "#094569";
 
 function toPostData(post: PostWithUser): PostData {
   const username =
@@ -79,62 +95,74 @@ export default function PostDetailScreen() {
       .finally(() => setLoading(false));
   }, [id, currentUser?.id]);
 
-  return (
-    <View style={{ flex: 1, backgroundColor: "#f3f4f6" }}>
-      {/* Header */}
-      <View
-        style={{
-          paddingTop: insets.top,
-          backgroundColor: "#fff",
-          borderBottomWidth: 1,
-          borderBottomColor: "#f3f4f6",
-        }}
-      >
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            paddingHorizontal: 16,
-            paddingVertical: 12,
-          }}
-        >
-          <TouchableOpacity
-            onPress={() => router.back()}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            style={{ marginRight: 12 }}
-          >
-            <ChevronLeft size={24} color="#111" />
-          </TouchableOpacity>
-          <Text style={{ fontSize: 17, fontWeight: "700", color: "#111" }}>
-            Post
-          </Text>
-        </View>
-      </View>
+  const handleContactAuthor = useCallback(() => {
+    if (!post) return;
+    const authorId = post.userId;
+    if (currentUser?.id === authorId) return;
+    router.push({
+      pathname: "/(users)/chat/[id]",
+      params: {
+        id: String(authorId),
+        context_product_id: String(post.id),
+        context_product_title: post.content || "Shared post",
+        context_product_image: post.images?.[0] || "",
+        context_source: "post",
+      },
+    } as any);
+  }, [post, currentUser?.id, router]);
 
-      {loading ? (
-        <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-          <ActivityIndicator size="large" color="#094569" />
+  const canMessageAuthor = !!post && currentUser?.id !== post.userId;
+  const contactAuthorTarget = useMemo<ContextDropTarget | null>(() => {
+    if (!canMessageAuthor) return null;
+    return {
+      label: "Contact Author",
+      armedLabel: "Drop to Contact Author",
+      icon: <MessageCircle size={18} color="#fff" fill="none" />,
+      armedIcon: <MessageCircle size={18} color={PRIMARY} fill={PRIMARY} />,
+      onDrop: handleContactAuthor,
+    };
+  }, [canMessageAuthor, handleContactAuthor]);
+
+  return (
+    <>
+      {/* Native-stack's own edge-swipe would otherwise compete with
+          ContextDrop's for the same left-edge touch zone. transparentModal
+          (+ transparent contentStyle, since Android's screens otherwise
+          paint an opaque backing) keeps the previous screen mounted and
+          visible behind this one. */}
+      <Stack.Screen
+        options={{
+          gestureEnabled: false,
+          presentation: "transparentModal",
+          animation: "none",
+          contentStyle: { backgroundColor: "transparent" },
+        }}
+      />
+      <ContextDrop enabled={!loading} onDismiss={() => router.back()} target={contactAuthorTarget}>
+        <View style={{ flex: 1, backgroundColor: "#f3f4f6" }}>
+          {loading ? (
+            <View style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingTop: insets.top }}>
+              <CircularLoader size="large" color="#094569" />
+            </View>
+          ) : error || !post ? (
+            <View style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 32, paddingTop: insets.top }}>
+              <Text style={{ fontSize: 15, color: "#6b7280", textAlign: "center" }}>
+                This post is no longer available.
+              </Text>
+              <TouchableOpacity
+                onPress={() => router.back()}
+                style={{ marginTop: 16, paddingVertical: 10, paddingHorizontal: 24, backgroundColor: "#094569", borderRadius: 20 }}
+              >
+                <Text style={{ color: "#fff", fontWeight: "600" }}>Go back</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            // FeedPost owns its own internal ScrollView in onBack mode (so its
+            // header can stay pinned above it), so it isn't wrapped in one here.
+            <FeedPost post={post} isVisible onBack={() => router.back()} />
+          )}
         </View>
-      ) : error || !post ? (
-        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 32 }}>
-          <Text style={{ fontSize: 15, color: "#6b7280", textAlign: "center" }}>
-            This post is no longer available.
-          </Text>
-          <TouchableOpacity
-            onPress={() => router.back()}
-            style={{ marginTop: 16, paddingVertical: 10, paddingHorizontal: 24, backgroundColor: "#094569", borderRadius: 20 }}
-          >
-            <Text style={{ color: "#fff", fontWeight: "600" }}>Go back</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
-        >
-          <FeedPost post={post} isVisible />
-        </ScrollView>
-      )}
-    </View>
+      </ContextDrop>
+    </>
   );
 }

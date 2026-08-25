@@ -3,28 +3,30 @@
 import Banner from "@/components/Banner";
 import ClosingSaleBanner from "@/components/ClosingSaleBanner";
 import { CARD_LIST_HEIGHT, ForYouSection } from "@/components/ForYou";
+import FeedGrid from "@/components/FeedGrid";
 import HomeCard from "@/components/HomeCard";
 import SearchBar from "@/components/modals/SearchBar";
+import { isVideoUrl, PostGridCardSourceRect } from "@/components/PostGridCard";
+import PostDetailOverlay from "@/components/PostDetailOverlay";
+import ReelsViewer from "@/components/ReelsViewer";
+import CircularLoader from "@/components/ui/CircularLoader";
 import TopNavbar from "@/components/ui/TopNavbar";
 import { useTabBarScroll } from "@/contexts/TabBarScrollContext";
 import { SortOrder, useForYouData } from "@/hooks/useForYouData";
+import { useFilteredFeedPosts } from "@/hooks/useFilteredFeedPosts";
 import { useLivestreams } from "@/hooks/useLivestreams";
 import { useScreenAnalytics } from "@/hooks/useAnalytics";
 import { Screens } from "@/lib/analyticsService";
-import { MarketplaceItem } from "@/lib/postMarketPlace";
 import { Product } from "@/lib/productsService";
-import { ProviderServiceWithDetails } from "@/lib/servicesService";
+import { VideoReel } from "@/lib/postsService";
+import { PostData } from "@/types/post";
 import { useAppRouter } from "@/utils/navigation";
 import {
   ArrowUpDown,
   Briefcase,
-  Coins,
   Eye,
-  Heart,
   Radio,
-  Ticket,
   Tv2,
-  Users,
   Video,
 } from "lucide-react-native";
 import React, {
@@ -36,9 +38,7 @@ import React, {
   useState,
 } from "react";
 import {
-  ActivityIndicator,
   FlatList,
-  Image,
   InteractionManager,
   ListRenderItem,
   Modal,
@@ -48,18 +48,18 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { Image } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type TabType = "foryou" | "featured" | "live" | "bidding" | "norbu";
 type LiveFilter = "all" | "business" | "entertainment";
 
 type PageItem =
-  | { key: "header" }
+  | { key: "banner" }
+  | { key: "tabs" }
   | { key: "closing-sale" }
   | { key: "flash-deals" }
-  | { key: "products" }
-  | { key: "services" }
-  | { key: "marketplace" }
+  | { key: "feed-posts" }
   | { key: "featured" }
   | { key: "live" }
   | { key: "coming-soon"; label: string }
@@ -142,7 +142,7 @@ const TabContentLoadingState = React.memo(function TabContentLoadingState({
 }) {
   return (
     <View className="min-h-96 justify-center items-center px-6 py-12">
-      <ActivityIndicator size="small" color="#094569" />
+      <CircularLoader size="small" color="#094569" />
       <Text className="text-sm text-gray-500 mt-3">
         Loading {label.toLowerCase()}...
       </Text>
@@ -150,71 +150,48 @@ const TabContentLoadingState = React.memo(function TabContentLoadingState({
   );
 });
 
-// ─── Memoised tab pills ───────────────────────────────────────────────────────
-const TabPills = React.memo(function TabPills({
+// ─── Memoised home tabs (RedNote-style left-aligned text navbar) ──────────────
+const HomeTabs = React.memo(function HomeTabs({
   activeTab,
   onTabPress,
 }: {
   activeTab: TabType;
   onTabPress: (tab: TabType) => void;
 }) {
-  const tabs: { key: TabType; Icon: any; fill: boolean; label: string }[] = [
-    { key: "foryou", Icon: Heart, fill: true, label: "For You" },
-    { key: "featured", Icon: Users, fill: false, label: "Featured" },
-    { key: "live", Icon: Radio, fill: false, label: "Live" },
-    { key: "norbu", Icon: Coins, fill: false, label: "Norbu" },
-    { key: "bidding", Icon: Ticket, fill: false, label: "Bidding" },
+  const tabs: { key: TabType; label: string }[] = [
+    { key: "foryou", label: "For You" },
+    { key: "featured", label: "Featured" },
+    { key: "live", label: "Live" },
+    { key: "norbu", label: "Norbu" },
+    { key: "bidding", label: "Bidding" },
   ];
 
-  const activeLabel = tabs.find((t) => t.key === activeTab)?.label ?? "";
-
   return (
-    <View style={{ marginTop: 8 }}>
-      <View
-        style={{
-          flexDirection: "row",
-          justifyContent: "center",
-          alignItems: "center",
-          gap: 12,
-          paddingHorizontal: 16,
-        }}
-      >
-        {tabs.map(({ key, Icon, fill }) => {
-          const isActive = activeTab === key;
-          return (
-            <TouchableOpacity
-              key={key}
-              onPress={() => onTabPress(key)}
-              style={{
-                width: 42,
-                height: 42,
-                borderRadius: 21,
-                backgroundColor: isActive ? "#094569" : "#f3f4f6",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
+    <View
+      style={{
+        flexDirection: "row",
+        justifyContent: "flex-start",
+        alignItems: "center",
+        gap: 18,
+        marginTop: 12,
+      }}
+    >
+      {tabs.map(({ key, label }) => {
+        const isActive = activeTab === key;
+        return (
+          <TouchableOpacity key={key} onPress={() => onTabPress(key)}>
+            <Text
+              className={
+                isActive
+                  ? "text-[17px] font-mbold text-gray-900"
+                  : "text-[15px] font-medium text-gray-400"
+              }
             >
-              <Icon
-                size={17}
-                color={isActive ? "#fff" : "#9ca3af"}
-                fill={
-                  key === "foryou" && isActive
-                    ? "#fff"
-                    : fill && isActive
-                      ? "#fff"
-                      : "none"
-                }
-              />
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-      <Text
-        className="text-2xl font-mbold text-gray-800"
-        style={{ marginTop: 10, paddingHorizontal: 16 }}
-      >
-        {activeLabel}
-      </Text>
+              {label}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
     </View>
   );
 });
@@ -265,7 +242,7 @@ const LiveTab = React.memo(function LiveTab({
 
       {loading ? (
         <View className="min-h-64 justify-center items-center">
-          <ActivityIndicator size="small" color="#094569" />
+          <CircularLoader size="small" color="#094569" />
         </View>
       ) : filtered.length === 0 ? (
         <View className="min-h-64 justify-center items-center px-6">
@@ -297,7 +274,8 @@ const LiveTab = React.memo(function LiveTab({
                         (stream.thumbnail || stream.profile_image) ?? undefined,
                     }}
                     className="w-full h-full"
-                    resizeMode="cover"
+                    contentFit="cover"
+                    cachePolicy="memory-disk"
                   />
                 ) : (
                   <View className="w-full h-full bg-primary/10 items-center justify-center">
@@ -363,6 +341,17 @@ export default function HomeScreen() {
     onClose: () => void;
   }> | null>(null);
   const [liveScreenLoading, setLiveScreenLoading] = useState(false);
+  // Tapping a video card in the "For You" grid opens the fullscreen reels
+  // player directly instead of the post-detail screen.
+  const [reelsVisible, setReelsVisible] = useState(false);
+  const [reelsInitial, setReelsInitial] = useState<VideoReel[]>([]);
+  const [reelsIndex, setReelsIndex] = useState(0);
+  const [reelsSourceRect, setReelsSourceRect] = useState<PostGridCardSourceRect | null>(null);
+  // Tapping a (non-video) card morphs it into the full post-detail view —
+  // see PostDetailOverlay — instead of a plain navigation push.
+  const [postDetailVisible, setPostDetailVisible] = useState(false);
+  const [postDetailPost, setPostDetailPost] = useState<PostData | null>(null);
+  const [postDetailRect, setPostDetailRect] = useState<PostGridCardSourceRect | null>(null);
 
   useEffect(() => {
     if (showLive && !LiveScrollScreen && !liveScreenLoading) {
@@ -415,9 +404,6 @@ export default function HomeScreen() {
   }, [activeTab, renderedTab, FeaturedSellersComponent]);
 
   const {
-    products,
-    marketplaceItems,
-    services,
     loading,
     isClosingSaleTime,
     sortOrder,
@@ -430,6 +416,47 @@ export default function HomeScreen() {
     reload,
   } = useForYouData();
 
+  const {
+    posts: feedPosts,
+    loading: feedLoading,
+    loadingMore: feedLoadingMore,
+    loadMore: loadMoreFeedPosts,
+    hasMore: feedHasMore,
+    refresh: refreshFeedPosts,
+  } = useFilteredFeedPosts();
+
+  const onPostPress = useCallback(
+    (postId: string, rect: PostGridCardSourceRect) => {
+      const post = feedPosts.find((p) => p.id === postId);
+      const videoUrls = (post?.images || []).filter(isVideoUrl);
+      if (post && videoUrls.length > 0) {
+        const reels: VideoReel[] = videoUrls.map((uri, i) => ({
+          id: `${post.id}::${i}`,
+          uri,
+          postId: String(post.id),
+          userId: String(post.userId),
+          username: post.username || "Unknown",
+          avatarUrl: post.profilePic ?? null,
+          content: post.content || "",
+          createdAt: (post.date instanceof Date ? post.date : new Date(post.date)).toISOString(),
+        }));
+        setReelsInitial(reels);
+        setReelsIndex(0);
+        setReelsSourceRect(rect);
+        setReelsVisible(true);
+        return;
+      }
+      if (post) {
+        setPostDetailPost(post);
+        setPostDetailRect(rect);
+        setPostDetailVisible(true);
+        return;
+      }
+      router.push(`/(users)/post/${postId}` as any);
+    },
+    [router, feedPosts],
+  );
+
   const handleTabPress = useCallback((tab: TabType) => {
     trackFeature("sort_change", "home_sort_chip", "tap", { sort: tab });
     setActiveTab(tab);
@@ -438,9 +465,9 @@ export default function HomeScreen() {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     setRefreshKey((k) => k + 1);
-    await reload();
+    await Promise.all([reload(), refreshFeedPosts()]);
     setRefreshing(false);
-  }, [reload]);
+  }, [reload, refreshFeedPosts]);
 
   // ─── Stable card render callbacks ────────────────────────────────────────
 
@@ -489,99 +516,25 @@ export default function HomeScreen() {
     [router],
   );
 
-  const renderProductCard = useCallback(
-    (product: Product) => {
-      const isFoodSale =
-        product.category === "food" && product.is_discount_active;
-      const price = isFoodSale
-        ? product.price
-        : product.current_price || product.price;
-      const hasDiscount =
-        product.is_currently_active && product.discount_percent && !isFoodSale;
-      return (
-        <HomeCard
-          imageUrl={product.images[0] || ""}
-          title={product.name}
-          subtitle={product.category?.toUpperCase() || "PRODUCT"}
-          price={price && price > 0 ? `Nu. ${price}` : undefined}
-          discountPercent={hasDiscount ? product.discount_percent : undefined}
-          isClosingSale={false}
-          profileImage={(product as any).profiles?.avatar_url}
-          profileName={(product as any).profiles?.name}
-          isVerified={(product as any).isVerified}
-          onPress={() => router.push(`/(users)/product/${product.id}` as any)}
-        />
-      );
-    },
-    [router],
-  );
-
-  const renderServiceCard = useCallback(
-    (service: ProviderServiceWithDetails) => (
-      <HomeCard
-        imageUrl={service.images[0] || ""}
-        title={service.name}
-        subtitle={service.service_categories?.name || "Service"}
-        profileImage={
-          service.service_providers?.profile_url ||
-          service.service_providers?.profiles?.avatar_url
-        }
-        profileName={
-          service.service_providers?.name ||
-          service.service_providers?.profiles?.name
-        }
-        isVerified={
-          (service.service_providers as any)?.verification_status === "verified"
-        }
-        onPress={() =>
-          router.push(`/(users)/servicedetail/${service.id}` as any)
-        }
-      />
-    ),
-    [router],
-  );
-
-  const renderMarketplaceCard = useCallback(
-    (item: MarketplaceItem) => (
-      <HomeCard
-        imageUrl={item.images[0] || ""}
-        title={item.title}
-        subtitle={item.type.replace("_", " ")}
-        price={item.price && item.price > 0 ? `Nu. ${item.price}` : undefined}
-        location={item.dzongkhag}
-        profileImage={(item as any).profiles?.avatar_url}
-        profileName={(item as any).profiles?.name}
-        isVerified={item.isVerified}
-        onPress={() => router.push(`/(users)/marketplace/${item.id}` as any)}
-      />
-    ),
-    [router],
-  );
-
   const goCategories = useCallback(
     () => router.push("/(users)/(tabs)/categories" as any),
-    [router],
-  );
-  const goServices = useCallback(
-    () => router.push("/(users)/(tabs)/services" as any),
-    [router],
-  );
-  const goMarketplace = useCallback(
-    () => router.push("/(users)/(tabs)/marketplace" as any),
     [router],
   );
 
   // ─── Flat items list ──────────────────────────────────────────────────────
   const hasFlashDeals = !loading && discountedProducts.length > 0;
   const items = useMemo<PageItem[]>(() => {
-    const result: PageItem[] = [{ key: "header" }];
+    // "banner" and "tabs" are always the first two items (in that order) so
+    // their indices stay fixed for stickyHeaderIndices below — the banner
+    // scrolls away normally, then the tabs row sticks to the top of the
+    // list (right under the fixed header) once the banner scrolls past it.
+    const result: PageItem[] = [{ key: "banner" }, { key: "tabs" }];
     switch (activeTab) {
       case "foryou":
-        result.push({ key: "closing-sale" });
+        // Hidden for now — re-enable when Closing Sale is ready to ship again.
+        // result.push({ key: "closing-sale" });
         if (hasFlashDeals) result.push({ key: "flash-deals" });
-        result.push({ key: "products" });
-        result.push({ key: "services" });
-        result.push({ key: "marketplace" });
+        result.push({ key: "feed-posts" });
         break;
       case "featured":
         result.push({ key: "featured" });
@@ -602,9 +555,6 @@ export default function HomeScreen() {
 
   // Use ref to always have latest data in renderItem without changing its reference
   const dataRef = useRef({
-    products,
-    marketplaceItems,
-    services,
     loading,
     isClosingSaleTime,
     sortOrder,
@@ -614,25 +564,21 @@ export default function HomeScreen() {
     activeTab,
     renderedTab,
     isTabContentPending,
-    searchQuery,
     refreshKey,
     renderClosingSaleCard,
     renderFlashDealCard,
-    renderProductCard,
-    renderServiceCard,
-    renderMarketplaceCard,
     goCategories,
-    goServices,
-    goMarketplace,
     toggleSortMenu,
     selectSort,
     getSortLabel,
     FeaturedSellersComponent,
+    feedPosts,
+    feedLoading,
+    feedLoadingMore,
+    feedHasMore,
+    onPostPress,
   });
   dataRef.current = {
-    products,
-    marketplaceItems,
-    services,
     loading,
     isClosingSaleTime,
     sortOrder,
@@ -642,20 +588,19 @@ export default function HomeScreen() {
     activeTab,
     renderedTab,
     isTabContentPending,
-    searchQuery,
     refreshKey,
     renderClosingSaleCard,
     renderFlashDealCard,
-    renderProductCard,
-    renderServiceCard,
-    renderMarketplaceCard,
     goCategories,
-    goServices,
-    goMarketplace,
     toggleSortMenu,
     selectSort,
     getSortLabel,
     FeaturedSellersComponent,
+    feedPosts,
+    feedLoading,
+    feedLoadingMore,
+    feedHasMore,
+    onPostPress,
   };
 
   const renderItem = useCallback<ListRenderItem<PageItem>>(
@@ -665,20 +610,15 @@ export default function HomeScreen() {
         !d.isTabContentPending && d.renderedTab === d.activeTab;
 
       switch (item.key) {
-        case "header":
+        case "banner":
+          return <Banner />;
+
+        case "tabs":
+          // Opaque background required: once stickied, this row paints over
+          // whatever scrolls up underneath it.
           return (
-            <View>
-              <TopNavbar />
-              <View className="px-4">
-                <SearchBar
-                  value={d.searchQuery}
-                  onChangeText={(t) => setSearchQuery(t)}
-                />
-              </View>
-              <Banner />
-              <View className="px-4">
-                <TabPills activeTab={d.activeTab} onTabPress={handleTabPress} />
-              </View>
+            <View className="bg-background px-4" style={{ paddingBottom: 10 }}>
+              <HomeTabs activeTab={d.activeTab} onTabPress={handleTabPress} />
             </View>
           );
 
@@ -820,51 +760,15 @@ export default function HomeScreen() {
             />
           );
 
-        case "products":
+        case "feed-posts":
           if (!isCurrentTabReady) {
             return <SectionLoadingPlaceholder />;
           }
           return (
-            <ForYouSection
-              title="Products"
-              items={d.products}
-              loading={d.loading}
-              renderCard={d.renderProductCard}
-              viewAllRoute="/(users)/(tabs)/categories"
-              showEmptyState
-              onViewAll={d.goCategories}
-            />
-          );
-
-        case "services":
-          if (!isCurrentTabReady) {
-            return <SectionLoadingPlaceholder />;
-          }
-          return (
-            <ForYouSection
-              title="Services"
-              items={d.services}
-              loading={d.loading}
-              renderCard={d.renderServiceCard}
-              viewAllRoute="/(users)/(tabs)/services"
-              showEmptyState
-              onViewAll={d.goServices}
-            />
-          );
-
-        case "marketplace":
-          if (!isCurrentTabReady) {
-            return <SectionLoadingPlaceholder />;
-          }
-          return (
-            <ForYouSection
-              title="Marketplace"
-              items={d.marketplaceItems}
-              loading={d.loading}
-              renderCard={d.renderMarketplaceCard}
-              viewAllRoute="/(users)/(tabs)/marketplace"
-              showEmptyState
-              onViewAll={d.goMarketplace}
+            <FeedGrid
+              posts={d.feedPosts}
+              loading={d.feedLoading || d.feedLoadingMore}
+              onPostPress={d.onPostPress}
             />
           );
 
@@ -914,12 +818,31 @@ export default function HomeScreen() {
   );
   // renderItem is intentionally stable — it reads live data via dataRef
 
+  const handleFeedEndReached = useCallback(() => {
+    const d = dataRef.current;
+    if (d.activeTab === "foryou" && d.feedHasMore && !d.feedLoading && !d.feedLoadingMore) {
+      loadMoreFeedPosts();
+    }
+  }, [loadMoreFeedPosts]);
+
   return (
     <>
+      {/* Fixed header — TopNavbar + search trigger never scroll away. The
+          banner (data index 0) and tabs row (index 1) live inside the
+          FlatList itself: the banner scrolls normally, then the tabs row
+          sticks to the top of the list via stickyHeaderIndices below. */}
+      <View className="bg-background">
+        <TopNavbar />
+        <View className="px-4" style={{ paddingBottom: 8 }}>
+          <SearchBar value={searchQuery} onChangeText={setSearchQuery} />
+        </View>
+      </View>
+
       <FlatList
         data={items}
         renderItem={renderItem}
         keyExtractor={(item) => item.key}
+        stickyHeaderIndices={[1]}
         className="flex-1 bg-background"
         contentContainerStyle={{ paddingBottom: 72 + insets.bottom }}
         showsVerticalScrollIndicator={false}
@@ -931,7 +854,9 @@ export default function HomeScreen() {
         removeClippedSubviews={true}
         overScrollMode="never"
         bounces={true}
-        extraData={`${activeTab}-${renderedTab}-${isTabContentPending}-${refreshKey}`}
+        onEndReached={handleFeedEndReached}
+        onEndReachedThreshold={0.5}
+        extraData={`${activeTab}-${renderedTab}-${isTabContentPending}-${refreshKey}-${feedPosts.length}-${feedLoading}-${feedLoadingMore}`}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -956,11 +881,26 @@ export default function HomeScreen() {
             />
           ) : (
             <View className="flex-1 bg-black items-center justify-center">
-              <ActivityIndicator size="large" color="white" />
+              <CircularLoader size="large" color="white" />
             </View>
           )}
         </Modal>
       )}
+
+      <ReelsViewer
+        visible={reelsVisible}
+        initialReels={reelsInitial}
+        initialIndex={reelsIndex}
+        sourceRect={reelsSourceRect}
+        onClose={() => setReelsVisible(false)}
+      />
+
+      <PostDetailOverlay
+        visible={postDetailVisible}
+        post={postDetailPost}
+        sourceRect={postDetailRect}
+        onClose={() => setPostDetailVisible(false)}
+      />
     </>
   );
 }

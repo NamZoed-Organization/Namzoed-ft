@@ -7,9 +7,9 @@ import {
 } from "@stream-io/video-react-native-sdk";
 import { Camera } from "expo-camera";
 import React, { useCallback, useEffect, useState } from "react";
+import CircularLoader from "@/components/ui/CircularLoader";
 import PopupMessage from "@/components/ui/PopupMessage";
 import {
-    ActivityIndicator,
     Linking,
     Modal,
     Pressable,
@@ -88,7 +88,7 @@ function HostLivestreamUI({ callId }: { callId: string }) {
   if (!call) {
     return (
       <View className="flex-1 items-center justify-center bg-black">
-        <ActivityIndicator color="white" />
+        <CircularLoader color="white" />
       </View>
     );
   }
@@ -147,7 +147,7 @@ function HostLivestreamUI({ callId }: { callId: string }) {
 
       {busy && (
         <View className="absolute inset-0 bg-black/40 items-center justify-center">
-          <ActivityIndicator color="white" />
+          <CircularLoader color="white" />
         </View>
       )}
       <Modal visible={popup.visible} transparent animationType="none" statusBarTranslucent>

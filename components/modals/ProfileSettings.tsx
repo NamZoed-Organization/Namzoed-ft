@@ -7,6 +7,7 @@ import {
   CommunityGuidelines,
   DataStorage,
   DeleteAccount,
+  DevComponents,
   EditProfile,
   EditWorkProfile,
   HelpCenter,
@@ -24,8 +25,10 @@ import {
   BookOpen,
   Download,
   EyeOff,
+  FlaskConical,
   Key,
   LogOut,
+  Megaphone,
   MessageSquare,
   Phone,
   ScrollText,
@@ -52,6 +55,8 @@ import { useSafety } from "@/contexts/SafetyContext";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Constants from "expo-constants";
 import { openAppStoreForUpdate } from "@/utils/appUpdate";
+import WhatsNewModal from "@/components/modals/WhatsNewModal";
+import { useWhatsNew } from "@/hooks/useWhatsNew";
 
 interface ProfileSettingsProps {
   onClose: () => void;
@@ -76,6 +81,8 @@ export default function ProfileSettings({
   const [modalStack, setModalStack] = useState<string[]>(
     initialModal ? [initialModal] : [],
   );
+  const [showWhatsNew, setShowWhatsNew] = useState(false);
+  const { markSeen: markWhatsNewSeen } = useWhatsNew();
 
   const screenWidth = Dimensions.get("window").width;
   const screenHeight = Dimensions.get("window").height;
@@ -244,6 +251,8 @@ export default function ProfileSettings({
         return <AboutApp onClose={closeActiveModal} />;
       case "tutorials":
         return <Tutorials onClose={closeActiveModal} />;
+      case "devComponents":
+        return <DevComponents onClose={closeActiveModal} />;
       default:
         return null;
     }
@@ -515,9 +524,7 @@ export default function ProfileSettings({
                   </Text>
                   <View className="bg-gray-50 rounded-xl overflow-hidden">
                     <TouchableOpacity
-                      className={`flex-row items-center justify-between px-4 py-4 ${
-                        Platform.OS === "web" ? "" : "border-b border-gray-200"
-                      }`}
+                      className="flex-row items-center justify-between px-4 py-4 border-b border-gray-200"
                       onPress={() => handleNavigation("appVersion")}
                     >
                       <View className="flex-row items-center gap-2">
@@ -528,6 +535,23 @@ export default function ProfileSettings({
                       </View>
                       <Text className="text-sm text-gray-500">
                         v{Constants.expoConfig?.version || "1.0.0"}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      className={`flex-row items-center justify-between px-4 py-4 ${
+                        Platform.OS === "web" ? "" : "border-b border-gray-200"
+                      }`}
+                      onPress={() => setShowWhatsNew(true)}
+                      activeOpacity={0.7}
+                    >
+                      <View className="flex-row items-center gap-2">
+                        <Megaphone size={20} className="text-gray-700 mr-3" />
+                        <Text className="text-base font-medium text-gray-900">
+                          What&apos;s New
+                        </Text>
+                      </View>
+                      <Text className="text-gray-400 font-bold text-lg">
+                        →
                       </Text>
                     </TouchableOpacity>
                     {Platform.OS !== "web" && (
@@ -583,6 +607,35 @@ export default function ProfileSettings({
                     </TouchableOpacity>
                   </View>
                 </View>
+                {/* Developer Section — dev builds only, never shown in a
+                    prod bundle (__DEV__ is stripped/false in release). */}
+                {__DEV__ && (
+                  <View className="mb-6">
+                    <Text className="text-sm font-msemibold text-gray-500 px-2 py-2 uppercase tracking-wide">
+                      Developer
+                    </Text>
+                    <View className="bg-gray-50 rounded-xl overflow-hidden">
+                      <TouchableOpacity
+                        className="flex-row items-center justify-between px-4 py-4"
+                        onPress={() => handleNavigation("devComponents")}
+                        activeOpacity={0.7}
+                      >
+                        <View className="flex-row items-center gap-2">
+                          <FlaskConical size={20} color="#7c3aed" />
+                          <View>
+                            <Text className="text-base font-medium text-gray-900">
+                              DevComp
+                            </Text>
+                            <Text className="text-xs text-gray-400 mt-0.5">
+                              UI playground — loading states, popups, overlays
+                            </Text>
+                          </View>
+                        </View>
+                        <Text className="text-gray-400 font-bold text-lg">→</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
               </ScrollView>
             </Animated.View>
           </View>
@@ -605,6 +658,14 @@ export default function ProfileSettings({
           )}
         </View>
       </Animated.View>
+
+      <WhatsNewModal
+        visible={showWhatsNew}
+        onClose={() => {
+          setShowWhatsNew(false);
+          void markWhatsNewSeen();
+        }}
+      />
     </View>
   );
 }

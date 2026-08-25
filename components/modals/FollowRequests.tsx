@@ -4,11 +4,11 @@ import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
 import { useAppRouter } from '@/utils/navigation';
 import { ArrowDownAZ, ArrowUpAZ, X } from 'lucide-react-native';
+import CircularLoader from '@/components/ui/CircularLoader';
 import PopupMessage from '@/components/ui/PopupMessage';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Image } from 'expo-image';
 import {
-  ActivityIndicator,
   Modal,
   RefreshControl,
   Text,
@@ -232,7 +232,7 @@ export default function FollowRequests({ onClose, userId }: FollowRequestsProps)
       {/* Content */}
       {loading ? (
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#094569" />
+          <CircularLoader size="large" color="#094569" />
         </View>
       ) : (
         <FlashList

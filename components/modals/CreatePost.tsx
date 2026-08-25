@@ -1,5 +1,6 @@
 import ContentRatingSuggestion from "@/components/ContentRatingSuggestion";
 import FeedAspectReframeOverlay from "@/components/modals/FeedAspectReframeOverlay";
+import CircularLoader from "@/components/ui/CircularLoader";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { suggestContentRating } from "@/lib/contentClassifier";
 import { moderateImage, stricterRating } from "@/lib/imageModeration";
@@ -44,7 +45,6 @@ import {
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   Dimensions,
   FlatList,
   Image,
@@ -767,7 +767,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
           }`}
         >
           {isUploading ? (
-            <ActivityIndicator size="small" color="#fff" />
+            <CircularLoader size="small" color="#fff" />
           ) : (
             <Text
               className={`font-semibold text-sm ${
@@ -915,7 +915,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                   }}
                 >
                   {resolvingLocation ? (
-                    <ActivityIndicator size="small" color="#094569" />
+                    <CircularLoader size="small" color="#094569" />
                   ) : (
                     <>
                       <MapPin size={16} color="#094569" />
@@ -1887,7 +1887,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
       <Modal visible={isScanningMedia} transparent animationType="fade">
         <View className="flex-1 items-center justify-center bg-black/40">
           <View className="bg-white rounded-2xl px-6 py-5 items-center">
-            <ActivityIndicator size="large" color="#094569" />
+            <CircularLoader size="large" color="#094569" />
             <Text className="mt-3 text-base font-semibold text-gray-900">
               Checking image…
             </Text>
@@ -1922,7 +1922,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
 
           {loadingProducts ? (
             <View className="flex-1 items-center justify-center">
-              <ActivityIndicator size="small" color="#094569" />
+              <CircularLoader size="small" color="#094569" />
               <Text className="text-sm text-gray-400 mt-2">
                 Loading your products...
               </Text>
@@ -2080,7 +2080,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
           {/* Results */}
           {searchingAccounts ? (
             <View className="items-center py-8">
-              <ActivityIndicator size="small" color="#094569" />
+              <CircularLoader size="small" color="#094569" />
             </View>
           ) : accountSearch.length < 2 ? (
             <View className="items-center py-12 px-8">

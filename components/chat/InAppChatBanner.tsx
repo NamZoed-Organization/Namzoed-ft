@@ -2,9 +2,10 @@ import { useUnreadMessages } from "@/contexts/UnreadMessagesContext";
 import { playReceiveSound, triggerReceiveHaptic } from "@/utils/chatSounds";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
+import { Image } from "expo-image";
 import { useAppRouter } from "@/utils/navigation";
 import React, { useEffect, useRef } from "react";
-import { Animated, Image, PanResponder, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Animated, PanResponder, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Defs, FeColorMatrix, FeTurbulence, Filter, Rect } from "react-native-svg";
 
@@ -150,6 +151,7 @@ export default function InAppChatBanner() {
                   <Image
                     source={{ uri: banner.senderAvatarUrl }}
                     className="w-8 h-8 rounded-full mr-3 mt-0.5"
+                    cachePolicy="memory-disk"
                   />
                 ) : (
                   <View className="w-8 h-8 rounded-full bg-primary items-center justify-center mr-3 mt-0.5">

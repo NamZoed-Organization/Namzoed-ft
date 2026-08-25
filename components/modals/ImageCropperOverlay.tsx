@@ -1,9 +1,9 @@
 import * as ImageManipulator from "expo-image-manipulator";
 import { Check, X } from "lucide-react-native";
+import CircularLoader from "@/components/ui/CircularLoader";
 import PopupMessage from "@/components/ui/PopupMessage";
 import React, { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   Dimensions,
   Image,
   Modal,
@@ -307,7 +307,7 @@ export default function ResizableImageCropper({
   if (!ready) {
     return (
       <View className="flex-1 bg-white items-center justify-center">
-        <ActivityIndicator color="#000" size="large" />
+        <CircularLoader color="#000" size="large" />
       </View>
     );
   }
@@ -329,7 +329,7 @@ export default function ResizableImageCropper({
             className="p-2"
           >
             {isSaving ? (
-              <ActivityIndicator size="small" color="#000" />
+              <CircularLoader size="small" color="#000" />
             ) : (
               <Check size={24} color="#000" />
             )}

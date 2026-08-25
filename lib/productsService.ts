@@ -24,6 +24,10 @@ export interface Product {
   current_price?: number;            // Auto-calculated price with discount applied
   discount_ends_at?: string;         // Timestamp when discount expires
   isVerified?: boolean;
+  impressions_shown?: number;
+  last_shown_at?: string | null;
+  boost_started_at?: string | null;
+  boost_expires_at?: string | null;
 }
 
 export interface ProductWithUser extends Product {
@@ -144,6 +148,46 @@ export const fetchProductsByCategory = async (
   }
 
   return { products: (data || []) as ProductWithUser[], totalCount: count || 0 };
+};
+
+// Fetches the full candidate pool for one feed-randomization session (see
+// lib/feedRanking.ts) for a given category — no pagination, ranking is done
+// client-side over the whole pool, then sliced. Mirrors
+// fetchAllPostsForRanking in lib/postsService.ts.
+export const fetchProductsForRanking = async (
+  /** Pass null to fetch across every category (e.g. an "All" browse tab). */
+  category: string | null,
+  filter?: string | null,
+): Promise<ProductWithUser[]> => {
+  let query = supabase
+    .from('products_with_discounts')
+    .select(`
+      *,
+      profiles:user_id (
+        name,
+        email,
+        phone,
+        avatar_url
+      )
+    `)
+    .order('created_at', { ascending: false });
+
+  if (category) {
+    query = query.eq('category', category);
+  }
+
+  if (filter) {
+    query = query.contains('tags', [filter]);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    console.error('Error fetching products for ranking:', error);
+    throw error;
+  }
+
+  return (data || []) as ProductWithUser[];
 };
 
 // Create a new product

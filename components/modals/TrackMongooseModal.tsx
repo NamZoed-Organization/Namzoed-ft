@@ -1,9 +1,9 @@
 import MapPinMarker from "@/components/maps/MapPinMarker";
+import CircularLoader from "@/components/ui/CircularLoader";
 import { supabase } from "@/lib/supabase";
 import { Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-    ActivityIndicator,
     Dimensions,
     Modal,
     Platform,
@@ -366,7 +366,7 @@ export default function TrackMongooseModal({
               <View
                 style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f9fafb' }}
               >
-                <ActivityIndicator size="large" color="#094569" />
+                <CircularLoader size="large" color="#094569" />
                 <Text style={{ color: '#6b7280', marginTop: 12 }}>Loading location...</Text>
               </View>
             ) : (

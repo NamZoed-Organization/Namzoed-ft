@@ -2,7 +2,6 @@ import * as Haptics from 'expo-haptics';
 import { AlertCircle, X } from 'lucide-react-native';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Animated,
   Dimensions,
   Keyboard,
@@ -11,11 +10,13 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View
 } from 'react-native';
+import CircularLoader from '@/components/ui/CircularLoader';
 import { reportPost } from '@/lib/reportService';
 import { feedEvents } from '@/utils/feedEvents';
 import PopupMessage from '@/components/ui/PopupMessage';
@@ -29,6 +30,11 @@ interface ReportPostModalProps {
   postOwnerId: string;
   currentUserId: string;
   onReportSuccess?: () => void;
+  /** Render as a plain absolute-fill overlay instead of a native Modal — use
+   * when the caller is already presenting a full-screen Modal, since nesting
+   * a native Modal inside an open one is unreliable (status bar / safe area
+   * math gets miscalculated on iOS regardless of statusBarTranslucent). */
+  embedded?: boolean;
 }
 
 const POST_REPORT_REASONS = [
@@ -46,7 +52,8 @@ export default function ReportPostModal({
   postContent,
   postOwnerId,
   currentUserId,
-  onReportSuccess
+  onReportSuccess,
+  embedded,
 }: ReportPostModalProps) {
   const [selectedReason, setSelectedReason] = useState<string>('');
   const [details, setDetails] = useState('');
@@ -198,15 +205,7 @@ export default function ReportPostModal({
     onClose();
   };
 
-  return (
-    <>
-      <Modal
-        visible={visible}
-        transparent
-        animationType="none"
-        statusBarTranslucent
-        onRequestClose={handleClose}
-      >
+  const sheetContent = (
         <Pressable
           className="flex-1 bg-black/50 justify-end"
           onPress={handleClose}
@@ -310,7 +309,7 @@ export default function ReportPostModal({
                   }`}
                 >
                   {submitting ? (
-                    <ActivityIndicator color="#fff" />
+                    <CircularLoader color="#fff" />
                   ) : (
                     <Text className="text-white text-center font-mbold text-base">
                       Submit Report
@@ -328,22 +327,51 @@ export default function ReportPostModal({
             onHide={() => setPopup(p => ({ ...p, visible: false }))}
           />
         </Pressable>
-    </Modal>
+  );
 
-    {/* Success Popup */}
-    <Modal
+  const successContent = (
+    <PopupMessage
       visible={showSuccess}
-      transparent={true}
-      animationType="none"
-      statusBarTranslucent={true}
-    >
-      <PopupMessage
+      type="white"
+      title="We're on it!"
+      message="Post reported and hidden from your feed. We'll review it soon."
+    />
+  );
+
+  if (embedded) {
+    return (
+      <>
+        {visible && (
+          <View style={[StyleSheet.absoluteFill, { zIndex: 100 }]}>{sheetContent}</View>
+        )}
+        {showSuccess && (
+          <View style={[StyleSheet.absoluteFill, { zIndex: 100 }]}>{successContent}</View>
+        )}
+      </>
+    );
+  }
+
+  return (
+    <>
+      <Modal
+        visible={visible}
+        transparent
+        animationType="none"
+        statusBarTranslucent={false}
+        onRequestClose={handleClose}
+      >
+        {sheetContent}
+      </Modal>
+
+      {/* Success Popup */}
+      <Modal
         visible={showSuccess}
-        type="white"
-        title="We're on it!"
-        message="Post reported and hidden from your feed. We'll review it soon."
-      />
-    </Modal>
-  </>
+        transparent={true}
+        animationType="none"
+        statusBarTranslucent={false}
+      >
+        {successContent}
+      </Modal>
+    </>
   );
 }
