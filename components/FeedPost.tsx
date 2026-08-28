@@ -107,6 +107,16 @@ interface FeedPostProps {
   isAuthorLive?: boolean;
   /** Shows a back button in the header, next to the avatar. Used by the standalone post-detail screen. */
   onBack?: () => void;
+  /** Wraps any in-post navigation (e.g. tapping the author's name/avatar) so
+   * a caller that isn't a real navigator screen — PostDetailOverlay, an
+   * in-tree overlay over Home, not a stack push — can close itself first.
+   * Omitted by the standalone post-detail screen, where navigating away is
+   * always safe to do directly (there's no overlay state to leave stale
+   * underneath). Without this, navigating away from inside the overlay
+   * pushes a real screen onto the stack while the overlay's own "open"
+   * state stays frozen behind it — the next back() pops into that stale
+   * screen instead of back to Home. */
+  onNavigateAway?: (navigate: () => void) => void;
 }
 
 // Smoothstep (3t²-2t³): zero slope at BOTH ends, not just zero value — a
@@ -869,6 +879,11 @@ const MediaCarousel = React.memo(
             showsHorizontalScrollIndicator={false}
             directionalLockEnabled
             alwaysBounceVertical={false}
+            // No elastic rubber-band at either end — without this, dragging
+            // right on the first image (no previous item to page to) makes
+            // this visibly bounce/search for a page that isn't there,
+            // fighting ContextDrop's edge-swipe-back for the same gesture.
+            bounces={false}
             onScroll={handleScroll}
             scrollEventThrottle={16}
             style={{ height: slideH }}
@@ -1059,7 +1074,7 @@ const MiniAvatarRow = React.memo(({ users, totalLikes, onPress }: MiniAvatarRowP
   );
 });
 
-function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp, onBack }: FeedPostProps) {
+function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp, onBack, onNavigateAway }: FeedPostProps) {
   const insets = useSafeAreaInsets();
   const { width: frameWidth } = useWindowDimensions();
   const feedMediaHeight = frameWidth / RATIO_PORTRAIT;
@@ -1470,11 +1485,15 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp, onBa
   };
 
   const navigateToProfile = () => {
-    if (isOwnPost) {
-      router.push("/(users)/profile" as any);
-    } else {
-      router.push(`/(users)/profile/${post.userId}` as any);
-    }
+    const navigate = () => {
+      if (isOwnPost) {
+        router.push("/(users)/profile" as any);
+      } else {
+        router.push(`/(users)/profile/${post.userId}` as any);
+      }
+    };
+    if (onNavigateAway) onNavigateAway(navigate);
+    else navigate();
   };
 
   // Detail mode (onBack set): the header is pinned above its own internal

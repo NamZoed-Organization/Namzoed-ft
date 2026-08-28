@@ -1,5 +1,6 @@
 import PopupMessage from '@/components/ui/PopupMessage';
 import CircularLoader from '@/components/ui/CircularLoader';
+import GridSkeleton from '@/components/ui/GridSkeleton';
 import { useUser } from '@/contexts/UserContext';
 import { followUser, getFollowingIds, unfollowUser } from '@/lib/followService';
 import { FeaturedSellerProfile, fetchFeaturedSellers, fetchRandomSellers } from '@/lib/profileService';
@@ -410,10 +411,7 @@ const FeaturedSellers = () => {
       {/* Content */}
       <View>
         {loading && users.length === 0 ? (
-          <View className="items-center justify-center py-12">
-            <CircularLoader size="large" color="#094569" />
-            <Text className="text-sm text-gray-500 mt-2">Loading sellers...</Text>
-          </View>
+          <GridSkeleton rows={3} variant="avatar" />
         ) : users.length === 0 ? (
           <View className="items-center justify-center py-12">
             <Search size={48} className="text-gray-300 mb-4" />

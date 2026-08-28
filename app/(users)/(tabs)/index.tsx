@@ -10,6 +10,7 @@ import { isVideoUrl, PostGridCardSourceRect } from "@/components/PostGridCard";
 import PostDetailOverlay from "@/components/PostDetailOverlay";
 import ReelsViewer from "@/components/ReelsViewer";
 import CircularLoader from "@/components/ui/CircularLoader";
+import GridSkeleton from "@/components/ui/GridSkeleton";
 import TopNavbar from "@/components/ui/TopNavbar";
 import { useTabBarScroll } from "@/contexts/TabBarScrollContext";
 import { SortOrder, useForYouData } from "@/hooks/useForYouData";
@@ -137,9 +138,20 @@ const SectionLoadingPlaceholder = React.memo(
 
 const TabContentLoadingState = React.memo(function TabContentLoadingState({
   label,
+  variant = "grid",
 }: {
   label: string;
+  /** "grid" previews the incoming two-column layout (Featured/Live tabs);
+   * "spinner" is for tabs with no grid to preview (Coming Soon). */
+  variant?: "grid" | "spinner";
 }) {
+  if (variant === "grid") {
+    return (
+      <View className="px-4 pt-2">
+        <GridSkeleton rows={2} />
+      </View>
+    );
+  }
   return (
     <View className="min-h-96 justify-center items-center px-6 py-12">
       <CircularLoader size="small" color="#094569" />
@@ -241,9 +253,7 @@ const LiveTab = React.memo(function LiveTab({
       </View>
 
       {loading ? (
-        <View className="min-h-64 justify-center items-center">
-          <CircularLoader size="small" color="#094569" />
-        </View>
+        <GridSkeleton rows={3} imageHeight={110} />
       ) : filtered.length === 0 ? (
         <View className="min-h-64 justify-center items-center px-6">
           <View className="w-16 h-16 rounded-full bg-red-50 items-center justify-center mb-4">
@@ -800,7 +810,7 @@ export default function HomeScreen() {
 
         case "coming-soon":
           if (!isCurrentTabReady) {
-            return <TabContentLoadingState label={item.label} />;
+            return <TabContentLoadingState label={item.label} variant="spinner" />;
           }
           return (
             <View className="mt-6 min-h-96 justify-center items-center">

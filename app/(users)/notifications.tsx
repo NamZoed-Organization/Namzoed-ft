@@ -17,6 +17,7 @@ import type {
   NotificationSection,
 } from "@/types/notification";
 import { Ionicons } from "@expo/vector-icons";
+import { useIsFocused } from "@react-navigation/native";
 import { useAppRouter } from "@/utils/navigation";
 import { Bell, BellOff, ChevronLeft } from "lucide-react-native";
 import { Image } from "expo-image";
@@ -124,9 +125,12 @@ const KNOWN_NOTIFICATION_TYPES = new Set([
   "follower_milestone",
   "post_traction",
   "weekly_engagement",
+  "product_reviewed",
 ]);
 
-const POST_CONTEXT_TYPES = new Set(["post_liked", "post_commented", "new_post", "post_traction"]);
+// Also covers product_reviewed — same "reference thumbnail" treatment, just
+// for a product listing instead of a post.
+const POST_CONTEXT_TYPES = new Set(["post_liked", "post_commented", "new_post", "post_traction", "product_reviewed"]);
 
 function hasKnownIcon(type: string): boolean {
   return KNOWN_NOTIFICATION_TYPES.has(type);
@@ -154,6 +158,8 @@ function TypeIcon({ type }: { type: string }) {
       return <Ionicons name="trending-up" size={size} color={color} />;
     case "weekly_engagement":
       return <Ionicons name="bar-chart" size={size} color={color} />;
+    case "product_reviewed":
+      return <Ionicons name="star" size={size} color={color} />;
     default:
       return null;
   }
@@ -179,6 +185,8 @@ function typeIconBg(type: string): string {
       return "#10b981"; // emerald
     case "weekly_engagement":
       return "#6366f1"; // indigo
+    case "product_reviewed":
+      return "#eab308"; // gold
     default:
       return "#6b7280";
   }
@@ -305,6 +313,14 @@ export default function NotificationsScreen() {
   const router = useAppRouter();
   const insets = useSafeAreaInsets();
   const { trackTap } = useScreenAnalytics(Screens.NOTIFICATIONS);
+  // A screen pushed on top of this one (e.g. /post/[id], presented as a
+  // transparentModal so this stays mounted/visible underneath while its own
+  // ContextDrop edge-swipe-back is in progress) shouldn't leave this still
+  // competing for touches it can't actually see going to — even a plain
+  // vertical SectionList's native scroll-gesture recognizer participating in
+  // the same responder chain was enough to make that edge-swipe unreliable.
+  // Turning this off entirely while unfocused removes it from the picture.
+  const isFocused = useIsFocused();
   const {
     notifications,
     unseenCount,
@@ -431,6 +447,13 @@ export default function NotificationsScreen() {
           router.push("/(users)/profile" as any);
           break;
 
+        case "product_reviewed":
+          // Go to the product listing that was reviewed
+          if (n.reference_id) {
+            router.push(`/(users)/product/${n.reference_id}` as any);
+          }
+          break;
+
         default:
           break;
       }
@@ -440,7 +463,7 @@ export default function NotificationsScreen() {
 
   // ── render ──
   return (
-    <View className="flex-1 bg-white">
+    <View className="flex-1 bg-white" pointerEvents={isFocused ? "auto" : "none"}>
       {/* Header */}
       <View
         style={{ paddingTop: insets.top }}

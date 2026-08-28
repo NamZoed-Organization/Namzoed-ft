@@ -4,7 +4,7 @@ import MasonryGrid from "@/components/MasonryGrid";
 import AuthPromptModal from "@/components/modals/AuthPromptModal";
 import MarketplacePostOverlay from "@/components/modals/MarketplacePostOverlay";
 import SearchBar from "@/components/modals/SearchBar";
-import CircularLoader from "@/components/ui/CircularLoader";
+import GridSkeleton from "@/components/ui/GridSkeleton";
 import TopNavbar from "@/components/ui/TopNavbar";
 import { useUser } from "@/contexts/UserContext";
 import { useTabBarScroll } from "@/contexts/TabBarScrollContext";
@@ -200,11 +200,8 @@ export default function MarketplaceScreen() {
 
     if (isLoading) {
       return (
-        <View className="flex-1 items-center justify-center pt-20">
-          <CircularLoader size="large" color="#094569" />
-          <Text className="text-sm text-gray-600 mt-2">
-            Loading marketplace...
-          </Text>
+        <View className="px-3 pt-1">
+          <GridSkeleton rows={3} imageHeight={140} />
         </View>
       );
     }

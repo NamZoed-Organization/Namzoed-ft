@@ -32,6 +32,7 @@ const profileCache = new Map<
 
 const postImageCache = new Map<string, string | null>();
 const POST_IMAGE_TYPES = new Set(["post_liked", "post_commented", "new_post", "post_traction"]);
+const PRODUCT_IMAGE_TYPES = new Set(["product_reviewed"]);
 
 async function resolvePostImage(postId: string): Promise<string | null> {
   if (postImageCache.has(postId)) return postImageCache.get(postId)!;
@@ -42,6 +43,18 @@ async function resolvePostImage(postId: string): Promise<string | null> {
     .maybeSingle();
   const url: string | null = (data?.images as string[] | null)?.[0] ?? null;
   postImageCache.set(postId, url);
+  return url;
+}
+
+async function resolveProductImage(productId: string): Promise<string | null> {
+  if (postImageCache.has(productId)) return postImageCache.get(productId)!;
+  const { data } = await supabase
+    .from("products")
+    .select("images")
+    .eq("id", productId)
+    .maybeSingle();
+  const url: string | null = (data?.images as string[] | null)?.[0] ?? null;
+  postImageCache.set(productId, url);
   return url;
 }
 
@@ -86,7 +99,9 @@ async function enrichRow(row: NotificationRow): Promise<AppNotification> {
     resolveProfile(row.actor_id),
     POST_IMAGE_TYPES.has(row.type) && row.reference_id
       ? resolvePostImage(row.reference_id)
-      : Promise.resolve(null),
+      : PRODUCT_IMAGE_TYPES.has(row.type) && row.reference_id
+        ? resolveProductImage(row.reference_id)
+        : Promise.resolve(null),
   ]);
   return {
     ...row,
@@ -372,6 +387,45 @@ export async function notifyPostCommented(
     content: body,
     type: "post_commented",
     data: { actor_id: commenterUserId, reference_id: postId },
+    actorAvatarUrl: actor.avatar_url,
+  }).catch(() => {});
+}
+
+export async function notifyProductReviewed(
+  productOwnerId: string,
+  reviewerUserId: string,
+  productId: string,
+  rating: number,
+  reviewText: string,
+): Promise<void> {
+  if (productOwnerId === reviewerUserId) return; // don't self-notify
+
+  const actor = await resolveProfile(reviewerUserId);
+  const stars = "★".repeat(rating);
+  const body = reviewText.trim()
+    ? (() => {
+        const preview =
+          reviewText.length > 60 ? `${reviewText.slice(0, 57)}...` : reviewText;
+        return `${actor.name} rated your product ${stars}: “${preview}”`;
+      })()
+    : `${actor.name} rated your product ${stars}`;
+
+  await createNotification({
+    userId: productOwnerId,
+    type: "product_reviewed",
+    actorId: reviewerUserId,
+    referenceId: productId,
+    title: "New Review",
+    body,
+  });
+
+  // Push notification (fire-and-forget)
+  sendPushToUsers({
+    recipientIds: [productOwnerId],
+    heading: "New Review",
+    content: body,
+    type: "product_reviewed",
+    data: { actor_id: reviewerUserId, reference_id: productId },
     actorAvatarUrl: actor.avatar_url,
   }).catch(() => {});
 }

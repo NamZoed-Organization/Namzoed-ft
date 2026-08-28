@@ -105,9 +105,9 @@ export async function getProfileViewCount7d(profileId: string): Promise<number> 
 }
 
 /**
- * Fetch the list of users who viewed a post, most recent first.
- * RLS (post_owner_can_read_views) restricts this to the post's owner —
- * any other caller gets an empty result, not an error.
+ * Fetch the list of users who viewed a post, most recent first, one entry
+ * per viewer. RLS (post_owner_can_read_views) restricts this to the post's
+ * owner — any other caller gets an empty result, not an error.
  */
 export async function getPostViewers(postId: string) {
   try {
@@ -131,7 +131,17 @@ export async function getPostViewers(postId: string) {
       return [];
     }
 
-    return data || [];
+    // post_views is one row per (post, viewer, day) by design — the daily
+    // dedup that makes view_count a rolling unique-viewer count (see
+    // post_views_unique_daily) — so a viewer who came back on a different
+    // day has multiple rows here. Keep only their most recent one; rows are
+    // already newest-first, so the first occurrence per viewer_id is it.
+    const seenViewers = new Set<string>();
+    return (data || []).filter((row) => {
+      if (seenViewers.has(row.viewer_id)) return false;
+      seenViewers.add(row.viewer_id);
+      return true;
+    });
   } catch (error) {
     console.error("Error in getPostViewers:", error);
     return [];

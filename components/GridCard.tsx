@@ -8,8 +8,11 @@
  * use, each supplying only the fields relevant to it.
  */
 
+import PostGridReportOverlay from "@/components/modals/PostGridReportOverlay";
 import ProgressiveImage from "@/components/ui/ProgressiveImage";
 import { clampMediaRatio } from "@/lib/postMediaDisplay";
+import { feedEvents } from "@/utils/feedEvents";
+import * as Haptics from "expo-haptics";
 import { BlurView } from "expo-blur";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { Play } from "lucide-react-native";
@@ -59,6 +62,11 @@ export interface GridCardProps {
   badge?: React.ReactNode;
   /** rect is the tapped thumbnail's own on-screen box, for hero-transition callers. */
   onPress: (id: string, rect: GridCardSourceRect) => void;
+  /** When provided, enables hold-to-report — long-pressing the card shows a
+   * "Report" overlay (same affordance as PostGridCard's), and tapping it
+   * calls this with the card's id. The caller owns what "report" means
+   * (e.g. opening its own report modal), keeping this card content-agnostic. */
+  onReport?: (id: string) => void;
   /** True while this card is far enough off-screen that MasonryGrid hasn't
    * revealed it yet — renders a same-size placeholder instead of mounting
    * the real image/video, so a slow connection isn't spent downloading
@@ -84,10 +92,26 @@ function GridCard({
   footerRight,
   badge,
   onPress,
+  onReport,
   deferred,
   priority = "normal",
 }: GridCardProps) {
   const imageRef = React.useRef<View>(null);
+  const [showReportOverlay, setShowReportOverlay] = React.useState(false);
+
+  // Only one grid card's report overlay should be open at a time — opening
+  // one broadcasts its id so every other mounted card closes itself. Must
+  // run unconditionally (before the `!imageUri` early return below) so the
+  // hook order stays stable across renders.
+  React.useEffect(() => {
+    if (!onReport) return;
+    const handler = (openedId: string) => {
+      if (openedId !== id) setShowReportOverlay(false);
+    };
+    feedEvents.on("gridCardReportOverlayOpen", handler);
+    return () => feedEvents.off("gridCardReportOverlayOpen", handler);
+  }, [id, onReport]);
+
   if (!imageUri) return null;
 
   const imageHeight = gridCardHeight(ratio, width);
@@ -98,12 +122,26 @@ function GridCard({
     });
   };
 
+  const handleLongPress = () => {
+    if (!onReport) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    feedEvents.emit("gridCardReportOverlayOpen", id);
+    setShowReportOverlay(true);
+  };
+
+  const handleReportFromOverlay = () => {
+    setShowReportOverlay(false);
+    onReport?.(id);
+  };
+
   const showAvatarRow = !!(avatarUri || avatarLabel || subtitle);
 
   return (
     <TouchableOpacity
       onPress={handlePress}
-      disabled={deferred}
+      onLongPress={onReport ? handleLongPress : undefined}
+      delayLongPress={350}
+      disabled={deferred || showReportOverlay}
       activeOpacity={0.85}
       style={{
         width,
@@ -202,6 +240,14 @@ function GridCard({
           </View>
         )}
       </View>
+
+      {onReport && (
+        <PostGridReportOverlay
+          visible={showReportOverlay}
+          onClose={() => setShowReportOverlay(false)}
+          onReport={handleReportFromOverlay}
+        />
+      )}
     </TouchableOpacity>
   );
 }

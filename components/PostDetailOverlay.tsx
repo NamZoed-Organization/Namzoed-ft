@@ -268,7 +268,14 @@ export default function PostDetailOverlay({ visible, onClose, post, sourceRect }
         style={[StyleSheet.absoluteFill, { opacity: contentOpacity }]}
       >
         <ContextDrop enabled={phase === "open"} onDismiss={commitClose} target={contactAuthorTarget} dragX={dragX}>
-          {post && <FeedPost post={post} isVisible onBack={() => commitClose()} />}
+          {post && (
+            <FeedPost
+              post={post}
+              isVisible
+              onBack={() => commitClose()}
+              onNavigateAway={(navigate) => commitClose(navigate)}
+            />
+          )}
         </ContextDrop>
       </Animated.View>
     </View>

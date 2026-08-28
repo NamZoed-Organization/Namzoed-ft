@@ -23,6 +23,7 @@ import {
 } from "@/lib/servicesService";
 import { buildProfileExternalSharePayload } from "@/lib/shareUtils";
 import { useAppRouter } from "@/utils/navigation";
+import { useIsFocused } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
 import { Redirect, Stack, useLocalSearchParams } from "expo-router";
 import {
@@ -69,6 +70,15 @@ export default function PublicProfileScreen() {
   const { id, tab } = useLocalSearchParams(); // Get user ID from route: /user/123
   const { currentUser } = useUser();
   const router = useAppRouter();
+  // A screen pushed on top of this one (e.g. /post/[id], presented as a
+  // transparentModal so this stays mounted/visible underneath while its own
+  // ContextDrop edge-swipe-back is in progress) shouldn't leave this still
+  // competing for the same touches — this screen's own full-bleed
+  // horizontal Main/Work tab ScrollView spans the same left-edge strip
+  // ContextDrop captures from, and was winning that race often enough to
+  // make the edge-swipe unreliable whenever a post was opened from here.
+  // Turning this off entirely while unfocused removes it from the picture.
+  const isFocused = useIsFocused();
 
   // State - ALL hooks must be called before any conditional returns
   const [mainTab, setMainTab] = useState<"main" | "work">("main");
@@ -476,7 +486,7 @@ export default function PublicProfileScreen() {
   }
 
   return (
-    <View className="flex-1 bg-background">
+    <View className="flex-1 bg-background" pointerEvents={isFocused ? "auto" : "none"}>
       <PopupMessage visible={popup.visible} type={popup.type} title={popup.title} message={popup.message} onHide={() => setPopup(p => ({...p, visible: false}))} />
 
       <Stack.Screen options={{ headerShown: false }} />

@@ -1,4 +1,4 @@
-import { CategoriesIcon, HomeIcon } from "@/components/icons/index";
+import { HomeIcon, ShoppingIcon } from "@/components/icons/index";
 import CreateOptionsSheet from "@/components/modals/CreateOptionsSheet";
 import FloatingTabBar from "@/components/ui/FloatingTabBar";
 import CircularLoader from "@/components/ui/CircularLoader";
@@ -183,12 +183,12 @@ export default function UsersTabsLayout() {
         <Tabs.Screen
           name="categories/index"
           options={{
-            title: "Shop",
+            title: "Shopping",
             tabBarButton: (props) => (
               <TabBarButton {...props} android_ripple={null} />
             ),
             tabBarIcon: ({ focused }) => (
-              <CategoriesIcon
+              <ShoppingIcon
                 focused={focused || pathname.includes("/categories/")}
                 size={sideIconSize}
               />

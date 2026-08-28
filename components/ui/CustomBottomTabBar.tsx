@@ -1,4 +1,4 @@
-import { CategoriesIcon, HomeIcon } from "@/components/icons/index";
+import { HomeIcon, ShoppingIcon } from "@/components/icons/index";
 import { useRouter } from "expo-router";
 import { Plus, Store, Wrench } from "lucide-react-native";
 import React from "react";
@@ -49,7 +49,7 @@ export default function CustomBottomTabBar({ activeRoute, onHeightChange }: Cust
         onPress={() => router.push("/(users)/(tabs)/categories")}
         activeOpacity={0.7}
       >
-        <CategoriesIcon focused={isActive("categories")} size={24} />
+        <ShoppingIcon focused={isActive("categories")} size={24} />
       </TouchableOpacity>
 
       {/* Feed — FAB style */}

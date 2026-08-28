@@ -28,6 +28,10 @@ export interface Product {
   last_shown_at?: string | null;
   boost_started_at?: string | null;
   boost_expires_at?: string | null;
+  // Denormalized rating summary, maintained by a trigger on product_reviews
+  // (see supabase/migrations/20260826120000_create_product_reviews.sql).
+  average_rating?: number;
+  review_count?: number;
 }
 
 export interface ProductWithUser extends Product {

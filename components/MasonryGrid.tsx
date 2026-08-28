@@ -10,7 +10,7 @@
 
 import React, { useEffect, useMemo } from "react";
 import { Dimensions, Text, View } from "react-native";
-import CircularLoader from "@/components/ui/CircularLoader";
+import GridSkeleton from "@/components/ui/GridSkeleton";
 import { useGridReveal } from "@/hooks/useGridReveal";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
@@ -74,8 +74,15 @@ function MasonryGrid<T>({ items, loading, keyExtractor, getHeight, renderCard, e
 
   if (items.length === 0) {
     return (
-      <View style={{ paddingHorizontal: GRID_PADDING, paddingVertical: 48, alignItems: "center", backgroundColor: "#F0F1F3" }}>
-        {loading ? <CircularLoader size="small" color="#094569" /> : <Text style={{ fontSize: 14, color: "#9CA3AF" }}>{emptyText}</Text>}
+      <View
+        style={{
+          paddingHorizontal: GRID_PADDING,
+          paddingVertical: loading ? 12 : 48,
+          alignItems: loading ? "stretch" : "center",
+          backgroundColor: "#F0F1F3",
+        }}
+      >
+        {loading ? <GridSkeleton rows={3} /> : <Text style={{ fontSize: 14, color: "#9CA3AF" }}>{emptyText}</Text>}
       </View>
     );
   }
@@ -99,8 +106,8 @@ function MasonryGrid<T>({ items, loading, keyExtractor, getHeight, renderCard, e
         </View>
       </View>
       {loading && (
-        <View style={{ paddingVertical: 20, alignItems: "center" }}>
-          <CircularLoader size="small" color="#094569" />
+        <View style={{ paddingTop: 8 }}>
+          <GridSkeleton rows={1} />
         </View>
       )}
     </View>

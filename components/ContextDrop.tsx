@@ -3,9 +3,9 @@
  *
  * Reusable edge-swipe-back gesture with an optional bottom "drop target" —
  * inspired by RedNote: drag back from the left edge (like iOS's native back
- * gesture — starting anywhere else doesn't trigger it) to dismiss, or curve
- * the drag down toward a dome that rises from the bottom and release there
- * to fire a contextual action instead of just dismissing.
+ * gesture — starting anywhere else doesn't trigger it) to dismiss, or once
+ * the dome (see below) has risen into place, touch it to arm and release
+ * there to fire a contextual action instead of just dismissing.
  *
  * A multi-image carousel's own "swipe right to see the previous image"
  * gesture looks identical to this one when it happens to start within the
@@ -20,15 +20,33 @@
  * gesture. Pass `target={null}` for a plain dismiss-only edge swipe.
  *
  * Two-stage drag, not one continuous motion:
- *  - 0–25% of the screen width: content shrinks in from both top and
+ *  - 0–30% of the screen width: content shrinks in from both top and
  *    bottom, tracking the drag 1:1 (not a fixed-duration reveal) — a normal
- *    edge-swipe with no dome yet.
- *  - Past 25%: shrinking freezes at whatever it reached — from here the
- *    content is picked up and can be dragged in Y too (not just X), and the
- *    dome (reused from WeChatVoiceRecorder's own hold-to-talk dome
- *    silhouette — see that file for the curve math) fades in beneath it to
- *    drag toward. Crossing back below 25% reverses this immediately: the
- *    dome doesn't ease out, it's just gone, same as on release/cancel.
+ *    edge-swipe. The dome (reused from WeChatVoiceRecorder's own
+ *    hold-to-talk dome silhouette — see that file for the curve math)
+ *    slides up from beneath the screen edge in lockstep with the same drag
+ *    distance, like a drawer opening, reaching its resting position exactly
+ *    at 30% — purely a preview at this stage, not yet interactive, so a
+ *    user dragging slowly notices the feature exists well before reaching
+ *    the threshold instead of having it appear out of nowhere once they're
+ *    already there. A quick flick never gets this treatment at all — see
+ *    domeVisibility below, gated on average speed since the gesture
+ *    started (not React Native's own noisy per-sample gesture.vx) — since
+ *    it's headed straight for a dismiss and the dome popping up only to
+ *    vanish again reads as a glitch, not a preview.
+ *  - Past 30%: shrinking (and the dome's own slide) freezes at whatever it
+ *    reached, and the content is picked up and can be dragged in Y too (not
+ *    just X) — but only from THIS point, and only the incremental movement
+ *    from here on (see dragYBaseRef below), not the raw finger offset —
+ *    otherwise whatever vertical drift had already accumulated before
+ *    crossing the threshold would apply in one frame as a sudden jump the
+ *    instant context-drop mode engages. Arming is "is the finger currently
+ *    over the dome's hit area": touch it and it arms immediately, move off
+ *    it (still holding) and it un-arms immediately, release while armed to
+ *    drop. Crossing back below 30% mid-gesture immediately turns the
+ *    interactivity off (arming can't happen, Y resets), while the dome
+ *    keeps sliding with the drag continuously same as always, same as on
+ *    release/cancel.
  */
 
 import { BlurView } from "expo-blur";
@@ -54,16 +72,45 @@ const { width: WINDOW_WIDTH, height: WINDOW_HEIGHT } = Dimensions.get("window");
 // consider engaging — native iOS's own back-swipe uses a similarly narrow
 // strip, not "anywhere on screen".
 const EDGE_ZONE = 24;
-// Past this fraction of screen width, shrinking freezes and "context drop
-// mode" (Y-draggable, dome visible) begins.
-const CONTEXT_DROP_THRESHOLD = WINDOW_WIDTH * 0.25;
-// Past this fraction (or fast enough), releasing off-target commits a
-// normal dismiss rather than snapping back.
+// Past this fraction of screen width, shrinking (and the dome's own growth
+// — see shrinkProgress below) freezes, and "context drop mode" (Y-draggable,
+// drop target interactive) begins.
+const CONTEXT_DROP_THRESHOLD = WINDOW_WIDTH * 0.3;
+// Past this fraction (or fast enough — see DISMISS_COMMIT_VX), releasing
+// off-target commits a normal dismiss rather than snapping back. Checked
+// only at release, never mid-drag: a fast flick should commit once you let
+// go, but holding after one (finger still down) must keep tracking the
+// gesture normally instead of yanking the screen away out from under it.
 const DISMISS_COMMIT_DX = WINDOW_WIDTH * 0.4;
-// A flick at least this fast, caught early (before context-drop mode
-// engages), commits an immediate dismiss instead of tracking the drag —
-// see the "instant swipe" short-circuit in onPanResponderMove below.
-const INSTANT_SWIPE_VX = 1.0;
+const DISMISS_COMMIT_VX = 0.6;
+// Average speed (px/ms) since the gesture started, caught anywhere before
+// context-drop mode engages, means this swipe is headed for a dismiss (see
+// DISMISS_COMMIT_VX above, checked at release) — the dome preview is
+// suppressed for the rest of the gesture so it doesn't pop up only to
+// vanish again the instant the screen leaves. Deliberately an AVERAGE over
+// elapsed time (gesture.dx / ms-since-grant), not React Native's own
+// per-sample gesture.vx: vx is computed from raw deltas between the last
+// couple of touch-move events and is genuinely noisy — especially in a
+// gesture's first few samples — so gating on it made the dome show up
+// inconsistently even for perfectly ordinary slow drags whenever an early
+// sample happened to spike. An average smooths that out completely.
+const FAST_SWIPE_SUPPRESS_AVG_PX_PER_MS = 0.5;
+// Don't evaluate the average above until at least this much time has
+// passed — dx/elapsed is wildly unstable over the first couple of
+// milliseconds (a few px over ~1ms reads as an enormous "velocity").
+const FAST_SWIPE_MIN_ELAPSED_MS = 30;
+// How far (px) the drag must move before this claims the gesture. Kept
+// small on purpose: when a carousel is under the touch but reports no
+// previous item (edgeGestureRegistry's hasPrevious() is false — e.g. the
+// first image of a multi-image post), isEdgeGestureBlockedAt() already lets
+// this claim the gesture, but the carousel's own FlatList still has a
+// native scroll-gesture recognizer underneath that activates within a
+// couple of pixels — a large threshold here just hands it the race,
+// letting it start visibly rubber-banding (bouncing toward a "previous"
+// page that doesn't exist) before this ever gets a chance to capture.
+// Small enough to win that race, still large enough not to fire on tap
+// jitter (a tap barely moves 1-2px).
+const EDGE_SWIPE_CAPTURE_DX = 6;
 
 // Content shrinks in from BOTH edges while dragging (not just the bottom) —
 // makes the dragged content read as a single controllable object rather
@@ -136,33 +183,47 @@ export default function ContextDrop({ enabled, onDismiss, target, children, drag
   // one (see dragX prop above) instead of creating a private one.
   const internalDragX = useRef(new Animated.Value(0)).current;
   const dragX = externalDragX ?? internalDragX;
-  // Only moves once past the 25% threshold ("context drop mode") — before
+  // Only moves once past the 30% threshold ("context drop mode") — before
   // that the content only tracks X, per the request that it not also drift
   // vertically during a plain edge-swipe.
   const dragY = useRef(new Animated.Value(0)).current;
-  // Dome opacity/scale — eases in the moment the threshold is crossed, but
-  // is snapped (not eased) back to 0 the moment it's crossed back below, or
-  // on release/cancel/drop. See resetDome vs the animated entrance below.
-  const domeOpacity = useRef(new Animated.Value(0)).current;
   // Eases the dome up slightly when armed (hovering, about to drop) — a
-  // separate value from domeOpacity's own entrance since this one animates
-  // back and forth repeatedly within a single gesture as the hover state
-  // toggles, not just once per gesture.
+  // separate value from the dome's own shrinkProgress-driven entrance since
+  // this one animates back and forth repeatedly within a single gesture as
+  // the hover state toggles, not just once per gesture.
   const armedLift = useRef(new Animated.Value(0)).current;
+  // 1 = dome allowed to show, 0 = suppressed for the rest of this gesture
+  // (see FAST_SWIPE_SUPPRESS_AVG_PX_PER_MS). Multiplied into the dome's own
+  // shrinkProgress-driven reveal below — never touches shrinkProgress
+  // itself, so the content shrink/dismiss mechanics are unaffected either way.
+  const domeVisibility = useRef(new Animated.Value(1)).current;
+  const domeSuppressedRef = useRef(false);
+  // Set fresh on every onPanResponderGrant — timestamps the average-speed
+  // check above against, not against React Native's own noisy gesture.vx.
+  const gestureStartTimeRef = useRef(0);
   const inContextModeRef = useRef(false);
+  // gesture.dy already on the clock the instant context-drop mode engages —
+  // subtracted back out so Y-tracking starts smoothly from 0 right at that
+  // moment instead of snapping straight to whatever had already
+  // accumulated pre-threshold.
+  const dragYBaseRef = useRef(0);
   const [armed, setArmed] = useState(false);
   const armedRef = useRef(false);
-  // Set the instant a fast early flick commits the dismiss (see
-  // INSTANT_SWIPE_VX below) — once true, the rest of this same gesture
-  // (further moves, the eventual release/terminate) is ignored so the
-  // already-fired dismiss doesn't get double-processed.
-  const committedRef = useRef(false);
 
   const domeRestBottom = insets.bottom + NAV_CLEARANCE;
   const domeCrestY = WINDOW_HEIGHT - domeRestBottom - DOME_CREST_Y_FROM_BOTTOM;
 
-  const resetDome = () => {
-    domeOpacity.setValue(0);
+  // Turns context-drop *interactivity* off (arming) — the dome's own visual
+  // size is left alone here since it tracks dragX continuously (see
+  // shrinkProgress-derived opacity/scale below), not a separate discrete
+  // on/off animated value.
+  // Turns context-drop *interactivity* off. Deliberately does NOT touch
+  // dragY — callers on a release/terminate path let cancelDrag() ease it
+  // back to 0 in step with dragX; only the "dragged back below threshold
+  // mid-gesture" branch below needs (and applies) an instant snap, since
+  // that's live feedback while still actively dragging, not a hand-off to
+  // an end-of-gesture animation.
+  const resetContextMode = () => {
     armedLift.setValue(0);
     inContextModeRef.current = false;
     armedRef.current = false;
@@ -202,51 +263,73 @@ export default function ContextDrop({ enabled, onDismiss, target, children, drag
       onMoveShouldSetPanResponderCapture: (evt, gesture) =>
         enabledRef.current &&
         gesture.x0 < EDGE_ZONE &&
-        gesture.dx > 18 &&
+        gesture.dx > EDGE_SWIPE_CAPTURE_DX &&
         Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.5 &&
         !isEdgeGestureBlockedAt(evt.nativeEvent.pageY),
       onMoveShouldSetPanResponder: (evt, gesture) =>
         enabledRef.current &&
         gesture.x0 < EDGE_ZONE &&
-        gesture.dx > 18 &&
+        gesture.dx > EDGE_SWIPE_CAPTURE_DX &&
         Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.5 &&
         !isEdgeGestureBlockedAt(evt.nativeEvent.pageY),
+      // Once granted, nothing else gets to take the responder back mid-drag
+      // — without this, a fast/continuous drag can get reclaimed by a
+      // sibling (the feed's own vertical scroll, a nested carousel, etc.)
+      // partway through, which reads as "it lets go by itself" even though
+      // the finger never lifted. A real release/terminate is the only way
+      // out from here on.
+      onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: () => {
-        committedRef.current = false;
+        domeSuppressedRef.current = false;
+        domeVisibility.setValue(1);
+        gestureStartTimeRef.current = Date.now();
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       },
       onPanResponderMove: (_evt, gesture) => {
-        if (committedRef.current) return;
-
-        // Instant swipe: caught fast enough (and before context-drop mode
-        // ever engages) that the drag never gets a chance to visually track
-        // at all — commit straight to a normal dismiss instead of shrinking
-        // the content in and/or arming the drop dome first.
-        if (!inContextModeRef.current && gesture.vx > INSTANT_SWIPE_VX) {
-          committedRef.current = true;
-          dragX.setValue(0);
-          dragY.setValue(0);
-          resetDome();
-          onDismissRef.current();
-          return;
-        }
-
         dragX.setValue(Math.max(0, gesture.dx));
 
         const pastThreshold = gesture.dx >= CONTEXT_DROP_THRESHOLD;
         if (pastThreshold && !inContextModeRef.current && targetRef.current) {
           inContextModeRef.current = true;
-          Animated.timing(domeOpacity, { toValue: 1, duration: 180, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
+          // Truly in context-drop mode now — the dome must show regardless
+          // of how fast the drag got here, so any earlier suppression is
+          // lifted. And Y-tracking starts fresh from here (see dragY below),
+          // not from whatever gesture.dy had already accumulated.
+          domeSuppressedRef.current = false;
+          domeVisibility.setValue(1);
+          dragYBaseRef.current = gesture.dy;
           void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         } else if (!pastThreshold && inContextModeRef.current) {
-          // Dragged back below the threshold mid-gesture — same "gone
-          // immediately, not eased" rule as a release/cancel.
-          resetDome();
+          // Dragged back below the threshold mid-gesture — turns
+          // interactivity off; the dome itself keeps tracking dragX (it
+          // just shrinks back down along with the content, continuously).
+          // dragY snaps here (not eased) since this is live feedback while
+          // still actively dragging, not an end-of-gesture hand-off.
+          resetContextMode();
           dragY.setValue(0);
+        } else if (!inContextModeRef.current && !domeSuppressedRef.current) {
+          const elapsed = Date.now() - gestureStartTimeRef.current;
+          if (
+            elapsed > FAST_SWIPE_MIN_ELAPSED_MS &&
+            gesture.dx / elapsed > FAST_SWIPE_SUPPRESS_AVG_PX_PER_MS
+          ) {
+            // A quick flick, still short of the threshold — this is headed
+            // for a dismiss, not a deliberate drag toward the dome, so
+            // don't let it pop up only to disappear again a moment later.
+            domeSuppressedRef.current = true;
+            domeVisibility.setValue(0);
+          }
         }
 
+        // Arming is purely "is the finger currently over the dome" —
+        // gesture.moveY is the finger's actual on-screen position
+        // regardless of how far the content itself has been dragged, so
+        // this stays correct whether or not the content's own Y offset
+        // (below) has caught up yet. Touch the dome, it arms; move off it,
+        // it un-arms.
         if (inContextModeRef.current) {
-          dragY.setValue(Math.max(0, gesture.dy));
+          dragY.setValue(Math.max(0, gesture.dy - dragYBaseRef.current));
+
           const nowArmed = gesture.moveY >= domeCrestY - DOME_HIT_TOLERANCE;
           if (nowArmed !== armedRef.current) {
             armedRef.current = nowArmed;
@@ -257,31 +340,27 @@ export default function ContextDrop({ enabled, onDismiss, target, children, drag
         }
       },
       onPanResponderRelease: (_evt, gesture) => {
-        // Already dismissed by the instant-swipe short-circuit above —
-        // nothing left to do for the rest of this gesture.
-        if (committedRef.current) {
-          committedRef.current = false;
-          return;
-        }
         if (armedRef.current && targetRef.current) {
           void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          resetDome();
+          resetContextMode();
           targetRef.current.onDrop();
           return;
         }
-        resetDome();
-        if (gesture.dx > DISMISS_COMMIT_DX || gesture.vx > 0.6) {
+        resetContextMode();
+        // A fast-enough release commits a dismiss even short of
+        // DISMISS_COMMIT_DX — a quick flick shouldn't need to travel that
+        // far first. Velocity is checked ONLY here, at release — never
+        // mid-drag (see onPanResponderMove above) — so a fast swipe that's
+        // then held keeps tracking normally instead of committing before
+        // the finger even lifts.
+        if (gesture.dx > DISMISS_COMMIT_DX || gesture.vx > DISMISS_COMMIT_VX) {
           onDismissRef.current();
         } else {
           cancelDrag();
         }
       },
       onPanResponderTerminate: () => {
-        if (committedRef.current) {
-          committedRef.current = false;
-          return;
-        }
-        resetDome();
+        resetContextMode();
         cancelDrag();
       },
     }),
@@ -295,6 +374,19 @@ export default function ContextDrop({ enabled, onDismiss, target, children, drag
   const topInset = shrinkProgress.interpolate({ inputRange: [0, 1], outputRange: [0, TOP_SHRINK] });
   const bottomInset = shrinkProgress.interpolate({ inputRange: [0, 1], outputRange: [0, BOTTOM_SHRINK] });
   const cornerRadius = shrinkProgress.interpolate({ inputRange: [0, 1], outputRange: [0, DRAG_CORNER_RADIUS] });
+  // Dome preview — a drawer-style slide, not a resize/fade: tracks the same
+  // 0→threshold drag progress as the content shrink above, pushed down by
+  // DOME_EXTRA (enough to clear the crest's curve overshoot too) at rest and
+  // easing up to its true resting position exactly when shrinking freezes
+  // and context-drop mode actually goes interactive — a "this feature
+  // exists" hint that's visible well before the threshold, not a switch
+  // that flips only once you're already there. Multiplied by domeVisibility
+  // (1 normally, snapped to 0 mid-gesture for a fast flick — see
+  // FAST_SWIPE_SUPPRESS_AVG_PX_PER_MS) so a quick dismissive swipe never
+  // gets this preview at all — shrinkProgress itself is untouched, so the
+  // content shrink/dismiss keeps working exactly the same either way.
+  const domeReveal = Animated.multiply(shrinkProgress, domeVisibility);
+  const domeSlideY = domeReveal.interpolate({ inputRange: [0, 1], outputRange: [DOME_EXTRA, 0] });
 
   return (
     <View style={{ flex: 1 }}>
@@ -331,11 +423,13 @@ export default function ContextDrop({ enabled, onDismiss, target, children, drag
             right: 0,
             bottom: -DOME_EXTRA,
             height: DOME_TOTAL,
-            opacity: domeOpacity,
             transform: [
-              { scale: domeOpacity.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) },
-              // Slight rise while armed/hovering — a separate, repeatable
-              // transition (not tied to the one-shot entrance above).
+              // Drawer slide — see domeSlideY above.
+              { translateY: domeSlideY },
+              // Slight extra rise while armed/hovering — a separate,
+              // repeatable transition stacked on top of the slide (RN
+              // composes same-key transform entries additively), not tied
+              // to the drag-tracked entrance above.
               { translateY: armedLift.interpolate({ inputRange: [0, 1], outputRange: [0, -14] }) },
             ],
           }}

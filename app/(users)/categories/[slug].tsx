@@ -1,8 +1,11 @@
 // app/(users)/categories/[slug].tsx
 import GridCard, { gridCardHeight, GridCardSourceRect } from "@/components/GridCard";
 import MasonryGrid from "@/components/MasonryGrid";
+import AuthPromptModal from "@/components/modals/AuthPromptModal";
+import ReportProductModal from "@/components/modals/ReportProductModal";
 import SearchBar from "@/components/modals/SearchBar";
 import TopNavbar from "@/components/ui/TopNavbar";
+import { useUser } from "@/contexts/UserContext";
 import { categories as categoryData, categoryNames, SubCategory } from "@/data/categories";
 import { RATIO_SQUARE } from "@/lib/postMediaDisplay";
 import {
@@ -53,8 +56,11 @@ export default function CategoryDetailScreen() {
     filter?: string;
   }>();
 
+  const { currentUser } = useUser();
   const [searchQuery, setSearchQuery] = useState("");
   const [sortMode, setSortMode] = useState<SortMode>("foryou");
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [reportTarget, setReportTarget] = useState<ProductWithUser | null>(null);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -194,6 +200,18 @@ export default function CategoryDetailScreen() {
       router.push(`/(users)/product/${productId}`);
     },
     [router],
+  );
+
+  const handleReportProduct = useCallback(
+    (productId: string) => {
+      if (!currentUser?.id) {
+        setShowAuthModal(true);
+        return;
+      }
+      const product = displayedProducts.find((p) => p.id === productId);
+      if (product) setReportTarget(product);
+    },
+    [currentUser, displayedProducts],
   );
 
   const handleFilterPress = (subcategoryName: string) => {
@@ -347,11 +365,30 @@ export default function CategoryDetailScreen() {
                   </Text>
                 }
                 onPress={handleProductPress}
+                onReport={handleReportProduct}
               />
             )}
           />
         </Animated.View>
       </ScrollView>
+
+      <AuthPromptModal
+        visible={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        message="Sign in to report a product"
+      />
+
+      {currentUser && reportTarget && (
+        <ReportProductModal
+          visible={!!reportTarget}
+          onClose={() => setReportTarget(null)}
+          productId={reportTarget.id}
+          productName={reportTarget.name}
+          productOwnerId={reportTarget.user_id}
+          currentUserId={currentUser.id || ""}
+          onReportSuccess={() => setReportTarget(null)}
+        />
+      )}
     </View>
   );
 }

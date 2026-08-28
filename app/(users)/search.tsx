@@ -1,4 +1,3 @@
-import ImageViewer from "@/components/modals/ImageViewer";
 import CircularLoader from "@/components/ui/CircularLoader";
 import ProgressiveImage from "@/components/ui/ProgressiveImage";
 import { useUser } from "@/contexts/UserContext";
@@ -34,9 +33,6 @@ export default function GlobalSearchScreen() {
   const [activeTab, setActiveTab] = useState<
     "all" | "users" | "services" | "products" | "marketplace"
   >("all");
-  const [selectedPost, setSelectedPost] = useState<any | null>(null);
-  const [showImageViewer, setShowImageViewer] = useState(false);
-
   const inputRef = useRef<TextInput>(null);
   const tabScrollRef = useRef<ScrollView>(null);
   const touchStartX = useRef(0);
@@ -108,17 +104,12 @@ export default function GlobalSearchScreen() {
         router.push(`/(users)/marketplace/${result.id}` as any);
         break;
       case "post":
-        setSelectedPost({
-          id: result.id,
-          user_id: result.metadata.userId,
-          content: result.metadata.content,
-          images: result.metadata.images || [],
-          likes: result.metadata.likes || 0,
-          comments: result.metadata.comments || 0,
-          shares: result.metadata.shares || 0,
-          userName: result.metadata.userName || result.title,
-        });
-        setShowImageViewer(true);
+        // Route through the shared post-detail screen — same as every other
+        // post entry point (profile, notifications, saved posts, chat, deep
+        // links) — so this gets ContextDrop's edge-swipe-back + "drop to
+        // Contact Author" gesture and the full comments section for free,
+        // instead of the bespoke media-only ImageViewer this used to open.
+        router.push(`/(users)/post/${result.id}` as any);
         break;
     }
   };
@@ -595,21 +586,6 @@ export default function GlobalSearchScreen() {
 
         <View style={{ height: insets.bottom + 24 }} />
       </ScrollView>
-
-      {showImageViewer && selectedPost && (
-        <ImageViewer
-          visible={showImageViewer}
-          images={selectedPost.images}
-          initialIndex={0}
-          onClose={() => {
-            setShowImageViewer(false);
-            setSelectedPost(null);
-          }}
-          postId={selectedPost.id}
-          postUserId={selectedPost.user_id}
-          postContent={selectedPost.content}
-        />
-      )}
     </View>
   );
 }

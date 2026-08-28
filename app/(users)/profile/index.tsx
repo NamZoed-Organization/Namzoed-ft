@@ -7,6 +7,7 @@ import ProfileImageViewer from "@/components/modals/ProfileImageViewer";
 import ProfileSettings from "@/components/modals/ProfileSettings";
 import ShareComposerModal from "@/components/modals/ShareComposerModal";
 import { useUser } from "@/contexts/UserContext";
+import { useIsFocused } from "@react-navigation/native";
 // Added import for profile services
 import AddServicesModal from "@/components/modals/AddServicesModal";
 import CreatePost from "@/components/modals/CreatePost";
@@ -102,6 +103,15 @@ export default function ProfileScreen() {
   const { currentUser, setCurrentUser, logout } = useUser();
   const router = useAppRouter();
   const insets = useSafeAreaInsets();
+  // A screen pushed on top of this one (e.g. /post/[id], presented as a
+  // transparentModal so this stays mounted/visible underneath while its own
+  // ContextDrop edge-swipe-back is in progress) shouldn't leave this still
+  // competing for the same touches — this screen's own full-bleed
+  // horizontal Main/Work tab ScrollView spans the same left-edge strip
+  // ContextDrop captures from, and was winning that race often enough to
+  // make the edge-swipe unreliable whenever a post was opened from here.
+  // Turning this off entirely while unfocused removes it from the picture.
+  const isFocused = useIsFocused();
   const { scale: bottomBarScale, onScroll: onBottomBarScroll } = useBottomBarScroll();
   const { tab } = useLocalSearchParams<{ tab?: string }>();
   const [mainTab, setMainTab] = useState<"main" | "work">(
@@ -1047,7 +1057,7 @@ export default function ProfileScreen() {
   }
 
   return (
-    <View className="flex-1 bg-background">
+    <View className="flex-1 bg-background" pointerEvents={isFocused ? "auto" : "none"}>
       {/* Fixed Header - Absolute Position */}
       <View
         style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 100 }}

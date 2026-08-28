@@ -16,7 +16,9 @@ export type NotificationType =
   /** Weekly digest: "Your posts got X views and Y people visited your profile" */
   | "weekly_engagement"
   /** Someone you follow added a new story */
-  | "new_story";
+  | "new_story"
+  /** Someone rated/reviewed one of your product listings */
+  | "product_reviewed";
 
 export interface AppNotification {
   id: string;

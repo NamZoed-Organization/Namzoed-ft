@@ -9,7 +9,7 @@
  */
 
 import PostGridCard, { gridCardImageHeight, PostGridCardSourceRect } from "@/components/PostGridCard";
-import CircularLoader from "@/components/ui/CircularLoader";
+import GridSkeleton from "@/components/ui/GridSkeleton";
 import { useGridReveal } from "@/hooks/useGridReveal";
 import { PostData } from "@/types/post";
 import React, { useEffect, useMemo } from "react";
@@ -75,13 +75,13 @@ function FeedGrid({ posts, loading, onPostPress }: FeedGridProps) {
       <View
         style={{
           paddingHorizontal: GRID_PADDING,
-          paddingVertical: 48,
-          alignItems: "center",
+          paddingVertical: loading ? 12 : 48,
+          alignItems: loading ? "stretch" : "center",
           backgroundColor: "#F0F1F3",
         }}
       >
         {loading ? (
-          <CircularLoader size="small" color="#094569" />
+          <GridSkeleton rows={3} imageHeight={180} />
         ) : (
           <Text style={{ fontSize: 14, color: "#9CA3AF" }}>
             No posts yet — be the first to share something!
@@ -120,8 +120,8 @@ function FeedGrid({ posts, loading, onPostPress }: FeedGridProps) {
         </View>
       </View>
       {loading && (
-        <View style={{ paddingVertical: 20, alignItems: "center" }}>
-          <CircularLoader size="small" color="#094569" />
+        <View style={{ paddingTop: 8 }}>
+          <GridSkeleton rows={1} imageHeight={180} />
         </View>
       )}
     </View>

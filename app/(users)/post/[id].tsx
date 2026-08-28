@@ -41,6 +41,20 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const PRIMARY = "#094569";
 
+// Hoisted to a stable module-level reference — Stack.Screen's `options` prop
+// drives navigation.setOptions() internally; a fresh object literal on every
+// render can retrigger that (and the parent navigator re-rendering this
+// screen in response) badly enough to trip React's "Maximum update depth
+// exceeded" guard (seen on the product-detail screen, which used this exact
+// inline-literal pattern). These values are static, so a stable reference is
+// all that's needed.
+const POST_SCREEN_OPTIONS = {
+  gestureEnabled: false,
+  presentation: "transparentModal" as const,
+  animation: "none" as const,
+  contentStyle: { backgroundColor: "transparent" },
+};
+
 function toPostData(post: PostWithUser): PostData {
   const username =
     post.profiles?.name ||
@@ -130,14 +144,7 @@ export default function PostDetailScreen() {
           (+ transparent contentStyle, since Android's screens otherwise
           paint an opaque backing) keeps the previous screen mounted and
           visible behind this one. */}
-      <Stack.Screen
-        options={{
-          gestureEnabled: false,
-          presentation: "transparentModal",
-          animation: "none",
-          contentStyle: { backgroundColor: "transparent" },
-        }}
-      />
+      <Stack.Screen options={POST_SCREEN_OPTIONS} />
       <ContextDrop enabled={!loading} onDismiss={() => router.back()} target={contactAuthorTarget}>
         <View style={{ flex: 1, backgroundColor: "#f3f4f6" }}>
           {loading ? (

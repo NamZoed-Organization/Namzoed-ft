@@ -1,4 +1,4 @@
-import { CategoriesIcon, HomeIcon } from "@/components/icons/index";
+import { HomeIcon, ShoppingIcon } from "@/components/icons/index";
 import MongooseWorkerNavBar from "@/components/ui/MongooseWorkerNavBar";
 import { useUser } from "@/contexts/UserContext";
 import { clamp, useResponsive } from "@/utils/responsive";
@@ -64,7 +64,7 @@ export default function BottomNavBar({
       key: "categories",
       href: "/categories",
       icon: (focused: boolean) => (
-        <CategoriesIcon
+        <ShoppingIcon
           focused={focused || pathname.includes("/categories/")}
           size={sideIconSize}
         />

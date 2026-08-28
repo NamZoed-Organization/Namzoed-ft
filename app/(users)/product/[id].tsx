@@ -1,5 +1,8 @@
+import ContextDrop, { ContextDropTarget } from "@/components/ContextDrop";
 import CountdownTimer from "@/components/CountdownTimer";
 import MarketplaceImageViewer from "@/components/modals/MarketplaceImageViewer";
+import PostFeedbackOverlay from "@/components/modals/PostFeedbackOverlay";
+import ProductReviews from "@/components/ProductReviews";
 import ReportProductModal from "@/components/modals/ReportProductModal";
 import ShareComposerModal from "@/components/modals/ShareComposerModal";
 import PopupMessage from "@/components/ui/PopupMessage";
@@ -8,24 +11,25 @@ import { useUser } from "@/contexts/UserContext";
 import { fetchProductById, ProductWithUser } from "@/lib/productsService";
 import { buildProductExternalSharePayload } from "@/lib/shareUtils";
 import { supabase } from "@/lib/supabase";
+import { registerEdgeGestureCarousel } from "@/utils/edgeGestureRegistry";
 import { useAppRouter } from "@/utils/navigation";
 import { getInitials } from "@/utils/initials";
+import MaskedView from "@react-native-masked-view/masked-view";
 import { BlurView } from "expo-blur";
+import * as Haptics from "expo-haptics";
 import { Image as ExpoImage } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { useFocusEffect, useLocalSearchParams } from "expo-router";
+import { Stack, useLocalSearchParams } from "expo-router";
 import {
-    Bookmark,
     ChevronLeft,
-    ChevronRight,
     Clock,
-    Flag,
     MessageCircle,
     Moon,
     Package,
-    Share2,
+    Send,
     ShoppingBag,
     Sparkles,
+    Star,
     Tag,
     Verified
 } from "lucide-react-native";
@@ -34,15 +38,94 @@ import {
     BackHandler,
     Dimensions,
     Image,
+    Platform,
     RefreshControl,
     Animated as RNAnimated,
     ScrollView,
     StatusBar,
+    StyleSheet,
     Text,
     TouchableOpacity,
     View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+const PRIMARY = "#094569";
+
+// Same glassmorphism recipe as FeedPost's own detail-mode header buttons
+// (components/FeedPost.tsx HeaderGlassButton) — reused here so this page's
+// header reads as the same visual system as the post-detail screen.
+const HEADER_GLASS_BUTTON_SIZE = 36;
+const HEADER_GLASS_BUTTON_STYLE = {
+  width: HEADER_GLASS_BUTTON_SIZE,
+  height: HEADER_GLASS_BUTTON_SIZE,
+  borderRadius: HEADER_GLASS_BUTTON_SIZE / 2,
+  alignItems: "center" as const,
+  justifyContent: "center" as const,
+  overflow: "hidden" as const,
+  borderWidth: StyleSheet.hairlineWidth,
+  borderTopColor: "rgba(255,255,255,0.55)",
+  borderLeftColor: "rgba(255,255,255,0.25)",
+  borderRightColor: "rgba(255,255,255,0.25)",
+  borderBottomColor: "rgba(0,0,0,0.08)",
+  backgroundColor: Platform.OS === "ios" ? "transparent" : "rgba(255,255,255,0.77)",
+};
+
+// Fades the header's blur out at its bottom edge (via a MaskedView gradient
+// mask) instead of a flat translucent bar with a hard edge — same recipe as
+// FeedPost's own detail-mode header (components/FeedPost.tsx
+// headerBlurFadeStops) so this reads as no visible background, just a
+// blurred trail-off, matching the post-detail screen exactly. Smoothstep
+// (not a plain linear fade) because a linear fade still has a non-zero
+// slope right where it hits 0 alpha, which the eye picks out as a seam.
+function smoothstep(t: number) {
+  return t * t * (3 - 2 * t);
+}
+function headerBlurFadeStops() {
+  const STEPS = 5;
+  const locations = Array.from(
+    { length: STEPS + 1 },
+    (_, i) => i / STEPS,
+  ) as unknown as [number, number, ...number[]];
+  const colors = Array.from({ length: STEPS + 1 }, (_, i) => {
+    const alpha = 1 - smoothstep(i / STEPS);
+    return `rgba(255,255,255,${alpha.toFixed(3)})`;
+  }) as unknown as [string, string, ...string[]];
+  return { colors, locations };
+}
+const HEADER_BLUR_FADE_STOPS = headerBlurFadeStops();
+
+function HeaderGlassButton({
+  onPress,
+  children,
+  style,
+}: {
+  onPress: () => void;
+  children: React.ReactNode;
+  style?: object;
+}) {
+  return (
+    <TouchableOpacity onPress={onPress} style={[HEADER_GLASS_BUTTON_STYLE, style]} activeOpacity={0.8}>
+      {Platform.OS === "ios" && (
+        <BlurView tint="systemChromeMaterial" intensity={50} style={StyleSheet.absoluteFill} />
+      )}
+      {children}
+    </TouchableOpacity>
+  );
+}
+
+// Hoisted to a stable module-level reference — Stack.Screen's `options` prop
+// drives navigation.setOptions() internally, and passing a fresh object
+// literal on every render was retriggering that (and the parent navigator
+// re-rendering this screen in response) in a tight loop, tripping React's
+// "Maximum update depth exceeded" guard. These values are static, so a
+// stable reference is all that's needed — no useMemo required.
+const PRODUCT_SCREEN_OPTIONS = {
+  gestureEnabled: false,
+  presentation: "transparentModal" as const,
+  animation: "none" as const,
+  contentStyle: { backgroundColor: "transparent" },
+};
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const IMAGE_HEIGHT = SCREEN_HEIGHT * 0.5;
@@ -137,6 +220,13 @@ export default function ProductDetail() {
   const imageScrollX = useRef(new RNAnimated.Value(0)).current;
   const animatedHeroHeight = useRef(new RNAnimated.Value(IMAGE_HEIGHT)).current;
   const activeImageIndexRef = useRef(0);
+  // Registered with the shared edge-gesture registry below so ContextDrop's
+  // own left-edge swipe-back backs off while this carousel isn't on its
+  // first image — otherwise a mid-carousel "swipe right to see the previous
+  // image" gesture gets hijacked into a screen dismiss. Same pattern as
+  // FeedPost.tsx's MediaCarousel — see utils/edgeGestureRegistry.ts.
+  const carouselContainerRef = useRef<View>(null);
+  const carouselBoundsRef = useRef<{ top: number; bottom: number } | null>(null);
 
   // Image viewer state
   const [showImageViewer, setShowImageViewer] = useState(false);
@@ -147,6 +237,7 @@ export default function ProductDetail() {
   // Refresh & Report State
   const [refreshing, setRefreshing] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
+  const [showFeedbackOverlay, setShowFeedbackOverlay] = useState(false);
   const [showShareComposer, setShowShareComposer] = useState(false);
 
   // Popup states
@@ -222,11 +313,19 @@ export default function ProductDetail() {
     [id, currentUser],
   );
 
-  useFocusEffect(
-    useCallback(() => {
-      loadProduct();
-    }, [loadProduct]),
-  );
+  // Plain effect on id change rather than useFocusEffect — this screen is
+  // now presented as a transparentModal (see Stack.Screen options below) so
+  // the screen underneath stays mounted/focusable behind it, same as
+  // app/(users)/post/[id].tsx. useFocusEffect's refire-on-every-focus-event
+  // semantics fight that: the navigator can toggle focus between the two
+  // overlapping screens, and each focus firing loadProduct() (setLoading /
+  // setProduct / ...) synchronously kept re-triggering more focus/update
+  // cycles until React's nested-update-depth guard tripped ("Maximum update
+  // depth exceeded"). post/[id].tsx already loads its data this same way
+  // (a plain effect on id) specifically because of this same modal shape.
+  useEffect(() => {
+    loadProduct();
+  }, [id, currentUser?.id]);
 
   // Handle Android back button
   useEffect(() => {
@@ -308,6 +407,24 @@ export default function ProductDetail() {
     }).start();
   }, [activeImageIndex, getImageHeightForIndex, productImagesKey, animatedHeroHeight]);
 
+  const remeasureCarousel = useCallback(() => {
+    carouselContainerRef.current?.measureInWindow((_x, y, _w, h) => {
+      carouselBoundsRef.current = { top: y, bottom: y + h };
+    });
+  }, []);
+
+  useEffect(() => {
+    remeasureCarousel();
+  }, [activeImageIndex, remeasureCarousel]);
+
+  useEffect(() => {
+    if (productImageUrls.length <= 1) return;
+    return registerEdgeGestureCarousel({
+      getBounds: () => carouselBoundsRef.current,
+      hasPrevious: () => activeImageIndexRef.current > 0,
+    });
+  }, [productImageUrls.length]);
+
   const handleGoBack = () => {
     if (router.canGoBack()) {
       router.back();
@@ -379,6 +496,20 @@ export default function ProductDetail() {
   // Check if viewing own product
   const isOwnProduct = currentUser?.id === product?.user_id;
 
+  // Edge-swipe "drop to Message Seller" — same ContextDrop target shape as
+  // the post-detail screen's "Contact Author" (app/(users)/post/[id].tsx).
+  const canMessageSeller = !!product && currentUser?.id !== product.user_id;
+  const contactSellerTarget = useMemo<ContextDropTarget | null>(() => {
+    if (!canMessageSeller) return null;
+    return {
+      label: "Message Seller",
+      armedLabel: "Drop to Message Seller",
+      icon: <MessageCircle size={18} color="#fff" fill="none" />,
+      armedIcon: <MessageCircle size={18} color={PRIMARY} fill={PRIMARY} />,
+      onDrop: handleMessageSeller,
+    };
+  }, [canMessageSeller, handleMessageSeller]);
+
   const handleShare = async () => {
     if (!product) return;
     setShowShareComposer(true);
@@ -402,31 +533,19 @@ export default function ProductDetail() {
     setShowReportModal(true);
   };
 
-  if (loading) return <DetailSkeleton />;
+  // Long-press on the hero image — same "hold to report" affordance as
+  // posts (see FeedPost's handleImageLongPress): shows the dark
+  // PostFeedbackOverlay first, and only opens the report modal once the
+  // user taps "Report" on it.
+  const handleImageLongPress = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setShowFeedbackOverlay(true);
+  };
 
-  if (error || !product) {
-    return (
-      <View className="flex-1 justify-center items-center bg-[#FAFBFC] px-6">
-        <StatusBar barStyle="dark-content" />
-        <View className="w-24 h-24 bg-gray-100 rounded-full items-center justify-center mb-6">
-          <Package size={40} color="#9CA3AF" />
-        </View>
-        <Text className="text-xl font-bold text-gray-900 mb-2">
-          Oops! Something went wrong
-        </Text>
-        <Text className="text-gray-500 text-center mb-8">
-          {error || "We couldn't find this product. It may have been removed."}
-        </Text>
-        <TouchableOpacity
-          className="bg-primary px-8 py-4 rounded-2xl shadow-lg"
-          onPress={handleGoBack}
-          activeOpacity={0.8}
-        >
-          <Text className="text-white font-bold text-base">Go Back</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
+  const handleReportFromOverlay = () => {
+    setShowFeedbackOverlay(false);
+    handleReportProduct();
+  };
 
   const hasImages = productImageUrls.length > 0;
   const images = productImageUrls;
@@ -435,23 +554,135 @@ export default function ProductDetail() {
     setActiveImageIndex(index);
     imageScrollRef.current?.scrollTo({ x: index * SCREEN_WIDTH, animated: true });
   };
-  const savings = product.is_currently_active
+  const savings = product?.is_currently_active
     ? product.price - (product.current_price || 0)
     : 0;
 
   return (
+    <>
+      {/* Native-stack's own edge-swipe would otherwise compete with
+          ContextDrop's for the same left-edge touch zone. transparentModal
+          (+ transparent contentStyle, since Android's screens otherwise
+          paint an opaque backing) keeps the previous screen mounted and
+          visible behind this one — same treatment as app/(users)/post/[id].tsx. */}
+      <Stack.Screen options={PRODUCT_SCREEN_OPTIONS} />
+      <ContextDrop enabled={!loading} onDismiss={() => router.back()} target={contactSellerTarget}>
+      {loading ? (
+        <DetailSkeleton />
+      ) : error || !product ? (
+        <View className="flex-1 justify-center items-center bg-[#FAFBFC] px-6">
+          <StatusBar barStyle="dark-content" />
+          <View className="w-24 h-24 bg-gray-100 rounded-full items-center justify-center mb-6">
+            <Package size={40} color="#9CA3AF" />
+          </View>
+          <Text className="text-xl font-bold text-gray-900 mb-2">
+            Oops! Something went wrong
+          </Text>
+          <Text className="text-gray-500 text-center mb-8">
+            {error || "We couldn't find this product. It may have been removed."}
+          </Text>
+          <TouchableOpacity
+            className="bg-primary px-8 py-4 rounded-2xl shadow-lg"
+            onPress={handleGoBack}
+            activeOpacity={0.8}
+          >
+            <Text className="text-white font-bold text-base">Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
     <View className="flex-1 bg-[#FAFBFC]">
       <StatusBar
-        barStyle="light-content"
-        translucent
-        backgroundColor="transparent"
+        barStyle="dark-content"
       />
+
+      {/* Pinned header — floats above the media with a translucent blurred
+          bar (same glassmorphism as FeedPost's onBack detail header),
+          showing seller identity in place of the old plain back-only nav
+          that used to float directly over the hero image. */}
+      <View
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 10,
+          flexDirection: "row",
+          alignItems: "center",
+          paddingTop: insets.top + 10,
+          paddingBottom: 10,
+          paddingHorizontal: 14,
+        }}
+      >
+        {Platform.OS === "ios" ? (
+          <MaskedView
+            style={StyleSheet.absoluteFill}
+            maskElement={
+              <LinearGradient
+                colors={HEADER_BLUR_FADE_STOPS.colors}
+                locations={HEADER_BLUR_FADE_STOPS.locations}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 0, y: 1 }}
+                style={StyleSheet.absoluteFill}
+              />
+            }
+          >
+            <BlurView tint="systemChromeMaterial" intensity={70} style={StyleSheet.absoluteFill} />
+          </MaskedView>
+        ) : (
+          // No real blur on Android — approximate the same smoothed fade
+          // with a plain opacity gradient instead of a flat translucent fill.
+          <LinearGradient
+            colors={["rgba(255,255,255,0.8)", "rgba(255,255,255,0)"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
+        )}
+
+        <HeaderGlassButton onPress={handleGoBack} style={{ marginRight: 10 }}>
+          <ChevronLeft size={20} color="#111" />
+        </HeaderGlassButton>
+
+        <TouchableOpacity
+          onPress={() => router.push(`/(users)/profile/${product.user_id}`)}
+          style={{ flexDirection: "row", alignItems: "center", flex: 1 }}
+          activeOpacity={0.7}
+        >
+          {(product.profiles as any)?.avatar_url ? (
+            <ProgressiveImage
+              uri={(product.profiles as any).avatar_url}
+              style={{ width: 36, height: 36, borderRadius: 18 }}
+              showProgress={false}
+              priority="high"
+              backgroundColor="#e5e7eb"
+            />
+          ) : (
+            <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: "#e0e7ef", alignItems: "center", justifyContent: "center" }}>
+              <Text style={{ fontSize: 13, fontWeight: "700", color: PRIMARY }}>
+                {getInitials(product.profiles?.name)}
+              </Text>
+            </View>
+          )}
+          <View style={{ marginLeft: 10, flex: 1 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+              <Text style={{ fontSize: 14, fontWeight: "700", color: "#111" }} numberOfLines={1}>
+                {product.profiles?.name || "Unknown seller"}
+              </Text>
+              {sellerVerified && <Verified size={13} color={PRIMARY} />}
+            </View>
+          </View>
+        </TouchableOpacity>
+
+        <HeaderGlassButton onPress={handleShare} style={{ marginLeft: 8 }}>
+          <Send size={17} color="#374151" />
+        </HeaderGlassButton>
+      </View>
 
       <ScrollView
         className="flex-1"
         showsVerticalScrollIndicator={false}
         bounces={true}
-        contentContainerStyle={{ paddingBottom: isOwnProduct ? 16 : 120 }}
+        contentContainerStyle={{ paddingTop: insets.top + 56, paddingBottom: isOwnProduct ? 16 : 120 }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -461,7 +692,16 @@ export default function ProductDetail() {
           />
         }
       >
-        {/* Hero Image Section */}
+        {/* Hero Image Section — in-flow below the pinned header now, not
+            full-bleed behind it, so it no longer needs its own back/share
+            buttons layered on top (those moved to the header). */}
+        {/* No onLayout here deliberately — this wraps a height-animating
+            RNAnimated.View (see animatedHeroHeight below), and onLayout can
+            fire on every frame of that transition under the New
+            Architecture. The [activeImageIndex]-keyed effect above already
+            re-measures on every swipe, which is the only time the registry
+            actually needs fresh bounds. */}
+        <View ref={carouselContainerRef} collapsable={false} style={{ position: "relative" }}>
         <RNAnimated.View style={{ height: animatedHeroHeight, overflow: "hidden" }}>
           {hasImages ? (
             <RNAnimated.ScrollView
@@ -505,6 +745,8 @@ export default function ProductDetail() {
                     setActiveImageIndex(index);
                     setShowImageViewer(true);
                   }}
+                  onLongPress={isOwnProduct ? undefined : handleImageLongPress}
+                  delayLongPress={350}
                 >
                   <AnimatedHeroImage
                     source={{ uri: imageUrl }}
@@ -566,61 +808,6 @@ export default function ProductDetail() {
             pointerEvents="none"
           />
 
-          {/* Top Navigation Bar */}
-          <View className="absolute top-0 left-0 right-0 pt-14 px-5">
-            <View className="flex-row justify-between items-center">
-              {/* Back Button */}
-              <TouchableOpacity
-                onPress={handleGoBack}
-                activeOpacity={0.8}
-                className="w-11 h-11 rounded-full overflow-hidden"
-              >
-                <BlurView
-                  intensity={30}
-                  tint="dark"
-                  className="flex-1 items-center justify-center"
-                >
-                  <ChevronLeft size={22} color="white" strokeWidth={2.5} />
-                </BlurView>
-              </TouchableOpacity>
-
-              {/* Right Actions */}
-              <View className="flex-row gap-3">
-                <TouchableOpacity
-                  onPress={handleShare}
-                  activeOpacity={0.8}
-                  className="w-11 h-11 rounded-full overflow-hidden"
-                >
-                  <BlurView
-                    intensity={30}
-                    tint="dark"
-                    className="flex-1 items-center justify-center"
-                  >
-                    <Share2 size={20} color="white" />
-                  </BlurView>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={toggleBookmark}
-                  activeOpacity={0.8}
-                  className="w-11 h-11 rounded-full overflow-hidden"
-                >
-                  <BlurView
-                    intensity={30}
-                    tint="dark"
-                    className="flex-1 items-center justify-center"
-                  >
-                    <Bookmark
-                      size={20}
-                      color={isBookmarked ? "#FBBF24" : "white"}
-                      fill={isBookmarked ? "#FBBF24" : "transparent"}
-                    />
-                  </BlurView>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-
           {/* Image Pagination: Dots + Counter */}
           {images.length > 1 && (
             <View
@@ -668,7 +855,16 @@ export default function ProductDetail() {
               </View>
             </View>
           )}
+
+          {!isOwnProduct && (
+            <PostFeedbackOverlay
+              visible={showFeedbackOverlay}
+              onClose={() => setShowFeedbackOverlay(false)}
+              onReport={handleReportFromOverlay}
+            />
+          )}
         </RNAnimated.View>
+        </View>
 
         {/* Content Card */}
         <View className="bg-white">
@@ -801,61 +997,10 @@ export default function ProductDetail() {
               )}
             </View>
 
-            {/* Seller Card */}
-            {product.profiles?.name && (
-              <View
-                className="bg-gray-50 p-5 rounded-3xl mb-6"
-              >
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  onPress={() =>
-                    router.push(`/(users)/profile/${product.user_id}`)
-                  }
-                  className="flex-row items-center mb-4"
-                >
-                  {/* Avatar */}
-                  <View className="relative">
-                    {(product.profiles as any)?.avatar_url ? (
-                      <ProgressiveImage
-                        uri={(product.profiles as any).avatar_url}
-                        style={{ width: 56, height: 56, borderRadius: 16 }}
-                        showProgress={false}
-                        priority="high"
-                        backgroundColor="#e5e7eb"
-                      />
-                    ) : (
-                      <View className="w-14 h-14 bg-[#e0e7ef] rounded-2xl items-center justify-center">
-                        <Text style={{ fontSize: 20, fontWeight: '700', color: '#094569' }}>
-                          {getInitials(product.profiles?.name)}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-
-                  {/* Seller Info */}
-                  <View className="flex-1 ml-4">
-                    <View className="flex-row items-center gap-2 flex-wrap">
-                      <Text className="text-base font-bold text-gray-900">
-                        {product.profiles.name}
-                      </Text>
-                      {sellerVerified && (
-                        <View className="flex-row items-center bg-blue-50 border border-[#094569] rounded-full px-2 py-0.5 gap-1">
-                          <Verified size={11} color="#094569" />
-                          <Text className="text-[10px] font-msemibold text-[#094569] leading-none">Verified</Text>
-                        </View>
-                      )}
-                    </View>
-                    <Text className="text-xs text-gray-500 mt-1">Active seller</Text>
-                  </View>
-
-                  {/* View Profile Arrow */}
-                  <View className="bg-white/90 border border-gray-200 w-10 h-10 rounded-xl items-center justify-center">
-                    <ChevronRight size={18} color="#094569" strokeWidth={2.5} />
-                  </View>
-                </TouchableOpacity>
-
-              </View>
-            )}
+            {/* Seller identity now lives in the pinned header (avatar, name,
+                verified badge, tap-to-profile) — no separate card here,
+                same as the post-detail screen keeping author identity only
+                in its header rather than duplicating it in the body. */}
 
             {/* Description Section */}
             <View>
@@ -887,73 +1032,97 @@ export default function ProductDetail() {
                 <Text className="text-sm text-gray-600">In stock</Text>
               </View>
             </View>
-
-            {/* Report Link */}
-            <View>
-              <TouchableOpacity
-                onPress={handleReportProduct}
-                className="flex-row items-center justify-center gap-2 py-3"
-                activeOpacity={0.7}
-              >
-                <Flag size={14} color="#9CA3AF" />
-                <Text className="text-sm text-gray-400">
-                  Report this listing
-                </Text>
-              </TouchableOpacity>
-            </View>
           </View>
+
+          {/* Timestamp row + hairline divider directly above Reviews —
+              mirrors FeedPost's own date row just above its Comments
+              section, tying the reviews section into the page the same way. */}
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              paddingHorizontal: 14,
+              paddingTop: 4,
+              paddingBottom: 8,
+            }}
+          >
+            <Text style={{ fontSize: 14, color: "#9CA3AF", fontWeight: "500" }}>
+              Posted{" "}
+              {new Date(product.created_at).toLocaleDateString("en-US", {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              })}
+            </Text>
+          </View>
+          <View style={{ height: 1, backgroundColor: "#F3F4F6", marginHorizontal: 14 }} />
+
+          <ProductReviews
+            productId={product.id}
+            productOwnerId={product.user_id}
+            averageRating={product.average_rating}
+            reviewCount={product.review_count}
+          />
+
+          <View className="pb-8" />
         </View>
       </ScrollView>
 
-      {/* Floating Bottom Action Bar - Only show for other users' products */}
+      {/* Floating action pill - Only show for other users' products. No
+          full-width bar/blur behind it (transparent) and no profile avatar
+          here — "write a review" now lives inline in ProductReviews' own
+          trigger row, same as InlineComments' "Add a comment…" row on the
+          post-detail screen. This is just two actions enclosed in one
+          floating input-shaped pill: save (star) before Message Seller. */}
       {!isOwnProduct && (
-        <View className="absolute bottom-0 left-0 right-0">
-          <BlurView
-            intensity={80}
-            tint="light"
-            className="border-t border-gray-100"
+        <View
+          className="absolute bottom-0 left-0 right-0 items-end"
+          style={{ paddingHorizontal: 16, paddingBottom: Math.max(insets.bottom, 16) }}
+          pointerEvents="box-none"
+        >
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              backgroundColor: "#fff",
+              borderRadius: 999,
+              padding: 4,
+              gap: 4,
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 6 },
+              shadowOpacity: 0.15,
+              shadowRadius: 16,
+              elevation: 8,
+            }}
           >
-            <View
-              className="px-6 py-4 flex-row gap-4"
-              style={{ paddingBottom: Math.max(insets.bottom, 12) }}
+            <TouchableOpacity
+              onPress={toggleBookmark}
+              activeOpacity={0.8}
+              style={{ width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" }}
             >
-              {/* Message Seller Button */}
-              <TouchableOpacity
-                onPress={handleMessageSeller}
-                activeOpacity={0.8}
-                className="flex-1 bg-primary py-4 rounded-2xl flex-row items-center justify-center gap-2 shadow-lg"
-                style={{
-                  shadowColor: "#094569",
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.3,
-                  shadowRadius: 12,
-                  elevation: 8,
-                }}
-              >
-                <MessageCircle size={20} color="white" />
-                <Text className="text-white font-bold text-base">
-                  Message Seller
-                </Text>
-              </TouchableOpacity>
+              <Star
+                size={20}
+                color={isBookmarked ? "#FBBF24" : "#6B7280"}
+                fill={isBookmarked ? "#FBBF24" : "transparent"}
+              />
+            </TouchableOpacity>
 
-              {/* Quick Actions */}
-              <TouchableOpacity
-                onPress={toggleBookmark}
-                activeOpacity={0.8}
-                className={`w-14 h-14 rounded-2xl items-center justify-center border-2 ${
-                  isBookmarked
-                    ? "bg-primary/10 border-primary"
-                    : "bg-white border-gray-200"
-                }`}
-              >
-                <Bookmark
-                  size={22}
-                  color={isBookmarked ? "#094569" : "#6B7280"}
-                  fill={isBookmarked ? "#094569" : "transparent"}
-                />
-              </TouchableOpacity>
-            </View>
-          </BlurView>
+            <TouchableOpacity
+              onPress={handleMessageSeller}
+              activeOpacity={0.8}
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: 22,
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: PRIMARY,
+              }}
+            >
+              <MessageCircle size={19} color="white" />
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 
@@ -1017,5 +1186,8 @@ export default function ProductDetail() {
         message={popupMessage}
       />
     </View>
+      )}
+      </ContextDrop>
+    </>
   );
 }
