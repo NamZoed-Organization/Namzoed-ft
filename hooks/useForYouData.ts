@@ -28,6 +28,11 @@ export const shuffleArray = <T,>(array: T[]): T[] => {
 
 export function useForYouData() {
   const isMountedRef = useRef(true);
+  // Only the very first load shows `loading` (which hides sections like
+  // Flash Deals until there's data) — a pull-to-refresh re-fetches in the
+  // background and swaps the arrays in once ready, without flipping
+  // `loading` back on and yanking already-visible sections off screen.
+  const hasLoadedOnceRef = useRef(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [marketplaceItems, setMarketplaceItems] = useState<MarketplaceItem[]>([]);
   const [services, setServices] = useState<ProviderServiceWithDetails[]>([]);
@@ -45,7 +50,7 @@ export function useForYouData() {
 
   const loadAllData = useCallback(async () => {
     try {
-      if (isMountedRef.current) setLoading(true);
+      if (isMountedRef.current && !hasLoadedOnceRef.current) setLoading(true);
       const [productsData, marketplaceData, servicesData] = await Promise.all([
         fetchProducts(0, 15),
         fetchMarketplaceItems(0, 15),
@@ -107,10 +112,12 @@ export function useForYouData() {
           ),
       );
       if (isMountedRef.current) setLoading(false);
+      hasLoadedOnceRef.current = true;
       }); // end batchedUpdates
     } catch (error) {
       console.error("Error loading ForYou data:", error);
       if (isMountedRef.current) setLoading(false);
+      hasLoadedOnceRef.current = true;
     }
   }, []);
 

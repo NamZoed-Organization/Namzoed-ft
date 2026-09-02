@@ -62,6 +62,7 @@ export default function PendingMediaStrip({ items, onRemove }: PendingMediaStrip
               width: 18,
               height: 18,
               borderRadius: 9,
+              borderCurve: "continuous",
               backgroundColor: "rgba(0,0,0,0.6)",
               alignItems: "center",
               justifyContent: "center",

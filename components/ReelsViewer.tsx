@@ -705,6 +705,7 @@ function VideoScrubber({
             width: PREVIEW_WIDTH,
             height: PREVIEW_HEIGHT,
             borderRadius: 8,
+            borderCurve: "continuous",
             overflow: "hidden",
             borderWidth: 1.5,
             borderColor: "rgba(255,255,255,0.85)",
@@ -1195,6 +1196,7 @@ const styles = StyleSheet.create({
   scrubberBar: {
     width: "100%",
     borderRadius: 3,
+    borderCurve: "continuous",
     overflow: "hidden",
   },
   scrubberTrackBg: {
@@ -1222,6 +1224,7 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 36,
+    borderCurve: "continuous",
     backgroundColor: "rgba(0,0,0,0.55)",
     alignItems: "center",
     justifyContent: "center",
@@ -1257,6 +1260,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
+    borderCurve: "continuous",
     backgroundColor: "#333",
   },
   captionAvatarFallback: {
@@ -1279,6 +1283,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.2,
     borderColor: "#fff",
     borderRadius: 6,
+    borderCurve: "continuous",
     paddingVertical: 4,
     paddingHorizontal: 12,
   },
@@ -1303,6 +1308,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
+    borderCurve: "continuous",
     backgroundColor: "#e5e7eb",
   },
   descUsername: {

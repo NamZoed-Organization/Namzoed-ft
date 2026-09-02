@@ -3,12 +3,13 @@ import { Image } from "expo-image";
 import React, { useEffect, useRef, useState } from "react";
 import { FlatList, View, useWindowDimensions } from "react-native";
 
-const SIDE_PADDING = 16;
+// Matches FeedGrid's GRID_PADDING so the banner and the feed grid below it
+// share the same horizontal edges.
+const SIDE_PADDING = 4;
 const AUTO_SLIDE_INTERVAL = 7000;
 
 export default function Banner() {
   const { width } = useWindowDimensions();
-  const [activeIndex, setActiveIndex] = useState(0);
   const { banners, loading } = useBanners();
   const flatListRef = useRef<FlatList>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -24,7 +25,6 @@ export default function Banner() {
       const next = (activeIndexRef.current + 1) % banners.length;
       flatListRef.current?.scrollToIndex({ index: next, animated: true });
       activeIndexRef.current = next;
-      setActiveIndex(next);
     }, AUTO_SLIDE_INTERVAL);
   };
 
@@ -38,7 +38,10 @@ export default function Banner() {
   if (loading || banners.length === 0) return null;
 
   return (
-    <View className="mt-3">
+    // Bottom margin matches PostGridCard's own marginBottom so the gap
+    // between the banner and the grid reads the same as the gap between
+    // stacked cards within the grid.
+    <View className="mt-1" style={{ marginBottom: 4 }}>
       <FlatList
         ref={flatListRef}
         data={banners}
@@ -49,7 +52,6 @@ export default function Banner() {
         onMomentumScrollEnd={(e) => {
           const index = Math.round(e.nativeEvent.contentOffset.x / width);
           activeIndexRef.current = index;
-          setActiveIndex(index);
           startTimer();
         }}
         scrollEventThrottle={16}
@@ -65,7 +67,10 @@ export default function Banner() {
               style={{
                 width: CARD_WIDTH,
                 height: CARD_HEIGHT,
-                borderRadius: 16,
+                // Matches PostGridCard's borderRadius so the banner and the
+                // feed grid below it read as one visual system.
+                borderRadius: 4,
+                borderCurve: "continuous",
                 overflow: "hidden",
               }}
             >
@@ -79,19 +84,6 @@ export default function Banner() {
           </View>
         )}
       />
-
-      {banners.length > 1 && (
-        <View className="mt-3 flex-row justify-center gap-2">
-          {banners.map((_, index) => (
-            <View
-              key={index}
-              className={`w-2 h-2 rounded-full ${
-                activeIndex === index ? "bg-primary" : "bg-gray-300"
-              }`}
-            />
-          ))}
-        </View>
-      )}
     </View>
   );
 }

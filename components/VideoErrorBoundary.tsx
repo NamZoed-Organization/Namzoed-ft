@@ -47,6 +47,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: 8,
+    borderCurve: "continuous",
   },
   errorText: {
     marginTop: 8,

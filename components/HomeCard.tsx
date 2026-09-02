@@ -149,6 +149,7 @@ const styles = StyleSheet.create({
   cardContainer: {
     backgroundColor: "white",
     borderRadius: 16,
+    borderCurve: "continuous",
     borderWidth: 1,
     borderColor: "#E5E7EB",
     // NO overflow: "hidden" here — that forces an offscreen compositing pass
@@ -160,6 +161,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#F8F8F8",
     borderTopLeftRadius: 15,
     borderTopRightRadius: 15,
+    borderCurve: "continuous",
     overflow: "hidden", // clip only the image to the top corners
   },
   image: {
@@ -175,6 +177,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 20,
+    borderCurve: "continuous",
     gap: 4,
   },
   closingSaleBadge: {
@@ -205,12 +208,14 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
+    borderCurve: "continuous",
     marginRight: 6,
   },
   profileImagePlaceholder: {
     width: 24,
     height: 24,
     borderRadius: 12,
+    borderCurve: "continuous",
     backgroundColor: "#094569",
     alignItems: "center",
     justifyContent: "center",
@@ -234,6 +239,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#094569",
     borderRadius: 99,
+    borderCurve: "continuous",
     paddingHorizontal: 5,
     paddingVertical: 2,
     gap: 2,
@@ -292,6 +298,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#EAEAEA",
     borderRadius: 12,
+    borderCurve: "continuous",
     justifyContent: "center",
     alignItems: "center",
     borderStyle: "dashed",

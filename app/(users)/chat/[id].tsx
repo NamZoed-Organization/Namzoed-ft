@@ -168,6 +168,7 @@ const HEADER_GLASS_BUTTON_STYLE = {
   width: HEADER_GLASS_BUTTON_SIZE,
   height: HEADER_GLASS_BUTTON_SIZE,
   borderRadius: HEADER_GLASS_BUTTON_SIZE / 2,
+  borderCurve: "continuous" as const,
   alignItems: "center" as const,
   justifyContent: "center" as const,
   overflow: "hidden" as const,
@@ -191,33 +192,50 @@ const HEADER_BAR_ANDROID_BG = "rgba(255,255,255,0.85)";
 function smoothstep(t: number) {
   return t * t * (3 - 2 * t);
 }
-// Builds the {colors, locations} pair for one blur layer's alpha mask:
-// fully opaque at the header's top (location 0), smoothly easing down to
-// fully transparent by `fadeTo` (both value and slope reach 0 there), then
-// implicitly staying transparent for the rest of the way down to the
-// message list — six stops is enough that no single linear segment between
-// them is coarse enough to be perceptible.
-function headerBlurFadeStops(fadeTo: number) {
+// Where (as a fraction of the header's own total height) the fade begins —
+// full strength holds from the top through this point, covering the status
+// bar AND the avatar/name/icon row so both stay clearly legible, then eases
+// down to nothing by location 1 (the header's own bottom border — not past
+// it, so the blur/matte never bleeds into the message list, just meets it).
+const HEADER_BLUR_FADE_START = 0.8;
+// Builds the {colors, locations} pair for the blur layer's alpha mask: full
+// `peakAlpha` from the top through `holdTo`, then a smoothstep ease down to
+// TRUE zero by location 1 — a real fade-to-nothing at the header's bottom
+// border, not a settle at some low floor, so it blends into the message
+// list rather than leaving a faint residual line. `peakAlpha` defaults to 1
+// (full mask opacity, correct for the iOS layer — this alpha only ever
+// controls how much of the real BlurView shows through, not a flat color)
+// but Android's own gradient (no real blur, just a translucent fill
+// standing in for one) passes a lower peak instead, so it doesn't render as
+// a flat opaque white block up top. Six stops in the fade segment is enough
+// that no single linear segment between them is coarse enough to be
+// perceptible.
+function headerBlurFadeStops(holdTo: number, peakAlpha = 1) {
   const STEPS = 5;
-  const locations = Array.from(
-    { length: STEPS + 1 },
-    (_, i) => (i / STEPS) * fadeTo,
-  ) as unknown as [number, number, ...number[]];
-  const colors = Array.from({ length: STEPS + 1 }, (_, i) => {
-    const alpha = 1 - smoothstep(i / STEPS);
-    return `rgba(255,255,255,${alpha.toFixed(3)})`;
-  }) as unknown as [string, string, ...string[]];
-  return { colors, locations };
+  const locations: number[] = [0, holdTo];
+  const colors: string[] = [
+    `rgba(255,255,255,${peakAlpha})`,
+    `rgba(255,255,255,${peakAlpha})`,
+  ];
+  for (let i = 1; i <= STEPS; i++) {
+    const t = i / STEPS;
+    locations.push(holdTo + t * (1 - holdTo));
+    colors.push(`rgba(255,255,255,${(peakAlpha * (1 - smoothstep(t))).toFixed(3)})`);
+  }
+  return {
+    colors: colors as [string, string, ...string[]],
+    locations: locations as [number, number, ...number[]],
+  };
 }
-// Blur behind the whole header (status bar strip included — see the
-// header's render), eased in via a gradient alpha mask (see
-// headerBlurFadeStops) rather than switching on abruptly at the seam with
-// the message list, which is what would otherwise read as a hard line.
-// A single moderate-intensity layer, not several stacked ones: stacking
-// multiple BlurViews compounds "systemChromeMaterial"'s own built-in white
-// tint each time, which saturates into a flat white wash and loses the
-// visible frosted/blurred texture entirely — the opposite of "matte blur".
-const HEADER_BLUR_LAYERS = [{ intensity: 80, ...headerBlurFadeStops(1) }];
+// Full strength through the status bar AND the avatar/name/icon row,
+// fading to true zero by the header's own bottom border — see
+// headerBlurFadeStops and HEADER_BLUR_FADE_START.
+const HEADER_BLUR_LAYERS = [{ intensity: 94, ...headerBlurFadeStops(HEADER_BLUR_FADE_START) }];
+// Android has no real blur to mask — see headerBlurFadeStops' own
+// peakAlpha param — so this is a separate, lower-peak (0.85, matching the
+// rest of the app's floating chrome) gradient rather than reusing
+// HEADER_BLUR_LAYERS' own full-opacity mask values directly.
+const HEADER_BLUR_ANDROID_GRADIENT = headerBlurFadeStops(HEADER_BLUR_FADE_START, 0.85);
 
 type ReplyMeta = {
   id: string;
@@ -551,7 +569,8 @@ const TypingIndicator = ({ users }: { users: TypingUser[] }) => {
             </View>
           ) : null}
         </View>
-        <View className="bg-[#f7f8fa] border border-[#eceff3] px-3.5 py-2.5 rounded-2xl">
+        <View
+          style={{ borderRadius: 16, borderCurve: "continuous" }} className="bg-[#f7f8fa] border border-[#eceff3] px-3.5 py-2.5">
           <View className="flex-row items-center">
             {dots.map((dot, index) => (
               <Animated.View
@@ -710,6 +729,7 @@ const SwipeableRow = React.memo(function SwipeableRow({
               width: 28,
               height: 28,
               borderRadius: 14,
+              borderCurve: "continuous",
               backgroundColor: "rgba(99,102,241,0.18)",
               alignItems: "center",
               justifyContent: "center",
@@ -743,6 +763,7 @@ function ReactionPill({
         marginLeft: isCurrentUser ? 0 : 10,
         backgroundColor: "rgba(255,255,255,0.95)",
         borderRadius: 20,
+        borderCurve: "continuous",
         paddingHorizontal: 6,
         paddingVertical: 3,
         borderWidth: 1,
@@ -3144,6 +3165,7 @@ export default function ChatScreen() {
                   width: MESSAGE_AVATAR_SIZE,
                   height: MESSAGE_AVATAR_SIZE,
                   borderRadius: MESSAGE_AVATAR_SIZE / 2,
+                  borderCurve: "continuous",
                   backgroundColor: "#094569",
                   alignItems: "center",
                   justifyContent: "center",
@@ -3193,18 +3215,25 @@ export default function ChatScreen() {
       // Reactions stored locally for this message
       const reactionsForMsg =
         message?.id != null ? messageReactions[String(message.id)] || [] : [];
+      // borderCurve: "continuous" — iOS's own continuous ("squircle") corner
+      // curve instead of RN's default constant-radius circular arc, same
+      // smoother curvature Apple's own UI uses. Android silently ignores it
+      // and falls back to a regular rounded corner (no native continuous-
+      // curve primitive there) — harmless, not a visual regression.
       const bubbleRadiusStyle = isCurrentUser
         ? {
             borderTopLeftRadius: RADIUS_LARGE,
             borderBottomLeftRadius: RADIUS_LARGE,
             borderTopRightRadius: connectPrev ? RADIUS_SMALL : RADIUS_LARGE,
             borderBottomRightRadius: connectNext ? RADIUS_SMALL : RADIUS_LARGE,
+            borderCurve: "continuous" as const,
           }
         : {
             borderTopRightRadius: RADIUS_LARGE,
             borderBottomRightRadius: RADIUS_LARGE,
             borderTopLeftRadius: connectPrev ? RADIUS_SMALL : RADIUS_LARGE,
             borderBottomLeftRadius: connectNext ? RADIUS_SMALL : RADIUS_LARGE,
+            borderCurve: "continuous" as const,
           };
 
       // Extract coordinates from location message
@@ -3835,6 +3864,7 @@ export default function ChatScreen() {
                   borderBottomWidth: 2,
                   borderColor: isCurrentUser ? "#93c5fd" : "#60a5fa",
                   borderBottomLeftRadius: 8,
+                  borderCurve: "continuous",
                   marginRight: 4,
                   transform: [{ scaleX: isCurrentUser ? -1 : 1 }],
                 }}
@@ -3863,6 +3893,7 @@ export default function ChatScreen() {
                   borderBottomWidth: 2,
                   borderColor: isCurrentUser ? "#93c5fd" : "#9ca3af",
                   borderBottomLeftRadius: 8,
+                  borderCurve: "continuous",
                   marginRight: 4,
                   transform: [{ scaleX: isCurrentUser ? -1 : 1 }],
                 }}
@@ -4048,12 +4079,12 @@ export default function ChatScreen() {
 
           <View className="flex-1">
             <View
-              className="h-5 bg-gray-300 rounded animate-pulse mb-1"
-              style={{ width: "60%" }}
+              className="h-5 bg-gray-300 animate-pulse mb-1"
+              style={{ width: "60%", borderRadius: 4, borderCurve: "continuous" }}
             />
             <View
-              className="h-3 bg-gray-200 rounded animate-pulse"
-              style={{ width: "40%" }}
+              className="h-3 bg-gray-200 animate-pulse"
+              style={{ width: "40%", borderRadius: 4, borderCurve: "continuous" }}
             />
           </View>
         </View>
@@ -4103,7 +4134,8 @@ export default function ChatScreen() {
           visible={showChatActionsMenu}
           onClose={() => setShowChatActionsMenu(false)}
         >
-          <View className="bg-white rounded-t-3xl pb-8">
+          <View
+            style={{ borderTopLeftRadius: 24, borderTopRightRadius: 24, borderCurve: "continuous" }} className="bg-white pb-8">
             <View className="px-6 py-4 border-b border-gray-200">
               <Text className="text-lg font-mbold text-gray-900">Chat Actions</Text>
             </View>
@@ -4156,8 +4188,9 @@ export default function ChatScreen() {
               </View>
             </TouchableOpacity>
             <TouchableOpacity
+              style={{ borderRadius: 16, borderCurve: "continuous" }}
               onPress={() => setShowChatActionsMenu(false)}
-              className="mx-6 mt-4 py-3 rounded-2xl bg-gray-100"
+              className="mx-6 mt-4 py-3 bg-gray-100"
             >
               <Text className="text-center text-gray-900 font-msemibold">Cancel</Text>
             </TouchableOpacity>
@@ -4193,6 +4226,7 @@ export default function ChatScreen() {
               backgroundColor: "#fff",
               borderTopLeftRadius: 24,
               borderTopRightRadius: 24,
+              borderCurve: "continuous",
               paddingBottom: 40,
               paddingTop: 16,
             }}
@@ -4203,6 +4237,7 @@ export default function ChatScreen() {
                 height: 4,
                 backgroundColor: "#d1d5db",
                 borderRadius: 2,
+                borderCurve: "continuous",
                 alignSelf: "center",
                 marginBottom: 20,
               }}
@@ -4276,15 +4311,17 @@ export default function ChatScreen() {
         }}
         style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 10 }}
       >
-        {/* Progressive blur behind the whole header, status bar strip
-            included — the gradient's strongest layer now lands at the very
-            top of the screen instead of stopping at the status bar's lower
-            edge. Fades out (rather than hard-toggling) while holding to
-            talk: the white wash it adds behind the grey scrim below is
-            what made the header's dim read lighter/different from the
-            plain grey used everywhere else, so it needs to be gone by the
-            time that scrim is fully in — sharing holdRecordingOpacity with
-            it is what keeps the two in sync instead of drifting apart. */}
+        {/* Blur/matte behind the whole header — full strength through the
+            status bar AND the avatar/name/icon row (see HEADER_BLUR_FADE_START),
+            so both stay clearly legible, only easing down to true zero right
+            at the header's own bottom border, blending into the message
+            list instead of leaving a hard seam. Fades out entirely (rather
+            than hard-toggling) while holding to talk: the white wash it
+            adds behind the grey scrim below is what made the header's dim
+            read lighter/different from the plain grey used everywhere else,
+            so it needs to be gone by the time that scrim is fully in —
+            sharing holdRecordingOpacity with it is what keeps the two in
+            sync instead of drifting apart. */}
         {showHeaderBlur && (
         <Animated.View
           pointerEvents="none"
@@ -4323,17 +4360,20 @@ export default function ChatScreen() {
                 </MaskedView>
               ))
             ) : (
-              // No real blur on Android here — approximate the same ramp with
-              // a plain opacity gradient instead of a flat translucent fill.
-              // Capped at 0.8 (not ~0.92) to match the ~0.77–0.85 "matte"
+              // No real blur on Android here — approximate the same shape
+              // with a plain opacity gradient instead of a flat translucent
+              // fill: strong (0.85, matching the ~0.77–0.85 "matte"
               // translucency used by the rest of the app's floating chrome
-              // (HEADER_BAR_ANDROID_BG, HEADER_GLASS_BUTTON_STYLE,
-              // FloatingTabBar's ANDROID_BACKGROUND) — near-opaque read as
-              // "no blend" even though it was technically a gradient.
+              // — HEADER_BAR_ANDROID_BG, HEADER_GLASS_BUTTON_STYLE,
+              // FloatingTabBar's ANDROID_BACKGROUND) through the status bar
+              // and the avatar/name/icon row, fading to true 0 by the
+              // header's own bottom border — same shape as the iOS mask,
+              // just a flat gradient instead of a real blur.
               <LinearGradient
-                colors={["rgba(255,255,255,0.3)", "rgba(255,255,255,0.8)"]}
-                start={{ x: 0, y: 1 }}
-                end={{ x: 0, y: 0 }}
+                colors={HEADER_BLUR_ANDROID_GRADIENT.colors}
+                locations={HEADER_BLUR_ANDROID_GRADIENT.locations}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 0, y: 1 }}
                 style={StyleSheet.absoluteFill}
               />
             )}
@@ -4572,6 +4612,7 @@ export default function ChatScreen() {
               backgroundColor: "#ffffff",
               borderTopLeftRadius: INPUT_PILL_RADIUS,
               borderTopRightRadius: INPUT_PILL_RADIUS,
+              borderCurve: "continuous",
             }}
           />
         {/* Same grey-out treatment as the header and message list, so the
@@ -4591,6 +4632,7 @@ export default function ChatScreen() {
             backgroundColor: "rgba(17,24,39,0.20)",
             borderTopLeftRadius: INPUT_PILL_RADIUS,
             borderTopRightRadius: INPUT_PILL_RADIUS,
+            borderCurve: "continuous",
             opacity: holdRecordingOpacity,
           }}
         />
@@ -4633,6 +4675,7 @@ export default function ChatScreen() {
                   StyleSheet.absoluteFill,
                   {
                     borderRadius: INPUT_PILL_RADIUS,
+                    borderCurve: "continuous",
                     overflow: "hidden",
                     backgroundColor: Platform.OS === "ios" ? "transparent" : HEADER_BAR_ANDROID_BG,
                   },
@@ -4686,13 +4729,15 @@ export default function ChatScreen() {
               {pendingProductContext ? (
                 <View className="px-3 pt-2 pb-2 border-b border-gray-200/80">
                   <Pressable
+                    style={{ borderRadius: 12, borderCurve: "continuous" }}
                     onPress={() => openProductContext(pendingProductContext)}
-                    className="rounded-xl border border-gray-200 bg-white p-2 flex-row items-center"
+                    className="border border-gray-200 bg-white p-2 flex-row items-center"
                   >
                     {pendingProductContext.imageUrl ? (
                       <Image
+                        style={{ borderRadius: 8 }}
                         source={{ uri: pendingProductContext.imageUrl }}
-                        className="w-10 h-10 rounded-lg mr-2"
+                        className="w-10 h-10 mr-2"
                         resizeMode="cover"
                       />
                     ) : null}
@@ -5115,6 +5160,7 @@ export default function ChatScreen() {
                         paddingHorizontal: 14,
                         paddingVertical: 10,
                         borderRadius: 18,
+                        borderCurve: "continuous",
                         backgroundColor: isOwnMsg ? "#094569" : "#e5e7eb",
                         shadowColor: "#000",
                         shadowOffset: { width: 0, height: 3 },
@@ -5143,6 +5189,7 @@ export default function ChatScreen() {
                       alignSelf: "center",
                       backgroundColor: "rgba(255,255,255,0.97)",
                       borderRadius: 36,
+                      borderCurve: "continuous",
                       paddingHorizontal: 10,
                       paddingVertical: 7,
                       marginBottom: 8,
@@ -5216,6 +5263,7 @@ export default function ChatScreen() {
                             {
                               marginHorizontal: 4,
                               borderRadius: 20,
+                              borderCurve: "continuous",
                               padding: 4,
                             },
                             isSelected && {
@@ -5241,6 +5289,7 @@ export default function ChatScreen() {
                     style={{
                       backgroundColor: "rgba(255,255,255,0.97)",
                       borderRadius: 16,
+                      borderCurve: "continuous",
                       overflow: "hidden",
                       shadowColor: "#000",
                       shadowOffset: { width: 0, height: 4 },

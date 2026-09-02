@@ -49,7 +49,8 @@ export default function ProfileTabContent({
               return (
                 <View key={index} className="w-[33.33%] aspect-square p-1">
                   <TouchableOpacity
-                    className="flex-1 bg-gray-200 rounded-lg overflow-hidden relative"
+                    style={{ borderRadius: 8, borderCurve: "continuous" }}
+                    className="flex-1 bg-gray-200 overflow-hidden relative"
                     onPress={() => onImageClick(imageUrl)}
                   >
                     <Image
@@ -94,7 +95,8 @@ export default function ProfileTabContent({
                 className="w-[33.33%] aspect-square p-1"
               >
                 <TouchableOpacity
-                  className="flex-1 bg-gray-200 rounded-lg overflow-hidden"
+                  style={{ borderRadius: 8, borderCurve: "continuous" }}
+                  className="flex-1 bg-gray-200 overflow-hidden"
                   onPress={() =>
                     router.push(`/(users)/product/${product.id}` as any)
                   }

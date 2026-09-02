@@ -101,6 +101,7 @@ export default function LoadingBar({
           width,
           height,
           borderRadius: radius,
+          borderCurve: "continuous",
           backgroundColor: trackColor ?? "rgba(120, 120, 128, 0.5)",
         },
         style,

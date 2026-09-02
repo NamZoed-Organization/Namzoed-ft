@@ -307,6 +307,7 @@ export default function StoryDesignOverlay({
                     width: 28,
                     height: 28,
                     borderRadius: 14,
+                    borderCurve: "continuous",
                     backgroundColor: color,
                     borderWidth: focusedLayer.color === color ? 3 : 1,
                     borderColor: focusedLayer.color === color ? "#4ade80" : "rgba(255,255,255,0.4)",

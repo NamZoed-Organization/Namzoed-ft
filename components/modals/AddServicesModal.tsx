@@ -257,7 +257,8 @@ export default function AddServicesModal({
           className="flex-1 justify-end"
         >
           <View className="flex-1 bg-black/50 justify-end">
-            <View className="bg-white rounded-t-3xl h-[90%] w-full overflow-hidden">
+            <View
+              style={{ borderTopLeftRadius: 24, borderTopRightRadius: 24, borderCurve: "continuous" }} className="bg-white h-[90%] w-full overflow-hidden">
               {/* Header */}
               <BlurView
                 intensity={90}
@@ -295,7 +296,8 @@ export default function AddServicesModal({
                         Service Category <Text className="text-red-500">*</Text>
                       </Text>
                       {getSelectedCategoryName() && (
-                        <View className="bg-primary/10 px-2 py-1 rounded-md">
+                        <View
+                          style={{ borderRadius: 6, borderCurve: "continuous" }} className="bg-primary/10 px-2 py-1">
                           <Text className="text-xs text-primary font-medium">
                             {getSelectedCategoryName()}
                           </Text>
@@ -307,8 +309,9 @@ export default function AddServicesModal({
                   {/* Accordion Toggle Button (hidden when category is locked) */}
                   {!lockedCategorySlug && (
                     <TouchableOpacity
+                      style={{ borderRadius: 12, borderCurve: "continuous" }}
                       onPress={() => setIsCategoryExpanded(!isCategoryExpanded)}
-                      className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 flex-row justify-between items-center"
+                      className="bg-gray-50 border border-gray-200 px-4 py-3 flex-row justify-between items-center"
                       activeOpacity={0.7}
                     >
                       <Text className="text-gray-700 text-sm">
@@ -324,7 +327,8 @@ export default function AddServicesModal({
 
                   {/* Locked category display (read-only) */}
                   {lockedCategorySlug && (
-                    <View className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3">
+                    <View
+                      style={{ borderRadius: 12, borderCurve: "continuous" }} className="bg-gray-50 border border-gray-200 px-4 py-3">
                       <Text className="text-gray-700 text-sm font-medium">
                         {getSelectedCategoryName() || lockedCategorySlug}
                       </Text>
@@ -333,7 +337,8 @@ export default function AddServicesModal({
 
                   {/* Category Options - Expandable */}
                   {!lockedCategorySlug && isCategoryExpanded && (
-                    <View className="mt-3 bg-gray-50 rounded-xl p-3 border border-gray-200">
+                    <View
+                      style={{ borderRadius: 12, borderCurve: "continuous" }} className="mt-3 bg-gray-50 p-3 border border-gray-200">
                       <View className="flex-row flex-wrap gap-2">
                         {selectableCategories.map((category) => (
                           <TouchableOpacity
@@ -385,7 +390,8 @@ export default function AddServicesModal({
                     Give your service a catchy name
                   </Text>
                   <TextInput
-                    className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900"
+                    style={{ borderRadius: 12, borderCurve: "continuous" }}
+                    className="bg-gray-50 border border-gray-200 px-4 py-3 text-gray-900"
                     placeholder="e.g., Express Taxi Service, Professional Photography, etc."
                     value={name}
                     onChangeText={setName}
@@ -401,7 +407,8 @@ export default function AddServicesModal({
                     Describe what you offer in this category
                   </Text>
                   <TextInput
-                    className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 min-h-[120px]"
+                    style={{ borderRadius: 12, borderCurve: "continuous" }}
+                    className="bg-gray-50 border border-gray-200 px-4 py-3 text-gray-900 min-h-[120px]"
                     placeholder="e.g., Professional taxi service with 5+ years experience. Available 24/7 for airport pickups and city tours..."
                     multiline
                     textAlignVertical="top"
@@ -427,8 +434,9 @@ export default function AddServicesModal({
                     {images.map((uri, index) => (
                       <View key={index} className="relative mr-3">
                         <Image
+                          style={{ borderRadius: 12 }}
                           source={{ uri }}
-                          className="w-24 h-24 rounded-xl"
+                          className="w-24 h-24"
                         />
                         <TouchableOpacity
                           onPress={() => removeImage(index)}
@@ -441,8 +449,9 @@ export default function AddServicesModal({
 
                     {/* Add Photo Button */}
                     <TouchableOpacity
+                      style={{ borderRadius: 12, borderCurve: "continuous" }}
                       onPress={pickImage}
-                      className="w-24 h-24 border-2 border-dashed border-gray-300 rounded-xl justify-center items-center mr-3 bg-gray-50"
+                      className="w-24 h-24 border-2 border-dashed border-gray-300 justify-center items-center mr-3 bg-gray-50"
                     >
                       <Upload size={24} color="#9CA3AF" />
                       <Text className="text-xs text-gray-400 mt-1">

@@ -13,6 +13,7 @@ export const VIDEO_PREVIEW_STYLES = {
     height: 300,
     backgroundColor: '#000',
     borderRadius: 8,
+    borderCurve: "continuous",
     overflow: 'hidden' as const
   },
   videoWrapper: {
@@ -51,6 +52,7 @@ export const VIDEO_PREVIEW_STYLES = {
   playButton: {
     backgroundColor: 'rgba(255,255,255,0.8)',
     borderRadius: 50,
+    borderCurve: "continuous",
     padding: 15
   },
   durationBadge: {
@@ -59,7 +61,8 @@ export const VIDEO_PREVIEW_STYLES = {
     right: 8,
     backgroundColor: 'rgba(0,0,0,0.7)',
     padding: 4,
-    borderRadius: 4
+    borderRadius: 4,
+    borderCurve: "continuous",
   },
   durationText: {
     color: '#fff',
@@ -70,7 +73,8 @@ export const VIDEO_PREVIEW_STYLES = {
     backgroundColor: '#f8f9fa',
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    borderRadius: 8
+    borderRadius: 8,
+    borderCurve: "continuous",
   },
   errorText: {
     color: '#6c757d',

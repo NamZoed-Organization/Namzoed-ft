@@ -80,7 +80,8 @@ export default function TermsOfService({ onClose }: TermsOfServiceProps) {
             <Text className="text-3xl font-mblack text-white text-center mb-2">NamZoed</Text>
             <Text className="text-xl font-semibold text-white/90 text-center">Terms of Service</Text>
           </View>
-          <View className="bg-white/10 rounded-2xl p-4 mt-2">
+          <View
+            style={{ borderRadius: 16, borderCurve: "continuous" }} className="bg-white/10 p-4 mt-2">
             <Text className="text-sm text-white/90 text-center leading-5">
               Welcome to Bhutan's local commerce and services platform. Please read these terms carefully before using our services.
             </Text>
@@ -91,7 +92,8 @@ export default function TermsOfService({ onClose }: TermsOfServiceProps) {
         <View className="px-5 py-6">
 
           {/* Intro Alert */}
-          <View className="bg-amber-50 border-l-4 border-amber-500 rounded-r-xl p-4 mb-6 shadow-sm">
+          <View
+            style={{ borderTopRightRadius: 12, borderBottomRightRadius: 12, borderCurve: "continuous" }} className="bg-amber-50 border-l-4 border-amber-500 p-4 mb-6 shadow-sm">
             <View className="flex-row items-start">
               <AlertCircle size={20} color="#f59e0b" className="mt-0.5 mr-3" />
               <Text className="text-sm text-amber-900 leading-5 flex-1 font-medium">
@@ -102,9 +104,11 @@ export default function TermsOfService({ onClose }: TermsOfServiceProps) {
           </View>
 
           {/* Section 1 */}
-          <View className="bg-white rounded-2xl p-5 mb-4 shadow-sm border border-gray-100">
+          <View
+            style={{ borderRadius: 16, borderCurve: "continuous" }} className="bg-white p-5 mb-4 shadow-sm border border-gray-100">
             <View className="flex-row items-start mb-4">
-              <View className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary to-primary/80 items-center justify-center mr-4 shadow-md">
+              <View
+                style={{ borderRadius: 16, borderCurve: "continuous" }} className="w-12 h-12 bg-gradient-to-br from-primary to-primary/80 items-center justify-center mr-4 shadow-md">
                 <Shield size={24} color="#ffffff" />
               </View>
               <View className="flex-1">
@@ -121,9 +125,11 @@ export default function TermsOfService({ onClose }: TermsOfServiceProps) {
           </View>
 
           {/* Section 2 */}
-          <View className="bg-white rounded-2xl p-5 mb-4 shadow-sm border border-gray-100">
+          <View
+            style={{ borderRadius: 16, borderCurve: "continuous" }} className="bg-white p-5 mb-4 shadow-sm border border-gray-100">
             <View className="flex-row items-start mb-4">
-              <View className="w-12 h-12 rounded-2xl bg-gradient-to-br from-secondary to-secondary/80 items-center justify-center mr-4 shadow-md">
+              <View
+                style={{ borderRadius: 16, borderCurve: "continuous" }} className="w-12 h-12 bg-gradient-to-br from-secondary to-secondary/80 items-center justify-center mr-4 shadow-md">
                 <Store size={24} color="#094569" />
               </View>
               <View className="flex-1">
@@ -136,7 +142,8 @@ export default function TermsOfService({ onClose }: TermsOfServiceProps) {
                 NamZoed operates as a digital marketplace and directory service.
               </Text>
 
-              <View className="bg-green-50 rounded-xl p-4 border border-green-200">
+              <View
+                style={{ borderRadius: 12, borderCurve: "continuous" }} className="bg-green-50 p-4 border border-green-200">
                 <Text className="text-sm font-semibold text-green-900 mb-2">✓ Our Role:</Text>
                 <Text className="text-sm text-green-800 leading-5">
                   NamZoed's primary function is to provide a platform that connects Buyers (seeking products
@@ -145,7 +152,8 @@ export default function TermsOfService({ onClose }: TermsOfServiceProps) {
                 </Text>
               </View>
 
-              <View className="bg-red-50 rounded-xl p-4 border border-red-200">
+              <View
+                style={{ borderRadius: 12, borderCurve: "continuous" }} className="bg-red-50 p-4 border border-red-200">
                 <Text className="text-sm font-semibold text-red-900 mb-2">✗ Our Limitation:</Text>
                 <Text className="text-sm text-red-800 leading-5">
                   NamZoed is not a traditional retailer, auctioneer, or service provider. We do not hold
@@ -157,9 +165,11 @@ export default function TermsOfService({ onClose }: TermsOfServiceProps) {
           </View>
 
           {/* Section 3 */}
-          <View className="bg-white rounded-2xl p-5 mb-4 shadow-sm border border-gray-100">
+          <View
+            style={{ borderRadius: 16, borderCurve: "continuous" }} className="bg-white p-5 mb-4 shadow-sm border border-gray-100">
             <View className="flex-row items-start mb-4">
-              <View className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary to-primary/80 items-center justify-center mr-4 shadow-md">
+              <View
+                style={{ borderRadius: 16, borderCurve: "continuous" }} className="w-12 h-12 bg-gradient-to-br from-primary to-primary/80 items-center justify-center mr-4 shadow-md">
                 <Users size={24} color="#ffffff" />
               </View>
               <View className="flex-1">
@@ -193,9 +203,11 @@ export default function TermsOfService({ onClose }: TermsOfServiceProps) {
           </View>
 
           {/* Section 4 */}
-          <View className="bg-white rounded-2xl p-5 mb-4 shadow-sm border border-gray-100">
+          <View
+            style={{ borderRadius: 16, borderCurve: "continuous" }} className="bg-white p-5 mb-4 shadow-sm border border-gray-100">
             <View className="flex-row items-start mb-4">
-              <View className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 items-center justify-center mr-4 shadow-md">
+              <View
+                style={{ borderRadius: 16, borderCurve: "continuous" }} className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 items-center justify-center mr-4 shadow-md">
                 <BadgeCheck size={24} color="#ffffff" />
               </View>
               <View className="flex-1">
@@ -204,7 +216,8 @@ export default function TermsOfService({ onClose }: TermsOfServiceProps) {
               </View>
             </View>
             <View className="pl-16 space-y-3">
-              <View className="bg-gray-50 rounded-xl p-3 border border-gray-200">
+              <View
+                style={{ borderRadius: 12, borderCurve: "continuous" }} className="bg-gray-50 p-3 border border-gray-200">
                 <Text className="text-sm font-semibold text-gray-800 mb-1">4.1. Lawful Use</Text>
                 <Text className="text-sm text-gray-700 leading-5">
                   You agree to use the App only for lawful purposes. You must not list, purchase, or
@@ -212,14 +225,16 @@ export default function TermsOfService({ onClose }: TermsOfServiceProps) {
                   relevant jurisdiction.
                 </Text>
               </View>
-              <View className="bg-gray-50 rounded-xl p-3 border border-gray-200">
+              <View
+                style={{ borderRadius: 12, borderCurve: "continuous" }} className="bg-gray-50 p-3 border border-gray-200">
                 <Text className="text-sm font-semibold text-gray-800 mb-1">4.2. Respectful Conduct</Text>
                 <Text className="text-sm text-gray-700 leading-5">
                   All communications on the App (including chat and live streams) must be respectful, honest,
                   and professional. Harassment, abuse, discriminatory, or offensive language is strictly prohibited.
                 </Text>
               </View>
-              <View className="bg-gray-50 rounded-xl p-3 border border-gray-200">
+              <View
+                style={{ borderRadius: 12, borderCurve: "continuous" }} className="bg-gray-50 p-3 border border-gray-200">
                 <Text className="text-sm font-semibold text-gray-800 mb-1">4.3. No Fraud</Text>
                 <Text className="text-sm text-gray-700 leading-5">
                   You shall not manipulate the platform, pricing, listing descriptions, or reviews, or
@@ -230,9 +245,11 @@ export default function TermsOfService({ onClose }: TermsOfServiceProps) {
           </View>
 
           {/* Section 5 */}
-          <View className="bg-white rounded-2xl p-5 mb-4 shadow-sm border border-gray-100">
+          <View
+            style={{ borderRadius: 16, borderCurve: "continuous" }} className="bg-white p-5 mb-4 shadow-sm border border-gray-100">
             <View className="flex-row items-start mb-4">
-              <View className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-500 to-purple-600 items-center justify-center mr-4 shadow-md">
+              <View
+                style={{ borderRadius: 16, borderCurve: "continuous" }} className="w-12 h-12 bg-gradient-to-br from-purple-500 to-purple-600 items-center justify-center mr-4 shadow-md">
                 <ShieldCheck size={24} color="#ffffff" />
               </View>
               <View className="flex-1">
@@ -277,9 +294,11 @@ export default function TermsOfService({ onClose }: TermsOfServiceProps) {
           </View>
 
           {/* Section 6 */}
-          <View className="bg-white rounded-2xl p-5 mb-4 shadow-sm border border-gray-100">
+          <View
+            style={{ borderRadius: 16, borderCurve: "continuous" }} className="bg-white p-5 mb-4 shadow-sm border border-gray-100">
             <View className="flex-row items-start mb-4">
-              <View className="w-12 h-12 rounded-2xl bg-gradient-to-br from-green-500 to-green-600 items-center justify-center mr-4 shadow-md">
+              <View
+                style={{ borderRadius: 16, borderCurve: "continuous" }} className="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 items-center justify-center mr-4 shadow-md">
                 <CreditCard size={24} color="#ffffff" />
               </View>
               <View className="flex-1">
@@ -288,7 +307,8 @@ export default function TermsOfService({ onClose }: TermsOfServiceProps) {
               </View>
             </View>
             <View className="pl-16 space-y-3">
-              <View className="bg-blue-50 rounded-xl p-3 border border-blue-200">
+              <View
+                style={{ borderRadius: 12, borderCurve: "continuous" }} className="bg-blue-50 p-3 border border-blue-200">
                 <Text className="text-sm font-semibold text-blue-900 mb-1">6.1. Payment</Text>
                 <Text className="text-sm text-blue-800 leading-5">
                   NamZoed does not process the final payment for goods or services. Buyers and Sellers agree
@@ -296,7 +316,8 @@ export default function TermsOfService({ onClose }: TermsOfServiceProps) {
                   NamZoed assumes no responsibility for payment disputes, failure to pay, or fraud related to payment.
                 </Text>
               </View>
-              <View className="bg-blue-50 rounded-xl p-3 border border-blue-200">
+              <View
+                style={{ borderRadius: 12, borderCurve: "continuous" }} className="bg-blue-50 p-3 border border-blue-200">
                 <Text className="text-sm font-semibold text-blue-900 mb-1">6.2. Safe Exchange Points</Text>
                 <Text className="text-sm text-blue-800 leading-5">
                   NamZoed encourages the use of designated Office of NamZoed locations for safe, verifiable
@@ -304,7 +325,8 @@ export default function TermsOfService({ onClose }: TermsOfServiceProps) {
                   condition or quality, only for providing a supervised meeting space.
                 </Text>
               </View>
-              <View className="bg-blue-50 rounded-xl p-3 border border-blue-200">
+              <View
+                style={{ borderRadius: 12, borderCurve: "continuous" }} className="bg-blue-50 p-3 border border-blue-200">
                 <Text className="text-sm font-semibold text-blue-900 mb-1">6.3. Disputes</Text>
                 <Text className="text-sm text-blue-800 leading-5">
                   In the event of a dispute between a Buyer and Seller, both parties agree to first attempt
@@ -316,9 +338,11 @@ export default function TermsOfService({ onClose }: TermsOfServiceProps) {
           </View>
 
           {/* Section 7 */}
-          <View className="bg-white rounded-2xl p-5 mb-4 shadow-sm border border-gray-100">
+          <View
+            style={{ borderRadius: 16, borderCurve: "continuous" }} className="bg-white p-5 mb-4 shadow-sm border border-gray-100">
             <View className="flex-row items-start mb-4">
-              <View className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-600 items-center justify-center mr-4 shadow-md">
+              <View
+                style={{ borderRadius: 16, borderCurve: "continuous" }} className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-indigo-600 items-center justify-center mr-4 shadow-md">
                 <FileText size={24} color="#ffffff" />
               </View>
               <View className="flex-1">
@@ -347,9 +371,11 @@ export default function TermsOfService({ onClose }: TermsOfServiceProps) {
           </View>
 
           {/* Section 8 */}
-          <View className="bg-white rounded-2xl p-5 mb-4 shadow-sm border border-gray-100">
+          <View
+            style={{ borderRadius: 16, borderCurve: "continuous" }} className="bg-white p-5 mb-4 shadow-sm border border-gray-100">
             <View className="flex-row items-start mb-4">
-              <View className="w-12 h-12 rounded-2xl bg-gradient-to-br from-red-500 to-red-600 items-center justify-center mr-4 shadow-md">
+              <View
+                style={{ borderRadius: 16, borderCurve: "continuous" }} className="w-12 h-12 bg-gradient-to-br from-red-500 to-red-600 items-center justify-center mr-4 shadow-md">
                 <AlertCircle size={24} color="#ffffff" />
               </View>
               <View className="flex-1">
@@ -369,9 +395,11 @@ export default function TermsOfService({ onClose }: TermsOfServiceProps) {
           </View>
 
           {/* Section 9 */}
-          <View className="bg-white rounded-2xl p-5 mb-4 shadow-sm border border-gray-100">
+          <View
+            style={{ borderRadius: 16, borderCurve: "continuous" }} className="bg-white p-5 mb-4 shadow-sm border border-gray-100">
             <View className="flex-row items-start mb-4">
-              <View className="w-12 h-12 rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600 items-center justify-center mr-4 shadow-md">
+              <View
+                style={{ borderRadius: 16, borderCurve: "continuous" }} className="w-12 h-12 bg-gradient-to-br from-orange-500 to-orange-600 items-center justify-center mr-4 shadow-md">
                 <XCircle size={24} color="#ffffff" />
               </View>
               <View className="flex-1">
@@ -389,9 +417,11 @@ export default function TermsOfService({ onClose }: TermsOfServiceProps) {
           </View>
 
           {/* Section 10 */}
-          <View className="bg-white rounded-2xl p-5 mb-4 shadow-sm border border-gray-100">
+          <View
+            style={{ borderRadius: 16, borderCurve: "continuous" }} className="bg-white p-5 mb-4 shadow-sm border border-gray-100">
             <View className="flex-row items-start mb-4">
-              <View className="w-12 h-12 rounded-2xl bg-gradient-to-br from-teal-500 to-teal-600 items-center justify-center mr-4 shadow-md">
+              <View
+                style={{ borderRadius: 16, borderCurve: "continuous" }} className="w-12 h-12 bg-gradient-to-br from-teal-500 to-teal-600 items-center justify-center mr-4 shadow-md">
                 <Gavel size={24} color="#ffffff" />
               </View>
               <View className="flex-1">
@@ -408,9 +438,11 @@ export default function TermsOfService({ onClose }: TermsOfServiceProps) {
           </View>
 
           {/* Section 11 */}
-          <View className="bg-white rounded-2xl p-5 mb-4 shadow-sm border border-gray-100">
+          <View
+            style={{ borderRadius: 16, borderCurve: "continuous" }} className="bg-white p-5 mb-4 shadow-sm border border-gray-100">
             <View className="flex-row items-start mb-4">
-              <View className="w-12 h-12 rounded-2xl bg-gradient-to-br from-pink-500 to-pink-600 items-center justify-center mr-4 shadow-md">
+              <View
+                style={{ borderRadius: 16, borderCurve: "continuous" }} className="w-12 h-12 bg-gradient-to-br from-pink-500 to-pink-600 items-center justify-center mr-4 shadow-md">
                 <RefreshCw size={24} color="#ffffff" />
               </View>
               <View className="flex-1">
@@ -429,7 +461,8 @@ export default function TermsOfService({ onClose }: TermsOfServiceProps) {
           </View>
 
           {/* Footer */}
-          <View className="bg-primary rounded-3xl p-6 mt-4 shadow-lg">
+          <View
+            style={{ borderRadius: 24, borderCurve: "continuous" }} className="bg-primary p-6 mt-4 shadow-lg">
             <View className="items-center mb-3">
               <View className="w-16 h-16 bg-white/20 rounded-full items-center justify-center mb-3">
                 <BadgeCheck size={32} color="#ffffff" />

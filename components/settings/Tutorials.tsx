@@ -95,14 +95,12 @@ export default function Tutorials({ onClose }: TutorialsProps) {
           return (
             <View
               key={card.id}
-              className="mb-4 bg-white rounded-2xl overflow-hidden border border-gray-100"
-              style={{
-                shadowColor: '#000',
+              className="mb-4 bg-white overflow-hidden border border-gray-100"
+              style={{ shadowColor: '#000',
                 shadowOffset: { width: 0, height: 2 },
                 shadowOpacity: 0.06,
                 shadowRadius: 8,
-                elevation: 3,
-              }}
+                elevation: 3, borderRadius: 16, borderCurve: "continuous" }}
             >
               {/* Card header strip */}
               <View
@@ -114,6 +112,7 @@ export default function Tutorials({ onClose }: TutorialsProps) {
                     style={{
                       backgroundColor: 'rgba(255,255,255,0.2)',
                       borderRadius: 10,
+                      borderCurve: "continuous",
                       padding: 6,
                     }}
                   >
@@ -131,6 +130,7 @@ export default function Tutorials({ onClose }: TutorialsProps) {
                     style={{
                       backgroundColor: 'rgba(255,255,255,0.25)',
                       borderRadius: 12,
+                      borderCurve: "continuous",
                       paddingHorizontal: 8,
                       paddingVertical: 3,
                       flexDirection: 'row',
@@ -176,8 +176,8 @@ export default function Tutorials({ onClose }: TutorialsProps) {
                 <TouchableOpacity
                   onPress={() => handleViewTutorial(card.id)}
                   activeOpacity={0.8}
-                  className="flex-row items-center justify-center gap-2 py-3 rounded-xl"
-                  style={{ backgroundColor: card.accentColor }}
+                  className="flex-row items-center justify-center gap-2 py-3"
+                  style={{ backgroundColor: card.accentColor, borderRadius: 12, borderCurve: "continuous" }}
                 >
                   <PlayCircle size={16} color="#fff" />
                   <Text className="text-white font-semibold text-sm">

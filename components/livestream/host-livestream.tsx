@@ -130,15 +130,17 @@ function HostLivestreamUI({ callId }: { callId: string }) {
         )}
         {!live ? (
           <Pressable
+            style={{ borderRadius: 12, borderCurve: "continuous" }}
             onPress={startLive}
-            className="bg-red-600 px-4 py-2 rounded-xl"
+            className="bg-red-600 px-4 py-2"
           >
             <Text className="text-white font-bold">Go Live</Text>
           </Pressable>
         ) : (
           <Pressable
+            style={{ borderRadius: 12, borderCurve: "continuous" }}
             onPress={endLive}
-            className="bg-gray-800 px-4 py-2 rounded-xl"
+            className="bg-gray-800 px-4 py-2"
           >
             <Text className="text-white font-bold">End</Text>
           </Pressable>

@@ -1,4 +1,5 @@
 import { notifyPostCommented } from '@/services/notificationService';
+import { Post } from './postsService';
 import { supabase } from './supabase';
 
 export type CommentMediaType = 'image' | 'video' | 'audio';
@@ -643,4 +644,45 @@ export const toggleReplyLike = async (
     count: rows.length,
     creatorLiked: rows.some((r) => r.user_id === postOwnerId),
   };
+};
+
+// Get all posts a user has commented on, most recently commented first (one
+// entry per post, deduped) — feeds the "Comments" tab on their own profile.
+export const getUserCommentedPosts = async (userId: string): Promise<Post[]> => {
+  if (!userId) return [];
+  try {
+    const { data, error } = await supabase
+      .from('post_comments')
+      .select('post_id, created_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error || !data || data.length === 0) return [];
+
+    const orderedPostIds: string[] = [];
+    const seen = new Set<string>();
+    for (const row of data as any[]) {
+      if (!seen.has(row.post_id)) {
+        seen.add(row.post_id);
+        orderedPostIds.push(row.post_id);
+      }
+    }
+
+    const { data: posts, error: postsError } = await supabase
+      .from('posts')
+      .select('*, post_likes ( id )')
+      .in('id', orderedPostIds);
+
+    if (postsError || !posts) return [];
+
+    const postMap = new Map(
+      posts.map((p: any) => [p.id, { ...p, likes: p.post_likes?.length || 0 }]),
+    );
+    return orderedPostIds
+      .map((id) => postMap.get(id))
+      .filter((p): p is Post => p != null);
+  } catch (error) {
+    console.error('Error in getUserCommentedPosts:', error);
+    return [];
+  }
 };

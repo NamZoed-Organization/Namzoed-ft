@@ -1,10 +1,9 @@
 // app/categories.tsx
 
 import { LinearGradient } from "expo-linear-gradient";
-import { useAppRouter } from "@/utils/navigation";
 import { useScreenAnalytics } from "@/hooks/useAnalytics";
 import { Screens } from "@/lib/analyticsService";
-import { ChevronDown, ChevronUp, Plus } from "lucide-react-native";
+import { ChevronDown, ChevronUp } from "lucide-react-native";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     Animated,
@@ -22,11 +21,10 @@ import {
 } from "react-native";
 
 import AuthPromptModal from "@/components/modals/AuthPromptModal";
-import CreateProductModal from "@/components/modals/CreateProductModal";
 import ReportProductModal from "@/components/modals/ReportProductModal";
-import SearchBar from "@/components/modals/SearchBar";
 import GridCard, { GridCardSourceRect, gridCardHeight } from "@/components/GridCard";
 import MasonryGrid from "@/components/MasonryGrid";
+import ProductDetailOverlay from "@/components/ProductDetailOverlay";
 import TopNavbar from "@/components/ui/TopNavbar";
 import { useUser } from "@/contexts/UserContext";
 import { useTabBarScroll } from "@/contexts/TabBarScrollContext";
@@ -38,6 +36,7 @@ import {
 } from "@/lib/productsService";
 import { useRankedFeed } from "@/hooks/useRankedFeed";
 import { useTrendingSubcategories } from "@/hooks/useTrendingSubcategories";
+import { readCache, writeCache } from "@/lib/queryCache";
 import { supabase } from "@/lib/supabase";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -55,15 +54,15 @@ const DRAWER_HEADER_HEIGHT = 46;
 
 export default function CategoriesScreen() {
   const insets = useSafeAreaInsets();
-  const router = useAppRouter();
   const { currentUser } = useUser();
   const { trackTap } = useScreenAnalytics(Screens.CATEGORIES);
   const { onTabBarScroll } = useTabBarScroll();
 
-  const [searchQuery, setSearchQuery] = useState("");
-  const [isModalVisible, setModalVisible] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [reportTarget, setReportTarget] = useState<ProductWithUser | null>(null);
+  // Grid tile tapped — grows into ProductDetailOverlay instead of a plain
+  // router.push, same hero-grow treatment Home's post grid uses.
+  const [productOverlay, setProductOverlay] = useState<{ product: ProductWithUser; rect: GridCardSourceRect } | null>(null);
 
   // Category drawer — slides down from the horizontal scroll row itself
   // (not a bottom sheet), overlaying it full-width (its own opaque panel
@@ -125,7 +124,7 @@ export default function CategoriesScreen() {
 
   const currentUserId = currentUser?.id || "";
 
-  const { trending, loading: countsLoading } = useTrendingSubcategories();
+  const { loading: countsLoading } = useTrendingSubcategories();
   const categoryKeys = useMemo(() => Object.keys(categoryData), []);
 
   const subcategoriesForActive =
@@ -140,25 +139,26 @@ export default function CategoriesScreen() {
     [trackTap],
   );
 
-  // Rotating search-bar placeholder — trending subcategories, memoized so
-  // the effect driving the rotation (see SearchBar) doesn't restart on
-  // every render.
-  const trendingPlaceholders = useMemo(
-    () => trending.map((entry) => `Search "${entry.subcategoryName}"`),
-    [trending],
-  );
-
   // Product pool for whatever's currently selected — fetched once per
   // category+subcategory combo, ranked/randomized client-side (see
   // lib/feedRanking.ts), same pattern the old per-category detail screen used.
-  const fetchPool = useCallback(
-    () =>
-      fetchProductsForRanking(
-        activeCategory === "all" ? null : activeCategory,
-        activeSubcategory,
-      ),
-    [activeCategory, activeSubcategory],
+  const productsCacheKey = `products:pool:${activeCategory}:${activeSubcategory ?? "none"}`;
+  // Same stale-while-revalidate seed as the "For You" feed
+  // (hooks/useFeedInfiniteScroll.ts) — lets the grid paint instantly from
+  // this category's last-fetched pool instead of a full-page skeleton every
+  // time the category/subcategory changes, then silently refreshes.
+  const seedFromCache = useCallback(
+    async () => (await readCache<ProductWithUser[]>(productsCacheKey))?.data ?? null,
+    [productsCacheKey],
   );
+  const fetchPool = useCallback(async () => {
+    const fetched = await fetchProductsForRanking(
+      activeCategory === "all" ? null : activeCategory,
+      activeSubcategory,
+    );
+    writeCache(productsCacheKey, fetched);
+    return fetched;
+  }, [activeCategory, activeSubcategory, productsCacheKey]);
   const trackImpressions = useCallback(async (ids: string[]) => {
     const { error } = await supabase.rpc("increment_impressions_products", {
       ids,
@@ -172,18 +172,10 @@ export default function CategoriesScreen() {
     pageSize: PAGE_SIZE,
     boostSlotCount: BOOST_SLOT_COUNT,
     deps: [activeCategory, activeSubcategory],
+    seedFromCache,
   });
 
-  const displayedProducts = useMemo(() => {
-    if (!searchQuery.trim()) return ranked.items;
-    const query = searchQuery.toLowerCase();
-    return ranked.items.filter(
-      (p) =>
-        p.name.toLowerCase().includes(query) ||
-        (p.description && p.description.toLowerCase().includes(query)) ||
-        (p.tags && p.tags.some((tag) => tag.toLowerCase().includes(query))),
-    );
-  }, [ranked.items, searchQuery]);
+  const displayedProducts = ranked.items;
 
   const handleScroll = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -201,10 +193,10 @@ export default function CategoriesScreen() {
   );
 
   const handleProductPress = useCallback(
-    (productId: string, _rect: GridCardSourceRect) => {
-      router.push(`/(users)/product/${productId}` as any);
+    (product: ProductWithUser, _productId: string, rect: GridCardSourceRect) => {
+      setProductOverlay({ product, rect });
     },
-    [router],
+    [],
   );
 
   const handleReportProduct = useCallback(
@@ -219,23 +211,19 @@ export default function CategoriesScreen() {
     [currentUserId, displayedProducts],
   );
 
-  const handleCreatePress = () => {
-    if (!currentUserId) {
-      setShowAuthModal(true);
-      return;
-    }
-    setModalVisible(true);
-  };
-
   return (
     <View className="flex-1 bg-[#f8f9fa]">
+      {/* Fixed header — TopNavbar never scrolls away. */}
+      <View className="bg-[#f8f9fa]">
+        <TopNavbar />
+      </View>
+
       <ScrollView
         showsVerticalScrollIndicator={false}
         scrollEventThrottle={16}
         onScroll={handleScroll}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingBottom: 72 + insets.bottom }}
-        stickyHeaderIndices={[1]}
         refreshControl={
           <RefreshControl
             refreshing={ranked.refreshing}
@@ -245,62 +233,15 @@ export default function CategoriesScreen() {
           />
         }
       >
-        {/* Header — scrolls away normally */}
-        <View className="bg-[#f8f9fa]">
-          <TopNavbar />
-          <View className="px-4" style={{ paddingBottom: 8 }}>
-            <View className="flex-row items-center gap-3">
-              <View className="flex-1">
-                <SearchBar
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                  placeholder="Search products..."
-                  animatedPlaceholders={trendingPlaceholders}
-                />
-              </View>
-              <TouchableOpacity
-                onPress={handleCreatePress}
-                activeOpacity={0.85}
-                className="w-10 h-10 rounded-lg overflow-hidden"
-              >
-                <LinearGradient
-                  colors={["#094569", "#0a5a8a", "#0b6ba8"]}
-                  start={[0, 0]}
-                  end={[1, 1]}
-                  style={{
-                    width: "100%",
-                    height: "100%",
-                    justifyContent: "center",
-                    alignItems: "center",
-                  }}
-                >
-                  <Plus color="white" size={26} strokeWidth={2.5} />
-                </LinearGradient>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-
-        {/* Shopping — sticky text bar, "All" first, matches Home/Marketplace.
+        {/* Category row — "All" first, matches Home/Marketplace, scrolls away
+            with the rest of the content (only TopNavbar above stays fixed).
             The chevron beside the row opens a drawer that slides down from
             right where the horizontal scroll starts (not a bottom sheet),
             overlaying it — the drawer's own opaque panel covers the row
             rather than leaving a blank gap where it used to be — with every
             category at once, so a full scroll through this row isn't the
             only way to reach one further down the list. */}
-        <View className="bg-[#f8f9fa] px-4" style={{ paddingTop: 4, paddingBottom: 10 }}>
-          <Text
-            style={{
-              fontSize: 11,
-              fontWeight: "700",
-              color: "#9CA3AF",
-              letterSpacing: 0.4,
-              textTransform: "uppercase",
-              marginBottom: 8,
-            }}
-          >
-            Shopping
-          </Text>
+        <View className="bg-[#f8f9fa] px-4" style={{ paddingTop: 12, paddingBottom: 12 }}>
           <View style={{ flexDirection: "row", alignItems: "center" }}>
             <View ref={categoryRowRef} style={{ flex: 1, position: "relative" }}>
               <ScrollView
@@ -414,7 +355,7 @@ export default function CategoriesScreen() {
         )}
 
         {/* Products */}
-        <View style={{ paddingTop: 12 }}>
+        <View style={{ paddingTop: 4 }}>
           <MasonryGrid
             items={displayedProducts}
             loading={ranked.loading || countsLoading}
@@ -442,7 +383,7 @@ export default function CategoriesScreen() {
                     ).toLocaleString()}
                   </Text>
                 }
-                onPress={handleProductPress}
+                onPress={(id, rect) => handleProductPress(product, id, rect)}
                 onReport={handleReportProduct}
               />
             )}
@@ -450,16 +391,17 @@ export default function CategoriesScreen() {
         </View>
       </ScrollView>
 
-      <CreateProductModal
-        isVisible={isModalVisible}
-        onClose={() => setModalVisible(false)}
-        userId={currentUserId}
+      <ProductDetailOverlay
+        visible={!!productOverlay}
+        product={productOverlay?.product ?? null}
+        sourceRect={productOverlay?.rect ?? null}
+        onClose={() => setProductOverlay(null)}
       />
 
       <AuthPromptModal
         visible={showAuthModal}
         onClose={() => setShowAuthModal(false)}
-        message="Sign in to create a product listing"
+        message="Sign in to report this product"
       />
 
       {currentUser && reportTarget && (
@@ -525,6 +467,7 @@ export default function CategoriesScreen() {
                 backgroundColor: "#f8f9fa",
                 borderBottomLeftRadius: 20,
                 borderBottomRightRadius: 20,
+                borderCurve: "continuous",
                 shadowColor: "#000",
                 shadowOffset: { width: 0, height: 6 },
                 shadowOpacity: 0.12,
@@ -577,6 +520,7 @@ export default function CategoriesScreen() {
                           paddingHorizontal: 16,
                           paddingVertical: 10,
                           borderRadius: 20,
+                          borderCurve: "continuous",
                           // White (not the near-identical #F3F4F6 this was
                           // before) — needs contrast against the drawer's
                           // own #f8f9fa background now, not just the old

@@ -240,6 +240,13 @@ function scheduleFlush() {
  * });
  */
 export function trackInteraction(payload: TrackPayload): void {
+  // Dev and prod currently share one backend — skip writing real analytics
+  // rows while running a development build (Metro/dev client), so testing
+  // features doesn't pollute production interaction data. Real users only
+  // ever run production builds, where __DEV__ is false, so this never
+  // affects them.
+  if (__DEV__) return;
+
   const interaction: QueuedInteraction = {
     user_id: payload.userId ?? null,
     session_id: SESSION_ID,

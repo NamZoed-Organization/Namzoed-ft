@@ -441,6 +441,7 @@ export default function ChatAudioRecorder({
             alignItems: "center",
             backgroundColor: "#f0f9ff",
             borderRadius: 22,
+            borderCurve: "continuous",
             paddingHorizontal: 8,
             paddingVertical: 4,
             opacity: slideAnim,

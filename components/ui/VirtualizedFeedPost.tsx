@@ -16,22 +16,30 @@ const PostSkeleton = memo(({ height }: { height: number }) => (
     <View className="flex-row items-center p-4">
       <View className="w-10 h-10 rounded-full bg-gray-200 mr-3" />
       <View className="flex-1">
-        <View className="bg-gray-200 h-4 w-24 rounded mb-1" />
-        <View className="bg-gray-200 h-3 w-16 rounded" />
+        <View
+          style={{ borderRadius: 4, borderCurve: "continuous" }} className="bg-gray-200 h-4 w-24 mb-1" />
+        <View
+          style={{ borderRadius: 4, borderCurve: "continuous" }} className="bg-gray-200 h-3 w-16" />
       </View>
     </View>
     <View className="px-4">
-      <View className="bg-gray-200 h-4 w-full rounded mb-1" />
-      <View className="bg-gray-200 h-4 w-3/4 rounded mb-3" />
-      <View className="bg-gray-200 h-48 w-full rounded mb-3" />
+      <View
+        style={{ borderRadius: 4, borderCurve: "continuous" }} className="bg-gray-200 h-4 w-full mb-1" />
+      <View
+        style={{ borderRadius: 4, borderCurve: "continuous" }} className="bg-gray-200 h-4 w-3/4 mb-3" />
+      <View
+        style={{ borderRadius: 4, borderCurve: "continuous" }} className="bg-gray-200 h-48 w-full mb-3" />
     </View>
     <View className="border-t border-gray-200 px-4 py-4">
       <View className="flex-row items-center justify-between">
         <View className="flex-row items-center">
-          <View className="bg-gray-200 h-6 w-16 rounded mr-6" />
-          <View className="bg-gray-200 h-6 w-6 rounded" />
+          <View
+            style={{ borderRadius: 4, borderCurve: "continuous" }} className="bg-gray-200 h-6 w-16 mr-6" />
+          <View
+            style={{ borderRadius: 4, borderCurve: "continuous" }} className="bg-gray-200 h-6 w-6" />
         </View>
-        <View className="bg-gray-200 h-6 w-20 rounded" />
+        <View
+          style={{ borderRadius: 4, borderCurve: "continuous" }} className="bg-gray-200 h-6 w-20" />
       </View>
     </View>
   </View>

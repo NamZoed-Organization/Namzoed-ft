@@ -383,6 +383,7 @@ const styles = StyleSheet.create({
   overlayCard: {
     flex: 1,
     borderRadius: 14,
+    borderCurve: "continuous",
     overflow: "hidden",
     backgroundColor: "#111",
     borderWidth: 1.5,
@@ -416,6 +417,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "rgba(0,0,0,0.6)",
     borderRadius: 6,
+    borderCurve: "continuous",
     paddingHorizontal: 5,
     paddingVertical: 3,
     gap: 4,
@@ -424,6 +426,7 @@ const styles = StyleSheet.create({
     width: 5,
     height: 5,
     borderRadius: 3,
+    borderCurve: "continuous",
     backgroundColor: "#ef4444",
   },
   overlayLiveText: {
@@ -436,6 +439,7 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
+    borderCurve: "continuous",
     backgroundColor: "rgba(0,0,0,0.65)",
     justifyContent: "center",
     alignItems: "center",

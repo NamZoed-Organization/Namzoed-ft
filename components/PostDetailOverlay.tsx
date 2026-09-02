@@ -13,6 +13,23 @@
  * That swap is masked with a quick crossfade at the moment the growing
  * thumbnail reaches fullscreen, rather than pretending it isn't happening.
  *
+ * Driven entirely by Reanimated shared values/worklets (not React Native's
+ * legacy Animated API) — same reasoning as ContextDrop itself (see that
+ * file's header comment): every value here, including the backdrop, now
+ * runs on the UI thread with no native-driver restrictions to work around,
+ * so the whole grow/crossfade/shrink stays smooth regardless of what the JS
+ * thread is doing while FeedPost mounts or unmounts.
+ *
+ * The hero grows via a scaleX/scaleY transform (see heroStyle below), which
+ * does visibly stretch the image for the brief moment its aspect ratio
+ * doesn't match the grid cell it grew from — animating its real
+ * top/left/width/height instead (so contentFit="cover" could re-crop
+ * correctly every frame) was tried, but costs far more than it fixes: an
+ * Image's native view has to redo its crop/paint on every single layout
+ * change, and it can't keep up at animation framerates, producing dropped
+ * frames that flash to black. A transform is pure UI-thread compositing —
+ * no such cost — so the mild stretch stays the lesser evil.
+ *
  * The edge-swipe-back gesture itself (including the "drop on the dome to
  * message the author" behavior) is handled by ContextDrop — this component
  * only supplies what's post-specific: the hero grow/shrink, view tracking,
@@ -36,7 +53,17 @@ import { Image } from "expo-image";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { MessageCircle } from "lucide-react-native";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, BackHandler, Dimensions, Easing, Platform, StyleSheet, View } from "react-native";
+import { BackHandler, Dimensions, Platform, StyleSheet, View } from "react-native";
+import Animated, {
+  Easing,
+  Extrapolation,
+  interpolate,
+  runOnJS,
+  useAnimatedStyle,
+  useDerivedValue,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const PRIMARY = "#094569";
@@ -60,7 +87,16 @@ type Phase = "opening" | "open" | "closing";
 
 const { width: WINDOW_WIDTH, height: WINDOW_HEIGHT } = Dimensions.get("window");
 
-function HeroFrame({ uri }: { uri: string }) {
+const GROW_TIMING = { duration: 320, easing: Easing.out(Easing.cubic) };
+const SHRINK_TIMING = { duration: 260, easing: Easing.out(Easing.cubic) };
+const CROSSFADE_TIMING = { duration: 150 };
+// Matches GridCard/PostGridCard's own thumbnail corner radius — the hero
+// eases from that down to 0 as it grows, so it reads as the tapped card
+// itself flattening out into fullscreen rather than a plain rectangle
+// popping in from nowhere.
+const GRID_CARD_RADIUS = 4;
+
+function HeroFrame({ uri, blurhash }: { uri: string; blurhash?: string | null }) {
   const isVideo = isVideoUrl(uri);
   const player = useVideoPlayer({ uri, useCaching: true }, (p) => {
     p.muted = true;
@@ -69,7 +105,24 @@ function HeroFrame({ uri }: { uri: string }) {
   if (isVideo) {
     return <VideoView player={player} style={{ width: "100%", height: "100%" }} nativeControls={false} contentFit="cover" />;
   }
-  return <Image source={{ uri }} style={{ width: "100%", height: "100%" }} contentFit="cover" />;
+  // Same uri the grid thumbnail (ProgressiveImage) just painted a frame ago —
+  // matching its cachePolicy/recyclingKey means this fresh <Image> mount hits
+  // the already-warm memory cache instead of re-decoding, and the blurhash
+  // placeholder covers the gap if it somehow doesn't. transition={0} because
+  // heroOpacity/contentOpacity above already drive the crossfade; letting
+  // expo-image fade in on top of that read as the image "reloading" mid-grow.
+  return (
+    <Image
+      source={{ uri }}
+      placeholder={blurhash ? { blurhash } : undefined}
+      placeholderContentFit="cover"
+      style={{ width: "100%", height: "100%" }}
+      contentFit="cover"
+      cachePolicy="memory-disk"
+      recyclingKey={uri}
+      transition={0}
+    />
+  );
 }
 
 export default function PostDetailOverlay({ visible, onClose, post, sourceRect }: PostDetailOverlayProps) {
@@ -94,45 +147,66 @@ export default function PostDetailOverlay({ visible, onClose, post, sourceRect }
   const phaseRef = useRef<Phase>("opening");
   const closingRef = useRef(false);
 
-  const progress = useRef(new Animated.Value(0)).current; // 0 = rect, 1 = fullscreen (hero bounds)
-  const heroOpacity = useRef(new Animated.Value(1)).current;
-  const contentOpacity = useRef(new Animated.Value(0)).current;
+  const progress = useSharedValue(0); // 0 = rect, 1 = fullscreen (hero bounds) — drives the backdrop
+  const heroProgress = useSharedValue(0); // drives the hero's own grow/shrink size
+  const heroOpacity = useSharedValue(1);
+  const contentOpacity = useSharedValue(0);
+  // Multiplies into the opaque backing's opacity below (see that view for
+  // why the backing exists at all). heroProgress alone keeps the backing
+  // opaque for the ENTIRE "open" phase, not just the brief crossfade right
+  // after opening/before closing — so once ContextDrop starts shrinking
+  // FeedPost's content inward, the backing (a static rect pinned to the
+  // media bounds, never itself shrunk or dragged) shows through the gap as
+  // a black box sized to the image. Fading this to 0 once the opening
+  // crossfade settles removes the backing exactly while it'd otherwise be
+  // exposed by a drag, and setting it back to 1 the instant commitClose
+  // starts restores it in time for the closing crossfade it actually exists
+  // to protect.
+  const backingOpacity = useSharedValue(1);
   // Shared with ContextDrop (see dragX prop there) — the white backdrop
   // below fades out as this grows, so the real Home screen underneath
   // shows through while dragging instead of a flat white/grey fill.
-  const dragX = useRef(new Animated.Value(0)).current;
+  const dragX = useSharedValue(0);
 
-  const setPhaseBoth = (p: Phase) => {
+  const setPhaseBoth = useCallback((p: Phase) => {
     phaseRef.current = p;
     setPhase(p);
-  };
+  }, []);
 
   useEffect(() => {
     if (!visible) return;
     closingRef.current = false;
-    progress.setValue(0);
-    heroOpacity.setValue(1);
-    contentOpacity.setValue(0);
-    dragX.setValue(0);
+    progress.value = 0;
+    heroProgress.value = 0;
+    heroOpacity.value = 1;
+    contentOpacity.value = 0;
+    backingOpacity.value = 1;
+    dragX.value = 0;
     setPhaseBoth("opening");
     // A real navigated screen would sit outside the tab group and hide the
     // floating nav automatically — FloatingTabBar renders in its own layer
     // (via the Tabs navigator), so it needs to be told explicitly.
     setTabBarHidden(true);
 
-    Animated.timing(progress, {
-      toValue: 1,
-      duration: 320,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: false,
-    }).start(({ finished }) => {
+    progress.value = withTiming(1, GROW_TIMING);
+    // The content crossfade only starts once the grow has ACTUALLY finished
+    // settling (not overlapped with its tail) — content fading in while the
+    // hero is still visibly resizing made any residual size mismatch (and
+    // the brief window before its first frame paints) much more noticeable.
+    heroProgress.value = withTiming(1, GROW_TIMING, (finished) => {
+      "worklet";
       if (!finished) return;
-      setPhaseBoth("open");
-      Animated.parallel([
-        Animated.timing(heroOpacity, { toValue: 0, duration: 150, useNativeDriver: false }),
-        Animated.timing(contentOpacity, { toValue: 1, duration: 150, useNativeDriver: false }),
-      ]).start();
+      runOnJS(setPhaseBoth)("open");
+      heroOpacity.value = withTiming(0, CROSSFADE_TIMING);
+      contentOpacity.value = withTiming(1, CROSSFADE_TIMING, (finished2) => {
+        "worklet";
+        // Content now fully covers the backing — drop it so a later
+        // ContextDrop drag doesn't reveal it as a black box behind the
+        // shrinking content (restored to 1 again in commitClose).
+        if (finished2) backingOpacity.value = withTiming(0, CROSSFADE_TIMING);
+      });
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
   // View tracking parity with /post/[id] — fires once per open, skips self-views.
@@ -145,32 +219,33 @@ export default function PostDetailOverlay({ visible, onClose, post, sourceRect }
     if (closingRef.current) return;
     closingRef.current = true;
     setTabBarHidden(false);
+    // Back to opaque in time for the closing crossfade below, which relies
+    // on the backing the same way the opening one does (see backingOpacity's
+    // declaration above).
+    backingOpacity.value = 1;
 
     const shrink = () => {
       setPhaseBoth("closing");
-      Animated.timing(progress, {
-        toValue: 0,
-        duration: 260,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: false,
-      }).start(({ finished }) => {
+      progress.value = withTiming(0, SHRINK_TIMING);
+      heroProgress.value = withTiming(0, SHRINK_TIMING, (finished) => {
+        "worklet";
         if (finished) {
-          onClose();
-          after?.();
+          runOnJS(onClose)();
+          if (after) runOnJS(after)();
         }
       });
     };
 
     if (phaseRef.current === "open") {
-      Animated.parallel([
-        Animated.timing(contentOpacity, { toValue: 0, duration: 150, useNativeDriver: false }),
-        Animated.timing(heroOpacity, { toValue: 1, duration: 150, useNativeDriver: false }),
-      ]).start(({ finished }) => {
-        if (finished) shrink();
+      contentOpacity.value = withTiming(0, CROSSFADE_TIMING);
+      heroOpacity.value = withTiming(1, CROSSFADE_TIMING, (finished) => {
+        "worklet";
+        if (finished) runOnJS(shrink)();
       });
     } else {
       shrink();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onClose, setTabBarHidden]);
 
   // Close automatically if this post gets deleted out from under the overlay.
@@ -227,15 +302,48 @@ export default function PostDetailOverlay({ visible, onClose, post, sourceRect }
     };
   }, [canMessageAuthor, handleContactAuthor]);
 
-  if (!visible) return null;
-
   const heroUri = post?.images?.[0];
+
+  // FLIP-style transform math for the hero: the Animated.View below is laid
+  // out ONCE at its final (fullscreen-hero) bounds and never re-laid-out —
+  // heroProgress instead scales/translates it to visually match the source
+  // rect at 0 and settle to identity (the final bounds) at 1. A real
+  // top/left/width/height animation was tried instead (so contentFit=cover
+  // could re-crop correctly every frame instead of the non-uniform scale
+  // stretching the image) but made things measurably worse: resizing an
+  // Image's actual layout forces its native view to redo cropping/painting
+  // every single frame, and it can't keep up — producing exactly the
+  // dropped-to-black flashes reported here. A transform is a pure
+  // UI-thread compositing operation with no such cost, so it stays on
+  // transform despite the (much milder, brief) stretch that comes with it.
+  const heroScaleX = rect.width / WINDOW_WIDTH;
+  const heroScaleY = rect.height / mediaHeight;
+  const heroTranslateX = rect.x + rect.width / 2 - WINDOW_WIDTH / 2;
+  const heroTranslateY = rect.y + rect.height / 2 - (mediaTop + mediaHeight / 2);
+
   // Fades the white backdrop down toward mostly-transparent as ContextDrop's
   // drag grows, so the real Home screen shows through behind the shrinking/
   // dragging content instead of staying hidden under a flat white fill —
   // ContextDrop's own grey scrim then dims whatever's revealed underneath.
-  const dragReveal = dragX.interpolate({ inputRange: [0, WINDOW_WIDTH * 0.4], outputRange: [1, 0.08], extrapolate: "clamp" });
-  const backdropOpacity = Animated.multiply(progress, dragReveal);
+  const dragReveal = useDerivedValue(() =>
+    interpolate(dragX.value, [0, WINDOW_WIDTH * 0.4], [1, 0.08], Extrapolation.CLAMP),
+  );
+  const backdropStyle = useAnimatedStyle(() => ({ opacity: progress.value * dragReveal.value }));
+  const backingStyle = useAnimatedStyle(() => ({ opacity: heroProgress.value * backingOpacity.value }));
+  const heroStyle = useAnimatedStyle(() => ({
+    opacity: heroOpacity.value,
+    borderRadius: interpolate(heroProgress.value, [0, 1], [GRID_CARD_RADIUS, 0], Extrapolation.CLAMP),
+    borderCurve: "continuous",
+    transform: [
+      { translateX: interpolate(heroProgress.value, [0, 1], [heroTranslateX, 0]) },
+      { translateY: interpolate(heroProgress.value, [0, 1], [heroTranslateY, 0]) },
+      { scaleX: interpolate(heroProgress.value, [0, 1], [heroScaleX, 1]) },
+      { scaleY: interpolate(heroProgress.value, [0, 1], [heroScaleY, 1]) },
+    ],
+  }));
+  const contentWrapperStyle = useAnimatedStyle(() => ({ opacity: contentOpacity.value }));
+
+  if (!visible) return null;
 
   return (
     // zIndex/elevation is only meaningful among siblings sharing this same
@@ -243,29 +351,58 @@ export default function PostDetailOverlay({ visible, onClose, post, sourceRect }
     // layer entirely (see setTabBarHidden above), so this doesn't need to
     // out-stack it, just the screen's own content.
     <View style={[StyleSheet.absoluteFill, { zIndex: 200, elevation: 200 }]}>
-      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: "#fff", opacity: backdropOpacity }]} />
+      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: "#fff" }, backdropStyle]} />
+
+      {/* Opaque backing pinned to the settled media rect, directly behind the
+          hero/content swap. Driven by heroProgress (not heroOpacity) so it
+          stays fully opaque through BOTH crossfade windows (open: right
+          after grow finishes; close: right before shrink starts) — exactly
+          when heroOpacity/contentOpacity are mid-fade and whichever image
+          layer is coming in hasn't necessarily uploaded its first texture
+          yet. Without this, that single missed frame let the white backdrop
+          above show through right at the image's rect, on both platforms
+          and both image/video posts, since decoding/uploading a photo or
+          video frame is slower than the plain views crossfading around it. */}
+      {heroUri && (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            {
+              position: "absolute",
+              top: mediaTop,
+              left: 0,
+              width: WINDOW_WIDTH,
+              height: mediaHeight,
+              backgroundColor: "#000",
+            },
+            backingStyle,
+          ]}
+        />
+      )}
 
       {heroUri && (
         <Animated.View
           pointerEvents="none"
-          style={{
-            position: "absolute",
-            top: progress.interpolate({ inputRange: [0, 1], outputRange: [rect.y, mediaTop] }),
-            left: progress.interpolate({ inputRange: [0, 1], outputRange: [rect.x, 0] }),
-            width: progress.interpolate({ inputRange: [0, 1], outputRange: [rect.width, WINDOW_WIDTH] }),
-            height: progress.interpolate({ inputRange: [0, 1], outputRange: [rect.height, mediaHeight] }),
-            overflow: "hidden",
-            opacity: heroOpacity,
-            backgroundColor: "#000",
-          }}
+          style={[
+            {
+              position: "absolute",
+              top: mediaTop,
+              left: 0,
+              width: WINDOW_WIDTH,
+              height: mediaHeight,
+              overflow: "hidden",
+              backgroundColor: "#000",
+            },
+            heroStyle,
+          ]}
         >
-          <HeroFrame uri={heroUri} />
+          <HeroFrame uri={heroUri} blurhash={post?.blurHashes?.[0]} />
         </Animated.View>
       )}
 
       <Animated.View
         pointerEvents={phase === "open" ? "auto" : "none"}
-        style={[StyleSheet.absoluteFill, { opacity: contentOpacity }]}
+        style={[StyleSheet.absoluteFill, contentWrapperStyle]}
       >
         <ContextDrop enabled={phase === "open"} onDismiss={commitClose} target={contactAuthorTarget} dragX={dragX}>
           {post && (

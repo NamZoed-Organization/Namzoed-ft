@@ -241,6 +241,7 @@ function LuxuryBadge({ tier, s, Mark }: {
         start={{ x: 0, y: 0 }} end={{ x: 1, y: 0.6 }}
         style={{
           borderRadius: s.borderRadius - 0.5,
+          borderCurve: "continuous",
           paddingHorizontal: s.paddingH,
           paddingVertical: s.paddingV,
           overflow: 'hidden',

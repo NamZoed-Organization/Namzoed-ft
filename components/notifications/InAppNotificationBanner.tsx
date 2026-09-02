@@ -197,6 +197,7 @@ export default function InAppNotificationBanner() {
       <Animated.View
         style={{
           borderRadius: 22,
+          borderCurve: "continuous",
           overflow: "hidden",
           // Fallback shadow
           shadowColor: "#000",
@@ -213,6 +214,7 @@ export default function InAppNotificationBanner() {
           experimentalBlurMethod={Platform.OS === 'android' ? 'dimezisBlurView' : undefined}
           style={{
             borderRadius: 22,
+            borderCurve: "continuous",
             overflow: "hidden",
             borderWidth: 0.5,
             borderColor: "rgba(255,255,255,0.15)",

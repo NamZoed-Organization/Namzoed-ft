@@ -213,12 +213,10 @@ export default function ReportPostModal({
         >
           <Pressable onPress={(e) => e.stopPropagation()}>
             <Animated.View
-              className="bg-white rounded-t-3xl overflow-hidden shadow-xl w-full"
-              style={{
-                transform: [{
+              className="bg-white overflow-hidden shadow-xl w-full"
+              style={{ transform: [{
                   translateY: Animated.add(panY, keyboardOffset)
-                }],
-              }}
+                }], borderTopLeftRadius: 24, borderTopRightRadius: 24, borderCurve: "continuous" }}
             >
               {/* Drag Bar */}
               <View
@@ -291,8 +289,8 @@ export default function ReportPostModal({
                   multiline
                   numberOfLines={4}
                   maxLength={500}
-                  className="bg-white border border-gray-300 rounded-2xl p-4 text-gray-900 font-regular text-base min-h-[120px]"
-                  style={{ textAlignVertical: 'top' }}
+                  className="bg-white border border-gray-300 p-4 text-gray-900 font-regular text-base min-h-[120px]"
+                  style={{ textAlignVertical: 'top', borderRadius: 16, borderCurve: "continuous" }}
                 />
                 <Text className="text-xs text-gray-500 mt-2 text-right">
                   {details.length}/500

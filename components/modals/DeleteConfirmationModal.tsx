@@ -51,7 +51,8 @@ export default function DeleteConfirmationModal({
       activeOpacity={1}
     >
       <Pressable onPress={(e) => e.stopPropagation()}>
-        <View className="bg-white rounded-t-3xl">
+        <View
+          style={{ borderTopLeftRadius: 24, borderTopRightRadius: 24, borderCurve: "continuous" }} className="bg-white">
           {/* Header */}
           <View className="p-6 border-b border-gray-200">
             <View className="flex-row items-center mb-3">
@@ -64,7 +65,8 @@ export default function DeleteConfirmationModal({
               Are you sure you want to delete this post? This action cannot be undone.
             </Text>
             {postContent && (
-              <View className="mt-3 p-3 bg-gray-50 rounded-lg">
+              <View
+                style={{ borderRadius: 8, borderCurve: "continuous" }} className="mt-3 p-3 bg-gray-50">
                 <Text className="text-sm text-gray-700 italic">
                   "{truncatedContent}"
                 </Text>
@@ -75,7 +77,8 @@ export default function DeleteConfirmationModal({
           {/* Buttons */}
           <View className="p-4">
             <TouchableOpacity
-              className="bg-red-500 py-4 px-4 rounded-xl flex-row items-center justify-center mb-3"
+              style={{ borderRadius: 12, borderCurve: "continuous" }}
+              className="bg-red-500 py-4 px-4 flex-row items-center justify-center mb-3"
               onPress={handleConfirm}
             >
               <Trash2 size={20} color="#FFFFFF" />

@@ -28,9 +28,10 @@ export default function AuthPromptModal({
         className="flex-1 bg-black/50 justify-center items-center px-6"
       >
         <TouchableOpacity
+          style={{ borderRadius: 16, borderCurve: "continuous" }}
           activeOpacity={1}
           onPress={() => {}}
-          className="bg-white rounded-2xl w-full px-6 py-8 items-center"
+          className="bg-white w-full px-6 py-8 items-center"
         >
           <Text className="text-xl font-mbold text-gray-900 mb-2 text-center">
             Account Required

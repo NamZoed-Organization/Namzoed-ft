@@ -387,10 +387,8 @@ export default function MarketplacePostOverlay({
 
         {/* --- MAIN SHEET --- */}
         <Animated.View
-          className="bg-white rounded-t-3xl overflow-hidden shadow-xl w-full h-[90%]"
-          style={{
-            transform: [{ translateY: panY }],
-          }}
+          className="bg-white overflow-hidden shadow-xl w-full h-[90%]"
+          style={{ transform: [{ translateY: panY }], borderTopLeftRadius: 24, borderTopRightRadius: 24, borderCurve: "continuous" }}
         >
           {/* --- DRAG BAR AREA (ALWAYS ON TOP) --- */}
           <View
@@ -489,7 +487,8 @@ export default function MarketplacePostOverlay({
                 {/* Selected Category Display */}
                 <View className="items-center py-4">
                   {selectedCategory ? (
-                    <View className="bg-gray-50 px-6 py-3 rounded-lg">
+                    <View
+                      style={{ borderRadius: 8, borderCurve: "continuous" }} className="bg-gray-50 px-6 py-3">
                       <Text className="text-base font-msemibold text-gray-900">
                         Selected: {CATEGORY_LABELS[selectedCategory]}
                       </Text>
@@ -511,11 +510,12 @@ export default function MarketplacePostOverlay({
                       Title <Text className="text-red-500">*</Text>
                     </Text>
                     <TextInput
+                      style={{ borderRadius: 8, borderCurve: "continuous" }}
                       value={title}
                       onChangeText={setTitle}
                       placeholder="Enter title (max 100 characters)"
                       maxLength={100}
-                      className="bg-white border border-gray-200 rounded-lg px-4 py-3 text-base font-regular"
+                      className="bg-white border border-gray-200 px-4 py-3 text-base font-regular"
                     />
                     <Text className="text-xs text-gray-500 mt-1">
                       {title.length}/100
@@ -533,6 +533,7 @@ export default function MarketplacePostOverlay({
                           <Text className="text-red-500">*</Text>
                         </Text>
                         <TextInput
+                          style={{ borderRadius: 8, borderCurve: "continuous" }}
                           value={jobDescription}
                           onChangeText={setJobDescription}
                           placeholder="Describe the role and what makes it unique"
@@ -540,7 +541,7 @@ export default function MarketplacePostOverlay({
                           multiline
                           numberOfLines={4}
                           textAlignVertical="top"
-                          className="bg-white border border-gray-200 rounded-lg px-4 py-3 text-base font-regular min-h-[100px]"
+                          className="bg-white border border-gray-200 px-4 py-3 text-base font-regular min-h-[100px]"
                         />
                         <Text className="text-xs text-gray-500 mt-1">
                           {jobDescription.length}/500
@@ -556,6 +557,7 @@ export default function MarketplacePostOverlay({
                           </Text>
                         </Text>
                         <TextInput
+                          style={{ borderRadius: 8, borderCurve: "continuous" }}
                           value={jobRequirements}
                           onChangeText={setJobRequirements}
                           placeholder="List required qualifications and skills"
@@ -563,7 +565,7 @@ export default function MarketplacePostOverlay({
                           multiline
                           numberOfLines={4}
                           textAlignVertical="top"
-                          className="bg-white border border-gray-200 rounded-lg px-4 py-3 text-base font-regular min-h-[100px]"
+                          className="bg-white border border-gray-200 px-4 py-3 text-base font-regular min-h-[100px]"
                         />
                         <Text className="text-xs text-gray-500 mt-1">
                           {jobRequirements.length}/500
@@ -579,6 +581,7 @@ export default function MarketplacePostOverlay({
                           </Text>
                         </Text>
                         <TextInput
+                          style={{ borderRadius: 8, borderCurve: "continuous" }}
                           value={jobResponsibilities}
                           onChangeText={setJobResponsibilities}
                           placeholder="List key responsibilities and duties"
@@ -586,7 +589,7 @@ export default function MarketplacePostOverlay({
                           multiline
                           numberOfLines={4}
                           textAlignVertical="top"
-                          className="bg-white border border-gray-200 rounded-lg px-4 py-3 text-base font-regular min-h-[100px]"
+                          className="bg-white border border-gray-200 px-4 py-3 text-base font-regular min-h-[100px]"
                         />
                         <Text className="text-xs text-gray-500 mt-1">
                           {jobResponsibilities.length}/500
@@ -600,6 +603,7 @@ export default function MarketplacePostOverlay({
                         Description <Text className="text-red-500">*</Text>
                       </Text>
                       <TextInput
+                        style={{ borderRadius: 8, borderCurve: "continuous" }}
                         value={description}
                         onChangeText={setDescription}
                         placeholder="Enter description (max 500 characters)"
@@ -607,7 +611,7 @@ export default function MarketplacePostOverlay({
                         multiline
                         numberOfLines={4}
                         textAlignVertical="top"
-                        className="bg-white border border-gray-200 rounded-lg px-4 py-3 text-base font-regular min-h-[100px]"
+                        className="bg-white border border-gray-200 px-4 py-3 text-base font-regular min-h-[100px]"
                       />
                       <Text className="text-xs text-gray-500 mt-1">
                         {description.length}/500
@@ -635,6 +639,7 @@ export default function MarketplacePostOverlay({
                         )}
                       </Text>
                       <TextInput
+                        style={{ borderRadius: 8, borderCurve: "continuous" }}
                         value={price}
                         onChangeText={setPrice}
                         placeholder={
@@ -643,7 +648,7 @@ export default function MarketplacePostOverlay({
                             : "Enter price"
                         }
                         keyboardType="numeric"
-                        className="bg-white border border-gray-200 rounded-lg px-4 py-3 text-base font-regular"
+                        className="bg-white border border-gray-200 px-4 py-3 text-base font-regular"
                       />
                     </View>
                   )}
@@ -654,7 +659,8 @@ export default function MarketplacePostOverlay({
                       Location (Dzongkhag){" "}
                       <Text className="text-gray-400 text-xs">(Optional)</Text>
                     </Text>
-                    <View className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                    <View
+                      style={{ borderRadius: 8, borderCurve: "continuous" }} className="bg-white border border-gray-200 overflow-hidden">
                       <Picker
                         selectedValue={dzongkhag}
                         onValueChange={(itemValue) => setDzongkhag(itemValue)}
@@ -679,10 +685,11 @@ export default function MarketplacePostOverlay({
                       <Text className="text-gray-400 text-xs">(Optional)</Text>
                     </Text>
                     <TextInput
+                      style={{ borderRadius: 8, borderCurve: "continuous" }}
                       value={tags}
                       onChangeText={setTags}
                       placeholder="Add tags (separated by commas)"
-                      className="bg-white border border-gray-200 rounded-lg px-4 py-3 text-base font-regular"
+                      className="bg-white border border-gray-200 px-4 py-3 text-base font-regular"
                     />
                     <Text className="text-xs text-gray-500 mt-1">
                       Example: furniture, affordable, like-new
@@ -700,13 +707,15 @@ export default function MarketplacePostOverlay({
                       {selectedImages.map((uri, index) => (
                         <View key={index} className="relative w-20 h-20">
                           <Image
+                            style={{ borderRadius: 8 }}
                             source={{ uri }}
-                            className="w-full h-full rounded-lg"
+                            className="w-full h-full"
                           />
                           {/* Optional crop/edit button */}
                           <TouchableOpacity
+                            style={{ borderTopLeftRadius: 8, borderCurve: "continuous" }}
                             onPress={() => handleEditImage(index)}
-                            className="absolute bottom-0 right-0 bg-black/60 rounded-tl-lg px-1.5 py-1"
+                            className="absolute bottom-0 right-0 bg-black/60 px-1.5 py-1"
                           >
                             <Crop size={12} color="white" />
                           </TouchableOpacity>
@@ -722,8 +731,9 @@ export default function MarketplacePostOverlay({
                       {/* Add Image Button */}
                       {selectedImages.length < 5 && (
                         <TouchableOpacity
+                          style={{ borderRadius: 8, borderCurve: "continuous" }}
                           onPress={handleAddImage}
-                          className="w-20 h-20 bg-gray-100 rounded-lg items-center justify-center border-2 border-dashed border-gray-300"
+                          className="w-20 h-20 bg-gray-100 items-center justify-center border-2 border-dashed border-gray-300"
                         >
                           <Camera size={24} color="#9CA3AF" />
                         </TouchableOpacity>

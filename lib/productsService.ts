@@ -24,6 +24,10 @@ export interface Product {
   current_price?: number;            // Auto-calculated price with discount applied
   discount_ends_at?: string;         // Timestamp when discount expires
   isVerified?: boolean;
+  // false/omitted (default) = shows on the seller's main profile Products
+  // tab; true = shows on their Work profile's product list instead. See
+  // supabase/migrations/20260902120000_add_work_profile_product_flag.sql.
+  is_work_listing?: boolean;
   impressions_shown?: number;
   last_shown_at?: string | null;
   boost_started_at?: string | null;
@@ -99,12 +103,25 @@ export const fetchProductById = async (productId: string): Promise<ProductWithUs
 // Fetch products by user ID
 // Uses products_with_discounts view for real-time discount calculations
 // Note: Expired discounts are automatically cleaned up by database cron job every minute
-export const fetchUserProducts = async (userId: string) => {
-  const { data, error } = await supabase
+//
+// `options.isWorkListing` filters by the main/work-profile split (see
+// Product.is_work_listing) — omit it to get everything regardless of where
+// it's displayed (e.g. for post/story product-tagging pickers, which aren't
+// scoped to either profile).
+export const fetchUserProducts = async (
+  userId: string,
+  options?: { isWorkListing?: boolean },
+) => {
+  let query = supabase
     .from('products_with_discounts')  // Query the view for discount fields
     .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false });
+    .eq('user_id', userId);
+
+  if (options?.isWorkListing !== undefined) {
+    query = query.eq('is_work_listing', options.isWorkListing);
+  }
+
+  const { data, error } = await query.order('created_at', { ascending: false });
 
   if (error) {
     console.error('Error fetching user products:', error);
@@ -203,6 +220,9 @@ export const createProduct = async (productData: {
   tags: string[];
   images: string[];
   userId: string;
+  // true = list under the seller's Work profile instead of their main one
+  // (see Product.is_work_listing). Defaults to false when omitted.
+  isWorkListing?: boolean;
 }) => {
   const { data, error } = await supabase
     .from('products')
@@ -214,6 +234,7 @@ export const createProduct = async (productData: {
       category: productData.category,
       tags: productData.tags,
       images: productData.images,
+      is_work_listing: productData.isWorkListing ?? false,
     }])
     .select()
     .single();

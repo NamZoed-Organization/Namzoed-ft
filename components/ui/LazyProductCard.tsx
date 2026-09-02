@@ -37,8 +37,8 @@ const ProductSkeleton = memo(({ height }: { height: number }) => {
 
   return (
     <View
-      style={{ height }}
-      className="rounded-lg bg-white overflow-hidden shadow-sm max-w-[48%] mb-4"
+      style={{ height, borderRadius: 8, borderCurve: "continuous" }}
+      className="bg-white overflow-hidden shadow-sm max-w-[48%] mb-4"
     >
       <Animated.View
         className="w-full h-36 bg-gray-200"
@@ -46,20 +46,20 @@ const ProductSkeleton = memo(({ height }: { height: number }) => {
       />
       <View className="p-2">
         <Animated.View
-          className="bg-gray-200 h-4 w-full rounded mb-2"
-          style={{ opacity: shimmerOpacity }}
+          className="bg-gray-200 h-4 w-full mb-2"
+          style={{ opacity: shimmerOpacity, borderRadius: 4, borderCurve: "continuous" }}
         />
         <Animated.View
-          className="bg-gray-200 h-3 w-3/4 rounded mb-2"
-          style={{ opacity: shimmerOpacity }}
+          className="bg-gray-200 h-3 w-3/4 mb-2"
+          style={{ opacity: shimmerOpacity, borderRadius: 4, borderCurve: "continuous" }}
         />
         <Animated.View
-          className="bg-gray-200 h-4 w-1/2 rounded mb-1"
-          style={{ opacity: shimmerOpacity }}
+          className="bg-gray-200 h-4 w-1/2 mb-1"
+          style={{ opacity: shimmerOpacity, borderRadius: 4, borderCurve: "continuous" }}
         />
         <Animated.View
-          className="bg-gray-200 h-8 w-full rounded mt-2"
-          style={{ opacity: shimmerOpacity }}
+          className="bg-gray-200 h-8 w-full mt-2"
+          style={{ opacity: shimmerOpacity, borderRadius: 4, borderCurve: "continuous" }}
         />
       </View>
     </View>
@@ -99,7 +99,8 @@ const LazyProductCard = memo(
         asChild
       >
         <TouchableOpacity
-          className="rounded-lg bg-white overflow-hidden shadow-sm max-w-[48%] mb-4"
+          style={{ borderRadius: 8, borderCurve: "continuous" }}
+          className="bg-white overflow-hidden shadow-sm max-w-[48%] mb-4"
           activeOpacity={0.7}
         >
           <View className="w-full h-36 bg-gray-200 relative">
@@ -145,7 +146,8 @@ const LazyProductCard = memo(
                     </Text>
 
                     {/* Discount badge */}
-                    <View className="bg-red-500 px-1.5 py-0.5 rounded">
+                    <View
+                      style={{ borderRadius: 4, borderCurve: "continuous" }} className="bg-red-500 px-1.5 py-0.5">
                       <Text className="text-white text-[10px] font-bold">
                         -{(product as any).discount_percent}%
                       </Text>
@@ -173,7 +175,8 @@ const LazyProductCard = memo(
             </View>
 
             <TouchableOpacity
-              className="bg-blue-50 border border-blue-200 rounded-lg py-3 px-4 flex-row items-center justify-center"
+              style={{ borderRadius: 8, borderCurve: "continuous" }}
+              className="bg-blue-50 border border-blue-200 py-3 px-4 flex-row items-center justify-center"
               onPress={handleMessagePress}
               activeOpacity={0.8}
             >

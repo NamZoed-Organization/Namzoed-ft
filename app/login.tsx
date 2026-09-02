@@ -519,6 +519,7 @@ export default function Login() {
               style={{
                 paddingVertical: loginButtonPaddingY,
                 borderRadius: buttonRadius,
+                borderCurve: "continuous",
                 marginVertical: loginButtonMarginY,
               }}
             >
@@ -548,6 +549,7 @@ export default function Login() {
               style={{
                 paddingVertical: oauthButtonPaddingY,
                 borderRadius: oauthRadius,
+                borderCurve: "continuous",
                 shadowColor: "#000",
                 shadowOffset: { width: 1, height: 1 },
                 shadowOpacity: 0.1,
@@ -578,6 +580,7 @@ export default function Login() {
                 style={{
                   paddingVertical: oauthButtonPaddingY,
                   borderRadius: oauthRadius,
+                  borderCurve: "continuous",
                 }}
               >
                 {oauthLoading === "apple" ? (
@@ -635,8 +638,8 @@ export default function Login() {
             style={{ paddingHorizontal: modalPaddingX }}
           >
             <View
-              className="bg-white rounded-2xl"
-              style={{ padding: modalCardPadding }}
+              className="bg-white"
+              style={{ padding: modalCardPadding, borderRadius: 16, borderCurve: "continuous" }}
             >
               <Text
                 className="font-mbold text-gray-900 mb-2"
@@ -713,7 +716,8 @@ export default function Login() {
 
               <View className="flex-row mt-3 gap-2">
                 <TouchableOpacity
-                  className="flex-1 py-3 rounded-xl bg-gray-100 items-center"
+                  style={{ borderRadius: 12, borderCurve: "continuous" }}
+                  className="flex-1 py-3 bg-gray-100 items-center"
                   onPress={async () => {
                     if (pendingUserData?.id) {
                       await AsyncStorage.setItem(

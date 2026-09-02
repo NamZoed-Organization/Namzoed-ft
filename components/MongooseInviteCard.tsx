@@ -111,6 +111,7 @@ export default function MongooseInviteCard({
         style={{
           backgroundColor: "#f3f4f6",
           borderRadius: 14,
+          borderCurve: "continuous",
           padding: 12,
           maxWidth: 280,
           flexDirection: "row",
@@ -156,6 +157,7 @@ export default function MongooseInviteCard({
       style={{
         width: 274,
         borderRadius: 18,
+        borderCurve: "continuous",
         backgroundColor: "white",
         borderWidth: 1.5,
         borderColor: borderAccent,
@@ -190,6 +192,7 @@ export default function MongooseInviteCard({
             width: 32,
             height: 32,
             borderRadius: 8,
+            borderCurve: "continuous",
             backgroundColor: isCancelled
               ? "#e5e7eb"
               : isActiveDelivery
@@ -329,6 +332,7 @@ export default function MongooseInviteCard({
             style={{
               backgroundColor: roleBg,
               borderRadius: 10,
+              borderCurve: "continuous",
               paddingHorizontal: 8,
               paddingVertical: 3,
               flexDirection: "row",
@@ -395,6 +399,7 @@ export default function MongooseInviteCard({
             style={{
               backgroundColor: "#f9fafb",
               borderRadius: 10,
+              borderCurve: "continuous",
               paddingHorizontal: 10,
               paddingVertical: 6,
               marginBottom: 10,
@@ -440,6 +445,7 @@ export default function MongooseInviteCard({
             margin: 10,
             backgroundColor: "#094569",
             borderRadius: 12,
+            borderCurve: "continuous",
             paddingVertical: 11,
             flexDirection: "row",
             alignItems: "center",
@@ -464,6 +470,7 @@ export default function MongooseInviteCard({
             margin: 10,
             backgroundColor: "#ecfdf5",
             borderRadius: 12,
+            borderCurve: "continuous",
             paddingVertical: 11,
             paddingHorizontal: 14,
             flexDirection: "row",
@@ -483,6 +490,7 @@ export default function MongooseInviteCard({
             margin: 10,
             backgroundColor: "#fffbeb",
             borderRadius: 12,
+            borderCurve: "continuous",
             paddingVertical: 11,
             paddingHorizontal: 14,
             flexDirection: "row",
@@ -503,6 +511,7 @@ export default function MongooseInviteCard({
             margin: 10,
             backgroundColor: "#f3f4f6",
             borderRadius: 12,
+            borderCurve: "continuous",
             paddingVertical: 11,
             paddingHorizontal: 14,
             flexDirection: "row",
@@ -520,6 +529,7 @@ export default function MongooseInviteCard({
             margin: 10,
             backgroundColor: "#f3f4f6",
             borderRadius: 12,
+            borderCurve: "continuous",
             paddingVertical: 11,
             paddingHorizontal: 14,
             flexDirection: "row",
@@ -539,6 +549,7 @@ export default function MongooseInviteCard({
             style={{
               backgroundColor: "#f9fafb",
               borderRadius: 12,
+              borderCurve: "continuous",
               paddingVertical: 11,
               paddingHorizontal: 14,
               flexDirection: "row",
@@ -556,6 +567,7 @@ export default function MongooseInviteCard({
               style={{
                 backgroundColor: "#f3f4f6",
                 borderRadius: 12,
+                borderCurve: "continuous",
                 paddingVertical: 10,
                 flexDirection: "row",
                 alignItems: "center",
@@ -586,6 +598,7 @@ export default function MongooseInviteCard({
             margin: 10,
             backgroundColor: "#2563eb",
             borderRadius: 12,
+            borderCurve: "continuous",
             paddingVertical: 12,
             flexDirection: "row",
             alignItems: "center",

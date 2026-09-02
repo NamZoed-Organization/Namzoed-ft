@@ -42,6 +42,7 @@ function OptionRow({
           width: 40,
           height: 40,
           borderRadius: 20,
+          borderCurve: "continuous",
           backgroundColor: "rgba(9,69,105,0.08)",
           alignItems: "center",
           justifyContent: "center",
@@ -96,6 +97,7 @@ export default function CreateOptionsSheet({
             backgroundColor: "#fff",
             borderTopLeftRadius: 20,
             borderTopRightRadius: 20,
+            borderCurve: "continuous",
             paddingBottom: Math.max(insets.bottom, 16),
             transform: [{ translateY: sheetY }],
           }}

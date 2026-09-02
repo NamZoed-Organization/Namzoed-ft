@@ -11,10 +11,12 @@ import PostGridReportOverlay from "@/components/modals/PostGridReportOverlay";
 import ReportPostModal from "@/components/modals/ReportPostModal";
 import ProgressiveImage from "@/components/ui/ProgressiveImage";
 import { useUser } from "@/contexts/UserContext";
+import { hasUserLikedPost, togglePostLike } from "@/lib/likesService";
 import {
   clampMediaRatio,
   ratioForUniformMode,
 } from "@/lib/postMediaDisplay";
+import { playSound } from "@/lib/soundUtils";
 import { PostData } from "@/types/post";
 import { feedEvents } from "@/utils/feedEvents";
 import * as Haptics from "expo-haptics";
@@ -97,6 +99,8 @@ function PostGridCard({ post, width, onPress, deferred, priority = "normal" }: P
   const imageRef = React.useRef<View>(null);
   const [showReportOverlay, setShowReportOverlay] = React.useState(false);
   const [showReportModal, setShowReportModal] = React.useState(false);
+  const [isLiked, setIsLiked] = React.useState(false);
+  const [likesCount, setLikesCount] = React.useState(post.likes);
 
   // Only one grid card's report overlay should be open at a time — opening
   // one broadcasts its post id so every other mounted card closes itself.
@@ -107,6 +111,47 @@ function PostGridCard({ post, width, onPress, deferred, priority = "normal" }: P
     feedEvents.on("postGridOverlayOpen", handler);
     return () => feedEvents.off("postGridOverlayOpen", handler);
   }, [post.id]);
+
+  React.useEffect(() => {
+    setLikesCount(post.likes);
+  }, [post.likes]);
+
+  // Skip the like-status lookup while the card isn't revealed yet — matches
+  // the "deferred" gate that already skips image/video work off-screen.
+  React.useEffect(() => {
+    if (deferred || !currentUser?.id) return;
+    let cancelled = false;
+    hasUserLikedPost(post.id, currentUser.id).then((liked) => {
+      if (!cancelled) setIsLiked(liked);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [deferred, currentUser?.id, post.id]);
+
+  const handleLike = async () => {
+    if (!currentUser?.id) return;
+
+    const previousLiked = isLiked;
+    const previousCount = likesCount;
+    if (!isLiked) void playSound("like");
+    setIsLiked(!isLiked);
+    setLikesCount(isLiked ? likesCount - 1 : likesCount + 1);
+
+    try {
+      const result = await togglePostLike(post.id, currentUser.id, isLiked);
+      if (!result.success) {
+        setIsLiked(previousLiked);
+        setLikesCount(previousCount);
+      } else {
+        setIsLiked(result.isLiked);
+        setLikesCount(result.likeCount);
+      }
+    } catch {
+      setIsLiked(previousLiked);
+      setLikesCount(previousCount);
+    }
+  };
 
   if (!firstImage) return null;
 
@@ -140,9 +185,12 @@ function PostGridCard({ post, width, onPress, deferred, priority = "normal" }: P
       activeOpacity={0.85}
       style={{
         width,
-        marginBottom: 6,
+        // Matches FeedGrid's GRID_GAP so the vertical gap between stacked
+        // cards equals the horizontal gap between the two columns.
+        marginBottom: 4,
         backgroundColor: "#F7F7F8",
         borderRadius: 4,
+        borderCurve: "continuous",
         overflow: "hidden",
       }}
     >
@@ -156,6 +204,7 @@ function PostGridCard({ post, width, onPress, deferred, priority = "normal" }: P
           borderTopRightRadius: 4,
           borderBottomLeftRadius: 0,
           borderBottomRightRadius: 0,
+          borderCurve: "continuous",
           overflow: "hidden",
           backgroundColor: "#f3f4f6",
         }}
@@ -181,6 +230,7 @@ function PostGridCard({ post, width, onPress, deferred, priority = "normal" }: P
               width: 24,
               height: 24,
               borderRadius: 12,
+              borderCurve: "continuous",
               overflow: "hidden",
               alignItems: "center",
               justifyContent: "center",
@@ -232,6 +282,7 @@ function PostGridCard({ post, width, onPress, deferred, priority = "normal" }: P
                 width: 20,
                 height: 20,
                 borderRadius: 10,
+                borderCurve: "continuous",
                 backgroundColor: "#D1D5DB",
                 alignItems: "center",
                 justifyContent: "center",
@@ -260,10 +311,26 @@ function PostGridCard({ post, width, onPress, deferred, priority = "normal" }: P
             >
               {post.username || "Unknown"}
             </Text>
-            <Heart size={15} color="#9CA3AF" />
-            <Text style={{ fontSize: 13, color: "#9CA3AF", marginLeft: 3 }}>
-              {post.likes}
-            </Text>
+            <TouchableOpacity
+              onPress={handleLike}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              style={{ flexDirection: "row", alignItems: "center" }}
+            >
+              <Heart
+                size={15}
+                color={isLiked ? "#e91e63" : "#9CA3AF"}
+                fill={isLiked ? "#e91e63" : "none"}
+              />
+              <Text
+                style={{
+                  fontSize: 13,
+                  color: isLiked ? "#e91e63" : "#9CA3AF",
+                  marginLeft: 3,
+                }}
+              >
+                {likesCount}
+              </Text>
+            </TouchableOpacity>
           </View>
         )}
       </View>

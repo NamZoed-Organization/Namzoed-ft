@@ -45,8 +45,9 @@ export default function CategorySkeleton() {
       <View className="flex flex-row flex-wrap justify-between gap-y-4 mb-6">
         {[1, 2, 3, 4, 5, 6].map((item) => (
           <View
+            style={{ borderRadius: 16, borderCurve: "continuous" }}
             key={item}
-            className="w-[48%] h-56 rounded-2xl overflow-hidden bg-white shadow-sm"
+            className="w-[48%] h-56 overflow-hidden bg-white shadow-sm"
           >
             {/* Image Placeholder */}
             <SkeletonBox height="224" className="w-full" />
@@ -61,8 +62,9 @@ export default function CategorySkeleton() {
       <View className="flex flex-row flex-wrap justify-between gap-y-3 mb-14">
         {[1, 2, 3, 4].map((item) => (
           <View
+            style={{ borderRadius: 8, borderCurve: "continuous" }}
             key={`sub-${item}`}
-            className="w-[48%] bg-white rounded-lg px-4 py-3 shadow-sm border border-gray-100"
+            className="w-[48%] bg-white px-4 py-3 shadow-sm border border-gray-100"
           >
             {/* Subcategory name */}
             <SkeletonBox width="80%" height="16" className="mb-2" />

@@ -223,6 +223,7 @@ export default function MongooseInitiatorModal({
               backgroundColor: "white",
               borderTopLeftRadius: 24,
               borderTopRightRadius: 24,
+              borderCurve: "continuous",
               maxHeight: "88%",
               overflow: "hidden",
             }}
@@ -234,6 +235,7 @@ export default function MongooseInitiatorModal({
                   width: 40,
                   height: 4,
                   borderRadius: 2,
+                  borderCurve: "continuous",
                   backgroundColor: "#d1d5db",
                 }}
               />
@@ -299,6 +301,7 @@ export default function MongooseInitiatorModal({
                     flex: 1,
                     height: 4,
                     borderRadius: 2,
+                    borderCurve: "continuous",
                     backgroundColor:
                       ["role", "location", "datetime"].indexOf(step) >= i
                         ? "#2563eb"
@@ -339,6 +342,7 @@ export default function MongooseInitiatorModal({
                       borderWidth: 2,
                       borderColor: role === "seller" ? "#16a34a" : "#e5e7eb",
                       borderRadius: 16,
+                      borderCurve: "continuous",
                       padding: 18,
                       marginBottom: 12,
                       backgroundColor: pressed ? "#f0fdf4" : "white",
@@ -351,6 +355,7 @@ export default function MongooseInitiatorModal({
                         width: 52,
                         height: 52,
                         borderRadius: 26,
+                        borderCurve: "continuous",
                         backgroundColor: "#dcfce7",
                         alignItems: "center",
                         justifyContent: "center",
@@ -402,6 +407,7 @@ export default function MongooseInitiatorModal({
                       borderWidth: 2,
                       borderColor: role === "buyer" ? "#2563eb" : "#e5e7eb",
                       borderRadius: 16,
+                      borderCurve: "continuous",
                       padding: 18,
                       backgroundColor: pressed ? "#eff6ff" : "white",
                       flexDirection: "row",
@@ -413,6 +419,7 @@ export default function MongooseInitiatorModal({
                         width: 52,
                         height: 52,
                         borderRadius: 26,
+                        borderCurve: "continuous",
                         backgroundColor: "#dbeafe",
                         alignItems: "center",
                         justifyContent: "center",
@@ -468,6 +475,7 @@ export default function MongooseInitiatorModal({
                       backgroundColor:
                         role === "seller" ? "#dcfce7" : "#dbeafe",
                       borderRadius: 20,
+                      borderCurve: "continuous",
                       paddingHorizontal: 12,
                       paddingVertical: 6,
                       marginBottom: 16,
@@ -525,6 +533,7 @@ export default function MongooseInitiatorModal({
                           borderColor:
                             role === "seller" ? "#86efac" : "#93c5fd",
                           borderRadius: 14,
+                          borderCurve: "continuous",
                           padding: 14,
                           backgroundColor:
                             role === "seller" ? "#f0fdf4" : "#eff6ff",
@@ -580,6 +589,7 @@ export default function MongooseInitiatorModal({
                           borderWidth: 1.5,
                           borderColor: "#d1d5db",
                           borderRadius: 12,
+                          borderCurve: "continuous",
                           paddingVertical: 12,
                           marginBottom: 24,
                         }}
@@ -606,6 +616,7 @@ export default function MongooseInitiatorModal({
                         style={{
                           backgroundColor: "#2563eb",
                           borderRadius: 14,
+                          borderCurve: "continuous",
                           paddingVertical: 15,
                           alignItems: "center",
                         }}
@@ -629,6 +640,7 @@ export default function MongooseInitiatorModal({
                         borderStyle: "dashed",
                         borderColor: "#2563eb",
                         borderRadius: 14,
+                        borderCurve: "continuous",
                         paddingVertical: 28,
                         alignItems: "center",
                       }}
@@ -677,6 +689,7 @@ export default function MongooseInitiatorModal({
                         backgroundColor:
                           role === "seller" ? "#dcfce7" : "#dbeafe",
                         borderRadius: 20,
+                        borderCurve: "continuous",
                         paddingHorizontal: 10,
                         paddingVertical: 5,
                       }}
@@ -729,6 +742,7 @@ export default function MongooseInitiatorModal({
                         borderWidth: 1.5,
                         borderColor: "#d1d5db",
                         borderRadius: 12,
+                        borderCurve: "continuous",
                         paddingHorizontal: 14,
                         paddingVertical: 13,
                         flexDirection: "row",
@@ -784,6 +798,7 @@ export default function MongooseInitiatorModal({
                         borderWidth: 1.5,
                         borderColor: "#d1d5db",
                         borderRadius: 12,
+                        borderCurve: "continuous",
                         paddingHorizontal: 14,
                         paddingVertical: 13,
                         flexDirection: "row",
@@ -822,6 +837,7 @@ export default function MongooseInitiatorModal({
                     style={{
                       backgroundColor: submitting ? "#93c5fd" : "#2563eb",
                       borderRadius: 14,
+                      borderCurve: "continuous",
                       paddingVertical: 15,
                       alignItems: "center",
                       flexDirection: "row",

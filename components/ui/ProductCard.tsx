@@ -37,7 +37,8 @@ export default function ProductCard({
       asChild
     >
       <TouchableOpacity
-        className="rounded-lg bg-white overflow-hidden shadow-sm max-w-[48%]"
+        style={{ borderRadius: 8, borderCurve: "continuous" }}
+        className="bg-white overflow-hidden shadow-sm max-w-[48%]"
         activeOpacity={0.7}
        
       >
@@ -82,7 +83,8 @@ export default function ProductCard({
           </View>
 
           <TouchableOpacity
-            className="bg-blue-100 rounded-md py-2 px-3 flex-row items-center justify-center mt-3"
+            style={{ borderRadius: 6, borderCurve: "continuous" }}
+            className="bg-blue-100 py-2 px-3 flex-row items-center justify-center mt-3"
             onPress={handleMessagePress}
             activeOpacity={0.8}
           >

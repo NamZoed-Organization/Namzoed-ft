@@ -219,6 +219,7 @@ export default function DetectDzongkhag() {
               style={{
                 height: modalHeight,
                 borderRadius: modalRadius,
+                borderCurve: "continuous",
                 ...Platform.select({
                   android: { overflow: "visible" },
                   default: { overflow: "hidden" },
@@ -361,6 +362,7 @@ export default function DetectDzongkhag() {
                   paddingHorizontal: modalBottomPaddingX,
                   borderBottomLeftRadius: modalRadius,
                   borderBottomRightRadius: modalRadius,
+                  borderCurve: "continuous",
                 }}
               >
                 {accessDenied ? (
@@ -421,6 +423,7 @@ const styles = StyleSheet.create({
     width: 58,
     height: 58,
     borderRadius: 29,
+    borderCurve: "continuous",
     backgroundColor: "#094569",
     alignItems: "center",
     justifyContent: "center",
@@ -431,6 +434,7 @@ const styles = StyleSheet.create({
     width: 46,
     height: 46,
     borderRadius: 23,
+    borderCurve: "continuous",
     overflow: "hidden",
     backgroundColor: "#fff",
     alignItems: "center",
@@ -440,11 +444,13 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
     borderRadius: 23,
+    borderCurve: "continuous",
   },
   defaultAvatar: {
     width: "100%",
     height: "100%",
     borderRadius: 23,
+    borderCurve: "continuous",
     backgroundColor: "#EDE9E2",
     alignItems: "center",
     justifyContent: "center",

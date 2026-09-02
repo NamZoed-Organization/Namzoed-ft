@@ -291,7 +291,8 @@ export function GifStickerInlineDrawer({
             </TouchableOpacity>
           </View>
 
-          <View className="flex-row items-center rounded-2xl bg-white px-3 mb-3 h-11">
+          <View
+            style={{ borderRadius: 16, borderCurve: "continuous" }} className="flex-row items-center bg-white px-3 mb-3 h-11">
             <Ionicons name="search" size={17} color="#9ca3af" />
             <TextInput
               value={query}
@@ -340,6 +341,7 @@ export function GifStickerInlineDrawer({
                       flex: 1,
                       aspectRatio: 1,
                       borderRadius: 12,
+                      borderCurve: "continuous",
                       overflow: "hidden",
                       backgroundColor: "#f3f4f6",
                     }}

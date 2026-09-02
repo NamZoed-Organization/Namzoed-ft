@@ -325,6 +325,7 @@ export default function StoryComposer({ onClose }: StoryComposerProps) {
                 justifyContent: "center",
                 paddingVertical: 14,
                 borderRadius: 14,
+                borderCurve: "continuous",
                 backgroundColor: taggedProduct ? "rgba(9,69,105,0.25)" : "rgba(255,255,255,0.1)",
                 borderWidth: 1,
                 borderColor: taggedProduct ? "#094569" : "rgba(255,255,255,0.2)",
@@ -344,6 +345,7 @@ export default function StoryComposer({ onClose }: StoryComposerProps) {
                 justifyContent: "center",
                 paddingVertical: 14,
                 borderRadius: 14,
+                borderCurve: "continuous",
                 backgroundColor: taggedAccount ? "rgba(79,70,229,0.25)" : "rgba(255,255,255,0.1)",
                 borderWidth: 1,
                 borderColor: taggedAccount ? "#4f46e5" : "rgba(255,255,255,0.2)",
@@ -408,12 +410,14 @@ export default function StoryComposer({ onClose }: StoryComposerProps) {
                     >
                       {item.images?.[0] ? (
                         <Image
+                          style={{ borderRadius: 12 }}
                           source={{ uri: item.images[0] }}
-                          className="w-14 h-14 rounded-xl bg-gray-100"
+                          className="w-14 h-14 bg-gray-100"
                           resizeMode="cover"
                         />
                       ) : (
-                        <View className="w-14 h-14 rounded-xl bg-gray-100 items-center justify-center">
+                        <View
+                          style={{ borderRadius: 12, borderCurve: "continuous" }} className="w-14 h-14 bg-gray-100 items-center justify-center">
                           <ShoppingBag size={20} color="#D1D5DB" />
                         </View>
                       )}
@@ -460,7 +464,8 @@ export default function StoryComposer({ onClose }: StoryComposerProps) {
             </View>
 
             <View className="px-4 py-3">
-              <View className="flex-row items-center bg-gray-100 rounded-xl px-3 py-2.5">
+              <View
+                style={{ borderRadius: 12, borderCurve: "continuous" }} className="flex-row items-center bg-gray-100 px-3 py-2.5">
                 <Search size={18} color="#9CA3AF" />
                 <TextInput
                   className="flex-1 ml-2 text-sm text-gray-800"

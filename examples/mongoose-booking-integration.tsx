@@ -16,7 +16,8 @@ export default function ExampleIntegration() {
   return (
     <View className="p-4">
       {/* Example: Featured Provider Card */}
-      <View className="bg-white rounded-lg p-4 shadow-sm">
+      <View
+        style={{ borderRadius: 8, borderCurve: "continuous" }} className="bg-white p-4 shadow-sm">
         <View className="flex-row items-center mb-3">
           <View className="bg-green-100 p-3 rounded-full">
             <Ionicons name="person" size={24} color="#10b981" />
@@ -29,8 +30,9 @@ export default function ExampleIntegration() {
 
         {/* Book Now Button */}
         <Pressable
+          style={{ borderRadius: 8, borderCurve: "continuous" }}
           onPress={() => setShowBookingModal(true)}
-          className="bg-green-600 py-3 rounded-lg items-center"
+          className="bg-green-600 py-3 items-center"
         >
           <Text className="text-white font-semibold">Book Now</Text>
         </Pressable>
@@ -58,8 +60,9 @@ export function ServiceDetailIntegration() {
       {/* Footer with Book Button */}
       <View className="absolute bottom-0 left-0 right-0 bg-white p-4 border-t border-gray-200">
         <Pressable
+          style={{ borderRadius: 8, borderCurve: "continuous" }}
           onPress={() => setShowBookingModal(true)}
-          className="bg-green-600 py-4 rounded-lg items-center flex-row justify-center"
+          className="bg-green-600 py-4 items-center flex-row justify-center"
         >
           <Ionicons name="calendar" size={20} color="white" />
           <Text className="text-white font-semibold text-base ml-2">
@@ -90,12 +93,14 @@ export function ProviderListIntegration() {
   return (
     <View>
       {providers.map((provider) => (
-        <View key={provider.id} className="bg-white p-4 mb-2 rounded-lg">
+        <View
+          style={{ borderRadius: 8, borderCurve: "continuous" }} key={provider.id} className="bg-white p-4 mb-2">
           <Text className="text-lg font-semibold">{provider.name}</Text>
           {provider.email === 'mongoose@gmail.com' && (
             <Pressable
+              style={{ borderRadius: 4, borderCurve: "continuous" }}
               onPress={() => setSelectedProvider(provider.id)}
-              className="mt-2 bg-green-600 py-2 px-4 rounded"
+              className="mt-2 bg-green-600 py-2 px-4"
             >
               <Text className="text-white text-center">Book</Text>
             </Pressable>

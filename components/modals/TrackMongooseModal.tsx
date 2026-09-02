@@ -282,6 +282,7 @@ export default function TrackMongooseModal({
             marginTop: 48,
             borderTopLeftRadius: 24,
             borderTopRightRadius: 24,
+            borderCurve: "continuous",
           }}
         >
           {/* ── Header ──────────────────────────────────────── */}
@@ -326,6 +327,7 @@ export default function TrackMongooseModal({
                 paddingHorizontal: 10,
                 paddingVertical: 6,
                 borderRadius: 8,
+                borderCurve: "continuous",
                 alignSelf: 'flex-start',
                 marginBottom: 10,
               }}
@@ -452,6 +454,7 @@ export default function TrackMongooseModal({
                     style={{
                       backgroundColor: 'white',
                       borderRadius: 12,
+                      borderCurve: "continuous",
                       padding: 14,
                       flexDirection: 'row',
                       alignItems: 'center',
@@ -467,6 +470,7 @@ export default function TrackMongooseModal({
                         width: 10,
                         height: 10,
                         borderRadius: 5,
+                        borderCurve: "continuous",
                         backgroundColor: '#f97316',
                         marginRight: 10,
                       }}
@@ -485,6 +489,7 @@ export default function TrackMongooseModal({
                         backgroundColor: '#f0f9ff',
                         padding: 8,
                         borderRadius: 8,
+                        borderCurve: "continuous",
                         marginLeft: 8,
                       }}
                     >
@@ -498,6 +503,7 @@ export default function TrackMongooseModal({
                       borderWidth: 1.5,
                       borderColor: '#fcd34d',
                       borderRadius: 12,
+                      borderCurve: "continuous",
                       padding: 14,
                       flexDirection: 'row',
                       alignItems: 'center',
@@ -533,6 +539,7 @@ export default function TrackMongooseModal({
                 backgroundColor: '#f0fdf4',
                 padding: 12,
                 borderRadius: 10,
+                borderCurve: "continuous",
                 borderWidth: 1,
                 borderColor: '#bbf7d0',
               }}
@@ -554,6 +561,7 @@ export default function TrackMongooseModal({
                 backgroundColor: '#eff6ff',
                 padding: 12,
                 borderRadius: 10,
+                borderCurve: "continuous",
                 borderWidth: 1,
                 borderColor: '#bfdbfe',
               }}

@@ -60,3 +60,14 @@ export function useTabBarScroll() {
   }
   return ctx;
 }
+
+/** Same context, but returns null instead of throwing when there's no
+ * provider above — for components (e.g. ProductDetailOverlay/
+ * MarketplaceDetailOverlay) that are reused both inside the (tabs) group
+ * (where TabBarScrollProvider wraps the Tabs navigator) and from plain stack
+ * screens pushed alongside it (e.g. app/(users)/categories/[slug].tsx),
+ * which sit outside that subtree and have no floating tab bar to hide
+ * anyway. */
+export function useOptionalTabBarScroll() {
+  return useContext(TabBarScrollContext);
+}

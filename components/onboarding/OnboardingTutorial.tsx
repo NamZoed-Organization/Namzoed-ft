@@ -532,6 +532,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
+    borderCurve: "continuous",
     backgroundColor: "#F3F4F6",
     alignItems: "center",
     justifyContent: "center",
@@ -562,6 +563,7 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     paddingHorizontal: 10,
     borderRadius: 20,
+    borderCurve: "continuous",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -604,6 +606,7 @@ const styles = StyleSheet.create({
   imageWrapper: {
     width: SCREEN_WIDTH - 48, // matches container paddingHorizontal (24 × 2)
     borderRadius: 16,
+    borderCurve: "continuous",
     overflow: "hidden",
     backgroundColor: "#F3F4F6",
   },
@@ -617,6 +620,7 @@ const styles = StyleSheet.create({
     width: 140,
     height: 140,
     borderRadius: 70,
+    borderCurve: "continuous",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -624,6 +628,7 @@ const styles = StyleSheet.create({
     width: 90,
     height: 90,
     borderRadius: 45,
+    borderCurve: "continuous",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -634,6 +639,7 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     paddingHorizontal: 14,
     borderRadius: 12,
+    borderCurve: "continuous",
   },
   badgeText: {
     color: "#FFFFFF",
@@ -672,6 +678,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     backgroundColor: "#FFFBEB",
     borderRadius: 12,
+    borderCurve: "continuous",
     borderWidth: 1,
     borderColor: "#FEF3C7",
     alignSelf: "stretch",
@@ -696,6 +703,7 @@ const styles = StyleSheet.create({
   },
   dot: {
     borderRadius: 99,
+    borderCurve: "continuous",
   },
   dotActive: {
     width: 8,
@@ -733,6 +741,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 28,
     borderRadius: 999,
+    borderCurve: "continuous",
     alignItems: "center",
     justifyContent: "center",
     minWidth: 120,

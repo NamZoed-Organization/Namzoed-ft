@@ -176,6 +176,51 @@ export const fetchAllPostsForRanking = async (): Promise<PostWithUser[]> => {
   })) as PostWithUser[];
 };
 
+// Cursor-based fetch of posts from a specific set of authors (the "Following"
+// feed) — same shape as fetchPostsCursor but scoped to userIds via .in().
+export const fetchFollowingPostsCursor = async (
+  userIds: string[],
+  cursor: string | null,
+  pageSize: number = 15
+): Promise<PostWithUser[]> => {
+  if (userIds.length === 0) return [];
+
+  let query = supabase
+    .from('posts')
+    .select(`
+      *,
+      view_count,
+      profiles:user_id (
+        name,
+        email,
+        phone,
+        avatar_url
+      ),
+      post_likes (
+        id
+      )
+    `)
+    .in('user_id', userIds)
+    .order('created_at', { ascending: false })
+    .limit(pageSize);
+
+  if (cursor) {
+    query = query.lt('created_at', cursor);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    console.error('Error fetching following posts (cursor):', error);
+    throw error;
+  }
+
+  return (data || []).map((post: any) => ({
+    ...post,
+    likes: post.post_likes?.length || 0,
+  })) as PostWithUser[];
+};
+
 // Cursor-based fetch of video reels for the fullscreen "reels" experience.
 // Videos live inside posts' `images` arrays, so we page through posts and
 // extract video URLs until we have collected a batch (or run out of posts).

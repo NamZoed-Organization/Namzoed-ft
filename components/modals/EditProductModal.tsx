@@ -344,7 +344,8 @@ export default function EditProductModal({
           className="flex-1 justify-end"
         >
           <View className="flex-1 bg-black/50 justify-end">
-            <View className="bg-white rounded-t-3xl h-[90%] w-full overflow-hidden">
+            <View
+              style={{ borderTopLeftRadius: 24, borderTopRightRadius: 24, borderCurve: "continuous" }} className="bg-white h-[90%] w-full overflow-hidden">
               {/* Premium Header with BlurView */}
               <BlurView
                 intensity={90}
@@ -387,8 +388,9 @@ export default function EditProductModal({
                     {existingImages.map((url, index) => (
                       <View key={`existing-${index}`} className="relative mr-3">
                         <Image
+                          style={{ borderRadius: 12 }}
                           source={{ uri: url }}
-                          className="w-24 h-24 rounded-xl"
+                          className="w-24 h-24"
                         />
                         <TouchableOpacity
                           onPress={() => removeExistingImage(index)}
@@ -396,7 +398,8 @@ export default function EditProductModal({
                         >
                           <X size={12} color="white" />
                         </TouchableOpacity>
-                        <View className="absolute bottom-1 left-1 bg-white/80 rounded px-1">
+                        <View
+                          style={{ borderRadius: 4, borderCurve: "continuous" }} className="absolute bottom-1 left-1 bg-white/80 px-1">
                           <Text className="text-[10px] text-gray-600">
                             Existing
                           </Text>
@@ -408,8 +411,9 @@ export default function EditProductModal({
                     {newImages.map((uri, index) => (
                       <View key={`new-${index}`} className="relative mr-3">
                         <Image
+                          style={{ borderRadius: 12 }}
                           source={{ uri }}
-                          className="w-24 h-24 rounded-xl"
+                          className="w-24 h-24"
                         />
                         <TouchableOpacity
                           onPress={() => removeNewImage(index)}
@@ -417,7 +421,8 @@ export default function EditProductModal({
                         >
                           <X size={12} color="white" />
                         </TouchableOpacity>
-                        <View className="absolute bottom-1 left-1 bg-primary/80 rounded px-1">
+                        <View
+                          style={{ borderRadius: 4, borderCurve: "continuous" }} className="absolute bottom-1 left-1 bg-primary/80 px-1">
                           <Text className="text-[10px] text-white">New</Text>
                         </View>
                       </View>
@@ -425,8 +430,9 @@ export default function EditProductModal({
 
                     {/* Add Photo Button */}
                     <TouchableOpacity
+                      style={{ borderRadius: 12, borderCurve: "continuous" }}
                       onPress={pickImage}
-                      className="w-24 h-24 border-2 border-dashed border-gray-300 rounded-xl justify-center items-center mr-3 bg-gray-50"
+                      className="w-24 h-24 border-2 border-dashed border-gray-300 justify-center items-center mr-3 bg-gray-50"
                     >
                       <Upload size={24} color="#9CA3AF" />
                       <Text className="text-xs text-gray-400 mt-1">
@@ -443,7 +449,8 @@ export default function EditProductModal({
                       Product Name
                     </Text>
                     <TextInput
-                      className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900"
+                      style={{ borderRadius: 12, borderCurve: "continuous" }}
+                      className="bg-gray-50 border border-gray-200 px-4 py-3 text-gray-900"
                       placeholder="e.g. Vintage Leather Jacket"
                       value={name}
                       onChangeText={setName}
@@ -459,7 +466,8 @@ export default function EditProductModal({
                         <DollarSign size={16} color="#6B7280" />
                       </View>
                       <TextInput
-                        className="bg-gray-50 border border-gray-200 rounded-xl pl-10 pr-4 py-3 text-gray-900"
+                        style={{ borderRadius: 12, borderCurve: "continuous" }}
+                        className="bg-gray-50 border border-gray-200 pl-10 pr-4 py-3 text-gray-900"
                         placeholder="0.00"
                         keyboardType="numeric"
                         value={price}
@@ -471,7 +479,8 @@ export default function EditProductModal({
                   {/* CONDITIONAL: Closing Sale (Food) vs Discount (Non-Food) */}
                   {isFood ? (
                     /* ========== CLOSING SALE UI (Food Only) ========== */
-                    <View className="bg-amber-50 border border-amber-200 rounded-[24px] p-5 shadow-sm">
+                    <View
+                      style={{ borderRadius: 24, borderCurve: "continuous" }} className="bg-amber-50 border border-amber-200 p-5 shadow-sm">
                       <View className="flex-row items-center justify-between mb-4">
                         <View>
                           <Text className="text-sm font-semibold text-amber-800">
@@ -498,7 +507,8 @@ export default function EditProductModal({
                         </View>
                       </View>
 
-                      <View className="bg-amber-100/50 border border-amber-300 rounded-xl p-3 mb-4">
+                      <View
+                        style={{ borderRadius: 12, borderCurve: "continuous" }} className="bg-amber-100/50 border border-amber-300 p-3 mb-4">
                         <Text className="text-xs text-amber-700 leading-5">
                           💡 Your discount will automatically activate from <Text className="font-semibold">8:00 PM to 10:00 PM today</Text>, regardless of when you turn it on. Perfect for clearing leftover food!
                         </Text>
@@ -509,7 +519,8 @@ export default function EditProductModal({
                         <Text className="text-sm font-medium text-amber-800 mb-2">
                           Discount
                         </Text>
-                        <View className="bg-white border border-amber-200 rounded-xl">
+                        <View
+                          style={{ borderRadius: 12, borderCurve: "continuous" }} className="bg-white border border-amber-200">
                           <Picker
                             selectedValue={discountPercent}
                             onValueChange={(value) => setDiscountPercent(value)}
@@ -529,7 +540,8 @@ export default function EditProductModal({
 
                       {/* Closing Sale Price Display */}
                       {isDiscountActive && discountedPrice !== null && (
-                        <View className="bg-amber-100 border border-amber-300 rounded-xl p-3">
+                        <View
+                          style={{ borderRadius: 12, borderCurve: "continuous" }} className="bg-amber-100 border border-amber-300 p-3">
                           <Text className="text-xs text-amber-700 mb-1">
                             Closing Sale Price:
                           </Text>
@@ -549,7 +561,8 @@ export default function EditProductModal({
                     </View>
                   ) : (
                     /* ========== REGULAR DISCOUNT UI (Non-Food) ========== */
-                    <View className="bg-gray-50 border border-gray-200 rounded-[24px] p-5 shadow-sm">
+                    <View
+                      style={{ borderRadius: 24, borderCurve: "continuous" }} className="bg-gray-50 border border-gray-200 p-5 shadow-sm">
                       <View className="flex-row items-center justify-between mb-4">
                         <Text className="text-sm font-semibold text-gray-700">
                           Discount Settings{" "}
@@ -579,7 +592,8 @@ export default function EditProductModal({
                         <Text className="text-sm font-medium text-gray-700 mb-2">
                           Discount Percentage
                         </Text>
-                        <View className="bg-white border border-gray-200 rounded-xl">
+                        <View
+                          style={{ borderRadius: 12, borderCurve: "continuous" }} className="bg-white border border-gray-200">
                           <Picker
                             selectedValue={discountPercent}
                             onValueChange={(value) => setDiscountPercent(value)}
@@ -602,7 +616,8 @@ export default function EditProductModal({
 
                       {/* Discounted Price Display (Read-only) */}
                       {isDiscountActive && discountedPrice !== null && (
-                        <View className="mb-4 bg-primary/10 border border-primary/30 rounded-xl p-3">
+                        <View
+                          style={{ borderRadius: 12, borderCurve: "continuous" }} className="mb-4 bg-primary/10 border border-primary/30 p-3">
                           <Text className="text-xs text-gray-600 mb-1">
                             Discounted Price:
                           </Text>
@@ -625,7 +640,8 @@ export default function EditProductModal({
                         <Text className="text-sm font-medium text-gray-700 mb-2">
                           Duration
                         </Text>
-                        <View className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                        <View
+                          style={{ borderRadius: 12, borderCurve: "continuous" }} className="bg-white border border-gray-200 overflow-hidden">
                           <Picker
                             selectedValue={discountDurationHrs}
                             onValueChange={(value) =>
@@ -704,7 +720,8 @@ export default function EditProductModal({
                       )}
                     </View>
 
-                    <View className="bg-gray-50 rounded-xl p-3 min-h-[100px] border border-gray-100">
+                    <View
+                      style={{ borderRadius: 12, borderCurve: "continuous" }} className="bg-gray-50 p-3 min-h-[100px] border border-gray-100">
                       {!selectedCategory ? (
                         <View className="flex-1 justify-center items-center py-4">
                           <Text className="text-gray-400 text-center">
@@ -752,7 +769,8 @@ export default function EditProductModal({
                       Description
                     </Text>
                     <TextInput
-                      className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 min-h-[100px]"
+                      style={{ borderRadius: 12, borderCurve: "continuous" }}
+                      className="bg-gray-50 border border-gray-200 px-4 py-3 text-gray-900 min-h-[100px]"
                       placeholder="Describe your item..."
                       multiline
                       textAlignVertical="top"

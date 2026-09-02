@@ -33,9 +33,10 @@ export default function AppVersion({ onClose }: AppVersionProps) {
 
           {Platform.OS !== 'web' && (
             <TouchableOpacity
+              style={{ borderRadius: 12, borderCurve: "continuous" }}
               onPress={() => void openAppStoreForUpdate()}
               activeOpacity={0.8}
-              className="flex-row items-center bg-primary rounded-xl px-6 py-3.5"
+              className="flex-row items-center bg-primary px-6 py-3.5"
             >
               <Download size={18} color="#fff" />
               <Text className="text-white font-semibold text-base ml-2">

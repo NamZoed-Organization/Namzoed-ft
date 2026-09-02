@@ -12,7 +12,7 @@ import { getInitials } from "@/utils/initials";
 import { BlurView } from "expo-blur";
 import { Image as ExpoImage } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { Href, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { Href, Stack, useFocusEffect, useLocalSearchParams } from "expo-router";
 import {
   Bookmark,
   ChevronLeft,
@@ -49,6 +49,17 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const IMAGE_HEIGHT = SCREEN_HEIGHT * 0.45;
 const MIN_IMAGE_HEIGHT = SCREEN_HEIGHT * 0.32;
 const MAX_IMAGE_HEIGHT = SCREEN_HEIGHT * 0.62;
+
+// Hoisted to a stable module-level reference — same reasoning as
+// PRODUCT_SCREEN_OPTIONS / POST_SCREEN_OPTIONS / MARKETPLACE_SCREEN_OPTIONS
+// (a fresh literal each render retriggers navigation.setOptions() and can
+// trip React's nested-update guard). Unlike those three, this screen has no
+// overlay counterpart and isn't a transparentModal — it's a plain opaque
+// push, so it just needs a real animation instead of the root layout's
+// default "none" (which made every services-grid tap snap in instantly).
+const SERVICE_SCREEN_OPTIONS = {
+  animation: "slide_from_right" as const,
+};
 
 // Hero parallax only ever animates `transform` (translateX/scale) via style,
 // driven with useNativeDriver: false (it must share a JS listener with the
@@ -94,28 +105,28 @@ function DetailSkeleton() {
       />
       <View className="bg-white flex-1 px-6 pt-8">
         <RNAnimated.View
-          style={{ opacity }}
-          className="h-8 bg-gray-100 rounded-2xl w-3/4 mb-4"
+          style={{ opacity, borderRadius: 16, borderCurve: "continuous" }}
+          className="h-8 bg-gray-100 w-3/4 mb-4"
         />
         <RNAnimated.View
-          style={{ opacity }}
-          className="h-10 bg-gray-100 rounded-2xl w-1/2 mb-6"
+          style={{ opacity, borderRadius: 16, borderCurve: "continuous" }}
+          className="h-10 bg-gray-100 w-1/2 mb-6"
         />
         <RNAnimated.View
-          style={{ opacity }}
-          className="h-20 bg-gray-50 rounded-3xl w-full mb-6"
+          style={{ opacity, borderRadius: 24, borderCurve: "continuous" }}
+          className="h-20 bg-gray-50 w-full mb-6"
         />
         <RNAnimated.View
-          style={{ opacity }}
-          className="h-4 bg-gray-100 rounded-xl w-full mb-3"
+          style={{ opacity, borderRadius: 12, borderCurve: "continuous" }}
+          className="h-4 bg-gray-100 w-full mb-3"
         />
         <RNAnimated.View
-          style={{ opacity }}
-          className="h-4 bg-gray-100 rounded-xl w-full mb-3"
+          style={{ opacity, borderRadius: 12, borderCurve: "continuous" }}
+          className="h-4 bg-gray-100 w-full mb-3"
         />
         <RNAnimated.View
-          style={{ opacity }}
-          className="h-4 bg-gray-100 rounded-xl w-2/3"
+          style={{ opacity, borderRadius: 12, borderCurve: "continuous" }}
+          className="h-4 bg-gray-100 w-2/3"
         />
       </View>
     </View>
@@ -360,11 +371,19 @@ export default function ServiceDetail() {
     animatedHeroHeight,
   ]);
 
-  if (loading) return <DetailSkeleton />;
+  if (loading) {
+    return (
+      <>
+        <Stack.Screen options={SERVICE_SCREEN_OPTIONS} />
+        <DetailSkeleton />
+      </>
+    );
+  }
 
   if (!service) {
     return (
       <View className="flex-1 justify-center items-center bg-[#FAFBFC] px-6">
+        <Stack.Screen options={SERVICE_SCREEN_OPTIONS} />
         <StatusBar barStyle="dark-content" />
         <View className="w-24 h-24 bg-gray-100 rounded-full items-center justify-center mb-6">
           <Wrench size={40} color="#9CA3AF" />
@@ -376,7 +395,8 @@ export default function ServiceDetail() {
           We couldn&apos;t find this service. It may have been removed.
         </Text>
         <TouchableOpacity
-          className="bg-primary px-8 py-4 rounded-2xl shadow-lg"
+          style={{ borderRadius: 16, borderCurve: "continuous" }}
+          className="bg-primary px-8 py-4 shadow-lg"
           onPress={handleGoBack}
           activeOpacity={0.8}
         >
@@ -400,6 +420,7 @@ export default function ServiceDetail() {
 
   return (
     <View className="flex-1 bg-[#FAFBFC]">
+      <Stack.Screen options={SERVICE_SCREEN_OPTIONS} />
       <StatusBar
         barStyle="light-content"
         translucent
@@ -586,6 +607,7 @@ export default function ServiceDetail() {
                 style={{
                   backgroundColor: "rgba(0,0,0,0.5)",
                   borderRadius: 999,
+                  borderCurve: "continuous",
                   paddingHorizontal: 10,
                   paddingVertical: 3,
                 }}
@@ -615,6 +637,7 @@ export default function ServiceDetail() {
                       style={{
                         height: 7,
                         borderRadius: 999,
+                        borderCurve: "continuous",
                         width: activeImageIndex === index ? 22 : 7,
                         backgroundColor:
                           activeImageIndex === index
@@ -648,7 +671,8 @@ export default function ServiceDetail() {
             </Text>
 
             {/* Provider Card */}
-            <View className="bg-gray-50 p-5 rounded-3xl mb-6">
+            <View
+              style={{ borderRadius: 24, borderCurve: "continuous" }} className="bg-gray-50 p-5 mb-6">
               <TouchableOpacity
                 activeOpacity={0.8}
                 onPress={handleViewProvider}
@@ -665,7 +689,8 @@ export default function ServiceDetail() {
                       backgroundColor="#e5e7eb"
                     />
                   ) : (
-                    <View className="w-14 h-14 bg-[#e0e7ef] rounded-2xl items-center justify-center">
+                    <View
+                      style={{ borderRadius: 16, borderCurve: "continuous" }} className="w-14 h-14 bg-[#e0e7ef] items-center justify-center">
                       <Text
                         style={{
                           fontSize: 20,
@@ -719,7 +744,8 @@ export default function ServiceDetail() {
                 </View>
 
                 {/* View Profile Arrow */}
-                <View className="bg-white w-10 h-10 rounded-xl items-center justify-center shadow-sm">
+                <View
+                  style={{ borderRadius: 12, borderCurve: "continuous" }} className="bg-white w-10 h-10 items-center justify-center shadow-sm">
                   <ChevronRight size={18} color="#094569" />
                 </View>
               </TouchableOpacity>
@@ -738,7 +764,8 @@ export default function ServiceDetail() {
 
             {/* Details Grid */}
             <View className="flex-row flex-wrap gap-3 mb-6">
-              <View className="bg-gray-50 px-4 py-3 rounded-2xl flex-row items-center gap-2">
+              <View
+                style={{ borderRadius: 16, borderCurve: "continuous" }} className="bg-gray-50 px-4 py-3 flex-row items-center gap-2">
                 <Clock size={16} color="#6B7280" />
                 <Text className="text-sm text-gray-600">
                   {new Date((service as any).created_at).toLocaleDateString(
@@ -796,14 +823,12 @@ export default function ServiceDetail() {
               <TouchableOpacity
                 onPress={handleMessageProvider}
                 activeOpacity={0.8}
-                className="flex-1 bg-primary py-4 rounded-2xl flex-row items-center justify-center gap-2 shadow-lg"
-                style={{
-                  shadowColor: "#094569",
+                className="flex-1 bg-primary py-4 flex-row items-center justify-center gap-2 shadow-lg"
+                style={{ shadowColor: "#094569",
                   shadowOffset: { width: 0, height: 4 },
                   shadowOpacity: 0.3,
                   shadowRadius: 12,
-                  elevation: 8,
-                }}
+                  elevation: 8, borderRadius: 16, borderCurve: "continuous" }}
               >
                 <MessageCircle size={20} color="white" />
                 <Text className="text-white font-bold text-base">
@@ -813,9 +838,10 @@ export default function ServiceDetail() {
 
               {/* View Profile Button */}
               <TouchableOpacity
+                style={{ borderRadius: 16, borderCurve: "continuous" }}
                 onPress={handleViewProvider}
                 activeOpacity={0.8}
-                className="w-14 h-14 rounded-2xl items-center justify-center border-2 bg-white border-gray-200"
+                className="w-14 h-14 items-center justify-center border-2 bg-white border-gray-200"
               >
                 <User size={22} color="#6B7280" />
               </TouchableOpacity>

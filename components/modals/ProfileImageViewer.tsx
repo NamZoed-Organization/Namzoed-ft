@@ -142,6 +142,7 @@ export default function ProfileImageViewer({
                   width: dot.size,
                   height: dot.size,
                   borderRadius: dot.size,
+                  borderCurve: "continuous",
                   backgroundColor: `rgba(255,255,255,${dot.opacity})`,
                 }}
               />
@@ -172,6 +173,7 @@ export default function ProfileImageViewer({
                 width: AVATAR_SIZE + 14,
                 height: AVATAR_SIZE + 14,
                 borderRadius: (AVATAR_SIZE + 14) / 2,
+                borderCurve: "continuous",
                 padding: 7,
                 backgroundColor: "rgba(255,255,255,0.18)",
               }}
@@ -181,6 +183,7 @@ export default function ProfileImageViewer({
                   width: AVATAR_SIZE,
                   height: AVATAR_SIZE,
                   borderRadius: AVATAR_SIZE / 2,
+                  borderCurve: "continuous",
                   overflow: "hidden",
                   backgroundColor: "rgba(255,255,255,0.12)",
                 }}

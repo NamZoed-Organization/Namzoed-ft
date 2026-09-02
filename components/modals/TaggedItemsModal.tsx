@@ -59,6 +59,7 @@ export default function TaggedItemsModal({
           backgroundColor: 'white',
           borderTopLeftRadius: 24,
           borderTopRightRadius: 24,
+          borderCurve: "continuous",
           paddingBottom: 40,
           maxHeight: '60%',
         }}
@@ -70,6 +71,7 @@ export default function TaggedItemsModal({
             height: 4,
             backgroundColor: '#D1D5DB',
             borderRadius: 2,
+            borderCurve: "continuous",
             alignSelf: 'center',
             marginTop: 12,
             marginBottom: 12,
@@ -103,6 +105,7 @@ export default function TaggedItemsModal({
               marginBottom: 16,
               backgroundColor: '#F3F4F6',
               borderRadius: 10,
+              borderCurve: "continuous",
               padding: 3,
             }}
           >
@@ -112,6 +115,7 @@ export default function TaggedItemsModal({
                 flex: 1,
                 paddingVertical: 8,
                 borderRadius: 8,
+                borderCurve: "continuous",
                 alignItems: 'center',
                 backgroundColor: activeTab === 'products' ? '#fff' : 'transparent',
               }}
@@ -136,6 +140,7 @@ export default function TaggedItemsModal({
                 flex: 1,
                 paddingVertical: 8,
                 borderRadius: 8,
+                borderCurve: "continuous",
                 alignItems: 'center',
                 backgroundColor: activeTab === 'accounts' ? '#fff' : 'transparent',
               }}
@@ -178,6 +183,7 @@ export default function TaggedItemsModal({
                     alignItems: 'center',
                     padding: 12,
                     borderRadius: 16,
+                    borderCurve: "continuous",
                     marginBottom: 8,
                     backgroundColor: '#F9FAFB',
                     borderWidth: 1,
@@ -197,6 +203,7 @@ export default function TaggedItemsModal({
                         width: 56,
                         height: 56,
                         borderRadius: 12,
+                        borderCurve: "continuous",
                         backgroundColor: '#F3F4F6',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -222,6 +229,7 @@ export default function TaggedItemsModal({
                             marginLeft: 6,
                             backgroundColor: '#FEE2E2',
                             borderRadius: 4,
+                            borderCurve: "continuous",
                             paddingHorizontal: 4,
                             paddingVertical: 1,
                           }}
@@ -259,6 +267,7 @@ export default function TaggedItemsModal({
                     alignItems: 'center',
                     padding: 12,
                     borderRadius: 16,
+                    borderCurve: "continuous",
                     marginBottom: 8,
                     backgroundColor: '#F9FAFB',
                     borderWidth: 1,
@@ -277,6 +286,7 @@ export default function TaggedItemsModal({
                         width: 44,
                         height: 44,
                         borderRadius: 22,
+                        borderCurve: "continuous",
                         backgroundColor: '#094569',
                         alignItems: 'center',
                         justifyContent: 'center',

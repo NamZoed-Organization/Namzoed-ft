@@ -323,8 +323,9 @@ export default function LocationTrackingControl({
   return (
     <>
       <Pressable
+        style={{ borderRadius: 8, borderCurve: "continuous" }}
         onPress={() => setShowModal(true)}
-        className="bg-orange-500 px-4 py-2 rounded-lg flex-row items-center"
+        className="bg-orange-500 px-4 py-2 flex-row items-center"
       >
         <Ionicons name={isTracking ? "navigate" : "navigate-outline"} size={18} color="white" />
         <Text className="text-white font-semibold ml-2">
@@ -339,7 +340,8 @@ export default function LocationTrackingControl({
         onRequestClose={() => setShowModal(false)}
       >
         <View className="flex-1 bg-black/50 justify-end">
-          <View className="bg-white rounded-t-3xl p-6">
+          <View
+            style={{ borderTopLeftRadius: 24, borderTopRightRadius: 24, borderCurve: "continuous" }} className="bg-white p-6">
             {/* Header */}
             <View className="flex-row justify-between items-center mb-6">
               <View className="flex-1">
@@ -359,7 +361,8 @@ export default function LocationTrackingControl({
             </View>
 
             {/* Tracking Toggle */}
-            <View className="bg-orange-50 border-2 border-orange-200 rounded-lg p-4 mb-4">
+            <View
+              style={{ borderRadius: 8, borderCurve: "continuous" }} className="bg-orange-50 border-2 border-orange-200 p-4 mb-4">
               <View className="flex-row items-center justify-between">
                 <View className="flex-1 mr-4">
                   <Text className="text-base font-semibold text-gray-900 mb-1">
@@ -380,7 +383,8 @@ export default function LocationTrackingControl({
 
             {/* Status Info */}
             {isTracking && currentLocation && (
-              <View className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+              <View
+                style={{ borderRadius: 8, borderCurve: "continuous" }} className="bg-green-50 border border-green-200 p-4 mb-4">
                 <View className="flex-row items-center mb-2">
                   <View className="bg-green-500 w-3 h-3 rounded-full mr-2" />
                   <Text className="text-sm font-semibold text-green-900">
@@ -402,7 +406,8 @@ export default function LocationTrackingControl({
             )}
 
             {!isTracking && (
-              <View className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
+              <View
+                style={{ borderRadius: 8, borderCurve: "continuous" }} className="bg-gray-50 border border-gray-200 p-4 mb-4">
                 <Text className="text-sm text-gray-600 text-center">
                   Tracking is currently disabled. Enable it to share your location with the customer.
                 </Text>
@@ -410,7 +415,8 @@ export default function LocationTrackingControl({
             )}
 
             {/* Info */}
-            <View className="bg-blue-50 rounded-lg p-4">
+            <View
+              style={{ borderRadius: 8, borderCurve: "continuous" }} className="bg-blue-50 p-4">
               <View className="flex-row items-start">
                 <Ionicons name="information-circle" size={20} color="#2563eb" />
                 <View className="flex-1 ml-2">
@@ -429,8 +435,9 @@ export default function LocationTrackingControl({
 
             {/* Close Button */}
             <Pressable
+              style={{ borderRadius: 8, borderCurve: "continuous" }}
               onPress={() => setShowModal(false)}
-              className="bg-gray-200 py-3 rounded-lg items-center mt-6"
+              className="bg-gray-200 py-3 items-center mt-6"
             >
               <Text className="text-gray-900 font-semibold">Close</Text>
             </Pressable>

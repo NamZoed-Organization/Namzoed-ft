@@ -101,6 +101,7 @@ const styles = StyleSheet.create({
   },
   gradientBanner: {
     borderRadius: 16,
+    borderCurve: "continuous",
     marginHorizontal: 16,
     overflow: "hidden",
     shadowColor: "#000",
@@ -113,6 +114,7 @@ const styles = StyleSheet.create({
   gradientConnected: {
     marginHorizontal: 0,
     borderRadius: 0,
+    borderCurve: "continuous",
     elevation: 0,
     shadowOpacity: 0,
   },
@@ -169,6 +171,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     backgroundColor: "rgba(0, 0, 0, 0.18)",
     borderRadius: 8,
+    borderCurve: "continuous",
     paddingHorizontal: 10,
     paddingVertical: 7,
   },

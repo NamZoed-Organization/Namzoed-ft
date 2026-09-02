@@ -262,6 +262,7 @@ export default function VerifyOTP() {
                 width: otpBoxSize,
                 height: otpBoxSize,
                 borderRadius: otpBoxRadius,
+                borderCurve: "continuous",
                 fontSize: otpTextSize,
               }}
               selectTextOnFocus
@@ -278,6 +279,7 @@ export default function VerifyOTP() {
                 width: otpBoxSize,
                 height: otpBoxSize,
                 borderRadius: otpBoxRadius,
+                borderCurve: "continuous",
                 fontSize: otpTextSize,
               }}
               selectTextOnFocus
@@ -294,6 +296,7 @@ export default function VerifyOTP() {
                 width: otpBoxSize,
                 height: otpBoxSize,
                 borderRadius: otpBoxRadius,
+                borderCurve: "continuous",
                 fontSize: otpTextSize,
               }}
               selectTextOnFocus
@@ -310,6 +313,7 @@ export default function VerifyOTP() {
                 width: otpBoxSize,
                 height: otpBoxSize,
                 borderRadius: otpBoxRadius,
+                borderCurve: "continuous",
                 fontSize: otpTextSize,
               }}
               selectTextOnFocus

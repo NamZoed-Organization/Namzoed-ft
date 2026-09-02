@@ -221,6 +221,7 @@ export default function ChatImageViewer({
               zIndex: 20,
               backgroundColor: "rgba(0,0,0,0.55)",
               borderRadius: 20,
+              borderCurve: "continuous",
               padding: 7,
             }}
           >
@@ -239,6 +240,7 @@ export default function ChatImageViewer({
                   zIndex: 15,
                   backgroundColor: "rgba(0,0,0,0.55)",
                   borderRadius: 20,
+                  borderCurve: "continuous",
                   paddingHorizontal: 12,
                   paddingVertical: 5,
                 },
@@ -274,6 +276,7 @@ export default function ChatImageViewer({
                     width: 6,
                     height: 6,
                     borderRadius: 3,
+                    borderCurve: "continuous",
                     marginHorizontal: 3,
                     backgroundColor:
                       i === currentIndex ? "white" : "rgba(255,255,255,0.35)",

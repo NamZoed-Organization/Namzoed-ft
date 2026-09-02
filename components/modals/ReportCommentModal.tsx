@@ -125,6 +125,7 @@ export default function ReportCommentModal({
                       paddingHorizontal: 14,
                       paddingVertical: 8,
                       borderRadius: 999,
+                      borderCurve: "continuous",
                       borderWidth: 1,
                       borderColor: active ? '#EF4444' : '#E5E7EB',
                       backgroundColor: active ? '#FEF2F2' : '#fff',
@@ -152,6 +153,7 @@ export default function ReportCommentModal({
                 borderWidth: 1,
                 borderColor: '#E5E7EB',
                 borderRadius: 12,
+                borderCurve: "continuous",
                 padding: 12,
                 fontSize: 14,
                 color: '#111',
@@ -168,6 +170,7 @@ export default function ReportCommentModal({
                 marginBottom: 24,
                 paddingVertical: 14,
                 borderRadius: 16,
+                borderCurve: "continuous",
                 alignItems: 'center',
                 backgroundColor: submitting || !selectedReason ? '#D1D5DB' : '#EF4444',
               }}

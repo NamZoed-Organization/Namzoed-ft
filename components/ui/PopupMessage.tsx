@@ -103,6 +103,7 @@ export default function PopupMessage({
           width: '100%',
           maxWidth: 320,
           borderRadius: 24,
+          borderCurve: "continuous",
           overflow: 'hidden',
           shadowColor: '#000',
           shadowOffset: { width: 0, height: 10 },
@@ -138,6 +139,7 @@ export default function PopupMessage({
             style={{
               backgroundColor: config.iconBg,
               borderRadius: 50,
+              borderCurve: "continuous",
               padding: 12,
               marginBottom: 10,
             }}
@@ -195,6 +197,7 @@ export default function PopupMessage({
                       paddingHorizontal: 16,
                       paddingVertical: 8,
                       borderRadius: 9999,
+                      borderCurve: "continuous",
                       alignItems: 'center',
                       justifyContent: 'center',
                       backgroundColor: isDestructive

@@ -749,6 +749,7 @@ export default function MongooseDashboard() {
         padding: compact ? 10 : 16,
         marginBottom: compact ? 8 : 12,
         borderRadius: compact ? 8 : 8,
+        borderCurve: "continuous",
       }}
     >
       <View
@@ -869,6 +870,7 @@ export default function MongooseDashboard() {
             paddingHorizontal: compact ? 6 : 10,
             paddingVertical: compact ? 2 : 4,
             borderRadius: 999,
+            borderCurve: "continuous",
             ...statusPillStyle(item.status),
           }}
         >
@@ -946,6 +948,7 @@ export default function MongooseDashboard() {
                 borderColor: NZ.navy,
                 paddingVertical: 8,
                 borderRadius: 8,
+                borderCurve: "continuous",
               }}
             >
               <Ionicons name="map" size={16} color={NZ.navy} />
@@ -964,6 +967,7 @@ export default function MongooseDashboard() {
                 backgroundColor: NZ.navy,
                 paddingVertical: 8,
                 borderRadius: 8,
+                borderCurve: "continuous",
               }}
             >
               <Ionicons name="navigate" size={16} color="#fff" />
@@ -982,6 +986,7 @@ export default function MongooseDashboard() {
                 borderColor: NZ.navy,
                 padding: 12,
                 borderRadius: 8,
+                borderCurve: "continuous",
               }}
             >
               <View className="flex-row items-center justify-between mb-2">
@@ -1002,6 +1007,7 @@ export default function MongooseDashboard() {
                   backgroundColor: NZ.cream,
                   padding: 8,
                   borderRadius: 6,
+                  borderCurve: "continuous",
                   marginBottom: 4,
                 }}
               >
@@ -1011,6 +1017,7 @@ export default function MongooseDashboard() {
                       width: 8,
                       height: 8,
                       borderRadius: 4,
+                      borderCurve: "continuous",
                       backgroundColor: NZ.ink,
                       marginRight: 8,
                     }}
@@ -1033,6 +1040,7 @@ export default function MongooseDashboard() {
                   backgroundColor: NZ.cream,
                   padding: 8,
                   borderRadius: 6,
+                  borderCurve: "continuous",
                 }}
               >
                 <View className="flex-row items-center mb-1">
@@ -1041,6 +1049,7 @@ export default function MongooseDashboard() {
                       width: 8,
                       height: 8,
                       borderRadius: 4,
+                      borderCurve: "continuous",
                       backgroundColor: NZ.navy,
                       marginRight: 8,
                     }}
@@ -1076,6 +1085,7 @@ export default function MongooseDashboard() {
                 backgroundColor: NZ.navy,
                 paddingVertical: 12,
                 borderRadius: 8,
+                borderCurve: "continuous",
               }}
             >
               <Ionicons name="navigate" size={18} color="#fff" />
@@ -1095,6 +1105,7 @@ export default function MongooseDashboard() {
               flex: 1,
               paddingVertical: compact ? 9 : 12,
               borderRadius: 8,
+              borderCurve: "continuous",
               alignItems: "center",
               justifyContent: "center",
             }}
@@ -1112,6 +1123,7 @@ export default function MongooseDashboard() {
               flex: 1,
               paddingVertical: compact ? 9 : 12,
               borderRadius: 8,
+              borderCurve: "continuous",
               alignItems: "center",
               justifyContent: "center",
             }}
@@ -1139,6 +1151,7 @@ export default function MongooseDashboard() {
                 flex: 1,
                 paddingVertical: compact ? 9 : 12,
                 borderRadius: 8,
+                borderCurve: "continuous",
                 alignItems: "center",
                 flexDirection: "row",
                 justifyContent: "center",
@@ -1163,6 +1176,7 @@ export default function MongooseDashboard() {
               flex: 1,
               paddingVertical: compact ? 9 : 12,
               borderRadius: 8,
+              borderCurve: "continuous",
               alignItems: "center",
               flexDirection: "row",
               justifyContent: "center",
@@ -1183,6 +1197,7 @@ export default function MongooseDashboard() {
               flex: 1,
               paddingVertical: compact ? 9 : 12,
               borderRadius: 8,
+              borderCurve: "continuous",
               alignItems: "center",
               flexDirection: "row",
               justifyContent: "center",
@@ -1233,6 +1248,7 @@ export default function MongooseDashboard() {
                   backgroundColor: NZ.pearl,
                   padding: 10,
                   borderRadius: 999,
+                  borderCurve: "continuous",
                 }}
               >
                 <Ionicons name="log-out-outline" size={22} color={NZ.navy} />
@@ -1265,6 +1281,7 @@ export default function MongooseDashboard() {
                 borderColor: NZ.pearl,
                 padding: 20,
                 borderRadius: 8,
+                borderCurve: "continuous",
                 marginBottom: 16,
               }}
             >
@@ -1301,6 +1318,7 @@ export default function MongooseDashboard() {
                   marginTop: 12,
                   padding: 12,
                   borderRadius: 8,
+                  borderCurve: "continuous",
                   backgroundColor: isAvailable ? NZ.pearl : NZ.cream,
                   borderWidth: 1,
                   borderColor: isAvailable ? NZ.navy : NZ.pearl,
@@ -1328,6 +1346,7 @@ export default function MongooseDashboard() {
                     paddingHorizontal: 12,
                     paddingVertical: 4,
                     borderRadius: 999,
+                    borderCurve: "continuous",
                     borderWidth: 1,
                     borderColor: NZ.navy,
                   }}
@@ -1346,6 +1365,7 @@ export default function MongooseDashboard() {
                     borderColor: NZ.pearl,
                     padding: 32,
                     borderRadius: 8,
+                    borderCurve: "continuous",
                     alignItems: "center",
                   }}
                 >
@@ -1446,6 +1466,7 @@ export default function MongooseDashboard() {
                   marginTop: 48,
                   borderTopLeftRadius: 24,
                   borderTopRightRadius: 24,
+                  borderCurve: "continuous",
                 }}
               >
                 <View
@@ -1456,6 +1477,7 @@ export default function MongooseDashboard() {
                     padding: 16,
                     borderTopLeftRadius: 24,
                     borderTopRightRadius: 24,
+                    borderCurve: "continuous",
                   }}
                 >
                   <View className="flex-row justify-between items-center">
@@ -1473,6 +1495,7 @@ export default function MongooseDashboard() {
                         backgroundColor: NZ.pearl,
                         padding: 8,
                         borderRadius: 999,
+                        borderCurve: "continuous",
                       }}
                     >
                       <Ionicons name="close" size={24} color={NZ.ink} />
@@ -1486,6 +1509,7 @@ export default function MongooseDashboard() {
                           width: 10,
                           height: 10,
                           borderRadius: 5,
+                          borderCurve: "continuous",
                           backgroundColor: NZ.ink,
                           marginRight: 8,
                         }}
@@ -1500,6 +1524,7 @@ export default function MongooseDashboard() {
                           width: 10,
                           height: 10,
                           borderRadius: 5,
+                          borderCurve: "continuous",
                           backgroundColor: NZ.navy,
                           marginRight: 8,
                         }}
@@ -1519,6 +1544,7 @@ export default function MongooseDashboard() {
                           flex: 1,
                           paddingVertical: 8,
                           borderRadius: 8,
+                          borderCurve: "continuous",
                           backgroundColor: mapType === t ? NZ.navy : NZ.pearl,
                         }}
                       >
@@ -1547,6 +1573,7 @@ export default function MongooseDashboard() {
                       backgroundColor: NZ.navy,
                       paddingVertical: 12,
                       borderRadius: 8,
+                      borderCurve: "continuous",
                     }}
                   >
                     <Ionicons name="navigate" size={18} color="#fff" />
@@ -1590,6 +1617,7 @@ export default function MongooseDashboard() {
                               paddingHorizontal: 14,
                               paddingVertical: 8,
                               borderRadius: 8,
+                              borderCurve: "continuous",
                               borderWidth: 1,
                               borderColor: NZ.pearl,
                             }}
@@ -1688,6 +1716,7 @@ export default function MongooseDashboard() {
                         borderColor: NZ.ink,
                         padding: 12,
                         borderRadius: 8,
+                        borderCurve: "continuous",
                       }}
                     >
                       <View className="flex-row items-center mb-1">
@@ -1696,6 +1725,7 @@ export default function MongooseDashboard() {
                             width: 10,
                             height: 10,
                             borderRadius: 5,
+                            borderCurve: "continuous",
                             backgroundColor: NZ.ink,
                             marginRight: 8,
                           }}
@@ -1717,6 +1747,7 @@ export default function MongooseDashboard() {
                         borderColor: NZ.navy,
                         padding: 12,
                         borderRadius: 8,
+                        borderCurve: "continuous",
                       }}
                     >
                       <View className="flex-row items-center mb-1">
@@ -1725,6 +1756,7 @@ export default function MongooseDashboard() {
                             width: 10,
                             height: 10,
                             borderRadius: 5,
+                            borderCurve: "continuous",
                             backgroundColor: NZ.navy,
                             marginRight: 8,
                           }}
@@ -1746,6 +1778,7 @@ export default function MongooseDashboard() {
                       backgroundColor: NZ.pearl,
                       padding: 12,
                       borderRadius: 8,
+                      borderCurve: "continuous",
                     }}
                   >
                     <Text style={{ color: NZ.stone }} className="text-xs">

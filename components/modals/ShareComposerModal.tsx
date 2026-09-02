@@ -639,6 +639,7 @@ export default function ShareComposerModal({
             <View
               style={{
                 borderRadius: 14,
+                borderCurve: "continuous",
                 paddingHorizontal: 14,
                 paddingVertical: 10,
                 backgroundColor:
@@ -678,6 +679,7 @@ export default function ShareComposerModal({
                 paddingHorizontal: 18,
                 paddingVertical: 12,
                 borderRadius: 14,
+                borderCurve: "continuous",
                 flexDirection: "row",
                 alignItems: "center",
                 marginBottom: 210,
@@ -697,15 +699,16 @@ export default function ShareComposerModal({
           style={{ width: "100%" }}
         >
         <Animated.View
-          style={{ transform: [{ translateY: sheetTranslateY }] }}
+          style={{ transform: [{ translateY: sheetTranslateY }], borderTopLeftRadius: 24, borderTopRightRadius: 24, borderCurve: "continuous" }}
           {...panResponder.panHandlers}
-          className="bg-white rounded-t-3xl px-5 pt-3 pb-8"
+          className="bg-white px-5 pt-3 pb-8"
         >
           <View className="w-12 h-1.5 rounded-full bg-gray-300 self-center mb-4" />
 
           <Text className="text-lg font-bold text-gray-900 mb-3">{heading}</Text>
 
-          <View className="flex-row items-center bg-gray-100 rounded-2xl px-3 py-2 mb-4">
+          <View
+            style={{ borderRadius: 16, borderCurve: "continuous" }} className="flex-row items-center bg-gray-100 px-3 py-2 mb-4">
             <Search size={16} color="#6B7280" />
             <TextInput
               placeholder="Search people you follow"
@@ -758,6 +761,7 @@ export default function ShareComposerModal({
                                 width: 20,
                                 height: 20,
                                 borderRadius: 10,
+                                borderCurve: "continuous",
                                 backgroundColor: "#094569",
                                 alignItems: "center",
                                 justifyContent: "center",
@@ -788,9 +792,9 @@ export default function ShareComposerModal({
               onChangeText={setNoteText}
               multiline
               maxLength={220}
-              className="bg-gray-100 rounded-2xl px-3 py-3 text-gray-900"
+              className="bg-gray-100 px-3 py-3 text-gray-900"
               placeholderTextColor="#9CA3AF"
-              style={{ minHeight: 44, maxHeight: 88 }}
+              style={{ minHeight: 44, maxHeight: 88, borderRadius: 16, borderCurve: "continuous" }}
             />
 
             <View className="flex-row items-center justify-between mt-3">
@@ -913,6 +917,7 @@ export default function ShareComposerModal({
                 width: 22,
                 height: 22,
                 borderRadius: 11,
+                borderCurve: "continuous",
                 backgroundColor: "rgba(9,69,105,0.12)",
                 alignItems: "center",
                 justifyContent: "center",

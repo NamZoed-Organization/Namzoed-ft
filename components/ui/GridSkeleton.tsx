@@ -78,8 +78,9 @@ export default function GridSkeleton({
 
   const CardTile = ({ tileKey }: { tileKey: string | number }) => (
     <View
+      style={{ borderRadius: 12, borderCurve: "continuous" }}
       key={tileKey}
-      className="flex-1 bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100"
+      className="flex-1 bg-white overflow-hidden shadow-sm border border-gray-100"
     >
       <SkeletonBox height={imageHeight} className="w-full" />
       <View className="p-3">
@@ -93,8 +94,9 @@ export default function GridSkeleton({
 
   const AvatarTile = ({ tileKey }: { tileKey: string | number }) => (
     <View
+      style={{ borderRadius: 8, borderCurve: "continuous" }}
       key={tileKey}
-      className="flex-1 bg-white rounded-lg shadow-sm border border-gray-100 p-3 items-center"
+      className="flex-1 bg-white shadow-sm border border-gray-100 p-3 items-center"
     >
       <SkeletonBox width={64} height={64} className="rounded-full mb-2" />
       <SkeletonBox width="70%" height={14} className="mb-2" />

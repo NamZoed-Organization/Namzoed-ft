@@ -273,6 +273,7 @@ export default function ImageCropOverlay({ imageUri, imageWidth, imageHeight, on
                         width: cropSize + 2 * overlayBorderWidth,
                         height: cropSize + 2 * overlayBorderWidth,
                         borderRadius: (cropSize + 2 * overlayBorderWidth) / 2,
+                        borderCurve: "continuous",
                         borderWidth: overlayBorderWidth,
                         // This semi-transparent white allows you to see the excluded parts of the image
                         borderColor: 'rgba(255, 255, 255, 0.6)', 
@@ -287,6 +288,7 @@ export default function ImageCropOverlay({ imageUri, imageWidth, imageHeight, on
                 width: cropSize,
                 height: cropSize,
                 borderRadius: cropSize / 2,
+                borderCurve: "continuous",
                 borderWidth: 1,
                 borderColor: 'rgba(0,0,0,0.2)',
                 pointerEvents: 'none',

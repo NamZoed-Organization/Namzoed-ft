@@ -1,6 +1,6 @@
 import CircularLoader from "@/components/ui/CircularLoader";
 import { CommentMediaItem } from "@/lib/commentsService";
-import { registerEdgeGestureCarousel } from "@/utils/edgeGestureRegistry";
+import { EdgeGestureCarouselHandle, registerEdgeGestureCarousel } from "@/utils/edgeGestureRegistry";
 import { BlurView } from "expo-blur";
 import { Image } from "expo-image";
 import { useVideoPlayer, VideoView } from "expo-video";
@@ -50,6 +50,7 @@ function VideoBadge() {
         width: 24,
         height: 24,
         borderRadius: 12,
+        borderCurve: "continuous",
         overflow: "hidden",
         alignItems: "center",
         justifyContent: "center",
@@ -73,6 +74,7 @@ function CounterPill({ index, total }: { index: number; total: number }) {
         right: 8,
         backgroundColor: "rgba(0,0,0,0.55)",
         borderRadius: 999,
+        borderCurve: "continuous",
         paddingHorizontal: 7,
         paddingVertical: 3,
       }}
@@ -95,6 +97,7 @@ function DotsRow({ index, total }: { index: number; total: number }) {
             width: dotSize,
             height: dotSize,
             borderRadius: dotSize / 2,
+            borderCurve: "continuous",
             backgroundColor: i === index ? PRIMARY : "#D1D5DB",
           }}
         />
@@ -233,6 +236,7 @@ function GalleryViewer({
                 width: progress.interpolate({ inputRange: [0, 1], outputRange: [rect.width, finalRect.width] }),
                 height: progress.interpolate({ inputRange: [0, 1], outputRange: [rect.height, finalRect.height] }),
                 borderRadius: progress.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }),
+                borderCurve: "continuous",
                 overflow: "hidden",
                 backgroundColor: "#000",
               }}
@@ -286,25 +290,26 @@ export default function CommentMediaGallery({ items }: CommentMediaGalleryProps)
   // Lets ContextDrop's edge-swipe-back gesture (see PostDetailOverlay) tell
   // this gallery's "swipe right to see the previous image" apart from an
   // actual back gesture — see utils/edgeGestureRegistry.ts.
-  const boundsRef = useRef<{ top: number; bottom: number } | null>(null);
-  const activeIndexRef = useRef(activeIndex);
-  activeIndexRef.current = activeIndex;
+  const edgeGestureHandleRef = useRef<EdgeGestureCarouselHandle | null>(null);
 
   const remeasure = () => {
     containerRef.current?.measureInWindow((_x, y, _w, h) => {
-      boundsRef.current = { top: y, bottom: y + h };
+      edgeGestureHandleRef.current?.setBounds(y, y + h);
     });
   };
 
   useEffect(() => {
     if (!multipleItems) return;
-    return registerEdgeGestureCarousel({
-      getBounds: () => boundsRef.current,
-      hasPrevious: () => activeIndexRef.current > 0,
-    });
+    const handle = registerEdgeGestureCarousel();
+    edgeGestureHandleRef.current = handle;
+    return () => {
+      handle.unregister();
+      edgeGestureHandleRef.current = null;
+    };
   }, [multipleItems]);
 
   useEffect(() => {
+    edgeGestureHandleRef.current?.setHasPrevious(activeIndex > 0);
     remeasure();
   }, [activeIndex]);
 

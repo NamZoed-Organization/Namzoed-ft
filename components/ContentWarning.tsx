@@ -134,6 +134,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 4,
+    borderCurve: "continuous",
     marginRight: 8,
   },
   badgeText: {

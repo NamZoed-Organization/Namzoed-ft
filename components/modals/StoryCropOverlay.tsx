@@ -411,6 +411,7 @@ export default function StoryCropOverlay({
                     borderWidth: 2,
                     borderColor: "rgba(255,255,255,0.95)",
                     borderRadius: 4,
+                    borderCurve: "continuous",
                   }}
                 />
 

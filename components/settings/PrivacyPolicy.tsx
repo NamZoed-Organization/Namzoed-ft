@@ -80,7 +80,8 @@ export default function PrivacyPolicy({ onClose }: PrivacyPolicyProps) {
             <Text className="text-3xl font-mblack text-white text-center mb-2">NamZoed</Text>
             <Text className="text-xl font-semibold text-white/90 text-center">Privacy Policy</Text>
           </View>
-          <View className="bg-white/10 rounded-2xl p-4 mt-2">
+          <View
+            style={{ borderRadius: 16, borderCurve: "continuous" }} className="bg-white/10 p-4 mt-2">
             <Text className="text-sm text-white/90 text-center leading-5">
               NamZoed knows that you care how information about you is used and shared. We appreciate your trust that we will do so carefully and sensibly. Maintaining the Trust Fortress for our community is our highest priority.
             </Text>
@@ -91,7 +92,8 @@ export default function PrivacyPolicy({ onClose }: PrivacyPolicyProps) {
         <View className="px-5 py-6">
 
           {/* Intro Alert */}
-          <View className="bg-amber-50 border-l-4 border-amber-500 rounded-r-xl p-4 mb-6 shadow-sm">
+          <View
+            style={{ borderTopRightRadius: 12, borderBottomRightRadius: 12, borderCurve: "continuous" }} className="bg-amber-50 border-l-4 border-amber-500 p-4 mb-6 shadow-sm">
             <View className="flex-row items-start">
               <AlertCircle size={20} color="#f59e0b" style={{ marginTop: 2, marginRight: 12 }} />
               <Text className="text-sm text-amber-900 leading-5 flex-1 font-medium">
@@ -101,9 +103,11 @@ export default function PrivacyPolicy({ onClose }: PrivacyPolicyProps) {
           </View>
 
           {/* Section 1 — Applicability and Scope */}
-          <View className="bg-white rounded-2xl p-5 mb-4 shadow-sm border border-gray-100">
+          <View
+            style={{ borderRadius: 16, borderCurve: "continuous" }} className="bg-white p-5 mb-4 shadow-sm border border-gray-100">
             <View className="flex-row items-start mb-4">
-              <View className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary to-primary/80 items-center justify-center mr-4 shadow-md">
+              <View
+                style={{ borderRadius: 16, borderCurve: "continuous" }} className="w-12 h-12 bg-gradient-to-br from-primary to-primary/80 items-center justify-center mr-4 shadow-md">
                 <Users size={24} color="#ffffff" />
               </View>
               <View className="flex-1">
@@ -131,9 +135,11 @@ export default function PrivacyPolicy({ onClose }: PrivacyPolicyProps) {
           </View>
 
           {/* Section 2 — Information We Collect */}
-          <View className="bg-white rounded-2xl p-5 mb-4 shadow-sm border border-gray-100">
+          <View
+            style={{ borderRadius: 16, borderCurve: "continuous" }} className="bg-white p-5 mb-4 shadow-sm border border-gray-100">
             <View className="flex-row items-start mb-4">
-              <View className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 items-center justify-center mr-4 shadow-md">
+              <View
+                style={{ borderRadius: 16, borderCurve: "continuous" }} className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 items-center justify-center mr-4 shadow-md">
                 <Database size={24} color="#ffffff" />
               </View>
               <View className="flex-1">
@@ -147,7 +153,8 @@ export default function PrivacyPolicy({ onClose }: PrivacyPolicyProps) {
               </Text>
 
               {/* 2A */}
-              <View className="bg-blue-50 rounded-xl p-4 border border-blue-200">
+              <View
+                style={{ borderRadius: 12, borderCurve: "continuous" }} className="bg-blue-50 p-4 border border-blue-200">
                 <Text className="text-sm font-semibold text-blue-900 mb-2">A. Information You Give Us</Text>
                 <Text className="text-sm text-blue-800 leading-5 mb-2">
                   We receive and store any information you provide, including:
@@ -161,7 +168,8 @@ export default function PrivacyPolicy({ onClose }: PrivacyPolicyProps) {
               </View>
 
               {/* 2B */}
-              <View className="bg-blue-50 rounded-xl p-4 border border-blue-200">
+              <View
+                style={{ borderRadius: 12, borderCurve: "continuous" }} className="bg-blue-50 p-4 border border-blue-200">
                 <View className="flex-row items-center mb-2">
                   <Smartphone size={16} color="#1e40af" style={{ marginRight: 8 }} />
                   <Text className="text-sm font-semibold text-blue-900">B. Automatic Information</Text>
@@ -177,7 +185,8 @@ export default function PrivacyPolicy({ onClose }: PrivacyPolicyProps) {
               </View>
 
               {/* 2C */}
-              <View className="bg-blue-50 rounded-xl p-4 border border-blue-200">
+              <View
+                style={{ borderRadius: 12, borderCurve: "continuous" }} className="bg-blue-50 p-4 border border-blue-200">
                 <View className="flex-row items-center mb-2">
                   <MapPin size={16} color="#1e40af" style={{ marginRight: 8 }} />
                   <Text className="text-sm font-semibold text-blue-900">C. Information from Other Sources</Text>
@@ -191,9 +200,11 @@ export default function PrivacyPolicy({ onClose }: PrivacyPolicyProps) {
           </View>
 
           {/* Section 3 — How We Use Your Information */}
-          <View className="bg-white rounded-2xl p-5 mb-4 shadow-sm border border-gray-100">
+          <View
+            style={{ borderRadius: 16, borderCurve: "continuous" }} className="bg-white p-5 mb-4 shadow-sm border border-gray-100">
             <View className="flex-row items-start mb-4">
-              <View className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-500 to-purple-600 items-center justify-center mr-4 shadow-md">
+              <View
+                style={{ borderRadius: 16, borderCurve: "continuous" }} className="w-12 h-12 bg-gradient-to-br from-purple-500 to-purple-600 items-center justify-center mr-4 shadow-md">
                 <Eye size={24} color="#ffffff" />
               </View>
               <View className="flex-1">
@@ -233,9 +244,11 @@ export default function PrivacyPolicy({ onClose }: PrivacyPolicyProps) {
           </View>
 
           {/* Section 4 — How We Share Your Information */}
-          <View className="bg-white rounded-2xl p-5 mb-4 shadow-sm border border-gray-100">
+          <View
+            style={{ borderRadius: 16, borderCurve: "continuous" }} className="bg-white p-5 mb-4 shadow-sm border border-gray-100">
             <View className="flex-row items-start mb-4">
-              <View className="w-12 h-12 rounded-2xl bg-gradient-to-br from-green-500 to-green-600 items-center justify-center mr-4 shadow-md">
+              <View
+                style={{ borderRadius: 16, borderCurve: "continuous" }} className="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 items-center justify-center mr-4 shadow-md">
                 <Share2 size={24} color="#ffffff" />
               </View>
               <View className="flex-1">
@@ -244,7 +257,8 @@ export default function PrivacyPolicy({ onClose }: PrivacyPolicyProps) {
               </View>
             </View>
             <View className="pl-16 space-y-3">
-              <View className="bg-green-50 rounded-xl p-4 border border-green-200 mb-1">
+              <View
+                style={{ borderRadius: 12, borderCurve: "continuous" }} className="bg-green-50 p-4 border border-green-200 mb-1">
                 <Text className="text-sm font-semibold text-green-900 mb-2">Our Commitment</Text>
                 <Text className="text-sm text-green-800 leading-5">
                   Information about our customers is a vital part of our business, and we are not in the business of selling your personal information to others.
@@ -272,9 +286,11 @@ export default function PrivacyPolicy({ onClose }: PrivacyPolicyProps) {
           </View>
 
           {/* Section 5 — Security: The Trust Fortress */}
-          <View className="bg-white rounded-2xl p-5 mb-4 shadow-sm border border-gray-100">
+          <View
+            style={{ borderRadius: 16, borderCurve: "continuous" }} className="bg-white p-5 mb-4 shadow-sm border border-gray-100">
             <View className="flex-row items-start mb-4">
-              <View className="w-12 h-12 rounded-2xl bg-gradient-to-br from-red-500 to-red-600 items-center justify-center mr-4 shadow-md">
+              <View
+                style={{ borderRadius: 16, borderCurve: "continuous" }} className="w-12 h-12 bg-gradient-to-br from-red-500 to-red-600 items-center justify-center mr-4 shadow-md">
                 <Lock size={24} color="#ffffff" />
               </View>
               <View className="flex-1">
@@ -286,25 +302,29 @@ export default function PrivacyPolicy({ onClose }: PrivacyPolicyProps) {
               <Text className="text-base text-gray-700 leading-6 mb-1">
                 We design our systems with your security and privacy in mind.
               </Text>
-              <View className="bg-red-50 rounded-xl p-3 border border-red-200">
+              <View
+                style={{ borderRadius: 12, borderCurve: "continuous" }} className="bg-red-50 p-3 border border-red-200">
                 <Text className="text-sm font-semibold text-red-900 mb-1">Transmission Security</Text>
                 <Text className="text-sm text-red-800 leading-5">
                   We use encryption protocols (SSL/TLS) to protect your data during transmission.
                 </Text>
               </View>
-              <View className="bg-red-50 rounded-xl p-3 border border-red-200">
+              <View
+                style={{ borderRadius: 12, borderCurve: "continuous" }} className="bg-red-50 p-3 border border-red-200">
                 <Text className="text-sm font-semibold text-red-900 mb-1">Payment Standards</Text>
                 <Text className="text-sm text-red-800 leading-5">
                   We follow the Payment Card Industry Data Security Standard (PCI DSS) when handling card data.
                 </Text>
               </View>
-              <View className="bg-red-50 rounded-xl p-3 border border-red-200">
+              <View
+                style={{ borderRadius: 12, borderCurve: "continuous" }} className="bg-red-50 p-3 border border-red-200">
                 <Text className="text-sm font-semibold text-red-900 mb-1">Identity Verification</Text>
                 <Text className="text-sm text-red-800 leading-5">
                   Our procedures mean that we may ask to verify your identity before we disclose personal information to you.
                 </Text>
               </View>
-              <View className="bg-red-50 rounded-xl p-3 border border-red-200">
+              <View
+                style={{ borderRadius: 12, borderCurve: "continuous" }} className="bg-red-50 p-3 border border-red-200">
                 <Text className="text-sm font-semibold text-red-900 mb-1">User Responsibility</Text>
                 <Text className="text-sm text-red-800 leading-5">
                   It is important for you to protect against unauthorized access to your password. We recommend signing off when finished using a shared device.
@@ -314,9 +334,11 @@ export default function PrivacyPolicy({ onClose }: PrivacyPolicyProps) {
           </View>
 
           {/* Section 6 — Your Choices and Access */}
-          <View className="bg-white rounded-2xl p-5 mb-4 shadow-sm border border-gray-100">
+          <View
+            style={{ borderRadius: 16, borderCurve: "continuous" }} className="bg-white p-5 mb-4 shadow-sm border border-gray-100">
             <View className="flex-row items-start mb-4">
-              <View className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-600 items-center justify-center mr-4 shadow-md">
+              <View
+                style={{ borderRadius: 16, borderCurve: "continuous" }} className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-indigo-600 items-center justify-center mr-4 shadow-md">
                 <Settings size={24} color="#ffffff" />
               </View>
               <View className="flex-1">
@@ -328,25 +350,29 @@ export default function PrivacyPolicy({ onClose }: PrivacyPolicyProps) {
               <Text className="text-base text-gray-700 leading-6 mb-1">
                 NamZoed provides you with significant control over your data:
               </Text>
-              <View className="bg-gray-50 rounded-xl p-3 border border-gray-200">
+              <View
+                style={{ borderRadius: 12, borderCurve: "continuous" }} className="bg-gray-50 p-3 border border-gray-200">
                 <Text className="text-sm font-semibold text-gray-800 mb-1">Access to Data</Text>
                 <Text className="text-sm text-gray-700 leading-5">
                   You can access your products, services, order history, name, address, and payment options in the "My Account" section.
                 </Text>
               </View>
-              <View className="bg-gray-50 rounded-xl p-3 border border-gray-200">
+              <View
+                style={{ borderRadius: 12, borderCurve: "continuous" }} className="bg-gray-50 p-3 border border-gray-200">
                 <Text className="text-sm font-semibold text-gray-800 mb-1">Updating Information</Text>
                 <Text className="text-sm text-gray-700 leading-5">
                   When you update data, we usually keep a copy of the prior version for our records.
                 </Text>
               </View>
-              <View className="bg-gray-50 rounded-xl p-3 border border-gray-200">
+              <View
+                style={{ borderRadius: 12, borderCurve: "continuous" }} className="bg-gray-50 p-3 border border-gray-200">
                 <Text className="text-sm font-semibold text-gray-800 mb-1">Communication Preferences</Text>
                 <Text className="text-sm text-gray-700 leading-5">
                   You can choose not to receive emails or in-app notifications by adjusting your notification settings.
                 </Text>
               </View>
-              <View className="bg-gray-50 rounded-xl p-3 border border-gray-200">
+              <View
+                style={{ borderRadius: 12, borderCurve: "continuous" }} className="bg-gray-50 p-3 border border-gray-200">
                 <Text className="text-sm font-semibold text-gray-800 mb-1">Deletion</Text>
                 <Text className="text-sm text-gray-700 leading-5">
                   To the extent required by law, you may request the deletion of your personal information.
@@ -356,9 +382,11 @@ export default function PrivacyPolicy({ onClose }: PrivacyPolicyProps) {
           </View>
 
           {/* Section 7 — Conditions of Use */}
-          <View className="bg-white rounded-2xl p-5 mb-4 shadow-sm border border-gray-100">
+          <View
+            style={{ borderRadius: 16, borderCurve: "continuous" }} className="bg-white p-5 mb-4 shadow-sm border border-gray-100">
             <View className="flex-row items-start mb-4">
-              <View className="w-12 h-12 rounded-2xl bg-gradient-to-br from-teal-500 to-teal-600 items-center justify-center mr-4 shadow-md">
+              <View
+                style={{ borderRadius: 16, borderCurve: "continuous" }} className="w-12 h-12 bg-gradient-to-br from-teal-500 to-teal-600 items-center justify-center mr-4 shadow-md">
                 <FileText size={24} color="#ffffff" />
               </View>
               <View className="flex-1">
@@ -376,7 +404,8 @@ export default function PrivacyPolicy({ onClose }: PrivacyPolicyProps) {
           </View>
 
           {/* Footer */}
-          <View className="bg-primary rounded-3xl p-6 mt-4 shadow-lg">
+          <View
+            style={{ borderRadius: 24, borderCurve: "continuous" }} className="bg-primary p-6 mt-4 shadow-lg">
             <View className="items-center mb-3">
               <View className="w-16 h-16 bg-white/20 rounded-full items-center justify-center mb-3">
                 <BadgeCheck size={32} color="#ffffff" />

@@ -162,7 +162,8 @@ export default function FollowRequestsOverlay({
     return (
       <View className={`mx-4 mb-3 ${item.isUnfollowed ? 'opacity-50' : ''}`}>
         <TouchableOpacity
-          className="flex-row items-center bg-white p-4 rounded-2xl border border-gray-100"
+          style={{ borderRadius: 16, borderCurve: "continuous" }}
+          className="flex-row items-center bg-white p-4 border border-gray-100"
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
             router.push(`/(users)/profile/${item.id}`);

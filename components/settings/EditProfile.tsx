@@ -1,8 +1,10 @@
 import PopupMessage from '@/components/ui/PopupMessage';
 import CircularLoader from '@/components/ui/CircularLoader';
 import { useUser } from '@/contexts/UserContext';
+import { dzongkhagCenters } from '@/data/dzongkhag';
 import { updateUserProfile } from '@/lib/profileService';
-import { ArrowLeft } from 'lucide-react-native';
+import { Picker } from '@react-native-picker/picker';
+import { ArrowLeft, MapPin } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,10 +13,14 @@ interface EditProfileProps {
   onClose?: () => void;
 }
 
+const BIO_MAX_LENGTH = 150;
+
 export default function EditProfile({ onClose }: EditProfileProps) {
   const { currentUser, setCurrentUser } = useUser();
   const insets = useSafeAreaInsets();
   const [name, setName] = useState('');
+  const [bio, setBio] = useState('');
+  const [dzongkhag, setDzongkhag] = useState('');
   const [loading, setLoading] = useState(false);
   const [popup, setPopup] = useState<{ visible: boolean; type: 'success' | 'error'; title: string; message: string }>({
     visible: false, type: 'success', title: '', message: '',
@@ -23,6 +29,8 @@ export default function EditProfile({ onClose }: EditProfileProps) {
   useEffect(() => {
     if (currentUser) {
       setName((currentUser as any).name || '');
+      setBio((currentUser as any).bio || '');
+      setDzongkhag(currentUser.dzongkhag || '');
     }
   }, [currentUser]);
 
@@ -39,8 +47,13 @@ export default function EditProfile({ onClose }: EditProfileProps) {
     }
     setLoading(true);
     try {
-      await updateUserProfile(currentUser.id, { name: name.trim() });
-      setCurrentUser({ ...currentUser, name: name.trim() } as any);
+      const trimmedBio = bio.trim();
+      await updateUserProfile(currentUser.id, {
+        name: name.trim(),
+        bio: trimmedBio || null,
+        dzongkhag: dzongkhag || null,
+      });
+      setCurrentUser({ ...currentUser, name: name.trim(), bio: trimmedBio || null, dzongkhag: dzongkhag || null } as any);
       showPopup('success', 'Profile Updated', 'Your profile has been updated.');
       setTimeout(() => onClose?.(), 1500);
     } catch {
@@ -72,7 +85,8 @@ export default function EditProfile({ onClose }: EditProfileProps) {
         <View className="mb-4">
           <Text className="text-sm font-msemibold text-gray-700 mb-2">Name</Text>
           <TextInput
-            className="bg-gray-50 rounded-xl px-4 py-3 text-base text-gray-900 border border-gray-200"
+            style={{ borderRadius: 12, borderCurve: "continuous" }}
+            className="bg-gray-50 px-4 py-3 text-base text-gray-900 border border-gray-200"
             placeholder="Enter your name"
             placeholderTextColor="#9CA3AF"
             value={name}
@@ -80,10 +94,46 @@ export default function EditProfile({ onClose }: EditProfileProps) {
           />
         </View>
 
+        <View className="mb-4">
+          <View className="flex-row items-center justify-between mb-2">
+            <Text className="text-sm font-msemibold text-gray-700">Bio</Text>
+            <Text className="text-xs text-gray-400">{bio.length}/{BIO_MAX_LENGTH}</Text>
+          </View>
+          <TextInput
+            style={{ borderRadius: 12, borderCurve: "continuous", minHeight: 88, textAlignVertical: "top" }}
+            className="bg-gray-50 px-4 py-3 text-base text-gray-900 border border-gray-200"
+            placeholder="Tell people a bit about yourself (optional)"
+            placeholderTextColor="#9CA3AF"
+            value={bio}
+            onChangeText={(text) => setBio(text.slice(0, BIO_MAX_LENGTH))}
+            multiline
+            maxLength={BIO_MAX_LENGTH}
+          />
+        </View>
+
+        <View className="mb-4">
+          <Text className="text-sm font-msemibold text-gray-700 mb-2">Location</Text>
+          <View
+            style={{ borderRadius: 12, borderCurve: "continuous" }} className="bg-gray-50 border border-gray-200 flex-row items-center px-2">
+            <MapPin size={18} color="#9CA3AF" style={{ marginLeft: 6 }} />
+            <Picker
+              selectedValue={dzongkhag}
+              onValueChange={(value) => setDzongkhag(value)}
+              style={{ flex: 1, height: 50 }}
+            >
+              <Picker.Item label="Not set" value="" />
+              {dzongkhagCenters.map((dz) => (
+                <Picker.Item key={dz.name} label={dz.name} value={dz.name} />
+              ))}
+            </Picker>
+          </View>
+        </View>
+
         <TouchableOpacity
+          style={{ borderRadius: 12, borderCurve: "continuous" }}
           onPress={handleSave}
           disabled={loading}
-          className="bg-primary rounded-xl py-4 items-center mt-4"
+          className="bg-primary py-4 items-center mt-4"
         >
           {loading ? (
             <CircularLoader color="#fff" />

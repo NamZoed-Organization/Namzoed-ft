@@ -76,11 +76,11 @@ export default function AudioMessagePlayer({
     } catch (_) {}
   };
 
-  const fmt = (secs: number) => {
-    const m = Math.floor(secs / 60);
-    const s = Math.floor(secs % 60);
-    return `${m}:${s.toString().padStart(2, '0')}`;
-  };
+  // Bare seconds count with a trailing double-quote mark ("45", not
+  // "0:45") — matches CommentAudioPlayer's own voice-note format instead of
+  // a clock-style m:ss, for a consistent stopwatch-tick reading everywhere
+  // a voice note's duration shows up.
+  const fmt = (secs: number) => `${Math.round(secs)}"`;
 
   const displayTime   = (status.playing || status.currentTime > 0) ? fmt(status.currentTime) : fmt(totalDur);
   const isLoading     = loadedRef.current && !status.isLoaded && !status.playing;
@@ -89,8 +89,12 @@ export default function AudioMessagePlayer({
 
   return (
     <View
-      className={`flex-row items-center px-3 py-2 rounded-2xl ${isCurrentUser ? 'bg-primary' : 'bg-gray-200'} ${isOptimistic ? 'opacity-70' : ''}`}
-      style={{ minWidth: 210, maxWidth: 280 }}
+      className={`flex-row items-center px-3 py-2 ${isCurrentUser ? 'bg-primary' : 'bg-gray-200'} ${isOptimistic ? 'opacity-70' : ''}`}
+      // borderRadius/borderCurve moved out of the rounded-2xl className and
+      // into style — borderCurve (iOS's continuous "squircle" corner, same
+      // as the text/image chat bubbles now use) only takes effect via RN's
+      // own style prop, not a NativeWind className.
+      style={{ minWidth: 210, maxWidth: 280, borderRadius: 16, borderCurve: 'continuous' }}
     >
       {/* Play / Pause button */}
       <TouchableOpacity
@@ -109,7 +113,7 @@ export default function AudioMessagePlayer({
       <View style={{ flex: 1, height: 32, marginLeft: 8, marginRight: 6, overflow: 'hidden' }}>
         <View style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, flexDirection: 'row', alignItems: 'center' }}>
           {WAVEFORM.map((h, i) => (
-            <View key={i} style={{ width: 3, height: h, borderRadius: 2, marginHorizontal: 1.2, backgroundColor: unplayedColor }} />
+            <View key={i} style={{ width: 3, height: h, borderRadius: 2, borderCurve: 'continuous', marginHorizontal: 1.2, backgroundColor: unplayedColor }} />
           ))}
         </View>
         <Animated.View style={{
@@ -118,7 +122,7 @@ export default function AudioMessagePlayer({
         }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', height: 32 }}>
             {WAVEFORM.map((h, i) => (
-              <View key={i} style={{ width: 3, height: h, borderRadius: 2, marginHorizontal: 1.2, backgroundColor: playedColor }} />
+              <View key={i} style={{ width: 3, height: h, borderRadius: 2, borderCurve: 'continuous', marginHorizontal: 1.2, backgroundColor: playedColor }} />
             ))}
           </View>
         </Animated.View>
@@ -131,11 +135,6 @@ export default function AudioMessagePlayer({
       }}>
         {displayTime}
       </Text>
-
-      {/* Mic icon */}
-      <View style={{ marginLeft: 5, flexShrink: 0 }}>
-        <Ionicons name="mic" size={15} color={isCurrentUser ? 'rgba(255,255,255,0.75)' : '#6b7280'} />
-      </View>
 
       {/* Upload spinner for optimistic messages */}
       {isOptimistic && (

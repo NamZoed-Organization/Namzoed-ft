@@ -44,7 +44,8 @@ export default function CommentActionSheet({
 
   return (
     <ActionSheetModal visible={visible} onClose={onClose}>
-      <View className="bg-white rounded-t-3xl">
+      <View
+        style={{ borderTopLeftRadius: 24, borderTopRightRadius: 24, borderCurve: "continuous" }} className="bg-white">
         <View className="p-4">
           <TouchableOpacity
             className="flex-row items-center py-4 px-2"

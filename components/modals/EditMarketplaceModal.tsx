@@ -308,7 +308,8 @@ export default function EditMarketplaceModal({
           className="flex-1 justify-end"
         >
           <View className="flex-1 bg-black/50 justify-end">
-            <View className="bg-white rounded-t-3xl h-[90%] w-full overflow-hidden">
+            <View
+              style={{ borderTopLeftRadius: 24, borderTopRightRadius: 24, borderCurve: "continuous" }} className="bg-white h-[90%] w-full overflow-hidden">
               {/* Premium Header with BlurView */}
               <BlurView
                 intensity={90}
@@ -351,8 +352,9 @@ export default function EditMarketplaceModal({
                     {existingImages.map((url, index) => (
                       <View key={`existing-${index}`} className="relative mr-3">
                         <Image
+                          style={{ borderRadius: 12 }}
                           source={{ uri: url }}
-                          className="w-24 h-24 rounded-xl"
+                          className="w-24 h-24"
                         />
                         <TouchableOpacity
                           onPress={() => removeExistingImage(index)}
@@ -360,7 +362,8 @@ export default function EditMarketplaceModal({
                         >
                           <X size={12} color="white" />
                         </TouchableOpacity>
-                        <View className="absolute bottom-1 left-1 bg-white/80 rounded px-1">
+                        <View
+                          style={{ borderRadius: 4, borderCurve: "continuous" }} className="absolute bottom-1 left-1 bg-white/80 px-1">
                           <Text className="text-[10px] text-gray-600">
                             Existing
                           </Text>
@@ -372,8 +375,9 @@ export default function EditMarketplaceModal({
                     {newImages.map((uri, index) => (
                       <View key={`new-${index}`} className="relative mr-3">
                         <Image
+                          style={{ borderRadius: 12 }}
                           source={{ uri }}
-                          className="w-24 h-24 rounded-xl"
+                          className="w-24 h-24"
                         />
                         <TouchableOpacity
                           onPress={() => removeNewImage(index)}
@@ -381,7 +385,8 @@ export default function EditMarketplaceModal({
                         >
                           <X size={12} color="white" />
                         </TouchableOpacity>
-                        <View className="absolute bottom-1 left-1 bg-primary/80 rounded px-1">
+                        <View
+                          style={{ borderRadius: 4, borderCurve: "continuous" }} className="absolute bottom-1 left-1 bg-primary/80 px-1">
                           <Text className="text-[10px] text-white">New</Text>
                         </View>
                       </View>
@@ -389,8 +394,9 @@ export default function EditMarketplaceModal({
 
                     {/* Add Photo Button */}
                     <TouchableOpacity
+                      style={{ borderRadius: 12, borderCurve: "continuous" }}
                       onPress={pickImage}
-                      className="w-24 h-24 border-2 border-dashed border-gray-300 rounded-xl justify-center items-center mr-3 bg-gray-50"
+                      className="w-24 h-24 border-2 border-dashed border-gray-300 justify-center items-center mr-3 bg-gray-50"
                     >
                       <Upload size={24} color="#9CA3AF" />
                       <Text className="text-xs text-gray-400 mt-1">
@@ -407,7 +413,8 @@ export default function EditMarketplaceModal({
                       Title
                     </Text>
                     <TextInput
-                      className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900"
+                      style={{ borderRadius: 12, borderCurve: "continuous" }}
+                      className="bg-gray-50 border border-gray-200 px-4 py-3 text-gray-900"
                       placeholder="e.g. Apartment for Rent in Thimphu"
                       value={title}
                       onChangeText={setTitle}
@@ -472,7 +479,7 @@ export default function EditMarketplaceModal({
                         <Text className="text-gray-600 font-medium">Nu.</Text>
                       </View>
                       <TextInput
-                        className="bg-gray-50 border border-gray-200 rounded-xl pl-14 pr-4 py-3 text-gray-900"
+                        className="bg-gray-50 border border-gray-200 pl-14 pr-4 py-3 text-gray-900"
                         placeholder={
                           selectedType === "swap" || selectedType === "free"
                             ? "0"
@@ -486,12 +493,10 @@ export default function EditMarketplaceModal({
                         editable={
                           selectedType !== "swap" && selectedType !== "free"
                         }
-                        style={{
-                          opacity:
+                        style={{ opacity:
                             selectedType === "swap" || selectedType === "free"
                               ? 0.5
-                              : 1,
-                        }}
+                              : 1, borderRadius: 12, borderCurve: "continuous" }}
                       />
                     </View>
                     {(selectedType === "swap" || selectedType === "free") && (
@@ -506,7 +511,8 @@ export default function EditMarketplaceModal({
                     <Text className="text-sm font-medium text-gray-700 mb-2">
                       Location (Optional)
                     </Text>
-                    <View className="bg-gray-50 border border-gray-200 rounded-xl overflow-hidden">
+                    <View
+                      style={{ borderRadius: 12, borderCurve: "continuous" }} className="bg-gray-50 border border-gray-200 overflow-hidden">
                       <Picker
                         selectedValue={dzongkhag}
                         onValueChange={(value) => setDzongkhag(value)}
@@ -533,7 +539,8 @@ export default function EditMarketplaceModal({
                       </Text>
                     </Text>
                     <TextInput
-                      className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900"
+                      style={{ borderRadius: 12, borderCurve: "continuous" }}
+                      className="bg-gray-50 border border-gray-200 px-4 py-3 text-gray-900"
                       placeholder="e.g. 2BHK, furnished, parking"
                       value={tags}
                       onChangeText={setTags}
@@ -553,7 +560,8 @@ export default function EditMarketplaceModal({
                           <Text className="text-red-500">*</Text>
                         </Text>
                         <TextInput
-                          className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 min-h-[100px]"
+                          style={{ borderRadius: 12, borderCurve: "continuous" }}
+                          className="bg-gray-50 border border-gray-200 px-4 py-3 text-gray-900 min-h-[100px]"
                           placeholder="Describe the role and what makes it unique"
                           multiline
                           textAlignVertical="top"
@@ -574,7 +582,8 @@ export default function EditMarketplaceModal({
                           </Text>
                         </Text>
                         <TextInput
-                          className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 min-h-[100px]"
+                          style={{ borderRadius: 12, borderCurve: "continuous" }}
+                          className="bg-gray-50 border border-gray-200 px-4 py-3 text-gray-900 min-h-[100px]"
                           placeholder="List required qualifications and skills"
                           multiline
                           textAlignVertical="top"
@@ -595,7 +604,8 @@ export default function EditMarketplaceModal({
                           </Text>
                         </Text>
                         <TextInput
-                          className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 min-h-[100px]"
+                          style={{ borderRadius: 12, borderCurve: "continuous" }}
+                          className="bg-gray-50 border border-gray-200 px-4 py-3 text-gray-900 min-h-[100px]"
                           placeholder="List key responsibilities and duties"
                           multiline
                           textAlignVertical="top"
@@ -615,7 +625,8 @@ export default function EditMarketplaceModal({
                         Description <Text className="text-red-500">*</Text>
                       </Text>
                       <TextInput
-                        className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 min-h-[100px]"
+                        style={{ borderRadius: 12, borderCurve: "continuous" }}
+                        className="bg-gray-50 border border-gray-200 px-4 py-3 text-gray-900 min-h-[100px]"
                         placeholder="Describe your item..."
                         multiline
                         textAlignVertical="top"

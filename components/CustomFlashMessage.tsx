@@ -7,7 +7,8 @@ type Props = {
 
 export default function CustomFlashMessage({ message }: Props) {
   return (
-    <View className="bg-primary px-4 py-3 mx-4 rounded-xl shadow-lg">
+    <View
+      style={{ borderRadius: 12, borderCurve: "continuous" }} className="bg-primary px-4 py-3 mx-4 shadow-lg">
       <Text className="text-secondary font-mbold text-base">
         {message.message}
       </Text>

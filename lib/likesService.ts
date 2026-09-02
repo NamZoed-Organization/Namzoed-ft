@@ -1,4 +1,5 @@
 import { notifyPostLiked } from '@/services/notificationService';
+import { Post } from './postsService';
 import { supabase } from './supabase';
 
 // Check if a user has liked a post
@@ -226,6 +227,41 @@ export const getFollowedLikers = async (
     }));
   } catch (error) {
     console.error('Error in getFollowedLikers:', error);
+    return [];
+  }
+};
+
+// Get all posts a user has liked, most recently liked first — feeds the
+// "Likes" tab on their own profile.
+export const getUserLikedPosts = async (userId: string): Promise<Post[]> => {
+  if (!userId) return [];
+  try {
+    const { data, error } = await supabase
+      .from('post_likes')
+      .select(`
+        created_at,
+        posts (
+          *,
+          post_likes ( id )
+        )
+      `)
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching liked posts:', error);
+      return [];
+    }
+
+    return (data || [])
+      .map((row: any) => row.posts)
+      .filter((post: any) => post != null)
+      .map((post: any) => ({
+        ...post,
+        likes: post.post_likes?.length || 0,
+      }));
+  } catch (error) {
+    console.error('Error in getUserLikedPosts:', error);
     return [];
   }
 };

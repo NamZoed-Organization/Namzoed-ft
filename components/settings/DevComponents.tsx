@@ -4,7 +4,8 @@
  * Dev-only playground for previewing shared UI elements — loading
  * indicators, popups, overlays — in their different states without having
  * to dig up real data to trigger them. Only reachable from Settings when
- * __DEV__ is true (see ProfileSettings.tsx) — never shown in a prod bundle.
+ * __DEV__ is true (see app/(users)/settings/index.tsx) — never shown in a
+ * prod bundle.
  *
  * Add new sections here as more reusable components need a place to preview
  * their states: a SectionHeader + a row of trigger buttons is the pattern.
@@ -54,6 +55,7 @@ function TriggerButton({ label, onPress }: { label: string; onPress: () => void 
         paddingHorizontal: 14,
         paddingVertical: 10,
         borderRadius: 10,
+        borderCurve: "continuous",
         backgroundColor: "#f3f4f6",
         marginRight: 8,
         marginBottom: 8,
@@ -146,6 +148,7 @@ export default function DevComponents({ onClose }: Props) {
               style={{
                 backgroundColor: "#000",
                 borderRadius: 12,
+                borderCurve: "continuous",
                 padding: 14,
               }}
             >
@@ -188,6 +191,7 @@ export default function DevComponents({ onClose }: Props) {
               width: "100%",
               aspectRatio: 4 / 5,
               borderRadius: 12,
+              borderCurve: "continuous",
               overflow: "hidden",
               backgroundColor: "#334155",
               marginBottom: 12,
@@ -208,6 +212,7 @@ export default function DevComponents({ onClose }: Props) {
               width: 180,
               aspectRatio: 3 / 4,
               borderRadius: 4,
+              borderCurve: "continuous",
               overflow: "hidden",
               backgroundColor: "#94a3b8",
               marginBottom: 12,
@@ -228,6 +233,7 @@ export default function DevComponents({ onClose }: Props) {
             marginTop: 8,
             padding: 14,
             borderRadius: 12,
+            borderCurve: "continuous",
             backgroundColor: "#faf5ff",
             borderWidth: 1,
             borderColor: "#ede9fe",

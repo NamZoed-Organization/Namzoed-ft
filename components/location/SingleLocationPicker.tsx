@@ -241,6 +241,7 @@ export default function SingleLocationPicker({
               style={{
                 backgroundColor: "#2563eb",
                 borderRadius: 14,
+                borderCurve: "continuous",
                 paddingVertical: 15,
                 alignItems: "center",
               }}

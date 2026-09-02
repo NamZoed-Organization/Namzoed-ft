@@ -295,6 +295,7 @@ export default function MongooseResponderModal({
               backgroundColor: "white",
               borderTopLeftRadius: 24,
               borderTopRightRadius: 24,
+              borderCurve: "continuous",
               maxHeight: "90%",
               overflow: "hidden",
             }}
@@ -306,6 +307,7 @@ export default function MongooseResponderModal({
                   width: 40,
                   height: 4,
                   borderRadius: 2,
+                  borderCurve: "continuous",
                   backgroundColor: "#d1d5db",
                 }}
               />
@@ -357,6 +359,7 @@ export default function MongooseResponderModal({
                 style={{
                   backgroundColor: "#f8faff",
                   borderRadius: 14,
+                  borderCurve: "continuous",
                   padding: 14,
                   borderWidth: 1,
                   borderColor: "#e0e7ff",
@@ -439,6 +442,7 @@ export default function MongooseResponderModal({
                   alignItems: "center",
                   backgroundColor: myRoleBg,
                   borderRadius: 12,
+                  borderCurve: "continuous",
                   paddingHorizontal: 12,
                   paddingVertical: 10,
                   marginBottom: 16,
@@ -503,6 +507,7 @@ export default function MongooseResponderModal({
                       borderWidth: 1.5,
                       borderColor: myRoleColor === SELLER_COLOR ? "#86efac" : "#93c5fd",
                       borderRadius: 13,
+                      borderCurve: "continuous",
                       padding: 13,
                       backgroundColor: myRoleBg,
                       marginBottom: 10,
@@ -535,6 +540,7 @@ export default function MongooseResponderModal({
                       borderWidth: 1.5,
                       borderColor: "#d1d5db",
                       borderRadius: 12,
+                      borderCurve: "continuous",
                       paddingVertical: 11,
                       marginBottom: 22,
                     }}
@@ -560,6 +566,7 @@ export default function MongooseResponderModal({
                     borderStyle: "dashed",
                     borderColor: "#2563eb",
                     borderRadius: 14,
+                    borderCurve: "continuous",
                     paddingVertical: 26,
                     alignItems: "center",
                     marginBottom: 22,
@@ -587,6 +594,7 @@ export default function MongooseResponderModal({
                   backgroundColor:
                     !location || submitting ? "#9ca3af" : "#16a34a",
                   borderRadius: 14,
+                  borderCurve: "continuous",
                   paddingVertical: 15,
                   alignItems: "center",
                   flexDirection: "row",

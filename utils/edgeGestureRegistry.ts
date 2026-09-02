@@ -8,37 +8,63 @@
  * way to know. Carousels register their on-screen bounds + current index
  * here; ContextDrop consults it once per gesture-capture check.
  *
- * A plain module-level Map (not React context) on purpose — ContextDrop and
- * any carousel can be arbitrarily far apart in the tree (e.g. a comment's
- * gallery, several list levels below the post's own ContextDrop wrapper),
- * and this only ever needs a synchronous "is this point blocked right now"
- * read at gesture time, not a subscription.
+ * ContextDrop's gesture (see ContextDrop.tsx) runs entirely as a Reanimated
+ * worklet on the UI thread so its recognition/tracking never lags behind a
+ * busy JS thread — which means this check must be answerable synchronously
+ * FROM the UI thread too. A plain JS Map (readable only from the JS thread)
+ * can't do that, so state lives in a single Reanimated shared value instead:
+ * carousels push bounds/index updates into it (a normal JS-thread write,
+ * same cost as the old ref assignment it replaces), and isEdgeGestureBlockedAt
+ * — itself a worklet — reads it back live, with no cross-thread round trip.
  */
 
-interface RegisteredCarousel {
-  /** Current on-screen vertical bounds (window coordinates). */
-  getBounds: () => { top: number; bottom: number } | null;
-  /** True while there's a previous item a rightward swipe would reveal. */
-  hasPrevious: () => boolean;
+import { makeMutable } from "react-native-reanimated";
+
+interface CarouselEntry {
+  id: number;
+  top: number;
+  bottom: number;
+  hasPrevious: boolean;
 }
 
-const carousels = new Map<string, RegisteredCarousel>();
+export interface EdgeGestureCarouselHandle {
+  setBounds: (top: number, bottom: number) => void;
+  setHasPrevious: (hasPrevious: boolean) => void;
+  unregister: () => void;
+}
+
+const registrySV = makeMutable<CarouselEntry[]>([]);
 let nextId = 0;
 
-/** Call on mount; call the returned cleanup on unmount. */
-export function registerEdgeGestureCarousel(carousel: RegisteredCarousel): () => void {
-  const id = `carousel-${nextId++}`;
-  carousels.set(id, carousel);
-  return () => {
-    carousels.delete(id);
+/** Call on mount; call the returned handle's unregister() on unmount. */
+export function registerEdgeGestureCarousel(): EdgeGestureCarouselHandle {
+  const id = nextId++;
+  registrySV.value = [...registrySV.value, { id, top: 0, bottom: 0, hasPrevious: false }];
+
+  // Shared values must be reassigned (not mutated in place) for the new
+  // value to actually propagate to the UI thread's copy.
+  const patch = (partial: Partial<Omit<CarouselEntry, "id">>) => {
+    registrySV.value = registrySV.value.map((entry) =>
+      entry.id === id ? { ...entry, ...partial } : entry,
+    );
+  };
+
+  return {
+    setBounds: (top, bottom) => patch({ top, bottom }),
+    setHasPrevious: (hasPrevious) => patch({ hasPrevious }),
+    unregister: () => {
+      registrySV.value = registrySV.value.filter((entry) => entry.id !== id);
+    },
   };
 }
 
+/** Worklet — called from ContextDrop's own UI-thread gesture callbacks. */
 export function isEdgeGestureBlockedAt(y: number): boolean {
-  for (const carousel of carousels.values()) {
-    if (!carousel.hasPrevious()) continue;
-    const bounds = carousel.getBounds();
-    if (bounds && y >= bounds.top && y <= bounds.bottom) return true;
+  "worklet";
+  const list = registrySV.value;
+  for (let i = 0; i < list.length; i++) {
+    const entry = list[i];
+    if (entry.hasPrevious && y >= entry.top && y <= entry.bottom) return true;
   }
   return false;
 }

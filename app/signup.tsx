@@ -286,6 +286,7 @@ export default function SignupTab2() {
               borderWidth: 1,
               borderColor: "#E5E7EB",
               borderRadius: 12,
+              borderCurve: "continuous",
               paddingVertical: 14,
               paddingHorizontal: 16,
               backgroundColor: "#F9FAFB",
@@ -388,14 +389,12 @@ export default function SignupTab2() {
           {/* Register Button */}
           <TouchableOpacity
             onPress={handleSignup}
-            className="rounded-lg"
             activeOpacity={0.8}
             disabled={!isFormValid || loading}
-            style={{
-              backgroundColor: isFormValid && !loading ? "#094569" : "#09456980",
+            style={{ backgroundColor: isFormValid && !loading ? "#094569" : "#09456980",
               paddingVertical: submitPaddingY,
               borderRadius: submitRadius,
-            }}
+              borderCurve: "continuous" }}
           >
             <Text
               className="text-secondary text-center font-semibold"

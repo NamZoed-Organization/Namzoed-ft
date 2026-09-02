@@ -9,6 +9,7 @@ import { Actions, Elements, Features, Screens, trackInteraction } from "@/lib/an
 import { clamp, useResponsive } from "@/utils/responsive";
 import { isMongooseUser } from "@/utils/roleCheck";
 import { Ionicons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
 import { Tabs, usePathname, useRouter } from "expo-router";
 import { Plus } from "lucide-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -49,6 +50,20 @@ export default function UsersTabsLayout() {
       metadata: { pathname },
     });
   }, [pathname, currentUser?.id]);
+  // Tactile tick on every floating-tab-bar press, same as iOS's own
+  // segmented-control/tab-bar feedback (selectionAsync, not a heavier
+  // impact) — fires on press-in so it lands the instant a finger touches
+  // down, matching TabBarButton's no-press-delay Pressable.
+  const handleTabPressIn = useCallback(() => {
+    Haptics.selectionAsync();
+  }, []);
+  const renderTabBarButton = useCallback(
+    (props: any) => (
+      <TabBarButton {...props} android_ripple={null} onPressIn={handleTabPressIn} />
+    ),
+    [handleTabPressIn],
+  );
+
   const { ms } = useResponsive();
   const sideIconSize = clamp(ms(19), 18, 21);
   const plusCircleSize = clamp(ms(22), 20, 24) + 18;
@@ -171,9 +186,7 @@ export default function UsersTabsLayout() {
           name="index"
           options={{
             title: "Home",
-            tabBarButton: (props) => (
-              <TabBarButton {...props} android_ripple={null} />
-            ),
+            tabBarButton: renderTabBarButton,
             tabBarIcon: ({ focused }) => (
               <HomeIcon focused={focused} size={sideIconSize} />
             ),
@@ -184,9 +197,7 @@ export default function UsersTabsLayout() {
           name="categories/index"
           options={{
             title: "Shopping",
-            tabBarButton: (props) => (
-              <TabBarButton {...props} android_ripple={null} />
-            ),
+            tabBarButton: renderTabBarButton,
             tabBarIcon: ({ focused }) => (
               <ShoppingIcon
                 focused={focused || pathname.includes("/categories/")}
@@ -207,15 +218,14 @@ export default function UsersTabsLayout() {
           }}
           options={{
             title: "Feed",
-            tabBarButton: (props) => (
-              <TabBarButton {...props} android_ripple={null} />
-            ),
+            tabBarButton: renderTabBarButton,
             tabBarIcon: ({ focused }) => (
               <View
                 style={{
                   width: plusCircleSize,
                   height: plusCircleSize,
                   borderRadius: plusCircleSize / 2,
+                  borderCurve: "continuous",
                   backgroundColor: "#EDC06D",
                   alignItems: "center",
                   justifyContent: "center",
@@ -231,9 +241,7 @@ export default function UsersTabsLayout() {
           name="marketplace/index"
           options={{
             title: "Market",
-            tabBarButton: (props) => (
-              <TabBarButton {...props} android_ripple={null} />
-            ),
+            tabBarButton: renderTabBarButton,
             tabBarIcon: ({ focused }) => (
               <Ionicons
                 name={focused ? "storefront" : "storefront-outline"}
@@ -248,9 +256,7 @@ export default function UsersTabsLayout() {
           name="services/index"
           options={{
             title: "Services",
-            tabBarButton: (props) => (
-              <TabBarButton {...props} android_ripple={null} />
-            ),
+            tabBarButton: renderTabBarButton,
             tabBarIcon: ({ focused }) => (
               <Ionicons
                 name={focused ? "construct" : "construct-outline"}

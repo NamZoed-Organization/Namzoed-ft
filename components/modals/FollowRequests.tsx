@@ -99,7 +99,8 @@ export default function FollowRequests({ onClose, userId }: FollowRequestsProps)
     return (
       <View className={`mx-4 mb-3 ${isProcessed ? 'opacity-50' : ''}`}>
         <TouchableOpacity
-          className="flex-row items-center bg-white p-4 rounded-2xl border border-gray-100"
+          style={{ borderRadius: 16, borderCurve: "continuous" }}
+          className="flex-row items-center bg-white p-4 border border-gray-100"
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
             router.push(`/(users)/profile/${item.id}`);
@@ -134,23 +135,25 @@ export default function FollowRequests({ onClose, userId }: FollowRequestsProps)
           {!isProcessed && (
             <View className="flex-row gap-x-2">
               <TouchableOpacity
+                style={{ borderRadius: 8, borderCurve: "continuous" }}
                 onPress={(e) => {
                   e.stopPropagation();
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
                   handleAccept(item);
                 }}
-                className="bg-primary px-4 py-2 rounded-lg border border-primary"
+                className="bg-primary px-4 py-2 border border-primary"
               >
                 <Text className="font-msemibold text-sm text-white">Accept</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
+                style={{ borderRadius: 8, borderCurve: "continuous" }}
                 onPress={(e) => {
                   e.stopPropagation();
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
                   handleReject(item);
                 }}
-                className="bg-gray-50 px-4 py-2 rounded-lg border border-gray-200"
+                className="bg-gray-50 px-4 py-2 border border-gray-200"
               >
                 <Text className="font-msemibold text-sm text-gray-700">Reject</Text>
               </TouchableOpacity>
@@ -158,13 +161,15 @@ export default function FollowRequests({ onClose, userId }: FollowRequestsProps)
           )}
 
           {item.isFollowingBack && (
-            <View className="px-4 py-2 bg-green-50 rounded-lg">
+            <View
+              style={{ borderRadius: 8, borderCurve: "continuous" }} className="px-4 py-2 bg-green-50">
               <Text className="text-green-700 text-sm font-msemibold">Accepted</Text>
             </View>
           )}
 
           {item.isUnfollowed && (
-            <View className="px-4 py-2 bg-gray-50 rounded-lg">
+            <View
+              style={{ borderRadius: 8, borderCurve: "continuous" }} className="px-4 py-2 bg-gray-50">
               <Text className="text-gray-500 text-sm font-msemibold">Rejected</Text>
             </View>
           )}

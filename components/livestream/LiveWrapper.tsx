@@ -192,6 +192,7 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     backgroundColor: "#FEF2F2",
     borderRadius: 12,
+    borderCurve: "continuous",
     padding: 16,
     marginBottom: 20,
   },
@@ -211,6 +212,7 @@ const styles = StyleSheet.create({
   codeBlock: {
     backgroundColor: "#1F2937",
     borderRadius: 8,
+    borderCurve: "continuous",
     padding: 16,
     marginBottom: 24,
     alignSelf: "stretch",
@@ -230,6 +232,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
     paddingVertical: 14,
     borderRadius: 25,
+    borderCurve: "continuous",
     gap: 8,
     minWidth: 160,
   },
@@ -243,6 +246,7 @@ const styles = StyleSheet.create({
     padding: 16,
     backgroundColor: "#F3F4F6",
     borderRadius: 8,
+    borderCurve: "continuous",
     alignSelf: "stretch",
   },
   technicalTitle: {

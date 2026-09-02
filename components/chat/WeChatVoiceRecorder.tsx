@@ -10,7 +10,6 @@ import {
   requestRecordingPermissionsAsync,
   setAudioModeAsync,
   useAudioRecorder,
-  useAudioRecorderState,
 } from "expo-audio";
 import { BlurView } from "expo-blur";
 import * as FileSystem from "expo-file-system/legacy";
@@ -19,6 +18,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Easing,
+  Keyboard,
   Modal,
   PanResponder,
   Text,
@@ -143,7 +143,6 @@ export default function WeChatVoiceRecorder({
   // real values — without it every sample reads as undefined and the
   // waveform has no live signal to animate from.
   const recorder = useAudioRecorder({ ...RecordingPresets.HIGH_QUALITY, isMeteringEnabled: true });
-  const recorderState = useAudioRecorderState(recorder, WAVEFORM_SAMPLE_INTERVAL);
   // Measured (not assumed from window width) so the two pills' inner ends
   // land relative to THIS component's own actual center — since the
   // composer's horizontal padding is symmetric, that measured center
@@ -211,6 +210,15 @@ export default function WeChatVoiceRecorder({
   // what kept reopening the gap regardless of PILL_GAP.
   const pillContainerBottom = DOME_HEIGHT + PILL_GAP - pillContainerHeight + PILL_PAD;
   const pillContainerWidth = pillReach + PILL_CONTAINER_WIDTH_EXTRA;
+  // The lock container's left edge, expressed explicitly rather than via
+  // `right: -(PILL_EDGE_OVERHANG + PILL_PAD)` — algebraically identical
+  // (parentWidth - (-(PILL_EDGE_OVERHANG+PILL_PAD)) - pillContainerWidth
+  // reduces to exactly this), but measureInWindow's reported x for a
+  // right-positioned view was consistently landing somewhere that never
+  // satisfied `x >= lockZone.left` — matching the cancel pill's own
+  // reliably-working left-based positioning instead removes that
+  // asymmetry outright, with no visual difference (same resolved position).
+  const lockContainerLeft = contentWidth - pillReach - PILL_PAD;
   // Cancel: M is the far outer tip (straight extension, out in the
   // overhang), L brings it in to the visible screen-edge point, then Q is
   // the cropped dome-matched curve from there in to the inner/high end,
@@ -280,9 +288,25 @@ export default function WeChatVoiceRecorder({
   const [isRecording, setIsRecording] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
-  // Mirrors isRecording but lags behind it on the way to false — the dome
+  // True from the instant the finger touches down (onPanResponderGrant)
+  // until the session actually concludes (send/cancel/error) — deliberately
+  // NOT the same thing as isRecording, which only flips true once
+  // startRecording()'s async chain (mic permission → setAudioModeAsync →
+  // prepareToRecordAsync → recorder.record()) has fully resolved, often
+  // 100s of ms later. The dome/pills/hit-zones used to mount only once
+  // isRecording went true, which meant a normal quick "press, drag,
+  // release" gesture could run its entire course — including reaching the
+  // cancel/lock zone — before the pills had even mounted, let alone
+  // measured their hit zones, so the drag was evaluated against zone refs
+  // that were still null and nothing ever registered. Driving the UI off
+  // this instead shrinks that race from "however long real audio setup
+  // takes" down to a single render/effect flush, which is what actually
+  // fixes detection rather than the coordinate-math theories tried first.
+  const [isHolding, setIsHolding] = useState(false);
+  const holdingRef = useRef(false);
+  // Mirrors isHolding but lags behind it on the way to false — the dome
   // and pills are a conditional mount (see the render below), so unmounting
-  // the instant isRecording flips false would cut off the fade-out
+  // the instant isHolding flips false would cut off the fade-out
   // animation mid-flight. This stays true through that animation and only
   // flips once it's actually finished.
   const [showRecordingUI, setShowRecordingUI] = useState(false);
@@ -371,7 +395,14 @@ export default function WeChatVoiceRecorder({
     if (dragZoneRef.current === zone) return;
     dragZoneRef.current = zone;
     setDragZone(zone);
-    void Haptics.selectionAsync();
+    // Light impact, not selectionAsync — a selection tick reads as
+    // "scrolled past a picker row," barely felt on plenty of Android
+    // devices, and too faint to register as "you just crossed into a drop
+    // zone" on either platform. A light impact is the more common choice
+    // apps actually use for that kind of boundary-crossing feedback, and
+    // fires for every zone transition here (entering AND leaving a zone,
+    // since "none" is itself a zone value applyDragZone treats the same way).
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
   // Real hit-testing against each pill's measured box — both axes. The pill
@@ -402,16 +433,49 @@ export default function WeChatVoiceRecorder({
       x >= lockZone.left &&
       y >= lockZone.top - PILL_HIT_TOLERANCE &&
       y <= lockZone.bottom + PILL_HIT_TOLERANCE;
+    // Lock is a hover-then-release zone, symmetric with cancel — entering it
+    // mid-drag only shows the preview (blue tint, "Release to lock" hint,
+    // the selectionAsync tick from applyDragZone below), not an instant
+    // commit. Actually locking happens in onPanResponderRelease, same place
+    // cancel/send are decided, so drifting back out before releasing reverts
+    // to "release to send" exactly like drifting out of the cancel zone
+    // reverts there — instead of the old behavior where merely touching the
+    // zone while still dragging locked it immediately and irreversibly.
     if (inCancelZone) {
       applyDragZone("cancel");
     } else if (inLockZone) {
-      lockedRef.current = true;
-      applyDragZone("none");
-      if (mountedRef.current) setIsLocked(true);
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      applyDragZone("lock");
     } else {
       applyDragZone("none");
     }
+  };
+
+  // Re-measures each pill's hit-test zone (same logic as their own onLayout
+  // below) — also called from the keyboard-settle effect further down.
+  // Needed because the composer bar this component lives in tracks the
+  // keyboard via a Reanimated UI-thread animation that keeps sliding for
+  // ~250-300ms after the mic button dismisses the keyboard — well past
+  // when the pills' own one-shot onLayout measurement already resolved and
+  // froze cancelZoneRef/lockZoneRef at whatever mid-slide position the bar
+  // happened to be in at that instant. Without a re-measure once the
+  // keyboard has actually finished moving, the hit zones stay anchored a
+  // bit too high (wherever the bar was mid-close), which is exactly what
+  // reads as "have to drag past the visible pill before it registers."
+  const remeasureCancelZone = () => {
+    cancelPillRef.current?.measureInWindow((x, y, width, height) => {
+      cancelZoneRef.current = { right: x + width, top: y, bottom: y + height };
+      if (lastTouchRef.current) {
+        evaluateDragZone(lastTouchRef.current.x, lastTouchRef.current.y);
+      }
+    });
+  };
+  const remeasureLockZone = () => {
+    lockPillRef.current?.measureInWindow((x, y, width, height) => {
+      lockZoneRef.current = { left: x, top: y, bottom: y + height };
+      if (lastTouchRef.current) {
+        evaluateDragZone(lastTouchRef.current.x, lastTouchRef.current.y);
+      }
+    });
   };
 
   const resetInteraction = () => {
@@ -419,12 +483,14 @@ export default function WeChatVoiceRecorder({
     pendingEndRef.current = null;
     lockedRef.current = false;
     sendingRef.current = false;
+    holdingRef.current = false;
     lastTouchRef.current = null;
     clearTimer();
     applyDragZone("none");
     if (mountedRef.current) {
       setRecording(false);
       setIsLocked(false);
+      setIsHolding(false);
       setDisplaySecs(0);
     }
   };
@@ -442,12 +508,12 @@ export default function WeChatVoiceRecorder({
 
   useEffect(() => {
     Animated.timing(panelOpacity, {
-      toValue: isRecording && !isLocked ? 1 : 0,
+      toValue: isHolding && !isLocked ? 1 : 0,
       duration: 140,
       useNativeDriver: true,
     }).start();
 
-    if (isRecording) {
+    if (isHolding) {
       Animated.loop(
         Animated.sequence([
           Animated.timing(pulse, {
@@ -470,14 +536,14 @@ export default function WeChatVoiceRecorder({
         useNativeDriver: true,
       }).start();
     }
-  }, [isRecording, isLocked]);
+  }, [isHolding, isLocked]);
 
   // The "Hold to talk" → dome morph. Kept separate from the effect above
   // (which also reacts to isLocked) since mount/unmount timing should only
-  // ever be driven by isRecording itself — locking happens while the dome
-  // is already mounted and shouldn't re-trigger this.
+  // ever be driven by isHolding itself — locking happens while the dome is
+  // already mounted and shouldn't re-trigger this.
   useEffect(() => {
-    if (isRecording) {
+    if (isHolding) {
       setShowRecordingUI(true);
       Animated.timing(domeProgress, {
         toValue: 1,
@@ -495,7 +561,7 @@ export default function WeChatVoiceRecorder({
         if (finished) setShowRecordingUI(false);
       });
     }
-  }, [isRecording]);
+  }, [isHolding]);
 
   useEffect(() => {
     if (!isRecording) {
@@ -510,28 +576,60 @@ export default function WeChatVoiceRecorder({
       return;
     }
 
-    // Driven directly by each real metering sample from the recorder (not a
-    // fixed-interval synthetic animation), so the bars reflect actual
-    // captured loudness as it happens. Animates a scaleY transform (native
-    // driver, off the JS thread) instead of the height style — height
-    // can't be natively driven, and animating 28 of them on the JS thread
-    // every ~50ms was the source of the dropped frames.
-    const db = recorderState.metering ?? -60;
-    const amp = Math.min(1, Math.max(0, (db + 60) / 60));
-    const scale = WAVEFORM_BAR_MIN_SCALE + Math.max(0.08, amp) * (1 - WAVEFORM_BAR_MIN_SCALE);
-    const history = levelHistoryRef.current;
-    history.shift();
-    history.push(scale);
-    history.forEach((s, i) => {
-      const target =
-        WAVEFORM_BAR_MIN_SCALE + (s - WAVEFORM_BAR_MIN_SCALE) * waveformEnvelope[i];
-      Animated.timing(barAnims[i], {
-        toValue: target,
-        duration: WAVEFORM_SAMPLE_INTERVAL,
-        useNativeDriver: true,
-      }).start();
+    // Polls recorder.getStatus() directly on our own interval, rather than
+    // useAudioRecorderState(recorder, WAVEFORM_SAMPLE_INTERVAL) — that hook
+    // calls setState internally on every sample, which was re-rendering
+    // this ENTIRE component (recomputing every pill-path memo, etc.)
+    // ~20x/second for the whole duration of the hold gesture. That JS-thread
+    // churn was starving the PanResponder's own onPanResponderMove of time
+    // to run promptly, which is what made the drag-to-lock/cancel zone
+    // detection below feel laggy despite being cheap arithmetic on its own.
+    // getStatus() is a synchronous, non-reactive read — same data, zero
+    // re-renders. The bar animations themselves were already native-driven
+    // (scaleY transform, not height) and stay exactly as they were.
+    const interval = setInterval(() => {
+      const db = recorder.getStatus().metering ?? -60;
+      const amp = Math.min(1, Math.max(0, (db + 60) / 60));
+      const scale = WAVEFORM_BAR_MIN_SCALE + Math.max(0.08, amp) * (1 - WAVEFORM_BAR_MIN_SCALE);
+      const history = levelHistoryRef.current;
+      history.shift();
+      history.push(scale);
+      history.forEach((s, i) => {
+        const target =
+          WAVEFORM_BAR_MIN_SCALE + (s - WAVEFORM_BAR_MIN_SCALE) * waveformEnvelope[i];
+        Animated.timing(barAnims[i], {
+          toValue: target,
+          duration: WAVEFORM_SAMPLE_INTERVAL,
+          useNativeDriver: true,
+        }).start();
+      });
+    }, WAVEFORM_SAMPLE_INTERVAL);
+
+    return () => clearInterval(interval);
+  }, [barAnims, isRecording, recorder, waveformEnvelope]);
+
+  // Re-measure both pills once the keyboard finishes moving — see
+  // remeasureCancelZone/remeasureLockZone's own comment for why: pressing
+  // the mic button (which mounts this UI) also dismisses the keyboard, and
+  // the composer bar's own keyboard-tracking animation keeps sliding well
+  // past the pills' first onLayout firing. Listening for both show and hide
+  // covers holding to talk while the keyboard happens to be opening too,
+  // not just the far more common dismiss-on-mic-tap case.
+  useEffect(() => {
+    if (!showRecordingUI) return;
+    const hideSub = Keyboard.addListener("keyboardDidHide", () => {
+      remeasureCancelZone();
+      remeasureLockZone();
     });
-  }, [barAnims, isRecording, recorderState.metering, waveformEnvelope]);
+    const showSub = Keyboard.addListener("keyboardDidShow", () => {
+      remeasureCancelZone();
+      remeasureLockZone();
+    });
+    return () => {
+      hideSub.remove();
+      showSub.remove();
+    };
+  }, [showRecordingUI]);
 
   const startRecording = async () => {
     if (recordingRef.current || startingRef.current || isUploading) return;
@@ -674,10 +772,12 @@ export default function WeChatVoiceRecorder({
       if (mountedRef.current) {
         setRecording(false);
         setIsLocked(false);
+        setIsHolding(false);
         applyDragZone("none");
         setDisplaySecs(0);
       }
       lockedRef.current = false;
+      holdingRef.current = false;
       if (uri) {
         void triggerSendHaptic();
         await uploadAudio(uri, duration);
@@ -712,6 +812,10 @@ export default function WeChatVoiceRecorder({
       onShouldBlockNativeResponder: () => true,
       onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: () => {
+        // Fires the UI immediately — see isHolding's own declaration for
+        // why this can't wait on startRecording()'s async chain.
+        holdingRef.current = true;
+        setIsHolding(true);
         void startRecording();
       },
       onPanResponderMove: (_, gesture) => {
@@ -723,6 +827,14 @@ export default function WeChatVoiceRecorder({
         if (lockedRef.current) return;
         if (dragZoneRef.current === "cancel") {
           void cancelRecording();
+        } else if (dragZoneRef.current === "lock") {
+          // Committing the lock here (not the moment the drag first entered
+          // the zone) is what makes it a real hover-then-release gesture —
+          // see evaluateDragZone's own comment.
+          lockedRef.current = true;
+          applyDragZone("none");
+          if (mountedRef.current) setIsLocked(true);
+          void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         } else {
           void stopAndSend();
         }
@@ -738,7 +850,7 @@ export default function WeChatVoiceRecorder({
     dragZone === "cancel"
       ? "Release to cancel"
       : dragZone === "lock"
-        ? "Slide to lock"
+        ? "Release to lock"
         : "Release to send";
 
   // "Hold to talk" crossfades out exactly as the dome grows in — one
@@ -811,6 +923,14 @@ export default function WeChatVoiceRecorder({
                 bottom: WAVEFORM_PANEL_BOTTOM,
                 height: WAVEFORM_PANEL_HEIGHT,
                 borderRadius: 24,
+                // iOS's own continuous ("squircle") corner curve, not the
+                // constant-radius circular arc RN draws by default — same
+                // smoother, more gradual curvature apple's own UI (app
+                // icons, sheets, alerts) uses. No effect on Android; RN
+                // silently falls back to the standard circular corner there
+                // since Android's View has no native continuous-curve
+                // primitive to draw it with.
+                borderCurve: "continuous",
                 borderWidth: 1.5,
                 borderColor: "rgba(255,255,255,0.15)",
                 backgroundColor: PRIMARY,
@@ -840,7 +960,11 @@ export default function WeChatVoiceRecorder({
                       height: WAVEFORM_BAR_MAX_H,
                       marginHorizontal: 1.6,
                       borderRadius: 4,
-                      backgroundColor: dragZone === "cancel" ? "#fca5a5" : "#ffffff",
+                      borderCurve: "continuous",
+                      // Same red as the cancel pill's own tint (PILL_TINT_CANCEL),
+                      // not a light/pastel red — matches it exactly instead
+                      // of introducing a second, weaker "cancel" red.
+                      backgroundColor: dragZone === "cancel" ? PILL_TINT_CANCEL : "#ffffff",
                       transform: [{ scaleY: bar }],
                     }}
                   />
@@ -947,23 +1071,17 @@ export default function WeChatVoiceRecorder({
             <Animated.View
               ref={cancelPillRef}
               pointerEvents="box-none"
-              onLayout={() => {
-                cancelPillRef.current?.measureInWindow((x, y, width, height) => {
-                  // Only the visible curve counts as the zone — skip the
-                  // invisible far-tip overhang before PILL_EDGE_OVERHANG,
-                  // same region the tap target below excludes. No left
-                  // bound: anywhere at or past the inner edge, toward and
-                  // beyond the screen's left side, still reads as cancel.
-                  cancelZoneRef.current = { right: x + width, top: y, bottom: y + height };
-                  // measureInWindow is async — if a fast flick already
-                  // landed and went still before this resolved, there's no
-                  // further move event to re-check it against, so catch up
-                  // immediately using the last known touch.
-                  if (lastTouchRef.current) {
-                    evaluateDragZone(lastTouchRef.current.x, lastTouchRef.current.y);
-                  }
-                });
-              }}
+              // Only the visible curve counts as the zone — skip the
+              // invisible far-tip overhang before PILL_EDGE_OVERHANG, same
+              // region the tap target below excludes. No left bound:
+              // anywhere at or past the inner edge, toward and beyond the
+              // screen's left side, still reads as cancel. measureInWindow
+              // is async — if a fast flick already landed and went still
+              // before this resolved, there's no further move event to
+              // re-check it against, so remeasureCancelZone catches up
+              // immediately using the last known touch (also re-run on
+              // keyboard settle — see that effect for why).
+              onLayout={remeasureCancelZone}
               style={{
                 position: "absolute",
                 left: -(PILL_EDGE_OVERHANG + PILL_PAD),
@@ -1064,21 +1182,14 @@ export default function WeChatVoiceRecorder({
             <Animated.View
               ref={lockPillRef}
               pointerEvents="box-none"
-              onLayout={() => {
-                lockPillRef.current?.measureInWindow((x, y, width, height) => {
-                  // Mirror of the cancel zone: no right bound (anywhere at
-                  // or past the inner edge, toward and beyond the screen's
-                  // right side, still reads as lock).
-                  lockZoneRef.current = { left: x, top: y, bottom: y + height };
-                  // See the matching comment in the cancel pill's onLayout.
-                  if (lastTouchRef.current) {
-                    evaluateDragZone(lastTouchRef.current.x, lastTouchRef.current.y);
-                  }
-                });
-              }}
+              // Mirror of the cancel zone: no right bound (anywhere at or
+              // past the inner edge, toward and beyond the screen's right
+              // side, still reads as lock). See the matching comment on the
+              // cancel pill's onLayout.
+              onLayout={remeasureLockZone}
               style={{
                 position: "absolute",
-                right: -(PILL_EDGE_OVERHANG + PILL_PAD),
+                left: lockContainerLeft,
                 bottom: pillContainerBottom,
                 width: pillContainerWidth,
                 height: pillContainerHeight,

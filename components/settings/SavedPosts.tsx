@@ -137,6 +137,7 @@ export default function SavedPosts({ onClose, userId }: SavedPostsProps) {
           height: TILE_SIZE,
           margin: 2,
           borderRadius: 8,
+          borderCurve: "continuous",
           overflow: 'hidden',
           backgroundColor: '#f3f4f6',
         }}
@@ -201,6 +202,7 @@ export default function SavedPosts({ onClose, userId }: SavedPostsProps) {
           height: TILE_SIZE,
           margin: 2,
           borderRadius: 8,
+          borderCurve: "continuous",
           overflow: 'hidden',
           backgroundColor: '#f3f4f6',
         }}
@@ -267,6 +269,7 @@ export default function SavedPosts({ onClose, userId }: SavedPostsProps) {
           height: TILE_SIZE,
           margin: 2,
           borderRadius: 8,
+          borderCurve: "continuous",
           overflow: 'hidden',
           backgroundColor: '#f3f4f6',
         }}

@@ -125,6 +125,7 @@ export default function InAppChatBanner() {
     >
       {banner && (
         <TouchableOpacity
+          style={{ borderRadius: 16, borderCurve: "continuous" }}
           activeOpacity={0.92}
           onPress={() => {
             const senderId = banner.senderId;
@@ -133,7 +134,7 @@ export default function InAppChatBanner() {
               router.push(`/(users)/chat/${senderId}`);
             }
           }}
-          className="rounded-2xl overflow-hidden"
+          className="overflow-hidden"
         >
           <BlurView intensity={72} tint="light" style={{ borderRadius: 16, overflow: 'hidden' }} experimentalBlurMethod={Platform.OS === 'android' ? 'dimezisBlurView' : undefined}>
             <View
@@ -144,6 +145,7 @@ export default function InAppChatBanner() {
                 borderWidth: 1,
                 borderColor: 'rgba(255,255,255,0.55)',
                 borderRadius: 16,
+                borderCurve: "continuous",
               }}
             >
               <View className="flex-row items-start">
@@ -178,6 +180,7 @@ export default function InAppChatBanner() {
                     width: 36,
                     height: 4,
                     borderRadius: 2,
+                    borderCurve: "continuous",
                     backgroundColor: "rgba(0,0,0,0.18)",
                   }}
                 />

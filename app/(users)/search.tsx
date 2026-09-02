@@ -2,14 +2,24 @@ import CircularLoader from "@/components/ui/CircularLoader";
 import ProgressiveImage from "@/components/ui/ProgressiveImage";
 import { useUser } from "@/contexts/UserContext";
 import { searchAll, SearchResult, SearchResults } from "@/lib/searchService";
+import {
+  addRecentSearch,
+  getRecentSearches,
+  removeRecentSearch,
+  clearRecentSearches,
+} from "@/lib/recentSearches";
 import { useScreenAnalytics } from "@/hooks/useAnalytics";
 import { Screens } from "@/lib/analyticsService";
 import { useAppRouter } from "@/utils/navigation";
+import { clamp, useResponsive } from "@/utils/responsive";
 import { TrendingEntry, useTrendingSubcategories } from "@/hooks/useTrendingSubcategories";
 import { Ionicons } from "@expo/vector-icons";
+import { useLocalSearchParams } from "expo-router";
+import { ChevronLeft } from "lucide-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Keyboard,
+  Platform,
   ScrollView,
   Text,
   TextInput,
@@ -23,13 +33,26 @@ export default function GlobalSearchScreen() {
   const insets = useSafeAreaInsets();
   const { currentUser } = useUser();
   const { trackFeature } = useScreenAnalytics(Screens.SEARCH);
+  const { q: initialQuery } = useLocalSearchParams<{ q?: string }>();
+  const { ms, vs, wp } = useResponsive();
 
-  const [query, setQuery] = useState("");
+  // Same formulas as components/ui/TopNavbar.tsx's header row — this screen
+  // is landed on straight from that header's own expand animation, so the
+  // search pill needs to sit at the exact same height/position for the
+  // transition to read as one continuous UI, not a hand-off to a new screen.
+  const contentHeight =
+    Platform.OS === "android" ? clamp(ms(48), 44, 56) : clamp(ms(44), 40, 52);
+  const topSpacing =
+    Platform.OS === "android" ? clamp(vs(16), 12, 22) : clamp(vs(10), 8, 16);
+  const horizontalPadding = clamp(wp(4), 14, 24);
+
+  const [query, setQuery] = useState(initialQuery || "");
   const [throttledQuery, setThrottledQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResults | null>(
     null,
   );
   const [isSearching, setIsSearching] = useState(false);
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<
     "all" | "users" | "services" | "products" | "marketplace"
   >("all");
@@ -42,6 +65,41 @@ export default function GlobalSearchScreen() {
   const tabBarVisibleWidth = useRef(0);
 
   const { trending } = useTrendingSubcategories();
+
+  // Load this user's recent searches on mount
+  useEffect(() => {
+    getRecentSearches(currentUser?.id).then(setRecentSearches);
+  }, [currentUser?.id]);
+
+  const runSearch = useCallback(
+    (term: string) => {
+      const trimmed = term.trim();
+      setQuery(trimmed);
+      setThrottledQuery(trimmed);
+      if (trimmed.length >= 2) {
+        addRecentSearch(currentUser?.id, trimmed).then(setRecentSearches);
+      }
+    },
+    [currentUser?.id],
+  );
+
+  const handleRemoveRecent = useCallback(
+    (term: string) => {
+      removeRecentSearch(currentUser?.id, term).then(setRecentSearches);
+    },
+    [currentUser?.id],
+  );
+
+  const handleClearRecents = useCallback(() => {
+    clearRecentSearches(currentUser?.id).then(() => setRecentSearches([]));
+  }, [currentUser?.id]);
+
+  const handleSubmitSearch = useCallback(() => {
+    Keyboard.dismiss();
+    if (query.trim().length >= 2) {
+      addRecentSearch(currentUser?.id, query.trim()).then(setRecentSearches);
+    }
+  }, [query, currentUser?.id]);
 
   // Auto-focus on mount
   useEffect(() => {
@@ -226,7 +284,8 @@ export default function GlobalSearchScreen() {
       className="mb-3"
       activeOpacity={0.7}
     >
-      <View className="bg-white rounded-lg overflow-hidden border border-gray-100">
+      <View
+        style={{ borderRadius: 8, borderCurve: "continuous" }} className="bg-white overflow-hidden border border-gray-100">
         {result.imageUrl && (
           <ProgressiveImage
             uri={result.imageUrl}
@@ -287,8 +346,9 @@ export default function GlobalSearchScreen() {
 
     return (
       <TouchableOpacity
+        style={{ borderRadius: 8, borderCurve: "continuous" }}
         onPress={() => handleResultPress(result)}
-        className="flex-row items-center bg-white rounded-lg p-3 mb-2 border border-gray-100"
+        className="flex-row items-center bg-white p-3 mb-2 border border-gray-100"
         activeOpacity={0.7}
       >
         <View
@@ -344,29 +404,55 @@ export default function GlobalSearchScreen() {
 
   return (
     <View
-      style={{ flex: 1, backgroundColor: "#F9FAFB", paddingTop: insets.top }}
+      style={{ flex: 1, backgroundColor: "#f8f9fa", paddingTop: insets.top }}
     >
-      {/* Header */}
-      <View className="flex-row items-center px-3 py-2 bg-white border-b border-gray-100">
+      {/* Header — same bg, height, and horizontal padding as TopNavbar's own
+          header row, and the same white/rounded-full pill as its expand
+          animation, so landing here reads as a continuation of that
+          transition rather than a hand-off to a different screen. */}
+      <View
+        className="flex-row items-center"
+        style={{
+          height: contentHeight,
+          paddingTop: topSpacing,
+          paddingHorizontal: horizontalPadding,
+        }}
+      >
         <TouchableOpacity
           onPress={() => router.back()}
-          className="p-2 mr-1"
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          style={{ marginRight: 12 }}
         >
-          <Ionicons name="arrow-back" size={22} color="#0f172a" />
+          <ChevronLeft size={24} color="#000" strokeWidth={2.5} />
         </TouchableOpacity>
-        <View className="flex-1 flex-row items-center bg-gray-100 rounded-full px-3 py-2">
-          <Ionicons name="search" size={16} color="#9CA3AF" />
+        <View
+          style={{
+            flex: 1,
+            flexDirection: "row",
+            alignItems: "center",
+            backgroundColor: "#fff",
+            borderRadius: 999,
+            borderCurve: "continuous",
+            paddingHorizontal: 12,
+            height: contentHeight * 0.82,
+          }}
+        >
+          <Ionicons name="search" size={16} color="#888" />
           <TextInput
             ref={inputRef}
-            className="flex-1 ml-2 text-sm text-gray-900 font-regular"
-            style={{ paddingVertical: 0 }}
+            style={{
+              flex: 1,
+              marginLeft: 8,
+              fontSize: 14,
+              color: "#111",
+              paddingVertical: 0,
+            }}
             placeholder="Search users, services, products..."
             placeholderTextColor="#9CA3AF"
             value={query}
             onChangeText={setQuery}
             returnKeyType="search"
-            onSubmitEditing={Keyboard.dismiss}
+            onSubmitEditing={handleSubmitSearch}
           />
           {query.length > 0 && (
             <TouchableOpacity
@@ -404,6 +490,66 @@ export default function GlobalSearchScreen() {
             <Text className="text-gray-500 mt-4 text-center px-6">
               Search for users, services, products, marketplace items, or posts
             </Text>
+
+            {recentSearches.length > 0 && (
+              <View style={{ marginTop: 28, width: "100%" }}>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    marginBottom: 6,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 11,
+                      fontWeight: "700",
+                      color: "#9CA3AF",
+                      letterSpacing: 0.4,
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    Recent Searches
+                  </Text>
+                  <TouchableOpacity onPress={handleClearRecents} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Text style={{ fontSize: 12, fontWeight: "600", color: "#094569" }}>
+                      Clear all
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                {recentSearches.map((term) => (
+                  <View
+                    key={term}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      paddingVertical: 10,
+                    }}
+                  >
+                    <TouchableOpacity
+                      onPress={() => runSearch(term)}
+                      activeOpacity={0.7}
+                      style={{ flex: 1, flexDirection: "row", alignItems: "center" }}
+                    >
+                      <Ionicons name="time-outline" size={16} color="#9CA3AF" />
+                      <Text
+                        style={{ flex: 1, marginLeft: 10, fontSize: 14, color: "#374151" }}
+                        numberOfLines={1}
+                      >
+                        {term}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => handleRemoveRecent(term)}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Ionicons name="close" size={16} color="#9CA3AF" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            )}
 
             {trending.length > 0 && (
               <View style={{ marginTop: 28, width: "100%" }}>

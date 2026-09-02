@@ -465,6 +465,7 @@ function LivePage({
                   width: 120,
                   height: 120,
                   borderRadius: 60,
+                  borderCurve: "continuous",
                   backgroundColor: "#094569",
                   alignItems: "center",
                   justifyContent: "center",
@@ -505,6 +506,7 @@ function LivePage({
               right: 16,
               backgroundColor: "rgba(0,0,0,0.55)",
               borderRadius: 20,
+              borderCurve: "continuous",
               paddingHorizontal: 10,
               paddingVertical: 4,
               flexDirection: "row",
@@ -538,6 +540,7 @@ function LivePage({
             right: 16,
             backgroundColor: "rgba(0,0,0,0.55)",
             borderRadius: 20,
+            borderCurve: "continuous",
             paddingHorizontal: 10,
             paddingVertical: 4,
             flexDirection: "row",
@@ -588,6 +591,7 @@ function LivePage({
                   width: 40,
                   height: 40,
                   borderRadius: 20,
+                  borderCurve: "continuous",
                   backgroundColor: "#094569",
                   alignItems: "center",
                   justifyContent: "center",
@@ -638,6 +642,7 @@ function LivePage({
               style={{
                 backgroundColor: "rgba(0,0,0,0.45)",
                 borderRadius: 20,
+                borderCurve: "continuous",
                 paddingHorizontal: 18,
                 paddingVertical: 7,
               }}
@@ -670,6 +675,7 @@ function LivePage({
                   paddingHorizontal: 16,
                   paddingVertical: 12,
                   borderRadius: 28,
+                  borderCurve: "continuous",
                   flexDirection: "row",
                   alignItems: "center",
                   gap: 8,
@@ -694,6 +700,7 @@ function LivePage({
                   paddingHorizontal: 16,
                   paddingVertical: 12,
                   borderRadius: 28,
+                  borderCurve: "continuous",
                   flexDirection: "row",
                   alignItems: "center",
                   gap: 8,
@@ -714,6 +721,7 @@ function LivePage({
                   paddingHorizontal: 16,
                   paddingVertical: 12,
                   borderRadius: 28,
+                  borderCurve: "continuous",
                   flexDirection: "row",
                   alignItems: "center",
                   gap: 8,
@@ -731,6 +739,7 @@ function LivePage({
                   paddingHorizontal: 16,
                   paddingVertical: 12,
                   borderRadius: 28,
+                  borderCurve: "continuous",
                   flexDirection: "row",
                   alignItems: "center",
                   gap: 8,
@@ -1171,6 +1180,7 @@ export default function LiveScrollScreen({
             left: 16,
             backgroundColor: "rgba(255,255,255,0.15)",
             borderRadius: 20,
+            borderCurve: "continuous",
             padding: 8,
           }}
         >
@@ -1205,6 +1215,7 @@ export default function LiveScrollScreen({
             marginTop: 28,
             backgroundColor: "#EF4444",
             borderRadius: 14,
+            borderCurve: "continuous",
             paddingHorizontal: 28,
             paddingVertical: 14,
             flexDirection: "row",
@@ -1271,6 +1282,7 @@ export default function LiveScrollScreen({
             style={{
               backgroundColor: "rgba(0,0,0,0.5)",
               borderRadius: 20,
+              borderCurve: "continuous",
               padding: 6,
             }}
           >
@@ -1286,6 +1298,7 @@ export default function LiveScrollScreen({
                 gap: 8,
                 backgroundColor: "rgba(0,0,0,0.45)",
                 borderRadius: 20,
+                borderCurve: "continuous",
                 paddingRight: 12,
                 paddingLeft: 3,
                 paddingVertical: 3,
@@ -1302,6 +1315,7 @@ export default function LiveScrollScreen({
                     width: 28,
                     height: 28,
                     borderRadius: 14,
+                    borderCurve: "continuous",
                     backgroundColor: "#094569",
                     alignItems: "center",
                     justifyContent: "center",
@@ -1343,6 +1357,7 @@ export default function LiveScrollScreen({
             style={{
               backgroundColor: "rgba(0,0,0,0.5)",
               borderRadius: 20,
+              borderCurve: "continuous",
               padding: 6,
               width: 36,
               alignItems: "center",
@@ -1360,6 +1375,7 @@ export default function LiveScrollScreen({
                 gap: 6,
                 backgroundColor: "rgba(239,68,68,0.92)",
                 borderRadius: 20,
+                borderCurve: "continuous",
                 paddingHorizontal: 16,
                 paddingVertical: 9,
               }}

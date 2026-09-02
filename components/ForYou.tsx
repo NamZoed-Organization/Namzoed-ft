@@ -28,6 +28,7 @@ const SkeletonCard = React.memo(function SkeletonCard() {
         width: 160,
         height: CARD_LIST_HEIGHT,
         borderRadius: 16,
+        borderCurve: "continuous",
         backgroundColor: "#e5e7eb",
         marginRight: 12,
         overflow: "hidden",
@@ -291,8 +292,8 @@ export default function ForYou() {
             <View style={{ paddingHorizontal: 16, marginBottom: 12 }}>
               <TouchableOpacity
                 onPress={toggleSortMenu}
-                className="bg-white/90 backdrop-blur-sm px-3 py-2 rounded-xl shadow-sm border border-white/50 flex-row items-center self-start"
-                style={{ backgroundColor: "rgba(255, 255, 255, 0.9)" }}
+                className="bg-white/90 backdrop-blur-sm px-3 py-2 shadow-sm border border-white/50 flex-row items-center self-start"
+                style={{ backgroundColor: "rgba(255, 255, 255, 0.9)", borderRadius: 12, borderCurve: "continuous" }}
               >
                 <ArrowUpDown size={16} color="#1F2937" />
                 <Text className="ml-1.5 text-xs font-semibold text-gray-700">
@@ -300,7 +301,8 @@ export default function ForYou() {
                 </Text>
               </TouchableOpacity>
               {showSortMenu && (
-                <View className="mt-2 bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+                <View
+                  style={{ borderRadius: 12, borderCurve: "continuous" }} className="mt-2 bg-white shadow-lg border border-gray-200 overflow-hidden">
                   {(
                     [
                       "latest",

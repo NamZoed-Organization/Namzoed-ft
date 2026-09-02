@@ -59,6 +59,7 @@ function ProgressBar({ progress, staticFraction }: { progress?: SharedValue<numb
         flex: 1,
         height: 2.5,
         borderRadius: 1.5,
+        borderCurve: "continuous",
         backgroundColor: "rgba(255,255,255,0.35)",
         overflow: "hidden",
       }}
@@ -256,6 +257,7 @@ function StoryGroupPage({
               width: 32,
               height: 32,
               borderRadius: 16,
+              borderCurve: "continuous",
               backgroundColor: "#094569",
               alignItems: "center",
               justifyContent: "center",
@@ -295,6 +297,7 @@ function StoryGroupPage({
             alignItems: "center",
             backgroundColor: "rgba(0,0,0,0.6)",
             borderRadius: 20,
+            borderCurve: "continuous",
             paddingHorizontal: 14,
             paddingVertical: 8,
           }}

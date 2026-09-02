@@ -340,6 +340,7 @@ const styles = StyleSheet.create({
   queueItem: {
     marginBottom: 8,
     borderRadius: 8,
+    borderCurve: "continuous",
     padding: 12,
   },
   queueItemContent: {
@@ -351,6 +352,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     backgroundColor: 'rgba(0,0,0,0.1)',
     borderRadius: 4,
+    borderCurve: "continuous",
   },
   ratingText: {
     fontSize: 12,
@@ -381,6 +383,7 @@ const styles = StyleSheet.create({
   reviewCard: {
     backgroundColor: '#fff',
     borderRadius: 12,
+    borderCurve: "continuous",
     maxHeight: '90%',
     width: '100%',
     overflow: 'hidden',
@@ -444,6 +447,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 10,
     borderRadius: 8,
+    borderCurve: "continuous",
     gap: 6,
   },
   approveButton: {
@@ -467,6 +471,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#ddd',
     borderRadius: 8,
+    borderCurve: "continuous",
     padding: 10,
     fontSize: 13,
     color: '#333',
@@ -482,6 +487,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#007AFF',
     paddingVertical: 12,
     borderRadius: 8,
+    borderCurve: "continuous",
     alignItems: 'center',
   },
   submitButtonText: {

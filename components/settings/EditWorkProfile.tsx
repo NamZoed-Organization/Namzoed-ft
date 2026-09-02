@@ -141,7 +141,8 @@ export default function EditWorkProfile({ onClose, onSaved }: EditWorkProfilePro
         <View className="mb-4">
           <Text className="text-sm font-msemibold text-gray-700 mb-2">Business Name</Text>
           <TextInput
-            className="bg-gray-50 rounded-xl px-4 py-3 text-base text-gray-900 border border-gray-200"
+            style={{ borderRadius: 12, borderCurve: "continuous" }}
+            className="bg-gray-50 px-4 py-3 text-base text-gray-900 border border-gray-200"
             placeholder="Enter business name"
             placeholderTextColor="#9CA3AF"
             value={businessName}
@@ -152,7 +153,7 @@ export default function EditWorkProfile({ onClose, onSaved }: EditWorkProfilePro
         <View className="mb-4">
           <Text className="text-sm font-msemibold text-gray-700 mb-2">Business Bio</Text>
           <TextInput
-            className="bg-gray-50 rounded-xl px-4 py-3 text-base text-gray-900 border border-gray-200"
+            className="bg-gray-50 px-4 py-3 text-base text-gray-900 border border-gray-200"
             placeholder="Tell us about your business"
             placeholderTextColor="#9CA3AF"
             value={bio}
@@ -160,14 +161,15 @@ export default function EditWorkProfile({ onClose, onSaved }: EditWorkProfilePro
             multiline
             numberOfLines={4}
             textAlignVertical="top"
-            style={{ minHeight: 100 }}
+            style={{ minHeight: 100, borderRadius: 12, borderCurve: "continuous" }}
           />
         </View>
 
         <View className="mb-4">
           <Text className="text-sm font-msemibold text-gray-700 mb-2">Work Email</Text>
           <TextInput
-            className="bg-gray-50 rounded-xl px-4 py-3 text-base text-gray-900 border border-gray-200"
+            style={{ borderRadius: 12, borderCurve: "continuous" }}
+            className="bg-gray-50 px-4 py-3 text-base text-gray-900 border border-gray-200"
             placeholder="Enter work email"
             placeholderTextColor="#9CA3AF"
             value={email}
@@ -175,7 +177,8 @@ export default function EditWorkProfile({ onClose, onSaved }: EditWorkProfilePro
             autoCapitalize="none"
             keyboardType="email-address"
           />
-          <View className="flex-row items-center justify-between mt-3 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3">
+          <View
+            style={{ borderRadius: 12, borderCurve: "continuous" }} className="flex-row items-center justify-between mt-3 bg-gray-50 border border-gray-200 px-4 py-3">
             <View className="flex-1 pr-4">
               <Text className="text-sm font-msemibold text-gray-800">Show Email</Text>
               <Text className="text-xs text-gray-500 mt-0.5">
@@ -196,7 +199,8 @@ export default function EditWorkProfile({ onClose, onSaved }: EditWorkProfilePro
         <View className="mb-4">
           <Text className="text-sm font-msemibold text-gray-700 mb-2">Contact Number</Text>
           <TextInput
-            className="bg-gray-50 rounded-xl px-4 py-3 text-base text-gray-900 border border-gray-200"
+            style={{ borderRadius: 12, borderCurve: "continuous" }}
+            className="bg-gray-50 px-4 py-3 text-base text-gray-900 border border-gray-200"
             placeholder="Enter contact number"
             placeholderTextColor="#9CA3AF"
             value={contact}
@@ -204,7 +208,8 @@ export default function EditWorkProfile({ onClose, onSaved }: EditWorkProfilePro
             keyboardType="phone-pad"
             onFocus={scrollContactIntoView}
           />
-          <View className="flex-row items-center justify-between mt-3 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3">
+          <View
+            style={{ borderRadius: 12, borderCurve: "continuous" }} className="flex-row items-center justify-between mt-3 bg-gray-50 border border-gray-200 px-4 py-3">
             <View className="flex-1 pr-4">
               <Text className="text-sm font-msemibold text-gray-800">Show Contact Number</Text>
               <Text className="text-xs text-gray-500 mt-0.5">
@@ -223,9 +228,10 @@ export default function EditWorkProfile({ onClose, onSaved }: EditWorkProfilePro
         </View>
 
         <TouchableOpacity
+          style={{ borderRadius: 12, borderCurve: "continuous" }}
           onPress={handleSave}
           disabled={loading}
-          className="bg-primary rounded-xl py-4 items-center mt-2"
+          className="bg-primary py-4 items-center mt-2"
         >
           {loading ? (
             <CircularLoader color="#fff" />

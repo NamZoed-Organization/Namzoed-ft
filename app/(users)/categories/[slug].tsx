@@ -3,7 +3,7 @@ import GridCard, { gridCardHeight, GridCardSourceRect } from "@/components/GridC
 import MasonryGrid from "@/components/MasonryGrid";
 import AuthPromptModal from "@/components/modals/AuthPromptModal";
 import ReportProductModal from "@/components/modals/ReportProductModal";
-import SearchBar from "@/components/modals/SearchBar";
+import ProductDetailOverlay from "@/components/ProductDetailOverlay";
 import TopNavbar from "@/components/ui/TopNavbar";
 import { useUser } from "@/contexts/UserContext";
 import { categories as categoryData, categoryNames, SubCategory } from "@/data/categories";
@@ -57,10 +57,12 @@ export default function CategoryDetailScreen() {
   }>();
 
   const { currentUser } = useUser();
-  const [searchQuery, setSearchQuery] = useState("");
   const [sortMode, setSortMode] = useState<SortMode>("foryou");
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [reportTarget, setReportTarget] = useState<ProductWithUser | null>(null);
+  // Grid tile tapped — grows into ProductDetailOverlay instead of a plain
+  // router.push, same hero-grow treatment Home's post grid uses.
+  const [productOverlay, setProductOverlay] = useState<{ product: ProductWithUser; rect: GridCardSourceRect } | null>(null);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -164,16 +166,6 @@ export default function CategoryDetailScreen() {
   const displayedProducts = useMemo(() => {
     let result = [...ranked.items];
 
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter(
-        (p) =>
-          p.name.toLowerCase().includes(query) ||
-          (p.description && p.description.toLowerCase().includes(query)) ||
-          (p.tags && p.tags.some((tag) => tag.toLowerCase().includes(query))),
-      );
-    }
-
     // "For You" keeps the ranked/randomized order as-is; the other modes
     // are an explicit deterministic override of whatever's currently loaded.
     if (sortMode === "latest") {
@@ -193,13 +185,13 @@ export default function CategoryDetailScreen() {
     }
 
     return result;
-  }, [ranked.items, searchQuery, sortMode]);
+  }, [ranked.items, sortMode]);
 
   const handleProductPress = useCallback(
-    (productId: string, _rect: GridCardSourceRect) => {
-      router.push(`/(users)/product/${productId}`);
+    (product: ProductWithUser, _productId: string, rect: GridCardSourceRect) => {
+      setProductOverlay({ product, rect });
     },
-    [router],
+    [],
   );
 
   const handleReportProduct = useCallback(
@@ -244,6 +236,7 @@ export default function CategoryDetailScreen() {
             width: 40,
             height: 40,
             borderRadius: 12,
+            borderCurve: "continuous",
             backgroundColor: "#f5f5f5",
             justifyContent: "center",
             alignItems: "center",
@@ -251,9 +244,12 @@ export default function CategoryDetailScreen() {
         >
           <ChevronLeft size={24} color="#1a1a1a" strokeWidth={2.5} />
         </TouchableOpacity>
-        <View style={{ flex: 1 }}>
-          <SearchBar value={searchQuery} onChangeText={setSearchQuery} />
-        </View>
+        <Text
+          className="flex-1 text-lg font-semibold text-gray-900"
+          numberOfLines={1}
+        >
+          {categoryNames[categoryKey] || categoryKey.replace(/-/g, " ")}
+        </Text>
       </View>
 
       <ScrollView
@@ -323,12 +319,13 @@ export default function CategoryDetailScreen() {
               {displayedProducts.length} items found
             </Text>
             <TouchableOpacity
+              style={{ borderRadius: 12, borderCurve: "continuous" }}
               onPress={() => {
                 const currentIndex = SORT_CYCLE.indexOf(sortMode);
                 const nextIndex = (currentIndex + 1) % SORT_CYCLE.length;
                 setSortMode(SORT_CYCLE[nextIndex]);
               }}
-              className="bg-white p-2 rounded-xl shadow-sm border border-gray-100"
+              className="bg-white p-2 shadow-sm border border-gray-100"
             >
               <View className="flex-row items-center gap-1">
                 <ArrowUpDown size={14} color="#1F2937" />
@@ -364,13 +361,20 @@ export default function CategoryDetailScreen() {
                     Nu. {(product.is_currently_active ? product.current_price ?? product.price : product.price).toLocaleString()}
                   </Text>
                 }
-                onPress={handleProductPress}
+                onPress={(id, rect) => handleProductPress(product, id, rect)}
                 onReport={handleReportProduct}
               />
             )}
           />
         </Animated.View>
       </ScrollView>
+
+      <ProductDetailOverlay
+        visible={!!productOverlay}
+        product={productOverlay?.product ?? null}
+        sourceRect={productOverlay?.rect ?? null}
+        onClose={() => setProductOverlay(null)}
+      />
 
       <AuthPromptModal
         visible={showAuthModal}

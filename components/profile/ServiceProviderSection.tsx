@@ -88,7 +88,8 @@ export default function ServiceProviderSection({
     <View className="px-4 py-6">
 
       {/* ── PROFILE HEADER CARD ── */}
-      <View className="bg-white rounded-2xl p-5 mb-4 shadow-sm">
+      <View
+        style={{ borderRadius: 16, borderCurve: "continuous" }} className="bg-white p-5 mb-4 shadow-sm">
 
         {/* Top row: info left, avatar right */}
         <View className="flex-row items-start">
@@ -160,16 +161,18 @@ export default function ServiceProviderSection({
         {/* Action Buttons */}
         <View className="flex-row gap-2 mt-4">
           <TouchableOpacity
+            style={{ borderRadius: 8, borderCurve: "continuous" }}
             onPress={onEditWork}
-            className="flex-1 py-[9px] rounded-lg flex-row items-center justify-center bg-gray-100 border border-gray-300"
+            className="flex-1 py-[9px] flex-row items-center justify-center bg-gray-100 border border-gray-300"
           >
             <Edit3 size={13} color="#1f2937" style={{ marginRight: 5 }} />
             <Text className="text-sm font-semibold text-gray-800">Edit</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
+            style={{ borderRadius: 8, borderCurve: "continuous" }}
             onPress={onAddService}
-            className="flex-1 py-[9px] rounded-lg flex-row items-center justify-center bg-primary"
+            className="flex-1 py-[9px] flex-row items-center justify-center bg-primary"
           >
             <Plus size={13} color="white" style={{ marginRight: 5 }} />
             <Text className="text-sm font-semibold text-white">Add Service</Text>
@@ -178,7 +181,8 @@ export default function ServiceProviderSection({
       </View>
 
       {/* ── LICENSE VERIFICATION ── */}
-      <View className="bg-white rounded-2xl p-6 mb-4 shadow-sm">
+      <View
+        style={{ borderRadius: 16, borderCurve: "continuous" }} className="bg-white p-6 mb-4 shadow-sm">
         <View className="flex-row items-center justify-between mb-4">
           <View className="flex-row items-center">
             <FileText size={20} color="#094569" style={{ marginRight: 8 }} />
@@ -229,8 +233,9 @@ export default function ServiceProviderSection({
           </View>
         ) : !licenseImageUrl ? (
           <TouchableOpacity
+            style={{ borderRadius: 12, borderCurve: "continuous" }}
             onPress={onUploadLicense}
-            className="flex-row items-center justify-center bg-primary rounded-xl py-3 px-4"
+            className="flex-row items-center justify-center bg-primary py-3 px-4"
           >
             <Upload size={18} color="white" style={{ marginRight: 8 }} />
             <Text className="text-white font-msemibold">Upload License</Text>
@@ -239,7 +244,8 @@ export default function ServiceProviderSection({
       </View>
 
       {/* ── YOUR SERVICES ── */}
-      <View className="bg-white rounded-2xl p-6 shadow-sm">
+      <View
+        style={{ borderRadius: 16, borderCurve: "continuous" }} className="bg-white p-6 shadow-sm">
         <Text className="text-lg font-mbold text-gray-900 mb-2">
           Your Services
         </Text>
@@ -276,7 +282,8 @@ export default function ServiceProviderSection({
                   }`}
                 >
                   <View className="flex-row">
-                    <View className="w-20 h-20 rounded-2xl overflow-hidden bg-gray-100 relative">
+                    <View
+                      style={{ borderRadius: 16, borderCurve: "continuous" }} className="w-20 h-20 overflow-hidden bg-gray-100 relative">
                       {service.images && service.images.length > 0 ? (
                         <ProgressiveImage
                           uri={service.images[0]}
@@ -342,7 +349,8 @@ export default function ServiceProviderSection({
             ))}
           </View>
         ) : (
-          <View className="items-center justify-center py-8 bg-gray-50 rounded-xl">
+          <View
+            style={{ borderRadius: 12, borderCurve: "continuous" }} className="items-center justify-center py-8 bg-gray-50">
             <Wrench size={48} color="#9ca3af" />
             <Text className="text-base text-gray-500 mt-4">No services listed yet</Text>
           </View>

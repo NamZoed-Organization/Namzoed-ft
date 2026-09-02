@@ -308,6 +308,7 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
                   borderWidth: 1,
                   borderColor: showDropdown ? "#9CA3AF" : "#E5E7EB",
                   borderRadius: 12,
+                  borderCurve: "continuous",
                   paddingVertical: 14,
                   paddingHorizontal: 16,
                   paddingLeft: 46,
@@ -351,6 +352,7 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
                   maxHeight: 250,
                   backgroundColor: "#fff",
                   borderRadius: 8,
+                  borderCurve: "continuous",
                   borderColor: "#D1D5DB",
                   borderWidth: 1,
                   elevation: 8,
@@ -460,12 +462,10 @@ export default function SignupTab2({ onPrev }: { onPrev: () => void }) {
           {/* Register Button */}
           <TouchableOpacity
   onPress={handleSignup}
-  className="py-4 rounded-lg"
+  className="py-4"
   activeOpacity={0.8}
   disabled={!isFormValid || loading}
-  style={{
-    backgroundColor: isFormValid && !loading ? "#094569" : "#09456980",
-  }}
+  style={{ backgroundColor: isFormValid && !loading ? "#094569" : "#09456980", borderRadius: 8, borderCurve: "continuous" }}
 >
   <Text className="text-secondary text-center font-semibold text-base">
     {loading ? "Creating Account..." : "Create Account"}

@@ -73,7 +73,8 @@ export default function DeleteAccount({ onClose, onAccountDeleted }: DeleteAccou
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
         <View className="px-6 py-8">
           {/* Warning Banner */}
-          <View className="bg-red-50 border border-red-200 rounded-2xl p-5 mb-8">
+          <View
+            style={{ borderRadius: 16, borderCurve: "continuous" }} className="bg-red-50 border border-red-200 p-5 mb-8">
             <View className="flex-row items-center mb-3">
               <View className="w-10 h-10 bg-red-100 rounded-full items-center justify-center mr-3">
                 <AlertTriangle size={22} color="#dc2626" />
@@ -88,7 +89,8 @@ export default function DeleteAccount({ onClose, onAccountDeleted }: DeleteAccou
           </View>
 
           {/* What gets deleted */}
-          <View className="bg-gray-50 rounded-xl p-5 mb-8">
+          <View
+            style={{ borderRadius: 12, borderCurve: "continuous" }} className="bg-gray-50 p-5 mb-8">
             <Text className="text-sm font-semibold text-gray-800 mb-3">What will be deleted:</Text>
             {[
               'Your profile and personal information',
@@ -112,7 +114,8 @@ export default function DeleteAccount({ onClose, onAccountDeleted }: DeleteAccou
               Type <Text className="font-bold text-red-600">DELETE MY ACCOUNT</Text> to confirm
             </Text>
             <TextInput
-              className="bg-gray-100 rounded-lg px-4 py-3 border border-gray-300 text-base text-gray-900"
+              style={{ borderRadius: 8, borderCurve: "continuous" }}
+              className="bg-gray-100 px-4 py-3 border border-gray-300 text-base text-gray-900"
               placeholder="DELETE MY ACCOUNT"
               value={confirmText}
               onChangeText={setConfirmText}

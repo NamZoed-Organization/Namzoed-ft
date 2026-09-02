@@ -53,9 +53,10 @@ export default function GroundBookingsPage() {
       >
         <View className="px-4 pt-3">
           <TouchableOpacity
+            style={{ borderRadius: 12, borderCurve: "continuous" }}
             onPress={() => router.back()}
             activeOpacity={0.8}
-            className="w-10 h-10 rounded-xl bg-gray-100 items-center justify-center"
+            className="w-10 h-10 bg-gray-100 items-center justify-center"
           >
             <ChevronLeft size={22} color="#111827" />
           </TouchableOpacity>
@@ -87,7 +88,8 @@ export default function GroundBookingsPage() {
             </TouchableOpacity>
           </View>
 
-          <View className="mt-5 bg-[#E4EEF3] rounded-2xl p-1.5 flex-row border border-[#D2E2EA]">
+          <View
+            style={{ borderRadius: 16, borderCurve: "continuous" }} className="mt-5 bg-[#E4EEF3] p-1.5 flex-row border border-[#D2E2EA]">
             <TouchableOpacity
               onPress={() => setActiveTab("grounds")}
               activeOpacity={0.85}
@@ -180,9 +182,11 @@ export default function GroundBookingsPage() {
                 })}
               </ScrollView>
 
-              <View className="mt-5 bg-white rounded-3xl border border-gray-100 p-4">
+              <View
+                style={{ borderRadius: 24, borderCurve: "continuous" }} className="mt-5 bg-white border border-gray-100 p-4">
                 <View className="flex-row items-center mb-3">
-                  <View className="w-11 h-11 rounded-2xl bg-[#EEF7FC] items-center justify-center mr-3">
+                  <View
+                    style={{ borderRadius: 16, borderCurve: "continuous" }} className="w-11 h-11 bg-[#EEF7FC] items-center justify-center mr-3">
                     {activeFilter === "football" && <Goal size={20} color="#094569" />}
                     {activeFilter === "basketball" && <Dribbble size={20} color="#094569" />}
                     {activeFilter === "swimming" && <Waves size={20} color="#094569" />}
@@ -207,9 +211,11 @@ export default function GroundBookingsPage() {
             </>
           ) : (
             <View className="mt-5 gap-3">
-              <View className="bg-white rounded-3xl border border-gray-100 p-4">
+              <View
+                style={{ borderRadius: 24, borderCurve: "continuous" }} className="bg-white border border-gray-100 p-4">
                 <View className="flex-row items-center mb-3">
-                  <View className="w-11 h-11 rounded-2xl bg-[#EEF7FC] items-center justify-center mr-3">
+                  <View
+                    style={{ borderRadius: 16, borderCurve: "continuous" }} className="w-11 h-11 bg-[#EEF7FC] items-center justify-center mr-3">
                     <Users size={20} color="#094569" />
                   </View>
                   <View className="flex-1">
@@ -238,7 +244,8 @@ export default function GroundBookingsPage() {
         onRequestClose={() => setShowAddPopup(false)}
       >
         <View className="flex-1 bg-black/40 items-center justify-center px-6">
-          <View className="w-full max-w-sm bg-white rounded-[28px] p-6">
+          <View
+            style={{ borderRadius: 28, borderCurve: "continuous" }} className="w-full max-w-sm bg-white p-6">
             <Text className="text-xl font-mbold text-gray-900 mb-2">
               Add Ground Booking
             </Text>
@@ -247,9 +254,10 @@ export default function GroundBookingsPage() {
             </Text>
 
             <TouchableOpacity
+              style={{ borderRadius: 16, borderCurve: "continuous" }}
               onPress={() => setShowAddPopup(false)}
               activeOpacity={0.85}
-              className="bg-primary rounded-2xl py-3 items-center"
+              className="bg-primary py-3 items-center"
             >
               <Text className="text-white font-msemibold text-sm">Close</Text>
             </TouchableOpacity>

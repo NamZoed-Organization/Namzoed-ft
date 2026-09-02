@@ -1,28 +1,26 @@
+import MaskedView from "@react-native-masked-view/masked-view";
 import FollowRequests from "@/components/modals/FollowRequests";
 import FollowRequestsOverlay from "@/components/modals/FollowRequestsOverlay";
+import HamburgerMenu from "@/components/modals/HamburgerMenu";
 import ImageCropOverlay from "@/components/modals/ImageCropOverlay";
-import LicenseViewerOverlay from "@/components/modals/LicenseViewerOverlay";
 import ManageListingsOverlay from "@/components/modals/ManageListingsOverlay";
 import ProfileImageViewer from "@/components/modals/ProfileImageViewer";
-import ProfileSettings from "@/components/modals/ProfileSettings";
 import ShareComposerModal from "@/components/modals/ShareComposerModal";
 import { useUser } from "@/contexts/UserContext";
 import { useIsFocused } from "@react-navigation/native";
-// Added import for profile services
-import AddServicesModal from "@/components/modals/AddServicesModal";
 import CreatePost from "@/components/modals/CreatePost";
-import EditServicesModal from "@/components/modals/EditServicesModal";
 // Custom hooks
 import { useProfileData } from "@/hooks/profile/useProfileData";
 import { useServiceProvider } from "@/hooks/profile/useServiceProvider";
 import { useUserPosts } from "@/hooks/profile/useUserPosts";
 import { useUserProducts } from "@/hooks/profile/useUserProducts";
+import { useCoverPalette } from "@/hooks/useCoverPalette";
 import { useEarlyAccessBadge } from "@/hooks/useEarlyAccessBadge";
 // Profile components
 import EarlyAccessBadge from "@/components/EarlyAccessBadge";
+import ShareArcIcon from "@/components/icons/ShareArcIcon";
 import ProfilePostGridItem, { profileGridCellHeight } from "@/components/profile/ProfilePostGridItem";
 import ProgressiveImage from "@/components/ui/ProgressiveImage";
-import ServiceProviderSection from "@/components/profile/ServiceProviderSection";
 import BottomNavBar from "@/components/ui/BottomNavBar";
 import CircularLoader from "@/components/ui/CircularLoader";
 import { useBottomBarScroll } from "@/hooks/useBottomBarScroll";
@@ -30,44 +28,43 @@ import { useGridReveal } from "@/hooks/useGridReveal";
 import PopupMessage from "@/components/ui/PopupMessage";
 import {
     deleteAvatar,
+    deleteCoverImage,
     updateUserProfile,
     uploadAvatar,
+    uploadCoverImage,
 } from "@/lib/profileService";
+import { getUserBookmarks } from "@/lib/bookmarkService";
+import { getUserCommentedPosts } from "@/lib/commentsService";
+import { getUserLikedPosts } from "@/lib/likesService";
+import { Post } from "@/lib/postsService";
 import { getProfileViewCount7d } from "@/lib/viewTrackingService";
-import {
-    deleteLicenseImage,
-    deleteProviderAvatar,
-    deleteProviderService,
-    ProviderServiceWithDetails,
-    toggleServiceStatus,
-    updateServiceProviderLicense,
-    updateServiceProviderProfile,
-    uploadLicenseImage,
-    uploadProviderAvatar,
-} from "@/lib/servicesService";
 import {
     buildProfileExternalSharePayload,
 } from "@/lib/shareUtils";
 import { useAppRouter } from "@/utils/navigation";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
-import { ImpactFeedbackStyle, NotificationFeedbackType } from "expo-haptics";
+import { NotificationFeedbackType } from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
+import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import {
+    Bookmark,
     Camera,
+    Edit3,
     Eye,
-    GalleryHorizontal,
     Grid,
+    Heart,
     ImageIcon,
-    Package,
-    Settings,
-    Share2,
+    MessageCircle,
+    Menu,
+    QrCode,
+    ScanLine,
     ShoppingBag,
+    Store,
     Trash2,
-    Upload,
     User,
-    UserPlus,
     Verified,
     Wrench,
 } from "lucide-react-native";
@@ -81,26 +78,98 @@ import {
     Pressable,
     RefreshControl,
     ScrollView,
+    StatusBar,
     Text,
     TouchableOpacity,
     View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
+
+// HEADER_GRADIENT/COVER_GRADIENT used to be a fixed navy-blue pair here —
+// now they're computed per-user by useCoverPalette (see below), so the
+// header/cover/matte tint all share one hue drawn from the user's own cover
+// photo (or a deterministic fallback when they have none). HEADER_GRADIENT's
+// bottom stop is the same "dark" tone as the matte panel/tintRgb, so once the
+// header is fully scrolled-in its solid color matches the bottom of the
+// cover section (and the pinned tab bar sits on a seamless boundary).
+
+// Height of the fixed icon/tab row overlaid on top of the cover (status bar
+// spacer + header row) — the cover now renders behind this whole strip, so
+// content that used to sit below it needs this much top offset instead.
+const HEADER_HEIGHT = 84;
+// How far (in scroll px) the header background fades from transparent
+// (cover photo showing through) to the solid gradient, so icons stay
+// legible once the cover has scrolled out of view.
+const HEADER_FADE_DISTANCE = 150;
+
+// Rendered by renderTabRow below — a single shared list so the tab row's
+// magnet-pinned state never needs a duplicate copy to stay in sync.
+const PROFILE_TABS = [
+  { key: "images", label: "Posts" },
+  { key: "products", label: "Marketplace" },
+  { key: "likes", label: "Likes" },
+  { key: "saves", label: "Saves" },
+  { key: "comments", label: "Comments" },
+] as const;
+
+// Eases the blur mask below from 0 at the panel's top edge to 1 at its
+// bottom, instead of the blur switching on abruptly — same smoothstep
+// recipe as FeedPost's header blur fade (components/FeedPost.tsx).
+function smoothstep(t: number) {
+  return t * t * (3 - 2 * t);
+}
+function matteBlurFadeStops() {
+  const STEPS = 5;
+  const locations = Array.from(
+    { length: STEPS + 1 },
+    (_, i) => i / STEPS,
+  ) as unknown as [number, number, ...number[]];
+  const colors = Array.from({ length: STEPS + 1 }, (_, i) => {
+    const alpha = smoothstep(i / STEPS);
+    return `rgba(255,255,255,${alpha.toFixed(3)})`;
+  }) as unknown as [string, string, ...string[]];
+  return { colors, locations };
+}
+const MATTE_BLUR_FADE_STOPS = matteBlurFadeStops();
+
+function isVideoUrl(url: string): boolean {
+  const lower = url.toLowerCase();
+  return (
+    [".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"].some((ext) => lower.includes(ext)) ||
+    lower.includes("post-videos")
+  );
+}
+
+/** Same PostThumbnail shape hooks/profile/useUserPosts.ts builds for the
+ *  Posts tab — reused here so the Likes/Comments tabs render with the exact
+ *  same ProfilePostGridItem grid. */
+function toThumbnails(posts: Post[]) {
+  return posts
+    .filter((post) => post.images && post.images.length > 0)
+    .map((post) => ({
+      postId: post.id,
+      thumbnailUrl: post.images[0],
+      thumbnailBlurHash: (post as any).blur_hashes?.[0] ?? null,
+      mediaCount: post.images.length,
+      isVideo: isVideoUrl(post.images[0]),
+      post,
+    }));
+}
 
 // --- Reanimated & Gesture Handler ---
 import Animated, {
-    FadeIn,
-    FadeInDown,
-    FadeOut,
-    FadeOutDown,
     SlideInDown,
     SlideOutDown,
+    runOnJS,
+    useAnimatedScrollHandler,
+    useAnimatedStyle,
+    useSharedValue,
 } from "react-native-reanimated";
 
 export default function ProfileScreen() {
-  const { currentUser, setCurrentUser, logout } = useUser();
+  const { currentUser, setCurrentUser } = useUser();
   const router = useAppRouter();
   const insets = useSafeAreaInsets();
   // A screen pushed on top of this one (e.g. /post/[id], presented as a
@@ -113,13 +182,121 @@ export default function ProfileScreen() {
   // Turning this off entirely while unfocused removes it from the picture.
   const isFocused = useIsFocused();
   const { scale: bottomBarScale, onScroll: onBottomBarScroll } = useBottomBarScroll();
-  const { tab } = useLocalSearchParams<{ tab?: string }>();
-  const [mainTab, setMainTab] = useState<"main" | "work">(
-    tab === "work" ? "work" : "main",
-  );
+
+  const { openManageListings, openFollowRequests } = useLocalSearchParams<{
+    openManageListings?: string;
+    openFollowRequests?: string;
+  }>();
+
+  // Fixed header now overlays the cover (transparent at rest, so the cover
+  // photo/gradient is visible from the status bar down) — fades to its
+  // solid gradient as the user scrolls the cover out of view.
+  const headerBgOpacity = useSharedValue(0);
+  const headerBgAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: headerBgOpacity.value,
+  }));
+
+  // Mini avatar in the header — stays hidden until the real avatar (in the
+  // cover) is ~90% passed behind the header, then slides up + fades in over
+  // MINI_AVATAR_REVEAL_DISTANCE of additional scroll. avatarContentYRef is
+  // filled in by the avatar's onLayout measurement below (content-space Y,
+  // scroll-offset independent), since its on-screen position shifts with
+  // badge/dzongkhag layout and shouldn't be hardcoded.
+  const AVATAR_SIZE = 86;
+  const MINI_AVATAR_REVEAL_DISTANCE = 70;
+  const avatarContentYRef = React.useRef<number | null>(null);
+  const avatarRef = React.useRef<View>(null);
+  const mainScrollYRef = React.useRef(0);
+  const miniAvatarProgress = useSharedValue(0);
+  const miniAvatarAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: miniAvatarProgress.value,
+    transform: [{ translateY: (1 - miniAvatarProgress.value) * 14 }],
+  }));
+  // Inverse of the mini avatar's own fade — Edit Profile crossfades out of
+  // the header exactly as the mini avatar fades in, instead of sitting
+  // alongside it once you've scrolled past the cover.
+  const editProfilePillAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: 1 - miniAvatarProgress.value,
+  }));
+  const computeMiniAvatarProgress = (y: number) => {
+    const avatarContentY = avatarContentYRef.current;
+    if (avatarContentY == null) return 0;
+    const triggerY = avatarContentY + AVATAR_SIZE * 0.9 - HEADER_HEIGHT;
+    return Math.max(0, Math.min(1, (y - triggerY) / MINI_AVATAR_REVEAL_DISTANCE));
+  };
+
+  // Magnetic tab bar — the SAME Posts/Marketplace/etc. row (no duplicate)
+  // gets a translateY that exactly cancels out its own natural upward
+  // scroll once its top edge would slide behind the fixed header, so it
+  // appears to lock in place right there while the rest of the content
+  // keeps scrolling underneath; below that threshold translateY is 0 and it
+  // scrolls completely normally.
+  //
+  // This has to be computed on the UI thread (via useAnimatedScrollHandler
+  // below), not from the plain JS-thread onScroll callback the rest of this
+  // header uses — a JS-thread update lags a frame or more behind the
+  // ScrollView's own native-driven position, and since this transform is
+  // fighting to stay glued to a fast-moving native scroll (rather than just
+  // easing an opacity/translate in over a fixed distance, like the header
+  // fade/mini-avatar below), that lag is what read as "wobbling": the bar
+  // visibly hunting to catch up to where the scroll actually is instead of
+  // tracking it 1:1. tabBarContentY is a shared value (not a plain ref) so
+  // the worklet can read it directly; it's filled in from the row's own
+  // onLayout measurement, same content-space-Y approach as
+  // avatarContentYRef above, just JS-thread-writable/UI-thread-readable.
+  const tabBarRef = React.useRef<View>(null);
+  const tabBarContentY = useSharedValue<number>(Number.POSITIVE_INFINITY);
+  const tabBarTranslateY = useSharedValue(0);
+  const tabBarAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: tabBarTranslateY.value }],
+  }));
+  // HEADER_HEIGHT is a rough constant (it doesn't account for status bar
+  // height varying by device) — fine for the avatar-reveal threshold above,
+  // which just needs to be roughly right, but the tab bar needs to stop
+  // exactly flush with the header's real bottom edge or a sliver of it ends
+  // up hidden underneath. headerActualHeight is measured from the header's
+  // own onLayout, falling back to the constant until that first measurement
+  // lands.
+  const headerActualHeight = useSharedValue(HEADER_HEIGHT);
+
+  const onProfileScroll = (event: any) => {
+    const y = event.nativeEvent.contentOffset.y;
+    mainScrollYRef.current = y;
+    headerBgOpacity.value = Math.max(0, Math.min(1, y / HEADER_FADE_DISTANCE));
+    miniAvatarProgress.value = computeMiniAvatarProgress(y);
+    onBottomBarScroll(event);
+  };
+
+  // Drives tabBarTranslateY directly on the UI thread every scroll frame
+  // (zero bridge latency), then hands the event off to the existing
+  // JS-thread onProfileScroll for everything else it already does
+  // (header fade, mini avatar, bottom bar hide/show) — unchanged.
+  const mainScrollHandler = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      const y = event.contentOffset.y;
+      const triggerY = tabBarContentY.value - headerActualHeight.value;
+      tabBarTranslateY.value = Math.max(0, y - triggerY);
+      runOnJS(onProfileScroll)({ nativeEvent: event });
+    },
+  });
   const [activeTab, setActiveTab] = useState<
-    "images" | "products" | "services"
+    "images" | "products" | "likes" | "saves" | "comments"
   >("images");
+
+  // Likes/Saves/Comments — only ever shown on your own profile, so these
+  // load lazily the first time each tab is opened rather than eagerly like
+  // Posts/Marketplace, to avoid three extra queries most visits never need.
+  const [likedPosts, setLikedPosts] = useState<Post[]>([]);
+  const [loadingLikedPosts, setLoadingLikedPosts] = useState(false);
+  const [likedPostsLoaded, setLikedPostsLoaded] = useState(false);
+
+  const [commentedPosts, setCommentedPosts] = useState<Post[]>([]);
+  const [loadingCommentedPosts, setLoadingCommentedPosts] = useState(false);
+  const [commentedPostsLoaded, setCommentedPostsLoaded] = useState(false);
+
+  const [savedItems, setSavedItems] = useState<any[]>([]);
+  const [loadingSavedItems, setLoadingSavedItems] = useState(false);
+  const [savedItemsLoaded, setSavedItemsLoaded] = useState(false);
 
   // UI State
   const [showCreatePost, setShowCreatePost] = useState(false);
@@ -128,22 +305,20 @@ export default function ProfileScreen() {
     "camera" | "gallery" | null
   >(null);
   const [showMainAvatarMenu, setShowMainAvatarMenu] = useState(false);
-  const [showProviderImagePicker, setShowProviderImagePicker] = useState(false);
-  const [pendingProviderImageOption, setPendingProviderImageOption] = useState<
+  const [pendingCoverOption, setPendingCoverOption] = useState<
     "camera" | "gallery" | null
   >(null);
-  const [showProviderAvatarMenu, setShowProviderAvatarMenu] = useState(false);
-  const [showAddServiceModal, setShowAddServiceModal] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-  const [settingsInitialModal, setSettingsInitialModal] = useState<
-    string | undefined
-  >(undefined);
+  const [showCoverMenu, setShowCoverMenu] = useState(false);
   const [showFollowRequests, setShowFollowRequests] = useState(false);
   const [showPendingRequests, setShowPendingRequests] = useState(false);
   const [followRequestsTab, setFollowRequestsTab] = useState<
     "following" | "followers"
   >("following");
   const [showManageListings, setShowManageListings] = useState(false);
+  // Hamburger drawer — same component/trigger as the Home tab's TopNavbar,
+  // now replacing the header's separate Follow Requests / Manage Listings
+  // icons (Manage Listings already lives inside this menu).
+  const [showDrawer, setShowDrawer] = useState(false);
   const [showCropOverlay, setShowCropOverlay] = useState(false);
   const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
   const [selectedImageDims, setSelectedImageDims] = useState<{
@@ -151,34 +326,13 @@ export default function ProfileScreen() {
     height: number;
   } | null>(null);
 
-  // Service management state (kept here, not in provider hook)
-  const [isEditingProvider, setIsEditingProvider] = useState(false);
-
-  // Service management state
-  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
-  const [isServiceSelectionMode, setIsServiceSelectionMode] = useState(false);
-  const [serviceToEdit, setServiceToEdit] =
-    useState<ProviderServiceWithDetails | null>(null);
-  const [showEditServiceModal, setShowEditServiceModal] = useState(false);
-
   // Refresh state
   const [refreshing, setRefreshing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // Horizontal scroll ref
-  const horizontalScrollRef = React.useRef<ScrollView>(null);
-  // Ref to track programmatic scrolling (tap) vs user swiping
-  const isScrollingProgrammatically = React.useRef(false);
-
   // Profile image viewer state
   const [showProfileImageViewer, setShowProfileImageViewer] = useState(false);
-  const [showProviderWorkImageViewer, setShowProviderWorkImageViewer] =
-    useState(false);
 
-  // License viewer state
-  const [showLicenseViewer, setShowLicenseViewer] = useState(false);
-  const [showLicenseMenu, setShowLicenseMenu] = useState(false);
-  const [uploadingLicense, setUploadingLicense] = useState(false);
   const [showShareComposer, setShowShareComposer] = useState(false);
 
   // Popup states
@@ -227,11 +381,23 @@ export default function ProfileScreen() {
   const {
     profileImage,
     setProfileImage,
+    coverImage,
+    setCoverImage,
+    bio,
+    namzoedId,
     followerCount,
     setFollowerCount,
     followingCount,
     setFollowingCount,
   } = useProfileData(refreshKey);
+
+  // Per-user cover color identity — derived from the cover photo's dominant
+  // hue when there is one (so the header/gradient/matte tint blend with it),
+  // or a deterministic fallback hue keyed to the user's id otherwise. Same
+  // "dark matte navy" formula either way (see lib/coverTheme.ts), just with
+  // a different hue, so it's unique per user without ever looking garish.
+  const { header: HEADER_GRADIENT, cover: COVER_GRADIENT, tintRgb } =
+    useCoverPalette(currentUser?.id, coverImage);
 
   // 7-day rolling profile view count
   const [profileViews7d, setProfileViews7d] = useState<number>(0);
@@ -243,23 +409,12 @@ export default function ProfileScreen() {
   // Early-access badge for the logged-in user
   const badgeType = useEarlyAccessBadge(currentUser?.id);
 
-  // Service provider hook
-  const {
-    serviceProvider,
-    setServiceProvider,
-    loadingServiceProvider,
-    providerFormData,
-    setProviderFormData,
-    providerImageUri,
-    setProviderImageUri,
-    licenseImageUrl,
-    setLicenseImageUrl,
-    verificationStatus,
-    setVerificationStatus,
-    providerServices,
-    setProviderServices,
-    loadingProviderServices,
-  } = useServiceProvider(refreshKey);
+  // Service provider hook — trimmed to just what the Main page needs: the
+  // summary card below Edit Profile/Manage (full management, including the
+  // services list, lives on the pushed /profile/work screen now — there's
+  // no separate Services sub-tab here anymore).
+  const { serviceProvider, providerImageUri, verificationStatus } =
+    useServiceProvider(refreshKey);
 
   // User posts hook
   const {
@@ -279,19 +434,69 @@ export default function ProfileScreen() {
     showErrorPopup,
   );
 
+  // Pull-to-refresh should refresh these too, not just Posts/Marketplace —
+  // resetting the "loaded" flags lets the lazy-load effects below refetch.
+  useEffect(() => {
+    setLikedPostsLoaded(false);
+    setCommentedPostsLoaded(false);
+    setSavedItemsLoaded(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshKey]);
+
+  // Lazy-load Likes/Saves/Comments the first time each tab is opened.
+  useEffect(() => {
+    if (activeTab !== "likes" || likedPostsLoaded || !currentUser?.id) return;
+    setLoadingLikedPosts(true);
+    getUserLikedPosts(currentUser.id)
+      .then((posts) => {
+        setLikedPosts(posts);
+        setLikedPostsLoaded(true);
+      })
+      .finally(() => setLoadingLikedPosts(false));
+  }, [activeTab, likedPostsLoaded, currentUser?.id]);
+
+  useEffect(() => {
+    if (activeTab !== "comments" || commentedPostsLoaded || !currentUser?.id) return;
+    setLoadingCommentedPosts(true);
+    getUserCommentedPosts(currentUser.id)
+      .then((posts) => {
+        setCommentedPosts(posts);
+        setCommentedPostsLoaded(true);
+      })
+      .finally(() => setLoadingCommentedPosts(false));
+  }, [activeTab, commentedPostsLoaded, currentUser?.id]);
+
+  useEffect(() => {
+    if (activeTab !== "saves" || savedItemsLoaded || !currentUser?.id) return;
+    setLoadingSavedItems(true);
+    getUserBookmarks(currentUser.id)
+      .then((items) => {
+        setSavedItems(items as any[]);
+        setSavedItemsLoaded(true);
+      })
+      .finally(() => setLoadingSavedItems(false));
+  }, [activeTab, savedItemsLoaded, currentUser?.id]);
+
   // (Animation logic for avatar/picker modals removed — using native Modal animations now)
 
-  // Scroll to Work tab if tab parameter is "work"
+  // Deep-link param from the hamburger drawer (components/modals/HamburgerMenu.tsx)
+  // — jump straight to Manage Listings on arrival. Settings itself now lives
+  // at its own route (app/(users)/settings/index.tsx).
   useEffect(() => {
-    if (tab === "work" && horizontalScrollRef.current) {
-      setTimeout(() => {
-        horizontalScrollRef.current?.scrollTo({
-          x: SCREEN_WIDTH,
-          animated: true,
-        });
-      }, 100);
+    if (openManageListings === "1") {
+      setShowManageListings(true);
     }
-  }, [tab]);
+  }, [openManageListings]);
+
+  // Deep-link param from the hamburger drawer's "+ Add Friends" item —
+  // stands in for a real add-friends flow for now by surfacing the pending
+  // follow requests list (the same one the header's old UserPlus icon used
+  // to open) until that flow exists.
+  useEffect(() => {
+    if (openFollowRequests === "1") {
+      setShowPendingRequests(true);
+    }
+  }, [openFollowRequests]);
 
   // Close all overlays when navigating away from screen
   useFocusEffect(
@@ -300,19 +505,12 @@ export default function ProfileScreen() {
         // Cleanup function runs when screen loses focus
         setShowFollowRequests(false);
         setShowPendingRequests(false);
-        setShowSettings(false);
         setShowImagePicker(false);
         setPendingImageOption(null);
         setShowMainAvatarMenu(false);
-        setShowProviderImagePicker(false);
-        setPendingProviderImageOption(null);
-        setShowProviderAvatarMenu(false);
         setShowManageListings(false);
         setShowCropOverlay(false);
         setShowProfileImageViewer(false);
-        setShowProviderWorkImageViewer(false);
-        setShowLicenseViewer(false);
-        setShowLicenseMenu(false);
       };
     }, []),
   );
@@ -344,93 +542,7 @@ export default function ProfileScreen() {
     }
     setShowMainAvatarMenu(true);
   };
-  const handleEditProviderProfile = () => setShowProviderImagePicker(true);
-  const handleSettings = () => { if (!showSettings) setShowSettings(true); };
-  const handleFollowRequests = () => setShowPendingRequests(true);
   const handleManageListings = () => setShowManageListings(true);
-
-  // Handle main tab change with scroll
-  const handleMainTabChange = (tab: "main" | "work") => {
-    setMainTab(tab);
-    if (horizontalScrollRef.current) {
-      isScrollingProgrammatically.current = true;
-      const offset = tab === "main" ? 0 : SCREEN_WIDTH;
-      horizontalScrollRef.current.scrollTo({ x: offset, animated: true });
-    }
-  };
-
-  // Handle scroll event to update active tab (only for user swipes, not taps)
-  const handleScroll = (event: any) => {
-    // Skip state updates during programmatic scrolling (from tab tap)
-    if (isScrollingProgrammatically.current) return;
-
-    const offsetX = event.nativeEvent.contentOffset.x;
-    const newTab = offsetX > SCREEN_WIDTH / 2 ? "work" : "main";
-    if (newTab !== mainTab) {
-      setMainTab(newTab);
-    }
-  };
-
-  // Reset the programmatic scroll flag when user starts dragging (swiping)
-  const handleScrollBeginDrag = () => {
-    isScrollingProgrammatically.current = false;
-  };
-
-  // Reset the programmatic scroll flag when scrolling ends
-  const handleScrollEnd = () => {
-    isScrollingProgrammatically.current = false;
-  };
-
-  // Handle service provider profile save
-  const handleSaveProviderProfile = async () => {
-    if (!currentUser?.id) return;
-
-    try {
-      await updateServiceProviderProfile(currentUser.id, {
-        name: providerFormData.businessName,
-        master_bio: providerFormData.bio,
-        email: providerFormData.email.trim() || null,
-        contact: providerFormData.contact.trim() || null,
-        email_active: providerFormData.email.trim()
-          ? providerFormData.emailActive
-          : false,
-        contact_active: providerFormData.contact.trim()
-          ? providerFormData.contactActive
-          : false,
-      });
-
-      setIsEditingProvider(false);
-      setRefreshKey((prev) => prev + 1);
-      showSuccessPopup(
-        "Service provider profile updated successfully",
-        "Profile Updated!",
-      );
-    } catch (error) {
-      console.error("Failed to update service provider profile:", error);
-      showErrorPopup(
-        "Failed to update profile. Please try again.",
-        "Update Failed",
-      );
-    }
-  };
-
-  // Handle edit mode toggle
-  const handleToggleEditProvider = () => {
-    if (isEditingProvider) {
-      // Cancel editing - reload original data
-      if (serviceProvider) {
-        setProviderFormData({
-          businessName: serviceProvider.name || "",
-          email: serviceProvider.email || "",
-          contact: serviceProvider.contact || "",
-          emailActive: serviceProvider.email_active || false,
-          contactActive: serviceProvider.contact_active || false,
-          bio: serviceProvider.master_bio || "",
-        });
-      }
-    }
-    setIsEditingProvider(!isEditingProvider);
-  };
 
   // UPDATED: Save Logic
   const handleCropSave = async (croppedUri: string) => {
@@ -552,86 +664,124 @@ export default function ProfileScreen() {
     }
   };
 
-  const openProviderImageOption = async (option: "camera" | "gallery") => {
-    if (!currentUser?.id) return;
-
-    try {
-      let result;
-      if (option === "camera") {
-        const cameraGranted = await ensureCameraPermission(
-          "Camera access is needed.",
-        );
-        if (!cameraGranted) return;
-        result = await ImagePicker.launchCameraAsync({
-          mediaTypes: ["images"],
-          allowsEditing: false,
-          quality: 1.0,
-        });
-      } else {
-        const galleryPermission =
-          await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (!galleryPermission.granted) {
-          showErrorPopup("Gallery access is needed.", "Permission Denied");
-          return;
-        }
-        result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ["images"],
-          allowsEditing: false,
-          quality: 1.0,
-        });
-      }
-
-      if (!result.canceled && result.assets[0]) {
-        const imageUri = result.assets[0].uri;
-
-        // Optimistic update (show image immediately)
-        setProviderImageUri(imageUri);
-
-        try {
-          // Upload to Supabase Storage
-          const publicUrl = await uploadProviderAvatar(
-            imageUri,
-            currentUser.id,
-          );
-
-          // Update database with new avatar URL (profile_url is the avatar)
-          await updateServiceProviderProfile(currentUser.id, {
-            profile_url: publicUrl,
-          });
-
-          showSuccessPopup(
-            "Service provider avatar updated successfully",
-            "Avatar Updated!",
-          );
-        } catch (uploadError) {
-          console.error("Failed to upload provider avatar:", uploadError);
-          showErrorPopup(
-            "Failed to upload avatar. Please try again.",
-            "Upload Failed",
-          );
-          // Revert to previous image on error
-          if (serviceProvider?.profile_url) {
-            setProviderImageUri(serviceProvider.profile_url);
-          } else {
-            setProviderImageUri(null);
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Error picking provider image:", error);
-      showErrorPopup("Failed to select image.", "Selection Failed");
-    }
-  };
-
   const handleImageOption = (option: "camera" | "gallery") => {
     setPendingImageOption(option);
     setShowMainAvatarMenu(false);
     setShowImagePicker(false);
   };
 
-  const handleProviderImageOption = (option: "camera" | "gallery") => {
-    setPendingProviderImageOption(option);
-    setShowProviderImagePicker(false);
+  // Cover/background image upload — always uses the native picker's own
+  // crop editor (banner aspect) on both platforms, so there's no need for
+  // ImageCropOverlay's Android-only flow here.
+  const handleCoverSave = async (uri: string) => {
+    if (!currentUser?.id) return;
+
+    const previousCover = coverImage;
+    setCoverImage(uri);
+
+    try {
+      const publicUrl = await uploadCoverImage(uri, currentUser.id);
+      await updateUserProfile(currentUser.id, { cover_image_url: publicUrl });
+      setCoverImage(publicUrl);
+
+      const updatedUser = { ...currentUser, cover_image_url: publicUrl };
+      await AsyncStorage.setItem("currentUser", JSON.stringify(updatedUser));
+      setCurrentUser(updatedUser);
+
+      if (previousCover) {
+        deleteCoverImage(previousCover).catch((error) =>
+          console.error("Failed to delete previous cover image:", error),
+        );
+      }
+
+      showSuccessPopup("Cover photo has been updated.", "Cover Updated!");
+    } catch (error) {
+      console.error("Failed to save cover image:", error);
+      setCoverImage(previousCover);
+      showErrorPopup("Failed to save cover photo. Please try again.", "Save Failed");
+    }
+  };
+
+  const openCoverImageOption = async (option: "camera" | "gallery") => {
+    try {
+      setShowCoverMenu(false);
+      let result;
+      if (option === "camera") {
+        const cameraGranted = await ensureCameraPermission("Camera access is needed.");
+        if (!cameraGranted) return;
+        result = await ImagePicker.launchCameraAsync({
+          mediaTypes: ["images"],
+          allowsEditing: true,
+          aspect: [3, 1],
+          quality: 1.0,
+        });
+      } else {
+        const galleryPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!galleryPermission.granted) {
+          showErrorPopup("Gallery access is needed.", "Permission Denied");
+          return;
+        }
+        result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ["images"],
+          allowsEditing: true,
+          aspect: [3, 1],
+          quality: 1.0,
+        });
+      }
+
+      if (!result.canceled && result.assets[0]) {
+        await handleCoverSave(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error("Error picking cover image:", error);
+      showErrorPopup("Failed to select image.", "Selection Failed");
+    }
+  };
+
+  const handleCoverImageOption = (option: "camera" | "gallery") => {
+    setPendingCoverOption(option);
+    setShowCoverMenu(false);
+  };
+
+  const handleRemoveCoverImage = () => {
+    setShowCoverMenu(false);
+    Alert.alert(
+      "Remove Cover Photo",
+      "Are you sure you want to remove your cover photo?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: async () => {
+            if (!currentUser?.id) return;
+
+            try {
+              if (coverImage) {
+                try {
+                  await deleteCoverImage(coverImage);
+                } catch (error) {
+                  console.error("Failed to delete cover image from storage:", error);
+                }
+              }
+
+              await updateUserProfile(currentUser.id, { cover_image_url: null });
+              setCoverImage(null);
+
+              const updatedUser = { ...currentUser, cover_image_url: null };
+              await AsyncStorage.setItem("currentUser", JSON.stringify(updatedUser));
+              setCurrentUser(updatedUser);
+
+              Haptics.notificationAsync(NotificationFeedbackType.Success);
+              showSuccessPopup("Cover photo removed successfully", "Removed!");
+            } catch (error) {
+              console.error("Failed to remove cover photo:", error);
+              showErrorPopup("Failed to remove cover photo. Please try again.", "Removal Failed");
+            }
+          },
+        },
+      ],
+    );
   };
 
   useEffect(() => {
@@ -652,237 +802,21 @@ export default function ProfileScreen() {
   }, [showImagePicker, showMainAvatarMenu, pendingImageOption]);
 
   useEffect(() => {
-    if (showProviderImagePicker || !pendingProviderImageOption) return;
+    if (showCoverMenu || !pendingCoverOption) return;
 
     let cancelled = false;
     (async () => {
       await waitForIosModalDismiss();
       if (cancelled) return;
-      const option = pendingProviderImageOption;
-      setPendingProviderImageOption(null);
-      await openProviderImageOption(option);
+      const option = pendingCoverOption;
+      setPendingCoverOption(null);
+      await openCoverImageOption(option);
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [showProviderImagePicker, pendingProviderImageOption, currentUser?.id]);
-
-  // Service management handlers
-  const handleToggleStatus = (serviceId: string, newStatus: boolean) => {
-    const actionText = newStatus ? "activate" : "deactivate";
-
-    Alert.alert(
-      `${newStatus ? "Activate" : "Deactivate"} Service`,
-      `Are you sure you want to ${actionText} this service?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Confirm",
-          onPress: async () => {
-            try {
-              await toggleServiceStatus(serviceId, newStatus);
-
-              // Update local state
-              setProviderServices((prev) =>
-                prev.map((s) =>
-                  s.id === serviceId ? { ...s, status: newStatus } : s,
-                ),
-              );
-
-              Haptics.notificationAsync(NotificationFeedbackType.Success);
-              showSuccessPopup(
-                `Service ${newStatus ? "activated" : "deactivated"} successfully`,
-                newStatus ? "Activated!" : "Deactivated!",
-              );
-            } catch (error: any) {
-              showErrorPopup(
-                error.message || "Failed to update service status",
-                "Update Failed",
-              );
-            }
-          },
-        },
-      ],
-    );
-  };
-
-  const handleEditService = (service: ProviderServiceWithDetails) => {
-    Haptics.impactAsync(ImpactFeedbackStyle.Heavy);
-    setServiceToEdit(service);
-    setShowEditServiceModal(true);
-  };
-
-  const handleServiceLongPress = (serviceId: string) => {
-    if (!isServiceSelectionMode) {
-      Haptics.notificationAsync(NotificationFeedbackType.Success);
-      setIsServiceSelectionMode(true);
-      setSelectedServiceIds([serviceId]);
-    }
-  };
-
-  const toggleServiceSelection = (serviceId: string) => {
-    Haptics.impactAsync(ImpactFeedbackStyle.Medium);
-    setSelectedServiceIds((prev) =>
-      prev.includes(serviceId)
-        ? prev.filter((id) => id !== serviceId)
-        : [...prev, serviceId],
-    );
-  };
-
-  const handleDeleteSelectedServices = () => {
-    Alert.alert(
-      "Delete Services",
-      `Are you sure you want to delete ${selectedServiceIds.length} service(s)? This cannot be undone.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              // Delete all selected services
-              await Promise.all(
-                selectedServiceIds.map((id) => deleteProviderService(id)),
-              );
-
-              // Update local state
-              setProviderServices((prev) =>
-                prev.filter((s) => !selectedServiceIds.includes(s.id)),
-              );
-
-              setIsServiceSelectionMode(false);
-              setSelectedServiceIds([]);
-
-              Haptics.notificationAsync(NotificationFeedbackType.Success);
-              showSuccessPopup("Services deleted successfully", "Removed!");
-            } catch (error: any) {
-              showErrorPopup(
-                error.message || "Failed to delete services",
-                "Deletion Failed",
-              );
-            }
-          },
-        },
-      ],
-    );
-  };
-
-  const handleCancelSelection = () => {
-    Haptics.impactAsync(ImpactFeedbackStyle.Medium);
-    setIsServiceSelectionMode(false);
-    setSelectedServiceIds([]);
-  };
-
-  // Handle license upload
-  const handleUploadLicense = async () => {
-    if (!currentUser?.id) return;
-
-    try {
-      const galleryPermission =
-        await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!galleryPermission.granted) {
-        showErrorPopup(
-          "Gallery access is needed to upload license.",
-          "Permission Denied",
-        );
-        return;
-      }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ["images"],
-        allowsEditing: false,
-        quality: 1.0,
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        const imageUri = result.assets[0].uri;
-
-        // Show confirmation popup after image selection (for both first time and replacement)
-        if (licenseImageUrl) {
-          // Replacing existing license
-          Alert.alert(
-            "Replace License",
-            "Are you sure you want to replace your existing license document? This will set your verification status back to pending.",
-            [
-              {
-                text: "Cancel",
-                style: "cancel",
-              },
-              {
-                text: "Replace",
-                style: "destructive",
-                onPress: async () => {
-                  await uploadLicenseDocument(imageUri);
-                },
-              },
-            ],
-          );
-        } else {
-          // First time upload with confirmation
-          Alert.alert(
-            "Upload License",
-            "Are you sure you want to upload this document as your license?",
-            [
-              {
-                text: "Cancel",
-                style: "cancel",
-              },
-              {
-                text: "Upload",
-                onPress: async () => {
-                  await uploadLicenseDocument(imageUri);
-                },
-              },
-            ],
-          );
-        }
-      }
-    } catch (error) {
-      console.error("Error picking license image:", error);
-      showErrorPopup("Failed to select image.", "Selection Failed");
-    }
-  };
-
-  // Upload license document helper
-  const uploadLicenseDocument = async (imageUri: string) => {
-    if (!currentUser?.id) return;
-
-    setUploadingLicense(true);
-
-    try {
-      // Upload to Supabase Storage
-      const publicUrl = await uploadLicenseImage(imageUri, currentUser.id);
-
-      // Update database with license URL and set status to pending
-      await updateServiceProviderLicense(currentUser.id, publicUrl);
-
-      // Update local state
-      setLicenseImageUrl(publicUrl);
-      setVerificationStatus("pending");
-
-      Haptics.notificationAsync(NotificationFeedbackType.Success);
-      showSuccessPopup(
-        "License document uploaded successfully. Pending verification.",
-        "Uploaded!",
-      );
-    } catch (uploadError) {
-      console.error("Failed to upload license:", uploadError);
-      showErrorPopup(
-        "Failed to upload license. Please try again.",
-        "Upload Failed",
-      );
-    } finally {
-      setUploadingLicense(false);
-    }
-  };
-
-  // Handle view license
-  const handleViewLicense = () => {
-    if (licenseImageUrl) {
-      setShowLicenseViewer(true);
-    }
-  };
+  }, [showCoverMenu, pendingCoverOption]);
 
   // Handle remove main profile avatar
   const handleRemoveMainAvatar = () => {
@@ -940,105 +874,6 @@ export default function ProfileScreen() {
     );
   };
 
-  // Handle remove provider avatar
-  const handleRemoveProviderAvatar = () => {
-    setShowProviderAvatarMenu(false);
-    Alert.alert(
-      "Remove Avatar",
-      "Are you sure you want to remove your service provider avatar?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Remove",
-          style: "destructive",
-          onPress: async () => {
-            if (!currentUser?.id) return;
-
-            try {
-              // Delete from storage if exists
-              if (providerImageUri && serviceProvider?.profile_url) {
-                try {
-                  await deleteProviderAvatar(serviceProvider.profile_url);
-                } catch (error) {
-                  console.error("Failed to delete avatar from storage:", error);
-                }
-              }
-
-              // Update database
-              await updateServiceProviderProfile(currentUser.id, {
-                profile_url: undefined,
-              });
-
-              // Update local state
-              setProviderImageUri(null);
-
-              Haptics.notificationAsync(NotificationFeedbackType.Success);
-              showSuccessPopup("Avatar removed successfully", "Removed!");
-            } catch (error) {
-              console.error("Failed to remove provider avatar:", error);
-              showErrorPopup(
-                "Failed to remove avatar. Please try again.",
-                "Removal Failed",
-              );
-            }
-          },
-        },
-      ],
-    );
-  };
-
-  // Handle remove license
-  const handleRemoveLicense = () => {
-    setShowLicenseMenu(false);
-    Alert.alert(
-      "Remove License",
-      'Are you sure you want to remove your license document? This will reset your verification status to "not verified".',
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Remove",
-          style: "destructive",
-          onPress: async () => {
-            if (!currentUser?.id) return;
-
-            try {
-              // Delete from storage if exists
-              if (licenseImageUrl) {
-                try {
-                  await deleteLicenseImage(licenseImageUrl);
-                } catch (error) {
-                  console.error(
-                    "Failed to delete license from storage:",
-                    error,
-                  );
-                }
-              }
-
-              // Update database
-              await updateServiceProviderProfile(currentUser.id, {
-                identification: null,
-                verification_status: "not_verified",
-              });
-
-              // Update local state
-              setLicenseImageUrl(null);
-              setVerificationStatus("not_verified");
-
-              Haptics.notificationAsync(NotificationFeedbackType.Success);
-              showSuccessPopup("License removed successfully", "Removed!");
-            } catch (error) {
-              console.error("Failed to remove license:", error);
-              showErrorPopup(
-                "Failed to remove license. Please try again.",
-                "Removal Failed",
-              );
-            }
-          },
-        },
-      ],
-    );
-  };
-
   if (!currentUser) {
     return (
       <View className="flex-1 bg-background items-center justify-center px-4">
@@ -1047,8 +882,9 @@ export default function ProfileScreen() {
           Not Logged In
         </Text>
         <TouchableOpacity
+          style={{ borderRadius: 12, borderCurve: "continuous" }}
           onPress={() => router.replace("/login")}
-          className="bg-primary rounded-xl py-3 px-6"
+          className="bg-primary py-3 px-6"
         >
           <Text className="text-white font-msemibold">Go to Login</Text>
         </TouchableOpacity>
@@ -1056,351 +892,614 @@ export default function ProfileScreen() {
     );
   }
 
+  // Posts/Marketplace/Likes/Saves/Comments row — shared between the in-flow
+  // tab bar (rendered inside the ScrollView, overlapping the cover's rounded
+  // corners) and its pinned duplicate (an absolute overlay right below the
+  // fixed header, shown once the in-flow one has scrolled up to meet it), so
+  // the two never drift out of sync.
+  const renderTabRow = () => (
+    <View style={{ position: "relative" }}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ flexGrow: 1 }}
+      >
+        {PROFILE_TABS.map((tab) => (
+          <TouchableOpacity
+            key={tab.key}
+            className="px-5 pt-4 pb-3 items-center"
+            onPress={() => setActiveTab(tab.key)}
+          >
+            <Text
+              className={`font-msemibold text-lg ${
+                activeTab === tab.key ? "text-primary" : "text-gray-500"
+              }`}
+            >
+              {tab.label}
+            </Text>
+            <View
+              className={`w-6 h-[2px] rounded-full mt-1.5 ${
+                activeTab === tab.key ? "bg-primary" : "bg-transparent"
+              }`}
+            />
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+      <LinearGradient
+        colors={["#ffffff", "rgba(255,255,255,0)"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        pointerEvents="none"
+        style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 20 }}
+      />
+      <LinearGradient
+        colors={["rgba(255,255,255,0)", "#ffffff"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        pointerEvents="none"
+        style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 20 }}
+      />
+    </View>
+  );
+
   return (
     <View className="flex-1 bg-background" pointerEvents={isFocused ? "auto" : "none"}>
-      {/* Fixed Header - Absolute Position */}
+      {/* Light status-bar icons — the header/cover gradient behind them is
+          dark, so the app's default dark-content bar would be unreadable
+          here. Overrides the global one from app/_layout.tsx while focused. */}
+      <StatusBar barStyle="light-content" />
+
+      {/* Fixed Header - Absolute Position — transparent at rest so the cover
+          section beneath (image or COVER_GRADIENT) shows through all the way
+          from the status bar; fades in HEADER_GRADIENT as the cover scrolls
+          out of view so the icons stay legible over whatever's beneath. */}
       <View
         style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 100 }}
+        onLayout={(e) => {
+          headerActualHeight.value = e.nativeEvent.layout.height;
+        }}
       >
-        <View className="h-12 bg-transparent" />
+        <Animated.View
+          style={[
+            { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
+            headerBgAnimatedStyle,
+          ]}
+        >
+          <LinearGradient
+            colors={HEADER_GRADIENT}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0, y: 1 }}
+            style={{ flex: 1 }}
+          />
+        </Animated.View>
+
+        <View className="h-12" />
 
         {/* Header */}
-        <View className="flex-row items-center justify-between px-4 pb-3 pt-2 bg-transparent ">
-          {/* Left Icons */}
+        <View className="flex-row items-center justify-between px-4 pb-3 pt-2">
+          {/* Left Icons — hamburger drawer, same as Home's TopNavbar */}
           <View className="flex-row items-center gap-2">
             <TouchableOpacity
-              onPress={handleFollowRequests}
+              onPress={() => setShowDrawer(true)}
               className="w-10 h-10 items-center justify-center"
             >
-              <UserPlus size={24} strokeWidth={1.5} className="text-primary" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={handleManageListings}
-              className="w-10 h-10 items-center justify-center"
-            >
-              <Package size={24} strokeWidth={1.5} className="text-primary" />
+              <Menu size={24} strokeWidth={1.5} color="#fff" />
             </TouchableOpacity>
           </View>
 
-          {/* Main/Work Tabs — center of topbar */}
-          <View className="flex-row gap-2">
-            <TouchableOpacity
-              className={`px-6 py-1.5 items-center rounded-full ${mainTab === "main" ? "bg-primary" : "bg-gray-100"}`}
-              onPress={() => handleMainTabChange("main")}
-            >
-              <Text
-                className={`font-msemibold text-sm ${mainTab === "main" ? "text-white" : "text-gray-600"}`}
-              >
-                Main
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              className={`px-6 py-1.5 items-center rounded-full ${mainTab === "work" ? "bg-primary" : "bg-gray-100"}`}
-              onPress={() => handleMainTabChange("work")}
-            >
-              <Text
-                className={`font-msemibold text-sm ${mainTab === "work" ? "text-white" : "text-gray-600"}`}
-              >
-                Work
-              </Text>
-            </TouchableOpacity>
-          </View>
+          {/* Mini avatar — stays hidden until the real avatar (in the cover)
+              is ~90% covered by this header, then slides up + fades in over
+              MINI_AVATAR_REVEAL_DISTANCE of further scroll (see
+              computeMiniAvatarProgress). No name — avatar only. Absolutely
+              centered so it sits dead-center regardless of the left/right
+              icon groups' widths, rather than following flex space-between. */}
+          <Animated.View
+            style={[
+              { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, alignItems: "center", justifyContent: "center" },
+              miniAvatarAnimatedStyle,
+            ]}
+            pointerEvents="none"
+          >
+            <View className="w-7 h-7 rounded-full bg-white/20 overflow-hidden items-center justify-center">
+              {profileImage ? (
+                <ProgressiveImage
+                  uri={profileImage}
+                  style={{ width: "100%", height: "100%" }}
+                  showProgress={false}
+                />
+              ) : (
+                <User size={14} strokeWidth={1.5} color="#fff" />
+              )}
+            </View>
+          </Animated.View>
 
           {/* Right Actions */}
-          <View className="flex-row items-center gap-1">
+          <View className="flex-row items-center gap-2">
+            <Animated.View style={editProfilePillAnimatedStyle}>
+              <TouchableOpacity
+                style={{ borderRadius: 999, borderCurve: "continuous" }}
+                onPress={() =>
+                  router.push({
+                    pathname: "/settings",
+                    params: { modal: "editProfile" },
+                  } as any)
+                }
+                className="flex-row items-center gap-1 px-3 py-1.5 bg-white/15 border border-white/30"
+              >
+                <Edit3 size={13} strokeWidth={1.8} color="#fff" />
+                <Text className="text-xs font-semibold text-white">
+                  Edit Profile
+                </Text>
+              </TouchableOpacity>
+            </Animated.View>
+
+            {/* Scan — no scanner screen exists yet, so this is a placeholder
+                stub for now rather than a dead, unresponsive icon. */}
+            <TouchableOpacity
+              onPress={() =>
+                Alert.alert("Coming Soon", "QR scanning isn't available yet.")
+              }
+              className="w-10 h-10 items-center justify-center"
+            >
+              <ScanLine size={22} strokeWidth={1.7} color="#fff" />
+            </TouchableOpacity>
             <TouchableOpacity
               onPress={handleShareProfile}
               className="w-10 h-10 items-center justify-center"
             >
-              <Share2 size={22} strokeWidth={1.7} className="text-gray-700" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={handleSettings}
-              className="w-10 h-10 items-center justify-center"
-            >
-              <Settings size={24} strokeWidth={1.5} className="text-gray-700" />
+              <ShareArcIcon size={22} strokeWidth={1.7} color="#fff" />
             </TouchableOpacity>
           </View>
         </View>
       </View>
 
-      {/* Content with Top Padding for Fixed Header */}
-      <View style={{ paddingTop: 84 }} className="flex-1">
-        {/* Horizontal Scrollable Content */}
-        <ScrollView
-          ref={horizontalScrollRef}
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
+      {/* Content — no top padding now: the fixed header above overlays the
+          cover section transparently, so this starts at the very top of the
+          screen and the cover renders behind the header/status bar. */}
+      <View className="flex-1">
+        <Animated.ScrollView
+          style={{ flex: 1 }}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 100 }}
+          onScroll={mainScrollHandler}
           scrollEventThrottle={16}
-          onScroll={handleScroll}
-          onScrollBeginDrag={handleScrollBeginDrag}
-          onMomentumScrollEnd={handleScrollEnd}
-          className="flex-1"
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor="#094569"
+              progressViewOffset={0}
+            />
+          }
         >
-          {/* Main Profile Page */}
-          <View style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT - 84 }}>
-            <ScrollView
-              style={{ flex: 1 }}
-              showsVerticalScrollIndicator={false}
-              nestedScrollEnabled
-              contentContainerStyle={{ paddingBottom: 100 }}
-              onScroll={onBottomBarScroll}
-              scrollEventThrottle={16}
-              refreshControl={
-                <RefreshControl
-                  refreshing={refreshing}
-                  onRefresh={onRefresh}
-                  tintColor="#094569"
-                  progressViewOffset={0}
-                />
-              }
-            >
-              {/* Profile Info Section — Instagram style */}
-              <View className="px-4 pt-5 pb-4">
-                {/* Row: Avatar + Stats */}
-                <View className="flex-row items-center mb-3">
-                  {/* Avatar */}
-                  <View className="relative">
-                    <TouchableOpacity
-                      onPress={() =>
-                        profileImage
-                          ? setShowProfileImageViewer(true)
-                          : setShowMainAvatarMenu(true)
-                      }
-                      onLongPress={() => setShowMainAvatarMenu(true)}
-                      activeOpacity={0.85}
-                      className="w-[86px] h-[86px] rounded-full bg-gray-200 overflow-hidden border-2 border-gray-100"
-                    >
-                      {profileImage ? (
-                        <ProgressiveImage
-                          uri={profileImage}
-                          style={{ width: "100%", height: "100%" }}
-                          showProgress={false}
-                          priority="high"
-                        />
-                      ) : (
-                        <View className="w-full h-full items-center justify-center bg-gray-100">
-                          <User size={34} strokeWidth={1.5} color="#9ca3af" />
-                        </View>
-                      )}
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => setShowMainAvatarMenu(true)}
-                      className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-primary border-2 border-white items-center justify-center"
-                    >
-                      <Camera size={12} strokeWidth={1.5} color="white" />
-                    </TouchableOpacity>
-                  </View>
+              {/* Cover / background photo — extends down through the avatar,
+                  name/id/location, badge, stats, bio and the Edit Profile /
+                  Manage buttons, stopping right above the Media/Products/
+                  Services tab row. Default linear gradient when no cover
+                  photo is set. */}
+              <View className="relative overflow-hidden">
+                <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}>
+                  {coverImage ? (
+                    <ProgressiveImage
+                      uri={coverImage}
+                      style={{ width: "100%", height: "100%" }}
+                      showProgress={false}
+                      priority="high"
+                    />
+                  ) : (
+                    <LinearGradient
+                      colors={COVER_GRADIENT}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 0, y: 1 }}
+                      style={{ width: "100%", height: "100%" }}
+                    />
+                  )}
+                  {/* Legibility scrim — a neutral grey wash (not pure black)
+                      over the whole cover, so a bright/colorful photo reads
+                      as a muted backdrop instead of competing for attention
+                      with the avatar, stats, bio and buttons on top of it. */}
+                  <View
+                    style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(70,72,76,0.58)" }}
+                  />
+                </View>
+                <TouchableOpacity
+                  onPress={() => setShowCoverMenu(true)}
+                  style={{ top: HEADER_HEIGHT + 12 }}
+                  className="absolute right-3 w-9 h-9 rounded-full bg-black/40 items-center justify-center"
+                >
+                  <Camera size={16} strokeWidth={1.5} color="white" />
+                </TouchableOpacity>
 
-                  {/* Stats row + Badge */}
-                  <View className="flex-1 ml-4">
-                    <View className="flex-row items-center justify-around">
-                      <View className="items-center">
-                        <Text className="text-lg font-mbold text-gray-900">
-                          {userPosts.length}
-                        </Text>
-                        <Text className="text-xs font-regular text-gray-500">
-                          Posts
-                        </Text>
-                      </View>
+                {/* Profile Info Section — Instagram style. Top padding clears
+                    the fixed header row now that the cover renders behind it. */}
+                <View className="px-4" style={{ paddingTop: HEADER_HEIGHT + 20 }}>
+                  {/* Row: Avatar + Name/Email/Location */}
+                  <View className="flex-row items-center mb-3">
+                    {/* Avatar — measured on layout so the header's mini
+                        avatar knows exactly when this one is ~90% scrolled
+                        behind the header (see avatarContentYRef). */}
+                    <View
+                      ref={avatarRef}
+                      className="relative"
+                      onLayout={() => {
+                        avatarRef.current?.measure((_x, _y, _w, _h, _pageX, pageY) => {
+                          avatarContentYRef.current = pageY + mainScrollYRef.current;
+                        });
+                      }}
+                    >
+                      {/* No camera badge — long-press still opens the
+                          same avatar menu as before, just without the
+                          visible affordance. */}
                       <TouchableOpacity
-                        className="items-center"
-                        onPress={() => {
-                          setFollowRequestsTab("followers");
-                          setShowFollowRequests(true);
-                        }}
-                        activeOpacity={0.8}
+                        onPress={() =>
+                          profileImage
+                            ? setShowProfileImageViewer(true)
+                            : setShowMainAvatarMenu(true)
+                        }
+                        onLongPress={() => setShowMainAvatarMenu(true)}
+                        activeOpacity={0.85}
+                        className="w-[86px] h-[86px] rounded-full bg-gray-200 overflow-hidden border border-white"
                       >
-                        <Text className="text-lg font-mbold text-gray-900">
-                          {followerCount}
-                        </Text>
-                        <Text className="text-xs font-regular text-gray-500">
-                          Followers
-                        </Text>
+                        {profileImage ? (
+                          <ProgressiveImage
+                            uri={profileImage}
+                            style={{ width: "100%", height: "100%" }}
+                            showProgress={false}
+                            priority="high"
+                          />
+                        ) : (
+                          <View className="w-full h-full items-center justify-center bg-gray-100">
+                            <User size={34} strokeWidth={1.5} color="#9ca3af" />
+                          </View>
+                        )}
                       </TouchableOpacity>
-                      <TouchableOpacity
-                        className="items-center"
-                        onPress={() => {
-                          setFollowRequestsTab("following");
-                          setShowFollowRequests(true);
-                        }}
-                        activeOpacity={0.8}
-                      >
-                        <Text className="text-lg font-mbold text-gray-900">
-                          {followingCount}
+                    </View>
+
+                    {/* Name, Email & Location */}
+                    <View className="flex-1 ml-4">
+                      <View className="flex-row items-center gap-1.5 mb-0.5">
+                        <Text className="text-lg font-mbold text-white">
+                          {currentUser.name}
                         </Text>
-                        <Text className="text-xs font-regular text-gray-500">
-                          Following
-                        </Text>
-                      </TouchableOpacity>
-                      {/* Profile views — private 7-day rolling stat */}
-                      {profileViews7d > 0 && (
-                        <>
-                          <Text className="text-gray-300 text-xl font-light">|</Text>
-                          <View className="items-center">
-                            <View className="flex-row items-center" style={{ gap: 3 }}>
-                              <Eye size={14} color="#1F2937" />
-                              <Text className="text-lg font-mbold text-gray-900">
-                                {profileViews7d > 999
-                                  ? `${(profileViews7d / 1000).toFixed(1)}k`
-                                  : profileViews7d}
-                              </Text>
-                            </View>
-                            <Text className="text-xs font-regular text-gray-500">
-                              Profile views
+                        {verificationStatus === "verified" && (
+                          <View className="flex-row items-center bg-blue-50 border border-[#094569] rounded-full px-2 py-0.5 gap-1">
+                            <Verified size={11} color="#094569" />
+                            <Text className="text-[10px] font-msemibold text-[#094569] leading-none">
+                              Verified
                             </Text>
                           </View>
-                        </>
+                        )}
+                      </View>
+                      {namzoedId && (
+                        <TouchableOpacity
+                          onPress={handleShareProfile}
+                          activeOpacity={0.7}
+                          className={`flex-row items-center gap-1 ${currentUser.dzongkhag ? "mb-1" : ""}`}
+                        >
+                          <Text
+                            style={{ flexShrink: 1 }}
+                            className="text-base font-regular text-white/80"
+                            numberOfLines={1}
+                          >
+                            NamZoed ID: {namzoedId}
+                          </Text>
+                          <QrCode size={16} color="rgba(255,255,255,0.8)" />
+                        </TouchableOpacity>
+                      )}
+                      {currentUser.dzongkhag && (
+                        <View className="flex-row items-center gap-1">
+                          <Text className="text-base font-msemibold text-white/80">
+                            GP:
+                          </Text>
+                          <Text className="text-base font-regular text-white/80">
+                            {currentUser.dzongkhag}
+                          </Text>
+                        </View>
+                      )}
+
+                      {/* Badge — moved below the location line instead of
+                          sitting beside the whole row. */}
+                      {badgeType && (
+                        <TouchableOpacity
+                          onPress={() =>
+                            router.push({
+                              pathname: "/settings",
+                              params: { modal: "appearance" },
+                            } as any)
+                          }
+                          className="mt-1.5 self-start"
+                        >
+                          <EarlyAccessBadge badgeType={badgeType} size="sm" />
+                        </TouchableOpacity>
                       )}
                     </View>
-                    {badgeType && (
-                      <TouchableOpacity
-                        style={{ marginTop: 10 }}
-                        onPress={() => {
-                          if (showSettings) return;
-                          setSettingsInitialModal("appearance");
-                          setShowSettings(true);
-                        }}
-                      >
-                        <EarlyAccessBadge badgeType={badgeType} size="sm" />
-                      </TouchableOpacity>
-                    )}
                   </View>
                 </View>
 
-                {/* Name & Email */}
-                <View className="flex-row items-center gap-1.5 mb-0.5">
-                  <Text className="text-base font-mbold text-gray-900">
-                    {currentUser.name}
-                  </Text>
-                  {verificationStatus === "verified" && (
-                    <View className="flex-row items-center bg-blue-50 border border-[#094569] rounded-full px-2 py-0.5 gap-1">
-                      <Verified size={11} color="#094569" />
-                      <Text className="text-[10px] font-msemibold text-[#094569] leading-none">
-                        Verified
+                {/* Matte panel — frosted blur (iOS) + a navy-tinted gradient
+                    (matches COVER_GRADIENT's own hue rather than plain black)
+                    sit behind just the stats/bio block. The panel itself
+                    starts right at the Posts/Followers/Following row, but the
+                    tint starts fully transparent at that same top edge and
+                    only builds up going down — so it blends seamlessly into
+                    the plain cover photo above instead of showing a hard
+                    line where the panel begins. Deliberately not applied
+                    above this line — the avatar/name area stays a clear view
+                    of the cover photo — and not below it either: the buttons
+                    get their own flat (non-gradient) backing instead, right
+                    below. */}
+                <View className="relative overflow-hidden" style={{ marginTop: 12 }}>
+                  {Platform.OS === "ios" && (
+                    <MaskedView
+                      style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
+                      maskElement={
+                        <LinearGradient
+                          colors={MATTE_BLUR_FADE_STOPS.colors}
+                          locations={MATTE_BLUR_FADE_STOPS.locations}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 0, y: 1 }}
+                          style={{ flex: 1 }}
+                        />
+                      }
+                    >
+                      <BlurView intensity={30} tint="dark" style={{ flex: 1 }} />
+                    </MaskedView>
+                  )}
+                  <LinearGradient
+                    colors={[
+                      `rgba(${tintRgb.r},${tintRgb.g},${tintRgb.b},0)`,
+                      `rgba(${tintRgb.r},${tintRgb.g},${tintRgb.b},0.55)`,
+                      `rgba(${tintRgb.r},${tintRgb.g},${tintRgb.b},0.95)`,
+                    ]}
+                    locations={[0, 0.5, 1]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 0, y: 1 }}
+                    style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
+                  />
+                  <View className="px-4 pt-3 pb-3">
+                  {/* Stats row — below the avatar/name row */}
+                  <View className="flex-row items-center justify-around mb-3">
+                    <View className="items-center">
+                      <Text className="text-lg font-mbold text-white">
+                        {userPosts.length}
+                      </Text>
+                      <Text className="text-xs font-regular text-white/70">
+                        Posts
                       </Text>
                     </View>
-                  )}
-                </View>
-                {currentUser.email && (
-                  <Text className="text-sm font-regular text-gray-500 mb-3">
-                    {currentUser.email}
-                  </Text>
-                )}
+                    <TouchableOpacity
+                      className="items-center"
+                      onPress={() => {
+                        setFollowRequestsTab("followers");
+                        setShowFollowRequests(true);
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <Text className="text-lg font-mbold text-white">
+                        {followerCount}
+                      </Text>
+                      <Text className="text-xs font-regular text-white/70">
+                        Followers
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      className="items-center"
+                      onPress={() => {
+                        setFollowRequestsTab("following");
+                        setShowFollowRequests(true);
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <Text className="text-lg font-mbold text-white">
+                        {followingCount}
+                      </Text>
+                      <Text className="text-xs font-regular text-white/70">
+                        Following
+                      </Text>
+                    </TouchableOpacity>
+                    {/* Profile views — private 7-day rolling stat */}
+                    {profileViews7d > 0 && (
+                      <>
+                        <Text className="text-white/40 text-xl font-light">|</Text>
+                        <View className="items-center">
+                          <View className="flex-row items-center" style={{ gap: 3 }}>
+                            <Eye size={14} color="#fff" />
+                            <Text className="text-lg font-mbold text-white">
+                              {profileViews7d > 999
+                                ? `${(profileViews7d / 1000).toFixed(1)}k`
+                                : profileViews7d}
+                            </Text>
+                          </View>
+                          <Text className="text-xs font-regular text-white/70">
+                            Profile views
+                          </Text>
+                        </View>
+                      </>
+                    )}
+                  </View>
 
-                {/* Action Buttons */}
-                <View className="flex-row gap-2 mt-2">
+                  {/* Bio — tapping either the existing text or the empty
+                      placeholder opens the dedicated bio-only edit screen
+                      (just a text area), not the full Edit Profile form. */}
                   <TouchableOpacity
-                    onPress={() => {
-                      if (showSettings) return;
-                      setSettingsInitialModal("editProfile");
-                      setShowSettings(true);
-                    }}
-                    className="flex-1 py-[9px] rounded-lg flex-row items-center justify-center bg-gray-100 border border-gray-300"
+                    activeOpacity={0.7}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/settings",
+                        params: { modal: "editBio" },
+                      } as any)
+                    }
                   >
-                    <Text className="text-sm font-semibold text-gray-800">
-                      Edit Profile
-                    </Text>
+                    {bio ? (
+                      <Text className="text-sm font-regular text-white/90 mb-1">
+                        {bio}
+                      </Text>
+                    ) : (
+                      <Text className="text-sm font-regular text-white/50 italic mb-1">
+                        Insert your bio here
+                      </Text>
+                    )}
                   </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={handleManageListings}
-                    className="flex-1 py-[9px] rounded-lg flex-row items-center justify-center bg-gray-100 border border-gray-300"
-                  >
-                    <Text className="text-sm font-semibold text-gray-800">
-                      Manage
-                    </Text>
-                  </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Action Buttons + Work profile summary — one shared flat
+                    matte backing (same solid color the gradient panel above
+                    ends on, no gradient/blur of its own), so everything here
+                    reads as one grouped section instead of separate blocks. */}
+                <View
+                  className="px-4 pt-3"
+                  style={{
+                    backgroundColor: `rgba(${tintRgb.r},${tintRgb.g},${tintRgb.b},0.95)`,
+                    // Extra bottom padding so the buttons keep clear space
+                    // below them even though the tab bar overlaps this
+                    // section by 20px (its own corner radius) to blend with
+                    // it — without this, that overlap would land right on
+                    // the buttons instead of the padding beneath them.
+                    paddingBottom: 32,
+                  }}
+                >
+                  {/* Work profile summary — shown first, above Edit
+                      Profile/Manage, to give it top billing when it exists.
+                      Only shown once a business name is actually set (every
+                      profile auto-gets an empty service_providers row, so a
+                      null/empty name means "no work profile" in practice).
+                      Full management (license, service listings) lives on
+                      the pushed /profile/work screen; setting one up for the
+                      first time is reachable from the hamburger menu instead
+                      of a tab, since an unused Work tab was dead weight for
+                      anyone without one. */}
+                  {serviceProvider?.name?.trim() && (
+                    <TouchableOpacity
+                      activeOpacity={0.85}
+                      onPress={() => router.push("/(users)/profile/work" as any)}
+                      style={{ borderRadius: 8, borderCurve: "continuous" }}
+                      className="mb-2 py-3 px-3 flex-row items-center bg-white/15 border border-white/30"
+                    >
+                      <View className="flex-1 pr-3">
+                        <View className="flex-row items-center gap-1.5 mb-0.5">
+                          <Text
+                            className="text-sm font-semibold text-white flex-shrink"
+                            numberOfLines={1}
+                          >
+                            {serviceProvider.name}
+                          </Text>
+                          {verificationStatus === "verified" && (
+                            <Verified size={13} color="#7FD1FF" />
+                          )}
+                        </View>
+                        {serviceProvider.master_bio ? (
+                          <Text
+                            className="text-xs font-regular text-white/70"
+                            numberOfLines={1}
+                          >
+                            {serviceProvider.master_bio}
+                          </Text>
+                        ) : (
+                          <Text className="text-xs font-regular text-white/50 italic">
+                            Work profile
+                          </Text>
+                        )}
+                      </View>
+                      <View className="w-10 h-10 rounded-full bg-white/15 overflow-hidden items-center justify-center">
+                        {providerImageUri ? (
+                          <ProgressiveImage
+                            uri={providerImageUri}
+                            style={{ width: "100%", height: "100%" }}
+                            showProgress={false}
+                          />
+                        ) : (
+                          <Wrench size={18} strokeWidth={1.5} color="rgba(255,255,255,0.8)" />
+                        )}
+                      </View>
+                    </TouchableOpacity>
+                  )}
+
+                  <View className="flex-row gap-2">
+                    {/* Edit Profile moved up into the header as a pill next
+                        to Scan/Share — no history screen exists yet, so this
+                        is a placeholder stub for now rather than a dead,
+                        unresponsive button. */}
+                    <TouchableOpacity
+                      style={{ borderRadius: 8, borderCurve: "continuous" }}
+                      onPress={() =>
+                        Alert.alert("Coming Soon", "Activity history isn't available yet.")
+                      }
+                      className="flex-1 py-[9px] flex-row items-center justify-center bg-white/15 border border-white/30"
+                    >
+                      <Text className="text-sm font-semibold text-white">
+                        History
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={{ borderRadius: 8, borderCurve: "continuous" }}
+                      onPress={handleManageListings}
+                      className="flex-1 py-[9px] flex-row items-center justify-center bg-white/15 border border-white/30"
+                    >
+                      <Text className="text-sm font-semibold text-white">
+                        Manage
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </View>
 
-              {/* Tab Navigation */}
-              <View className="bg-transparent border-b border-gray-100 mt-2">
-                <View className="flex-row">
-                  <TouchableOpacity
-                    className={`flex-1 py-4 items-center border-b-2 ${
-                      activeTab === "images"
-                        ? "border-primary"
-                        : "border-transparent"
-                    }`}
-                    onPress={() => setActiveTab("images")}
-                  >
-                    <GalleryHorizontal
-                      size={24}
-                      strokeWidth={1.5}
-                      className={`mb-1 ${
-                        activeTab === "images"
-                          ? "text-primary"
-                          : "text-gray-400"
-                      }`}
-                    />
-                    <Text
-                      className={`font-msemibold text-xs ${
-                        activeTab === "images"
-                          ? "text-primary"
-                          : "text-gray-500"
-                      }`}
-                    >
-                      Media
-                    </Text>
-                  </TouchableOpacity>
+              {/* Tab Navigation — rounded top corners so it reads as a sheet
+                  rising out of the dark cover above. Pulled up to overlap
+                  the cover by the same amount as the corner radius, with an
+                  internal dark strip (not a reveal-through-clip trick) so
+                  the corners read consistently dark whether this sits in
+                  its normal in-flow spot or is magnet-pinned to the header
+                  (see tabBarAnimatedStyle below) — otherwise, once pinned,
+                  the clipped corners would end up showing whatever grid
+                  content happens to be scrolling past behind them instead
+                  of a stable color. Text-only (no icons); Services moved
+                  out entirely, since it now only ever appears via the Work
+                  profile summary card above when the user has actually
+                  added one.
 
-                  <TouchableOpacity
-                    className={`flex-1 py-4 items-center border-b-2 ${
-                      activeTab === "products"
-                        ? "border-primary"
-                        : "border-transparent"
-                    }`}
-                    onPress={() => setActiveTab("products")}
+                  The outer View here is only for layout/measurement (ref +
+                  onLayout feed the tabBarContentY shared value, and
+                  marginTop keeps the same overlap density as before); the
+                  actual magnetic translateY lives on the inner
+                  Animated.View so transform never disturbs the measured
+                  layout position or pushes Tab Content around. */}
+              <View
+                ref={tabBarRef}
+                onLayout={() => {
+                  tabBarRef.current?.measure((_x: number, _y: number, _w: number, _h: number, _pageX: number, pageY: number) => {
+                    tabBarContentY.value = pageY + mainScrollYRef.current;
+                  });
+                }}
+                style={{ marginTop: -20 }}
+              >
+                <Animated.View style={[{ zIndex: 10 }, tabBarAnimatedStyle]}>
+                  <View
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      height: 20,
+                      backgroundColor: `rgba(${tintRgb.r},${tintRgb.g},${tintRgb.b},0.95)`,
+                    }}
+                  />
+                  <View
+                    style={{
+                      borderTopLeftRadius: 20,
+                      borderTopRightRadius: 20,
+                      borderCurve: "continuous",
+                      // Clips the edge fades (and anything else inside) to
+                      // the rounded corners below, instead of them
+                      // overflowing past the curve as sharp rectangular
+                      // patches.
+                      overflow: "hidden",
+                    }}
+                    className="bg-white border-b border-gray-100"
                   >
-                    <ShoppingBag
-                      size={24}
-                      strokeWidth={1.5}
-                      className={`mb-1 ${
-                        activeTab === "products"
-                          ? "text-primary"
-                          : "text-gray-400"
-                      }`}
-                    />
-                    <Text
-                      className={`font-msemibold text-xs ${
-                        activeTab === "products"
-                          ? "text-primary"
-                          : "text-gray-500"
-                      }`}
-                    >
-                      Products
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    className={`flex-1 py-4 items-center border-b-2 ${
-                      activeTab === "services"
-                        ? "border-primary"
-                        : "border-transparent"
-                    }`}
-                    onPress={() => setActiveTab("services")}
-                  >
-                    <Wrench
-                      size={24}
-                      strokeWidth={1.5}
-                      className={`mb-1 ${
-                        activeTab === "services"
-                          ? "text-primary"
-                          : "text-gray-400"
-                      }`}
-                    />
-                    <Text
-                      className={`font-msemibold text-xs ${
-                        activeTab === "services"
-                          ? "text-primary"
-                          : "text-gray-500"
-                      }`}
-                    >
-                      Services
-                    </Text>
-                  </TouchableOpacity>
-                </View>
+                    {renderTabRow()}
+                  </View>
+                </Animated.View>
               </View>
 
               {/* Tab Content */}
@@ -1466,12 +1565,13 @@ export default function ProfileScreen() {
                       userProducts.map((product) => (
                         <View key={product.id} className="w-[50%] p-2">
                           <TouchableOpacity
+                            style={{ borderRadius: 12, borderCurve: "continuous" }}
                             onPress={() =>
                               router.push(
                                 `/(users)/product/${product.id}` as any,
                               )
                             }
-                            className="bg-white rounded-xl overflow-hidden border border-gray-100"
+                            className="bg-white overflow-hidden border border-gray-100"
                           >
                             {product.images && product.images.length > 0 ? (
                               <ProgressiveImage
@@ -1539,169 +1639,148 @@ export default function ProfileScreen() {
                   </View>
                 )}
 
-                {activeTab === "services" && (
+                {activeTab === "likes" && (
                   <View className="flex-row flex-wrap">
-                    {providerServices.length > 0 ? (
-                      providerServices.map((service) => (
-                        <View key={service.id} className="w-[50%] p-2">
-                          <TouchableOpacity
-                            onPress={() =>
-                              router.push(
-                                `/(users)/servicedetail/${service.id}` as any,
-                              )
-                            }
-                            className="bg-transparent rounded-xl overflow-hidden border border-gray-100"
-                          >
-                            {service.images && service.images.length > 0 ? (
-                              <ProgressiveImage
-                                uri={service.images[0]}
-                                style={{ width: "100%", height: 160 }}
-                                showProgress={false}
-                                recyclingKey={service.id}
-                              />
-                            ) : (
-                              <View className="w-full h-40 bg-gray-100 items-center justify-center">
-                                <Wrench
-                                  size={32}
-                                  strokeWidth={1.5}
-                                  color="#9CA3AF"
-                                />
-                              </View>
-                            )}
-                            <View className="p-3">
-                              <Text
-                                className="text-sm font-msemibold text-gray-900"
-                                numberOfLines={2}
-                              >
-                                {service.name}
-                              </Text>
-                              {service.service_categories?.name && (
-                                <Text
-                                  className="text-xs font-regular text-gray-500 mt-1"
-                                  numberOfLines={1}
-                                >
-                                  {service.service_categories.name}
-                                </Text>
-                              )}
-                            </View>
-                          </TouchableOpacity>
-                        </View>
+                    {loadingLikedPosts ? (
+                      <CircularLoader size="large" color="#059669" />
+                    ) : likedPosts.length > 0 ? (
+                      toThumbnails(likedPosts).map((thumb) => (
+                        <ProfilePostGridItem
+                          key={thumb.postId}
+                          thumbnailUrl={thumb.thumbnailUrl}
+                          thumbnailBlurHash={thumb.thumbnailBlurHash}
+                          isVideo={thumb.isVideo}
+                          mediaCount={thumb.mediaCount}
+                          onPress={() =>
+                            router.push(`/(users)/post/${thumb.postId}` as any)
+                          }
+                        />
                       ))
                     ) : (
                       <View className="w-full py-16 items-center px-6">
-                        <View className="w-14 h-14 rounded-full bg-amber-50 items-center justify-center mb-3">
-                          <Wrench size={26} strokeWidth={1.5} color="#D97706" />
+                        <View className="w-14 h-14 rounded-full bg-pink-50 items-center justify-center mb-3">
+                          <Heart size={26} strokeWidth={1.5} color="#e91e63" />
                         </View>
                         <Text className="text-sm font-semibold text-gray-700">
-                          Offer your skills as services
+                          No liked posts yet
                         </Text>
                         <Text className="text-xs text-gray-400 mt-1 text-center">
-                          Switch to the Work tab to manage your services
+                          Posts you like will show up here
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+
+                {activeTab === "comments" && (
+                  <View className="flex-row flex-wrap">
+                    {loadingCommentedPosts ? (
+                      <CircularLoader size="large" color="#059669" />
+                    ) : commentedPosts.length > 0 ? (
+                      toThumbnails(commentedPosts).map((thumb) => (
+                        <ProfilePostGridItem
+                          key={thumb.postId}
+                          thumbnailUrl={thumb.thumbnailUrl}
+                          thumbnailBlurHash={thumb.thumbnailBlurHash}
+                          isVideo={thumb.isVideo}
+                          mediaCount={thumb.mediaCount}
+                          onPress={() =>
+                            router.push(`/(users)/post/${thumb.postId}` as any)
+                          }
+                        />
+                      ))
+                    ) : (
+                      <View className="w-full py-16 items-center px-6">
+                        <View className="w-14 h-14 rounded-full bg-blue-50 items-center justify-center mb-3">
+                          <MessageCircle size={26} strokeWidth={1.5} color="#3B82F6" />
+                        </View>
+                        <Text className="text-sm font-semibold text-gray-700">
+                          No comments yet
+                        </Text>
+                        <Text className="text-xs text-gray-400 mt-1 text-center">
+                          Posts you've commented on will show up here
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+
+                {activeTab === "saves" && (
+                  <View className="flex-row flex-wrap">
+                    {loadingSavedItems ? (
+                      <CircularLoader size="large" color="#059669" />
+                    ) : savedItems.length > 0 ? (
+                      savedItems.map((item) => {
+                        const post = item.posts;
+                        const product = item.products;
+                        const listing = item.marketplace;
+                        const target = post
+                          ? { href: `/(users)/post/${post.id}`, image: post.images?.[0], label: post.content, price: null as number | null }
+                          : product
+                            ? { href: `/(users)/product/${product.id}`, image: product.images?.[0], label: product.name, price: product.price }
+                            : listing
+                              ? { href: `/(users)/marketplace/${listing.id}`, image: listing.images?.[0], label: listing.title, price: listing.price }
+                              : null;
+                        if (!target) return null;
+                        return (
+                          <View key={item.id} className="w-[50%] p-2">
+                            <TouchableOpacity
+                              style={{ borderRadius: 12, borderCurve: "continuous" }}
+                              onPress={() => router.push(target.href as any)}
+                              className="bg-white overflow-hidden border border-gray-100"
+                            >
+                              {target.image ? (
+                                <ProgressiveImage
+                                  uri={target.image}
+                                  style={{ width: "100%", height: 160 }}
+                                  showProgress={false}
+                                  recyclingKey={item.id}
+                                />
+                              ) : (
+                                <View className="w-full h-40 bg-gray-100 items-center justify-center">
+                                  {product ? (
+                                    <ShoppingBag size={32} strokeWidth={1.5} className="text-gray-300" />
+                                  ) : listing ? (
+                                    <Store size={32} strokeWidth={1.5} className="text-gray-300" />
+                                  ) : (
+                                    <Bookmark size={32} strokeWidth={1.5} className="text-gray-300" />
+                                  )}
+                                </View>
+                              )}
+                              <View className="p-3">
+                                <Text
+                                  className="text-sm font-msemibold text-gray-900"
+                                  numberOfLines={2}
+                                >
+                                  {target.label}
+                                </Text>
+                                {target.price != null && (
+                                  <Text className="text-base font-mbold text-primary mt-2">
+                                    Nu. {target.price.toLocaleString()}
+                                  </Text>
+                                )}
+                              </View>
+                            </TouchableOpacity>
+                          </View>
+                        );
+                      })
+                    ) : (
+                      <View className="w-full py-16 items-center px-6">
+                        <View className="w-14 h-14 rounded-full bg-amber-50 items-center justify-center mb-3">
+                          <Bookmark size={26} strokeWidth={1.5} color="#D97706" />
+                        </View>
+                        <Text className="text-sm font-semibold text-gray-700">
+                          No saved items yet
+                        </Text>
+                        <Text className="text-xs text-gray-400 mt-1 text-center">
+                          Tap the bookmark icon on any post, product or listing to save it here
                         </Text>
                       </View>
                     )}
                   </View>
                 )}
               </View>
-            </ScrollView>
-          </View>
-
-          {/* Work Profile Page (Service Provider) */}
-          <View style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT - 84 }}>
-            <ScrollView
-              style={{ flex: 1 }}
-              showsVerticalScrollIndicator={false}
-              nestedScrollEnabled
-              contentContainerStyle={{ paddingBottom: 100 }}
-              onScroll={onBottomBarScroll}
-              scrollEventThrottle={16}
-              refreshControl={
-                <RefreshControl
-                  refreshing={refreshing}
-                  onRefresh={onRefresh}
-                  tintColor="#094569"
-                  progressViewOffset={0}
-                />
-              }
-            >
-              <ServiceProviderSection
-                loadingServiceProvider={loadingServiceProvider}
-                isEditingProvider={isEditingProvider}
-                providerImageUri={providerImageUri}
-                verificationStatus={verificationStatus}
-                providerFormData={providerFormData}
-                licenseImageUrl={licenseImageUrl}
-                uploadingLicense={uploadingLicense}
-                providerServices={providerServices}
-                loadingProviderServices={loadingProviderServices}
-                isServiceSelectionMode={isServiceSelectionMode}
-                selectedServiceIds={selectedServiceIds}
-                onEditWork={() => {
-                  if (showSettings) return;
-                  setSettingsInitialModal("editWorkProfile");
-                  setShowSettings(true);
-                }}
-                onShowProviderAvatarMenu={() => {
-                  Haptics.impactAsync(ImpactFeedbackStyle.Medium);
-                  setShowProviderAvatarMenu(true);
-                }}
-                onViewProviderImage={() => {
-                  Haptics.impactAsync(ImpactFeedbackStyle.Medium);
-                  setShowProviderWorkImageViewer(true);
-                }}
-                onEditProviderProfile={() => {
-                  Haptics.impactAsync(ImpactFeedbackStyle.Medium);
-                  handleEditProviderProfile();
-                }}
-                onUploadLicense={handleUploadLicense}
-                onShowLicenseMenu={() => {
-                  Haptics.impactAsync(ImpactFeedbackStyle.Medium);
-                  setShowLicenseMenu(true);
-                }}
-                onServiceLongPress={handleServiceLongPress}
-                onToggleServiceSelection={toggleServiceSelection}
-                onToggleStatus={handleToggleStatus}
-                onEditService={handleEditService}
-                onNavigateToService={(serviceId) =>
-                  router.push(`/(users)/servicedetail/${serviceId}` as any)
-                }
-                onAddService={() => setShowAddServiceModal(true)}
-              />
-
-              {/* Floating Delete Bar for Service Selection */}
-              {isServiceSelectionMode && selectedServiceIds.length > 0 && (
-                <Animated.View
-                  entering={FadeInDown.duration(400)}
-                  exiting={FadeOutDown}
-                  className="absolute bottom-6 left-6 right-6 h-20 bg-gray-900 rounded-[35px] flex-row items-center justify-between px-8 shadow-2xl"
-                >
-                  <View>
-                    <Text className="text-white font-mbold text-lg">
-                      {selectedServiceIds.length}
-                    </Text>
-                    <Text className="text-gray-400 text-[10px] uppercase tracking-widest font-mbold">
-                      Selected Services
-                    </Text>
-                  </View>
-                  <View className="flex-row items-center gap-x-4">
-                    <TouchableOpacity onPress={handleCancelSelection}>
-                      <Text className="text-gray-400 font-msemibold">
-                        Cancel
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={handleDeleteSelectedServices}
-                      className="bg-red-500 flex-row items-center px-6 py-3 rounded-full"
-                    >
-                      <Trash2 size={18} color="white" />
-                      <Text className="text-white font-mbold ml-2">Delete</Text>
-                    </TouchableOpacity>
-                  </View>
-                </Animated.View>
-              )}
-            </ScrollView>
-          </View>
-        </ScrollView>
+            </Animated.ScrollView>
       </View>
 
       {/* ------------------------------------------------------ */}
@@ -1728,6 +1807,7 @@ export default function ProfileScreen() {
               style={{
                 backgroundColor: "white",
                 borderRadius: 24,
+                borderCurve: "continuous",
                 marginHorizontal: 12,
                 marginBottom: 12 + insets.bottom,
               }}
@@ -1735,8 +1815,9 @@ export default function ProfileScreen() {
               <View className="px-4 pt-4 pb-4">
                 <View className="flex-row gap-x-3 mb-3">
                   <TouchableOpacity
+                    style={{ borderRadius: 12, borderCurve: "continuous" }}
                     onPress={() => handleImageOption("camera")}
-                    className="flex-1 items-center bg-gray-50 rounded-xl py-2"
+                    className="flex-1 items-center bg-gray-50 py-2"
                   >
                     <Camera size={18} color="#374151" />
                     <Text className="text-[10px] font-msemibold text-gray-900 mt-1">
@@ -1745,8 +1826,9 @@ export default function ProfileScreen() {
                   </TouchableOpacity>
 
                   <TouchableOpacity
+                    style={{ borderRadius: 12, borderCurve: "continuous" }}
                     onPress={() => handleImageOption("gallery")}
-                    className="flex-1 items-center bg-gray-50 rounded-xl py-2"
+                    className="flex-1 items-center bg-gray-50 py-2"
                   >
                     <ImageIcon size={18} color="#374151" />
                     <Text className="text-[10px] font-msemibold text-gray-900 mt-1">
@@ -1756,8 +1838,9 @@ export default function ProfileScreen() {
 
                   {profileImage && (
                     <TouchableOpacity
+                      style={{ borderRadius: 12, borderCurve: "continuous" }}
                       onPress={handleRemoveMainAvatar}
-                      className="flex-1 items-center bg-red-50 rounded-xl py-2"
+                      className="flex-1 items-center bg-red-50 py-2"
                     >
                       <Trash2 size={18} color="#dc2626" />
                       <Text className="text-[10px] font-msemibold text-red-600 mt-1">
@@ -1768,7 +1851,8 @@ export default function ProfileScreen() {
                 </View>
 
                 <TouchableOpacity
-                  className="bg-gray-100 rounded-2xl py-3 items-center"
+                  style={{ borderRadius: 16, borderCurve: "continuous" }}
+                  className="bg-gray-100 py-3 items-center"
                   onPress={() => setShowMainAvatarMenu(false)}
                 >
                   <Text className="text-gray-500 font-msemibold text-sm">
@@ -1782,475 +1866,84 @@ export default function ProfileScreen() {
       )}
 
       {/* ------------------------------------------------------ */}
-      {/* PROVIDER IMAGE PICKER MODAL */}
+      {/* COVER PHOTO ACTION MENU MODAL */}
       {/* ------------------------------------------------------ */}
-      {showProviderImagePicker && (
+      {showCoverMenu && (
         <Modal
           transparent
           statusBarTranslucent
-          animationType="slide"
-          visible={showProviderImagePicker}
-          onRequestClose={() => setShowProviderImagePicker(false)}
+          animationType="fade"
+          visible={showCoverMenu}
+          onRequestClose={() => setShowCoverMenu(false)}
         >
-          <View className="flex-1 justify-end">
-            <TouchableOpacity
-              style={{
-                position: "absolute",
-                top: 0,
-                bottom: 0,
-                left: 0,
-                right: 0,
-                backgroundColor: "rgba(0,0,0,0.5)",
-              }}
-              activeOpacity={1}
-              onPress={() => setShowProviderImagePicker(false)}
-            />
-
-            <View
+          <Pressable
+            style={{
+              flex: 1,
+              backgroundColor: "rgba(0,0,0,0.45)",
+              justifyContent: "flex-end",
+            }}
+            onPress={() => setShowCoverMenu(false)}
+          >
+            <Pressable
+              onPress={(e) => e.stopPropagation()}
               style={{
                 backgroundColor: "white",
-                borderTopLeftRadius: 24,
-                borderTopRightRadius: 24,
+                borderRadius: 24,
+                borderCurve: "continuous",
+                marginHorizontal: 12,
+                marginBottom: 12 + insets.bottom,
               }}
             >
-              <View className="w-full items-center pt-5 pb-4 bg-white rounded-t-3xl">
-                <View className="w-12 h-1.5 bg-gray-300 rounded-full" />
-              </View>
-
-              <View className="px-6 pb-6">
-                <Text className="text-xl font-mbold text-gray-900 mb-6 text-center">
-                  Change Service Provider Photo
-                </Text>
-
-                <TouchableOpacity
-                  onPress={() => handleProviderImageOption("camera")}
-                  className="flex-row items-center bg-gray-50 rounded-xl px-4 py-4 mb-3"
-                >
-                  <Camera size={24} className="text-gray-700 mr-4" />
-                  <View>
-                    <Text className="text-base font-msemibold text-gray-900">
+              <View className="px-4 pt-4 pb-4">
+                <View className="flex-row gap-x-3 mb-3">
+                  <TouchableOpacity
+                    style={{ borderRadius: 12, borderCurve: "continuous" }}
+                    onPress={() => handleCoverImageOption("camera")}
+                    className="flex-1 items-center bg-gray-50 py-2"
+                  >
+                    <Camera size={18} color="#374151" />
+                    <Text className="text-[10px] font-msemibold text-gray-900 mt-1">
                       Take Photo
                     </Text>
-                    <Text className="text-sm font-regular text-gray-500">
-                      Use camera to take a new photo
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={{ borderRadius: 12, borderCurve: "continuous" }}
+                    onPress={() => handleCoverImageOption("gallery")}
+                    className="flex-1 items-center bg-gray-50 py-2"
+                  >
+                    <ImageIcon size={18} color="#374151" />
+                    <Text className="text-[10px] font-msemibold text-gray-900 mt-1">
+                      Choose Gallery
                     </Text>
-                  </View>
-                </TouchableOpacity>
+                  </TouchableOpacity>
+
+                  {coverImage && (
+                    <TouchableOpacity
+                      style={{ borderRadius: 12, borderCurve: "continuous" }}
+                      onPress={handleRemoveCoverImage}
+                      className="flex-1 items-center bg-red-50 py-2"
+                    >
+                      <Trash2 size={18} color="#dc2626" />
+                      <Text className="text-[10px] font-msemibold text-red-600 mt-1">
+                        Remove
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
 
                 <TouchableOpacity
-                  onPress={() => handleProviderImageOption("gallery")}
-                  className="flex-row items-center bg-gray-50 rounded-xl px-4 py-4 mb-6"
+                  style={{ borderRadius: 16, borderCurve: "continuous" }}
+                  className="bg-gray-100 py-3 items-center"
+                  onPress={() => setShowCoverMenu(false)}
                 >
-                  <ImageIcon size={24} className="text-gray-700 mr-4" />
-                  <View>
-                    <Text className="text-base font-msemibold text-gray-900">
-                      Choose from Gallery
-                    </Text>
-                    <Text className="text-sm font-regular text-gray-500">
-                      Select from your photo library
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  className="bg-gray-100 rounded-xl py-4 items-center"
-                  onPress={() => setShowProviderImagePicker(false)}
-                >
-                  <Text className="text-gray-600 font-msemibold">Cancel</Text>
+                  <Text className="text-gray-500 font-msemibold text-sm">
+                    Cancel
+                  </Text>
                 </TouchableOpacity>
               </View>
-            </View>
-          </View>
-        </Modal>
-      )}
-
-      {/* ------------------------------------------------------ */}
-      {/* PROVIDER AVATAR ACTION MENU MODAL */}
-      {/* ------------------------------------------------------ */}
-      {showProviderAvatarMenu && (
-        <Modal
-          transparent
-          statusBarTranslucent
-          animationType="none"
-          visible={showProviderAvatarMenu}
-          onRequestClose={() => setShowProviderAvatarMenu(false)}
-        >
-          <View className="flex-1 justify-end">
-            <Animated.View entering={FadeIn} exiting={FadeOut}>
-              <TouchableOpacity
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  backgroundColor: "rgba(0,0,0,0.5)",
-                }}
-                activeOpacity={1}
-                onPress={() => setShowProviderAvatarMenu(false)}
-              />
-            </Animated.View>
-
-            <Animated.View
-              entering={SlideInDown.springify()}
-              exiting={SlideOutDown}
-              style={{
-                backgroundColor: "white",
-                borderTopLeftRadius: 24,
-                borderTopRightRadius: 24,
-              }}
-            >
-              <View className="w-full items-center pt-5 pb-4 bg-white rounded-t-3xl">
-                <View className="w-12 h-1.5 bg-gray-300 rounded-full" />
-              </View>
-
-              <View className="px-6 pb-6">
-                <Text className="text-xl font-mbold text-gray-900 mb-6 text-center">
-                  Avatar Options
-                </Text>
-
-                <TouchableOpacity
-                  onPress={() => {
-                    setShowProviderAvatarMenu(false);
-                    setTimeout(() => handleEditProviderProfile(), 300);
-                  }}
-                  className="flex-row items-center bg-gray-50 rounded-xl px-4 py-4 mb-3"
-                >
-                  <Camera size={24} className="text-gray-700 mr-4" />
-                  <View>
-                    <Text className="text-base font-msemibold text-gray-900">
-                      Change Photo
-                    </Text>
-                    <Text className="text-sm font-regular text-gray-500">
-                      Take a new photo or choose from gallery
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={handleRemoveProviderAvatar}
-                  className="flex-row items-center bg-red-50 rounded-xl px-4 py-4 mb-6"
-                >
-                  <Trash2 size={24} className="text-red-600 mr-4" />
-                  <View>
-                    <Text className="text-base font-msemibold text-red-600">
-                      Remove Photo
-                    </Text>
-                    <Text className="text-sm font-regular text-red-400">
-                      Delete your service provider avatar
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  className="bg-gray-100 rounded-xl py-4 items-center"
-                  onPress={() => setShowProviderAvatarMenu(false)}
-                >
-                  <Text className="text-gray-600 font-msemibold">Cancel</Text>
-                </TouchableOpacity>
-              </View>
-            </Animated.View>
-          </View>
-        </Modal>
-      )}
-
-      {/* ------------------------------------------------------ */}
-      {/* SMOOTH SETTINGS MODAL */}
-      {/* ------------------------------------------------------ */}
-      {showSettings && (
-        <Modal
-          transparent
-          statusBarTranslucent
-          animationType="none"
-          visible={showSettings}
-          onRequestClose={() => {
-            /* handled inside ProfileSettings */
-          }}
-        >
-          <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.35)" }}>
-            <ProfileSettings
-              onClose={() => {
-                setShowSettings(false);
-                setSettingsInitialModal(undefined);
-              }}
-              currentUser={currentUser}
-              initialModal={settingsInitialModal}
-              onLogout={async () => {
-                setShowSettings(false);
-                setSettingsInitialModal(undefined);
-                await logout();
-                router.replace("/login");
-              }}
-            />
-          </View>
-        </Modal>
-      )}
-
-      {/* ------------------------------------------------------ */}
-      {/* FOLLOW REQUESTS MODAL */}
-      {/* ------------------------------------------------------ */}
-      {showFollowRequests && currentUser?.id && (
-        <Modal
-          transparent
-          statusBarTranslucent
-          animationType="none"
-          visible={showFollowRequests}
-          onRequestClose={() => setShowFollowRequests(false)}
-        >
-          <Animated.View
-            entering={SlideInDown.springify()}
-            exiting={SlideOutDown}
-            style={{ flex: 1 }}
-          >
-            <FollowRequestsOverlay
-              onClose={() => {
-                setShowFollowRequests(false);
-                setRefreshKey((prev) => prev + 1);
-              }}
-              userId={currentUser.id}
-              actorUserId={currentUser.id}
-              initialTab={followRequestsTab}
-            />
-          </Animated.View>
-        </Modal>
-      )}
-
-      {/* ------------------------------------------------------ */}
-      {/* PENDING FOLLOW REQUESTS MODAL */}
-      {/* ------------------------------------------------------ */}
-      {showPendingRequests && currentUser?.id && (
-        <Modal
-          transparent
-          statusBarTranslucent
-          animationType="none"
-          visible={showPendingRequests}
-          onRequestClose={() => setShowPendingRequests(false)}
-        >
-          <Animated.View
-            entering={SlideInDown.springify()}
-            exiting={SlideOutDown}
-            style={{ flex: 1 }}
-          >
-            <FollowRequests
-              onClose={() => {
-                setShowPendingRequests(false);
-                setRefreshKey((prev) => prev + 1);
-              }}
-              userId={currentUser.id}
-            />
-          </Animated.View>
-        </Modal>
-      )}
-
-      {/* ------------------------------------------------------ */}
-      {/* MANAGE LISTINGS MODAL */}
-      {/* ------------------------------------------------------ */}
-      {showManageListings && currentUser?.id && (
-        <Modal
-          transparent
-          statusBarTranslucent
-          animationType="none"
-          visible={showManageListings}
-          onRequestClose={() => setShowManageListings(false)}
-        >
-          <Animated.View
-            entering={SlideInDown.springify()}
-            exiting={SlideOutDown}
-            style={{ flex: 1 }}
-          >
-            <ManageListingsOverlay
-              onClose={() => {
-                setShowManageListings(false);
-                setRefreshKey((prev) => prev + 1);
-              }}
-              userId={currentUser.id}
-            />
-          </Animated.View>
-        </Modal>
-      )}
-
-      {/* ------------------------------------------------------ */}
-      {/* IMAGE CROP OVERLAY */}
-      {/* ------------------------------------------------------ */}
-      {showCropOverlay && selectedImageUri && (
-        <Modal
-          visible={showCropOverlay}
-          animationType="slide"
-          statusBarTranslucent
-          onRequestClose={handleCropCancel}
-        >
-          <ImageCropOverlay
-            imageUri={selectedImageUri}
-            imageWidth={selectedImageDims?.width}
-            imageHeight={selectedImageDims?.height}
-            onSave={handleCropSave}
-            onCancel={handleCropCancel}
-          />
-        </Modal>
-      )}
-
-      {/* Profile Image Viewer */}
-      {showProfileImageViewer && profileImage && (
-        <ProfileImageViewer
-          visible={showProfileImageViewer}
-          imageUri={profileImage}
-          onClose={() => {
-            setShowProfileImageViewer(false);
-          }}
-        />
-      )}
-
-      {showProviderWorkImageViewer && providerImageUri && (
-        <ProfileImageViewer
-          visible={showProviderWorkImageViewer}
-          imageUri={providerImageUri}
-          onClose={() => setShowProviderWorkImageViewer(false)}
-        />
-      )}
-
-      {/* Add Service Modal */}
-      <AddServicesModal
-        isVisible={showAddServiceModal}
-        onClose={() => setShowAddServiceModal(false)}
-        userId={currentUser?.id || ""}
-        onSuccess={() => {
-          setShowAddServiceModal(false);
-          setRefreshKey((prev) => prev + 1);
-        }}
-      />
-
-      {/* Edit Service Modal */}
-      {showEditServiceModal && serviceToEdit && (
-        <EditServicesModal
-          isVisible={showEditServiceModal}
-          onClose={() => {
-            setShowEditServiceModal(false);
-            setServiceToEdit(null);
-          }}
-          service={serviceToEdit}
-          userId={currentUser?.id || ""}
-          onSuccess={() => {
-            setShowEditServiceModal(false);
-            setServiceToEdit(null);
-            setRefreshKey((prev) => prev + 1);
-          }}
-        />
-      )}
-
-      {/* License Viewer Overlay */}
-      {showLicenseViewer && licenseImageUrl && (
-        <LicenseViewerOverlay
-          visible={showLicenseViewer}
-          licenseUrl={licenseImageUrl}
-          onClose={() => setShowLicenseViewer(false)}
-        />
-      )}
-
-      {/* ------------------------------------------------------ */}
-      {/* LICENSE ACTION MENU MODAL */}
-      {/* ------------------------------------------------------ */}
-      {showLicenseMenu && (
-        <Modal
-          transparent
-          statusBarTranslucent
-          animationType="none"
-          visible={showLicenseMenu}
-          onRequestClose={() => setShowLicenseMenu(false)}
-        >
-          <View className="flex-1 justify-end">
-            <Animated.View entering={FadeIn} exiting={FadeOut}>
-              <TouchableOpacity
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  backgroundColor: "rgba(0,0,0,0.5)",
-                }}
-                activeOpacity={1}
-                onPress={() => setShowLicenseMenu(false)}
-              />
-            </Animated.View>
-
-            <Animated.View
-              entering={SlideInDown.springify()}
-              exiting={SlideOutDown}
-              style={{
-                backgroundColor: "white",
-                borderTopLeftRadius: 24,
-                borderTopRightRadius: 24,
-              }}
-            >
-              <View className="w-full items-center pt-5 pb-4 bg-white rounded-t-3xl">
-                <View className="w-12 h-1.5 bg-gray-300 rounded-full" />
-              </View>
-
-              <View className="px-6 pb-6">
-                <Text className="text-xl font-mbold text-gray-900 mb-6 text-center">
-                  License Options
-                </Text>
-
-                <TouchableOpacity
-                  onPress={() => {
-                    setShowLicenseMenu(false);
-                    setTimeout(() => handleViewLicense(), 300);
-                  }}
-                  className="flex-row items-center bg-gray-50 rounded-xl px-4 py-4 mb-3"
-                >
-                  <Eye size={24} className="text-gray-700 mr-4" />
-                  <View>
-                    <Text className="text-base font-msemibold text-gray-900">
-                      View License
-                    </Text>
-                    <Text className="text-sm font-regular text-gray-500">
-                      See your uploaded license document
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={() => {
-                    setShowLicenseMenu(false);
-                    setTimeout(() => handleUploadLicense(), 300);
-                  }}
-                  className="flex-row items-center bg-gray-50 rounded-xl px-4 py-4 mb-3"
-                >
-                  <Upload size={24} className="text-gray-700 mr-4" />
-                  <View>
-                    <Text className="text-base font-msemibold text-gray-900">
-                      Replace License
-                    </Text>
-                    <Text className="text-sm font-regular text-gray-500">
-                      Upload a new license document
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={handleRemoveLicense}
-                  className="flex-row items-center bg-red-50 rounded-xl px-4 py-4 mb-6"
-                >
-                  <Trash2 size={24} className="text-red-600 mr-4" />
-                  <View>
-                    <Text className="text-base font-msemibold text-red-600">
-                      Remove License
-                    </Text>
-                    <Text className="text-sm font-regular text-red-400">
-                      Delete license and reset verification
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  className="bg-gray-100 rounded-xl py-4 items-center"
-                  onPress={() => setShowLicenseMenu(false)}
-                >
-                  <Text className="text-gray-600 font-msemibold">Cancel</Text>
-                </TouchableOpacity>
-              </View>
-            </Animated.View>
-          </View>
+            </Pressable>
+          </Pressable>
         </Modal>
       )}
 
@@ -2303,6 +1996,10 @@ export default function ProfileScreen() {
           <CreatePost onClose={() => setShowCreatePost(false)} />
         </View>
       </Modal>
+
+      {showDrawer && (
+        <HamburgerMenu visible={showDrawer} onClose={() => setShowDrawer(false)} />
+      )}
 
       <BottomNavBar scale={bottomBarScale} />
     </View>

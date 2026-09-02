@@ -5,16 +5,17 @@ import ClosingSaleBanner from "@/components/ClosingSaleBanner";
 import { CARD_LIST_HEIGHT, ForYouSection } from "@/components/ForYou";
 import FeedGrid from "@/components/FeedGrid";
 import HomeCard from "@/components/HomeCard";
-import SearchBar from "@/components/modals/SearchBar";
 import { isVideoUrl, PostGridCardSourceRect } from "@/components/PostGridCard";
 import PostDetailOverlay from "@/components/PostDetailOverlay";
 import ReelsViewer from "@/components/ReelsViewer";
 import CircularLoader from "@/components/ui/CircularLoader";
 import GridSkeleton from "@/components/ui/GridSkeleton";
+import HomeSectionTabs, { HomeSection } from "@/components/ui/HomeSectionTabs";
 import TopNavbar from "@/components/ui/TopNavbar";
 import { useTabBarScroll } from "@/contexts/TabBarScrollContext";
 import { SortOrder, useForYouData } from "@/hooks/useForYouData";
 import { useFilteredFeedPosts } from "@/hooks/useFilteredFeedPosts";
+import { useFollowingFeedPosts } from "@/hooks/useFollowingFeedPosts";
 import { useLivestreams } from "@/hooks/useLivestreams";
 import { useScreenAnalytics } from "@/hooks/useAnalytics";
 import { Screens } from "@/lib/analyticsService";
@@ -28,6 +29,7 @@ import {
   Eye,
   Radio,
   Tv2,
+  UserPlus,
   Video,
 } from "lucide-react-native";
 import React, {
@@ -39,31 +41,34 @@ import React, {
   useState,
 } from "react";
 import {
+  Animated,
   FlatList,
   InteractionManager,
   ListRenderItem,
   Modal,
-  RefreshControl,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  PanResponder,
   ScrollView,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
 import { Image } from "expo-image";
+import ReAnimated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-type TabType = "foryou" | "featured" | "live" | "bidding" | "norbu";
+type TabType = "foryou" | "featured" | "live";
 type LiveFilter = "all" | "business" | "entertainment";
 
 type PageItem =
   | { key: "banner" }
-  | { key: "tabs" }
   | { key: "closing-sale" }
   | { key: "flash-deals" }
   | { key: "feed-posts" }
   | { key: "featured" }
   | { key: "live" }
-  | { key: "coming-soon"; label: string }
+  | { key: "following-posts" }
   | { key: "footer" };
 
 const SectionLoadingPlaceholder = React.memo(
@@ -77,6 +82,7 @@ const SectionLoadingPlaceholder = React.memo(
             width: 80,
             backgroundColor: "#e5e7eb",
             borderRadius: 6,
+            borderCurve: "continuous",
             marginBottom: 12,
             marginLeft: 16,
           }}
@@ -90,6 +96,7 @@ const SectionLoadingPlaceholder = React.memo(
                 width: 130,
                 height: 200,
                 borderRadius: 14,
+                borderCurve: "continuous",
                 backgroundColor: "#e5e7eb",
                 marginRight: 10,
                 overflow: "hidden",
@@ -109,6 +116,7 @@ const SectionLoadingPlaceholder = React.memo(
                     width: "80%",
                     backgroundColor: "#d1d5db",
                     borderRadius: 4,
+                    borderCurve: "continuous",
                   }}
                 />
                 <View
@@ -117,6 +125,7 @@ const SectionLoadingPlaceholder = React.memo(
                     width: "50%",
                     backgroundColor: "#d1d5db",
                     borderRadius: 4,
+                    borderCurve: "continuous",
                   }}
                 />
                 <View
@@ -125,6 +134,7 @@ const SectionLoadingPlaceholder = React.memo(
                     width: "60%",
                     backgroundColor: "#d1d5db",
                     borderRadius: 4,
+                    borderCurve: "continuous",
                   }}
                 />
               </View>
@@ -174,8 +184,6 @@ const HomeTabs = React.memo(function HomeTabs({
     { key: "foryou", label: "For You" },
     { key: "featured", label: "Featured" },
     { key: "live", label: "Live" },
-    { key: "norbu", label: "Norbu" },
-    { key: "bidding", label: "Bidding" },
   ];
 
   return (
@@ -273,8 +281,8 @@ const LiveTab = React.memo(function LiveTab({
               key={stream.id}
               onPress={() => onOpen(stream.id)}
               activeOpacity={0.85}
-              style={{ width: "47%" }}
-              className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100"
+              style={{ width: "47%", borderRadius: 16, borderCurve: "continuous" }}
+              className="bg-white overflow-hidden shadow-sm border border-gray-100"
             >
               <View className="w-full bg-gray-100" style={{ height: 110 }}>
                 {stream.thumbnail || stream.profile_image ? (
@@ -295,8 +303,8 @@ const LiveTab = React.memo(function LiveTab({
                   </View>
                 )}
                 <View
-                  className="absolute top-2 left-2 bg-red-500 rounded px-1.5 py-0.5"
-                  style={{ borderWidth: 1, borderColor: "white" }}
+                  className="absolute top-2 left-2 bg-red-500 px-1.5 py-0.5"
+                  style={{ borderWidth: 1, borderColor: "white", borderRadius: 4, borderCurve: "continuous" }}
                 >
                   <Text className="text-white text-[9px] font-black">LIVE</Text>
                 </View>
@@ -336,12 +344,42 @@ export default function HomeScreen() {
   const { onTabBarScroll } = useTabBarScroll();
   const router = useAppRouter();
   const { trackTap, trackFeature } = useScreenAnalytics(Screens.HOME);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [mainSection, setMainSection] = useState<HomeSection>("explore");
   const [activeTab, setActiveTab] = useState<TabType>("foryou");
   const [renderedTab, setRenderedTab] = useState<TabType>("foryou");
   const [isTabContentPending, setIsTabContentPending] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  // The tabs row (For You/Featured/...) is its own collapsing header,
+  // decoupled from the FlatList's content — see the JSX below. It hides on
+  // scroll-down and reappears on scroll-up (tabsTranslateY), and snaps back
+  // to fully visible whenever the list is at/above its top — which is also
+  // exactly when a pull-to-refresh can happen, so the tabs row always stays
+  // put (rather than dragging along) while the list content underneath it
+  // pulls down to reveal "refresh-indicator". 56 is a reasonable first-paint
+  // guess (overwritten by onLayout below) so there's no visible jump on mount.
+  const [tabsHeight, setTabsHeight] = useState(56);
+  // Reanimated, not legacy Animated — same reasoning as TabBarScrollContext's
+  // own pillScale (see that file): the decision of WHEN to hide/show still
+  // happens on the JS thread (one cheap branch per scroll event, in
+  // handleListScroll below), but the actual animation runs via withTiming
+  // on the UI thread, immune to JS-thread contention from list rendering —
+  // legacy Animated.timing here (with useNativeDriver: false, forced by
+  // marginTop below not being native-driver-compatible) ran the WHOLE
+  // animation on the JS thread instead, which is what made the hide/show
+  // visibly lag behind the actual scroll gesture.
+  const tabsTranslateY = useSharedValue(0);
+  const lastListScrollYRef = useRef(0);
+  // Custom pull-to-refresh — native RefreshControl only reports a before/
+  // after boolean, not a live drag distance, and Android's own pull gesture
+  // doesn't report one via onScroll either (only iOS's overscroll bounce
+  // does), so there's no native way to fade the loader in AS you drag on
+  // both platforms. This hand-rolled gesture (PanResponder, same technique
+  // ContextDrop uses for its edge-swipe: capture on MOVE once the drag
+  // clearly matches, not on initial touch, so plain scrolling/tapping is
+  // unaffected) tracks the raw drag distance itself instead.
+  const pullDistance = useRef(new Animated.Value(0)).current;
+  const [isPulling, setIsPulling] = useState(false);
+  const refreshingRef = useRef(false);
   const [showLive, setShowLive] = useState(false);
   const [FeaturedSellersComponent, setFeaturedSellersComponent] =
     useState<React.ComponentType | null>(null);
@@ -435,9 +473,21 @@ export default function HomeScreen() {
     refresh: refreshFeedPosts,
   } = useFilteredFeedPosts();
 
+  const {
+    posts: followingPosts,
+    loading: followingLoading,
+    loadingMore: followingLoadingMore,
+    hasMore: followingHasMore,
+    hasFollows,
+    loadMore: loadMoreFollowingPosts,
+    refresh: refreshFollowingPosts,
+  } = useFollowingFeedPosts();
+
   const onPostPress = useCallback(
     (postId: string, rect: PostGridCardSourceRect) => {
-      const post = feedPosts.find((p) => p.id === postId);
+      const post =
+        feedPosts.find((p) => p.id === postId) ||
+        followingPosts.find((p) => p.id === postId);
       const videoUrls = (post?.images || []).filter(isVideoUrl);
       if (post && videoUrls.length > 0) {
         const reels: VideoReel[] = videoUrls.map((uri, i) => ({
@@ -464,7 +514,7 @@ export default function HomeScreen() {
       }
       router.push(`/(users)/post/${postId}` as any);
     },
-    [router, feedPosts],
+    [router, feedPosts, followingPosts],
   );
 
   const handleTabPress = useCallback((tab: TabType) => {
@@ -472,12 +522,153 @@ export default function HomeScreen() {
     setActiveTab(tab);
   }, [trackFeature]);
 
+  // Tabs row always starts fully visible when (re)entering Explore — avoids
+  // landing mid-collapsed from whatever scroll position Following left it at.
+  useEffect(() => {
+    if (mainSection !== "explore") return;
+    lastListScrollYRef.current = 0;
+    tabsTranslateY.value = 0;
+  }, [mainSection, tabsTranslateY]);
+
+  const DIRECTION_THRESHOLD = 6;
+  const handleListScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      onTabBarScroll(e);
+      const y = e.nativeEvent.contentOffset.y;
+      const delta = y - lastListScrollYRef.current;
+      lastListScrollYRef.current = y;
+
+      // At/above the top — also true throughout the custom pull-to-refresh
+      // gesture below, since it disables the list's own scroll for its
+      // duration — the tabs row always sits fully visible here so it never
+      // drags along with the list content during that gesture.
+      if (y <= 0) {
+        tabsTranslateY.value = withTiming(0, { duration: 150 });
+        return;
+      }
+      if (delta > DIRECTION_THRESHOLD) {
+        tabsTranslateY.value = withTiming(-tabsHeight, { duration: 200 });
+      } else if (delta < -DIRECTION_THRESHOLD) {
+        tabsTranslateY.value = withTiming(0, { duration: 200 });
+      }
+    },
+    [onTabBarScroll, tabsTranslateY, tabsHeight],
+  );
+
+  // Content's reserved top space shrinks in lockstep with the tabs row
+  // hiding (tabsHeight + tabsTranslateY: tabsTranslateY is 0..-tabsHeight,
+  // so this runs tabsHeight..0) so the content actually rises to fill the
+  // gap as the tabs row slides away, instead of leaving it behind. A
+  // useAnimatedStyle (not Animated.add) since tabsTranslateY is now a
+  // Reanimated shared value — this still runs on the UI thread despite
+  // marginTop being a layout prop, unlike legacy Animated's native driver
+  // which can't touch layout props at all (that restriction is why this
+  // used to have to be JS-driven).
+  const contentMarginTopStyle = useAnimatedStyle(() => ({
+    marginTop: mainSection === "explore" ? tabsHeight + tabsTranslateY.value : 0,
+  }));
+  const tabsRowStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: tabsTranslateY.value }],
+  }));
+
   const onRefresh = useCallback(async () => {
-    setRefreshing(true);
+    refreshingRef.current = true;
     setRefreshKey((k) => k + 1);
-    await Promise.all([reload(), refreshFeedPosts()]);
-    setRefreshing(false);
-  }, [reload, refreshFeedPosts]);
+
+    // Kick off every refresh at once, but only wait on whatever's actually
+    // on screen right now — the loader clears the moment THAT'S ready
+    // instead of sitting there until everything (including tabs/data the
+    // user isn't even looking at) finishes. The rest keep loading silently
+    // in the background and settle in whenever they're done.
+    const reloadPromise = reload();
+    const feedPromise = refreshFeedPosts();
+    const followingPromise = refreshFollowingPosts();
+
+    // On "foryou", the feed grid is what actually dominates the screen —
+    // Flash Deals (reloadPromise) is a small secondary row that updates
+    // silently whenever it's ready, same as everything not currently in
+    // view, rather than holding the loader up for it too.
+    const visiblePromises: Promise<unknown>[] =
+      mainSection === "following"
+        ? [followingPromise]
+        : activeTab === "foryou"
+          ? [feedPromise]
+          : []; // Featured/Live don't depend on any of these three
+
+    await Promise.all(visiblePromises).catch(() => {});
+    refreshingRef.current = false;
+
+    Promise.all([reloadPromise, feedPromise, followingPromise]).catch(() => {});
+  }, [reload, refreshFeedPosts, refreshFollowingPosts, mainSection, activeTab]);
+
+  // Pull-to-refresh gesture geometry — mirrors ContextDrop's own constants
+  // in spirit (a small capture threshold, a larger commit threshold).
+  const PULL_CAPTURE_DY = 6;
+  const PULL_MAX = 90; // drag distance (px) mapped to a fully revealed loader
+  const PULL_COMMIT_DY = 64; // drag distance needed at release to commit a refresh
+  const REVEAL_HEIGHT = 56; // resting spacer height once committed — (56-24)/2 = 16px above/below the 24px loader, i.e. equal top/bottom space
+
+  const onRefreshRef = useRef(onRefresh);
+  onRefreshRef.current = onRefresh;
+
+  const settlePull = useCallback((toValue: number) => {
+    Animated.spring(pullDistance, {
+      toValue,
+      useNativeDriver: false,
+      friction: 7,
+      tension: 70,
+    }).start();
+  }, [pullDistance]);
+
+  const commitPull = useCallback(() => {
+    Animated.timing(pullDistance, { toValue: PULL_MAX, duration: 100, useNativeDriver: false }).start();
+    onRefreshRef.current().finally(() => settlePull(0));
+  }, [pullDistance, settlePull]);
+
+  const pullResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponderCapture: (_evt, gesture) =>
+        !refreshingRef.current &&
+        lastListScrollYRef.current <= 0 &&
+        gesture.dy > PULL_CAPTURE_DY &&
+        Math.abs(gesture.dy) > Math.abs(gesture.dx) * 1.5,
+      onMoveShouldSetPanResponder: (_evt, gesture) =>
+        !refreshingRef.current &&
+        lastListScrollYRef.current <= 0 &&
+        gesture.dy > PULL_CAPTURE_DY &&
+        Math.abs(gesture.dy) > Math.abs(gesture.dx) * 1.5,
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: () => {
+        setIsPulling(true);
+      },
+      onPanResponderMove: (_evt, gesture) => {
+        pullDistance.setValue(Math.max(0, gesture.dy));
+      },
+      onPanResponderRelease: (_evt, gesture) => {
+        setIsPulling(false);
+        if (gesture.dy >= PULL_COMMIT_DY) {
+          commitPull();
+        } else {
+          settlePull(0);
+        }
+      },
+      onPanResponderTerminate: () => {
+        setIsPulling(false);
+        settlePull(0);
+      },
+    }),
+  ).current;
+
+  const revealHeight = pullDistance.interpolate({
+    inputRange: [0, PULL_MAX],
+    outputRange: [0, REVEAL_HEIGHT],
+    extrapolate: "clamp",
+  });
+  const loaderOpacity = pullDistance.interpolate({
+    inputRange: [0, PULL_MAX * 0.4, PULL_MAX],
+    outputRange: [0, 0.5, 1],
+    extrapolate: "clamp",
+  });
 
   // ─── Stable card render callbacks ────────────────────────────────────────
 
@@ -534,13 +725,22 @@ export default function HomeScreen() {
   // ─── Flat items list ──────────────────────────────────────────────────────
   const hasFlashDeals = !loading && discountedProducts.length > 0;
   const items = useMemo<PageItem[]>(() => {
-    // "banner" and "tabs" are always the first two items (in that order) so
-    // their indices stay fixed for stickyHeaderIndices below — the banner
-    // scrolls away normally, then the tabs row sticks to the top of the
-    // list (right under the fixed header) once the banner scrolls past it.
-    const result: PageItem[] = [{ key: "banner" }, { key: "tabs" }];
+    if (mainSection === "following") {
+      return [{ key: "following-posts" }, { key: "footer" }];
+    }
+    // The tabs row (For You/Featured/...) is no longer a list item at all —
+    // it's rendered as its own absolutely-positioned, collapsing header (see
+    // the JSX below) so it can hide/show on scroll independently of the
+    // FlatList's own content, and stay put while the pull-to-refresh gesture
+    // drags the list content underneath it. The pull-to-refresh loading
+    // state is its own dedicated reveal spacer (also below), not a list
+    // item. Never hides/replaces existing content:
+    // reload()/refreshFeedPosts()/refreshFollowingPosts() below all fetch in
+    // the background and swap their data in once ready.
+    const result: PageItem[] = [];
     switch (activeTab) {
       case "foryou":
+        result.push({ key: "banner" });
         // Hidden for now — re-enable when Closing Sale is ready to ship again.
         // result.push({ key: "closing-sale" });
         if (hasFlashDeals) result.push({ key: "flash-deals" });
@@ -552,16 +752,10 @@ export default function HomeScreen() {
       case "live":
         result.push({ key: "live" });
         break;
-      case "norbu":
-        result.push({ key: "coming-soon", label: "Norbu Coin" });
-        break;
-      case "bidding":
-        result.push({ key: "coming-soon", label: "Bidding" });
-        break;
     }
     result.push({ key: "footer" });
     return result;
-  }, [activeTab, hasFlashDeals]);
+  }, [mainSection, activeTab, hasFlashDeals]);
 
   // Use ref to always have latest data in renderItem without changing its reference
   const dataRef = useRef({
@@ -587,6 +781,12 @@ export default function HomeScreen() {
     feedLoadingMore,
     feedHasMore,
     onPostPress,
+    mainSection,
+    followingPosts,
+    followingLoading,
+    followingLoadingMore,
+    followingHasMore,
+    hasFollows,
   });
   dataRef.current = {
     loading,
@@ -611,6 +811,12 @@ export default function HomeScreen() {
     feedLoadingMore,
     feedHasMore,
     onPostPress,
+    mainSection,
+    followingPosts,
+    followingLoading,
+    followingLoadingMore,
+    followingHasMore,
+    hasFollows,
   };
 
   const renderItem = useCallback<ListRenderItem<PageItem>>(
@@ -622,15 +828,6 @@ export default function HomeScreen() {
       switch (item.key) {
         case "banner":
           return <Banner />;
-
-        case "tabs":
-          // Opaque background required: once stickied, this row paints over
-          // whatever scrolls up underneath it.
-          return (
-            <View className="bg-background px-4" style={{ paddingBottom: 10 }}>
-              <HomeTabs activeTab={d.activeTab} onTabPress={handleTabPress} />
-            </View>
-          );
 
         case "closing-sale":
           if (!isCurrentTabReady) {
@@ -646,6 +843,7 @@ export default function HomeScreen() {
                     borderWidth: 1.5,
                     borderColor: "#F59E0B",
                     borderRadius: 16,
+                    borderCurve: "continuous",
                   }}
                 >
                   {/* Top: gradient banner — clip only the top corners */}
@@ -653,6 +851,7 @@ export default function HomeScreen() {
                     style={{
                       borderTopLeftRadius: 14,
                       borderTopRightRadius: 14,
+                      borderCurve: "continuous",
                       overflow: "hidden",
                     }}
                   >
@@ -675,8 +874,8 @@ export default function HomeScreen() {
                         >
                           <TouchableOpacity
                             onPress={d.toggleSortMenu}
-                            className="bg-white/90 px-3 py-2 rounded-xl shadow-sm border border-white/50 flex-row items-center self-start"
-                            style={{ backgroundColor: "rgba(255,255,255,0.9)" }}
+                            className="bg-white/90 px-3 py-2 shadow-sm border border-white/50 flex-row items-center self-start"
+                            style={{ backgroundColor: "rgba(255,255,255,0.9)", borderRadius: 12, borderCurve: "continuous" }}
                           >
                             <ArrowUpDown size={16} color="#1F2937" />
                             <Text className="ml-1.5 text-xs font-semibold text-gray-700">
@@ -684,7 +883,8 @@ export default function HomeScreen() {
                             </Text>
                           </TouchableOpacity>
                           {d.showSortMenu && (
-                            <View className="mt-2 bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+                            <View
+                              style={{ borderRadius: 12, borderCurve: "continuous" }} className="mt-2 bg-white shadow-lg border border-gray-200 overflow-hidden">
                               {(
                                 [
                                   "latest",
@@ -808,74 +1008,170 @@ export default function HomeScreen() {
             />
           );
 
-        case "coming-soon":
-          if (!isCurrentTabReady) {
-            return <TabContentLoadingState label={item.label} variant="spinner" />;
+        case "following-posts":
+          if (!d.hasFollows) {
+            if (d.followingLoading) {
+              return (
+                <View className="px-4 pt-6">
+                  <GridSkeleton rows={2} />
+                </View>
+              );
+            }
+            return (
+              <View className="mt-16 min-h-96 justify-center items-center px-8">
+                <View className="w-16 h-16 rounded-full bg-primary/10 items-center justify-center mb-4">
+                  <UserPlus size={28} color="#094569" />
+                </View>
+                <Text className="text-base font-semibold text-gray-700 text-center">
+                  No posts yet
+                </Text>
+                <Text className="text-sm text-gray-400 mt-1 text-center">
+                  Follow people to see their posts here
+                </Text>
+              </View>
+            );
           }
           return (
-            <View className="mt-6 min-h-96 justify-center items-center">
-              <Text className="text-base font-semibold text-primary mb-2">
-                {item.label} (Coming Soon)
-              </Text>
-            </View>
+            <FeedGrid
+              posts={d.followingPosts}
+              loading={d.followingLoading || d.followingLoadingMore}
+              onPostPress={d.onPostPress}
+            />
           );
 
         default:
           return null;
       }
     },
-    [handleTabPress],
+    [],
   );
   // renderItem is intentionally stable — it reads live data via dataRef
 
   const handleFeedEndReached = useCallback(() => {
     const d = dataRef.current;
+    if (d.mainSection === "following") {
+      if (d.hasFollows && d.followingHasMore && !d.followingLoading && !d.followingLoadingMore) {
+        loadMoreFollowingPosts();
+      }
+      return;
+    }
     if (d.activeTab === "foryou" && d.feedHasMore && !d.feedLoading && !d.feedLoadingMore) {
       loadMoreFeedPosts();
     }
-  }, [loadMoreFeedPosts]);
+  }, [loadMoreFeedPosts, loadMoreFollowingPosts]);
 
   return (
     <>
-      {/* Fixed header — TopNavbar + search trigger never scroll away. The
-          banner (data index 0) and tabs row (index 1) live inside the
-          FlatList itself: the banner scrolls normally, then the tabs row
-          sticks to the top of the list via stickyHeaderIndices below. */}
+      {/* Fixed header — TopNavbar never scrolls away. Search now lives in
+          TopNavbar's own expanding search field, not a full-width bar here. */}
       <View className="bg-background">
-        <TopNavbar />
-        <View className="px-4" style={{ paddingBottom: 8 }}>
-          <SearchBar value={searchQuery} onChangeText={setSearchQuery} />
-        </View>
+        <TopNavbar
+          centerContent={
+            <HomeSectionTabs active={mainSection} onChange={setMainSection} />
+          }
+        />
       </View>
 
-      <FlatList
-        data={items}
-        renderItem={renderItem}
-        keyExtractor={(item) => item.key}
-        stickyHeaderIndices={[1]}
-        className="flex-1 bg-background"
-        contentContainerStyle={{ paddingBottom: 72 + insets.bottom }}
-        showsVerticalScrollIndicator={false}
-        onScroll={onTabBarScroll}
-        scrollEventThrottle={16}
-        windowSize={5}
-        maxToRenderPerBatch={3}
-        initialNumToRender={2}
-        removeClippedSubviews={true}
-        overScrollMode="never"
-        bounces={true}
-        onEndReached={handleFeedEndReached}
-        onEndReachedThreshold={0.5}
-        extraData={`${activeTab}-${renderedTab}-${isTabContentPending}-${refreshKey}-${feedPosts.length}-${feedLoading}-${feedLoadingMore}`}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={["#094569"]}
-            tintColor="#094569"
-          />
-        }
-      />
+      <View style={{ flex: 1 }}>
+        {/* Tabs row — its own collapsing header, absolutely positioned over
+            the FlatList's reserved top padding (see contentMarginTopStyle
+            below) rather than a list item. Hides on scroll-down, reappears on
+            scroll-up, and always snaps back to visible at/above the list's
+            top — including mid pull-to-refresh — so it never drags along
+            with the content underneath it during that gesture.
+            The outer View is a fixed-height, overflow:"hidden" clip — the
+            inner Animated.View (the actual translateY) is unbounded/
+            absolute, so without this clip sliding it up wouldn't hide it,
+            it'd just keep moving upward past its own bounds and render over
+            TopNavbar above it instead. */}
+        {mainSection === "explore" && (
+          <View
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              height: tabsHeight,
+              overflow: "hidden",
+              zIndex: 10,
+              elevation: 10,
+            }}
+          >
+            <ReAnimated.View
+              onLayout={(e) => setTabsHeight(e.nativeEvent.layout.height)}
+              style={[
+                {
+                  // Inline instead of NativeWind's className — mixing
+                  // className with an Animated `style.transform` on the same
+                  // node is a known source of the transform silently not
+                  // taking effect (NativeWind's resolved style can end up
+                  // overriding/dropping it).
+                  backgroundColor: "#f8f9fa",
+                  paddingHorizontal: 16,
+                  paddingBottom: 12,
+                },
+                tabsRowStyle,
+              ]}
+            >
+              <HomeTabs activeTab={activeTab} onTabPress={handleTabPress} />
+            </ReAnimated.View>
+          </View>
+        )}
+
+        {/* Custom pull-to-refresh gesture — panHandlers live on the outer
+            (legacy Animated, untouched) View, wrapping both the reveal
+            spacer and the FlatList, so a qualifying drag (at the list's top,
+            moving down) is captured before it reaches the FlatList's own
+            scroll responder; anything else (a tap, a normal scroll, a
+            horizontal drag) is left alone. The inner Reanimated View's own
+            marginTop (contentMarginTopStyle) offsets this whole area below
+            the (absolutely positioned, zIndex'd) tabs row, and shrinks in
+            lockstep as that row slides away on scroll, so the content
+            actually rises to fill the gap instead of leaving it behind. */}
+        <Animated.View {...pullResponder.panHandlers} style={{ flex: 1 }}>
+          <ReAnimated.View style={[{ flex: 1 }, contentMarginTopStyle]}>
+            {/* Reveal spacer — grows with the live drag distance (fades the
+                loader in as you pull) and springs to REVEAL_HEIGHT on a
+                committed release, centering the loader with equal space
+                above/below, or back to 0 if released early/cancelled. */}
+            <Animated.View
+              style={{
+                height: revealHeight,
+                overflow: "hidden",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Animated.View style={{ opacity: loaderOpacity }}>
+                <CircularLoader size="small" color="#094569" />
+              </Animated.View>
+            </Animated.View>
+
+            <FlatList
+              data={items}
+              renderItem={renderItem}
+              keyExtractor={(item) => item.key}
+              className="flex-1 bg-background"
+              contentContainerStyle={{
+                paddingBottom: 72 + insets.bottom,
+              }}
+              showsVerticalScrollIndicator={false}
+              onScroll={handleListScroll}
+              scrollEventThrottle={16}
+              scrollEnabled={!isPulling}
+              windowSize={5}
+              maxToRenderPerBatch={3}
+              initialNumToRender={2}
+              removeClippedSubviews={true}
+              overScrollMode="never"
+              bounces={false}
+              onEndReached={handleFeedEndReached}
+              onEndReachedThreshold={0.5}
+              extraData={`${mainSection}-${activeTab}-${renderedTab}-${isTabContentPending}-${refreshKey}-${feedPosts.length}-${feedLoading}-${feedLoadingMore}-${followingPosts.length}-${followingLoading}-${followingLoadingMore}-${hasFollows}`}
+            />
+          </ReAnimated.View>
+        </Animated.View>
+      </View>
 
       {showLive && (
         <Modal

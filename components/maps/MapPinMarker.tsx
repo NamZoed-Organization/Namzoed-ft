@@ -87,6 +87,7 @@ export function MapPinVisual({
               width: size,
               height: size,
               borderRadius: half,
+              borderCurve: "continuous",
               backgroundColor: color,
             },
           ]}

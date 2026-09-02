@@ -120,6 +120,7 @@ const styles = StyleSheet.create({
     maxHeight: 200, // scroll enabled if content exceeds this
     backgroundColor: "#fff",
     borderRadius: 8,
+    borderCurve: "continuous",
     borderColor: "#D1D5DB",
     borderWidth: 1,
     elevation: 6,
@@ -138,6 +139,7 @@ const styles = StyleSheet.create({
   itemActive: {
     backgroundColor: "#f3f4f6", // gray-100
     borderRadius: 8,
+    borderCurve: "continuous",
   },
   text: {
     fontFamily: "Montserrat-Regular",

@@ -7,6 +7,9 @@ export interface Profile {
   email?: string;
   phone?: string;
   avatar_url?: string | null;
+  bio?: string | null;
+  cover_image_url?: string | null;
+  namzoed_id?: string | null;
   follower_count?: number;
   following_count?: number;
   dzongkhag?: string | null;
@@ -85,6 +88,47 @@ export const deleteAvatar = async (avatarUrl: string): Promise<void> => {
     }
   } catch (error) {
     console.error('Error deleting avatar:', error);
+    throw error;
+  }
+};
+
+// Upload cover/background image to Supabase storage ('profile' bucket) —
+// same bucket and per-user folder convention as uploadAvatar, distinguished
+// by a "cover_" filename prefix.
+export const uploadCoverImage = async (imageUri: string, userId: string): Promise<string> => {
+  try {
+    const fileExt = imageUri.split('.').pop()?.toLowerCase() || 'jpg';
+    const fileName = `${userId}/cover_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+
+    await uploadFileToSupabase(imageUri, 'profile', fileName, `image/${fileExt}`, true);
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('profile')
+      .getPublicUrl(fileName);
+
+    return publicUrl;
+  } catch (error) {
+    console.error('Error in uploadCoverImage:', error);
+    throw error;
+  }
+};
+
+// Delete cover/background image from Supabase storage ('profile' bucket)
+export const deleteCoverImage = async (coverUrl: string): Promise<void> => {
+  try {
+    const urlParts = coverUrl.split('/profile/');
+    const filePath = urlParts[1] || coverUrl;
+
+    const { error } = await supabase.storage
+      .from('profile')
+      .remove([filePath]);
+
+    if (error) {
+      console.error('Error deleting cover image:', error);
+      throw error;
+    }
+  } catch (error) {
+    console.error('Error deleting cover image:', error);
     throw error;
   }
 };

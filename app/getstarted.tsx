@@ -235,6 +235,7 @@ export default function GetStarted() {
                 style={{
                   height: dotHeight,
                   borderRadius: dotRadius,
+                  borderCurve: "continuous",
                   width: dotWidth,
                   backgroundColor: dotColor,
                 }}

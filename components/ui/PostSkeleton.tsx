@@ -46,7 +46,8 @@ export default function PostSkeleton({ hasImages = true, imageCount = 1 }: PostS
 
     if (imageCount === 1) {
       return (
-        <View className="mt-3 rounded-lg overflow-hidden">
+        <View
+          style={{ borderRadius: 8, borderCurve: "continuous" }} className="mt-3 overflow-hidden">
           <SkeletonBox height="256" className="w-full" />
         </View>
       );
@@ -54,7 +55,8 @@ export default function PostSkeleton({ hasImages = true, imageCount = 1 }: PostS
 
     if (imageCount === 2) {
       return (
-        <View className="mt-3 flex-row gap-1 rounded-lg overflow-hidden">
+        <View
+          style={{ borderRadius: 8, borderCurve: "continuous" }} className="mt-3 flex-row gap-1 overflow-hidden">
           <SkeletonBox height="192" className="flex-1" />
           <SkeletonBox height="192" className="flex-1" />
         </View>
@@ -63,7 +65,8 @@ export default function PostSkeleton({ hasImages = true, imageCount = 1 }: PostS
 
     // For 3 or more images
     return (
-      <View className="mt-3 gap-1 rounded-lg overflow-hidden">
+      <View
+        style={{ borderRadius: 8, borderCurve: "continuous" }} className="mt-3 gap-1 overflow-hidden">
         <SkeletonBox height="192" className="w-full" />
         <View className="flex-row gap-1">
           <SkeletonBox height="128" className="flex-1" />
@@ -89,7 +92,8 @@ export default function PostSkeleton({ hasImages = true, imageCount = 1 }: PostS
         </View>
         
         {/* Three Dots Menu Skeleton */}
-        <SkeletonBox width="20" height="20" className="rounded" />
+        <SkeletonBox
+          style={{ borderRadius: 4, borderCurve: "continuous" }} width="20" height="20" />
       </View>
       
       {/* Post Content Skeleton */}
@@ -110,15 +114,18 @@ export default function PostSkeleton({ hasImages = true, imageCount = 1 }: PostS
           {/* Left side - Like and Bookmark */}
           <View className="flex-row items-center">
             <View className="flex-row items-center mr-6">
-              <SkeletonBox width="20" height="20" className="rounded mr-1" />
+              <SkeletonBox
+                style={{ borderRadius: 4, borderCurve: "continuous" }} width="20" height="20" className="mr-1" />
               <SkeletonBox width="20" height="16" />
             </View>
-            <SkeletonBox width="20" height="20" className="rounded" />
+            <SkeletonBox
+              style={{ borderRadius: 4, borderCurve: "continuous" }} width="20" height="20" />
           </View>
           
           {/* Right side - Message */}
           <View className="flex-row items-center">
-            <SkeletonBox width="20" height="20" className="rounded mr-2" />
+            <SkeletonBox
+              style={{ borderRadius: 4, borderCurve: "continuous" }} width="20" height="20" className="mr-2" />
             <SkeletonBox width="60" height="16" />
           </View>
         </View>

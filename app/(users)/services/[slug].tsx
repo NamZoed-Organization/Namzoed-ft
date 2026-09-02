@@ -1,4 +1,3 @@
-import AddServicesModal from "@/components/modals/AddServicesModal";
 import CircularLoader from "@/components/ui/CircularLoader";
 import TopNavbar from "@/components/ui/TopNavbar";
 import { getServiceCategoryBySlug } from "@/data/servicecategory";
@@ -9,7 +8,7 @@ import { useAppRouter } from "@/utils/navigation";
 import { getInitials } from "@/utils/initials";
 import { Href, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { Image } from "expo-image";
-import { ArrowUpDown, Shuffle, ChevronLeft, Plus, Search, Verified } from "lucide-react-native";
+import { ArrowUpDown, Shuffle, ChevronLeft, Search, Verified } from "lucide-react-native";
 import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { FlatList, StyleSheet, Text, TouchableOpacity, View, BackHandler } from "react-native";
 import * as Haptics from "expo-haptics";
@@ -40,9 +39,6 @@ export default function ServiceDetailScreen() {
   const [isProviderShuffled, setIsProviderShuffled] = useState(false);
   const [providerShuffling, setProviderShuffling] = useState(false);
   const [providerShuffleKey, setProviderShuffleKey] = useState(0);
-
-  const [showAddModal, setShowAddModal] = useState(false);
-  const canAddService = !!currentUser?.id && slug !== "government-services";
 
   useEffect(() => {
     if (!slug) return;
@@ -255,6 +251,7 @@ export default function ServiceDetailScreen() {
                     width: 24,
                     height: 24,
                     borderRadius: 12,
+                    borderCurve: "continuous",
                     backgroundColor: '#e0e7ef',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -331,6 +328,7 @@ export default function ServiceDetailScreen() {
                   width: 64,
                   height: 64,
                   borderRadius: 32,
+                  borderCurve: "continuous",
                   backgroundColor: '#e0e7ef',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -426,6 +424,7 @@ export default function ServiceDetailScreen() {
             width: 40,
             height: 40,
             borderRadius: 20,
+            borderCurve: "continuous",
             backgroundColor: '#ffffff',
             justifyContent: 'center',
             alignItems: 'center',
@@ -445,29 +444,6 @@ export default function ServiceDetailScreen() {
         >
           {category.name}
         </Text>
-
-        {canAddService && (
-          <TouchableOpacity
-            onPress={() => setShowAddModal(true)}
-            activeOpacity={0.85}
-            style={{
-              height: 40,
-              paddingHorizontal: 16,
-              borderRadius: 20,
-              backgroundColor: '#094569',
-              flexDirection: 'row',
-              alignItems: 'center',
-              shadowColor: '#094569',
-              shadowOpacity: 0.25,
-              shadowRadius: 8,
-              shadowOffset: { width: 0, height: 3 },
-              elevation: 3,
-            }}
-          >
-            <Plus size={16} color="white" strokeWidth={2.8} />
-            <Text className="text-white font-msemibold text-sm ml-1">Add</Text>
-          </TouchableOpacity>
-        )}
       </View>
 
       {/* Segmented tabs */}
@@ -476,6 +452,7 @@ export default function ServiceDetailScreen() {
           style={{
             backgroundColor: '#f1f5f9',
             borderRadius: 999,
+            borderCurve: "continuous",
             padding: 4,
             flexDirection: 'row',
           }}
@@ -487,6 +464,7 @@ export default function ServiceDetailScreen() {
               flex: 1,
               paddingVertical: 10,
               borderRadius: 999,
+              borderCurve: "continuous",
               backgroundColor: activeTab === 'services' ? '#ffffff' : 'transparent',
               shadowColor: activeTab === 'services' ? '#000' : 'transparent',
               shadowOpacity: activeTab === 'services' ? 0.08 : 0,
@@ -511,6 +489,7 @@ export default function ServiceDetailScreen() {
               flex: 1,
               paddingVertical: 10,
               borderRadius: 999,
+              borderCurve: "continuous",
               backgroundColor: activeTab === 'providers' ? '#ffffff' : 'transparent',
               shadowColor: activeTab === 'providers' ? '#000' : 'transparent',
               shadowOpacity: activeTab === 'providers' ? 0.08 : 0,
@@ -669,19 +648,6 @@ export default function ServiceDetailScreen() {
         />
       )}
 
-      {canAddService && currentUser?.id && (
-        <AddServicesModal
-          isVisible={showAddModal}
-          onClose={() => setShowAddModal(false)}
-          userId={currentUser.id}
-          onSuccess={() => {
-            setShowAddModal(false);
-            ranked.refresh();
-          }}
-          lockedCategorySlug={slug}
-        />
-      )}
-
     </View>
   );
 }
@@ -692,6 +658,7 @@ const slugStyles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#F1F5F9",
     borderRadius: 10,
+    borderCurve: "continuous",
     paddingHorizontal: 12,
     paddingVertical: 9,
     marginHorizontal: 16,

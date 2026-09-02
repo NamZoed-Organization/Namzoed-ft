@@ -19,7 +19,12 @@ export const useUserProducts = (
       }
       try {
         setLoadingProducts(true);
-        const products = await fetchUserProducts(currentUser.id);
+        // Main profile's Products tab — excludes anything tagged to the
+        // user's Work profile (see Product.is_work_listing), which lists
+        // separately on /profile/work instead.
+        const products = await fetchUserProducts(currentUser.id, {
+          isWorkListing: false,
+        });
         setUserProducts(products);
       } catch (error) {
         console.error("Error loading user products:", error);

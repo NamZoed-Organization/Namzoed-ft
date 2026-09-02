@@ -12,6 +12,7 @@ import ReelsViewer from "@/components/ReelsViewer";
 import ShareComposerModal from "@/components/modals/ShareComposerModal";
 import TaggedItemsModal from "@/components/modals/TaggedItemsModal";
 import MaskedView from "@react-native-masked-view/masked-view";
+import CarouselDots from "@/components/ui/CarouselDots";
 import LoadingBar from "@/components/ui/LoadingBar";
 import PopupMessage from "@/components/ui/PopupMessage";
 import ProgressiveImage from "@/components/ui/ProgressiveImage";
@@ -35,7 +36,7 @@ import { getPostSaveCount, trackPostView } from "@/lib/viewTrackingService";
 import { buildPostExternalSharePayload } from "@/lib/shareUtils";
 import { playSound } from "@/lib/soundUtils";
 import { PostData } from "@/types/post";
-import { registerEdgeGestureCarousel } from "@/utils/edgeGestureRegistry";
+import { EdgeGestureCarouselHandle, registerEdgeGestureCarousel } from "@/utils/edgeGestureRegistry";
 import { feedEvents } from "@/utils/feedEvents";
 import { useAppRouter } from "@/utils/navigation";
 import { BlurView } from "expo-blur";
@@ -151,6 +152,7 @@ const HEADER_GLASS_BUTTON_STYLE = {
   width: HEADER_GLASS_BUTTON_SIZE,
   height: HEADER_GLASS_BUTTON_SIZE,
   borderRadius: HEADER_GLASS_BUTTON_SIZE / 2,
+  borderCurve: "continuous",
   alignItems: "center" as const,
   justifyContent: "center" as const,
   overflow: "hidden" as const,
@@ -323,6 +325,16 @@ interface MediaCarouselProps {
    * to surface post feedback (actions sheet for the owner, Report overlay
    * for everyone else) now that its header button is Share. */
   onLongPress?: () => void;
+  /** True in detail mode (onBack set) — skips ProgressiveImage's own
+   * load→sharp crossfade. In detail mode this image was already visible a
+   * moment ago (grid thumbnail, then PostDetailOverlay's own hero), so the
+   * cache is warm and there's nothing to fade from; letting expo-image play
+   * its transition anyway, layered on top of PostDetailOverlay's own
+   * hero→content crossfade, is what reads as the image going black and
+   * reloading right as the detail screen appears. Left at its normal fade
+   * in the plain feed, where images are genuinely being seen for the first
+   * time as they scroll into view. */
+  disableLoadTransition?: boolean;
 }
 
 /** Sits right where a timeline would be — the bottom edge of the video frame. */
@@ -568,6 +580,7 @@ const ActiveVideoPlayer = React.memo(function ActiveVideoPlayer({ uri, frameWidt
                   width: 64,
                   height: 64,
                   borderRadius: 32,
+                  borderCurve: "continuous",
                   backgroundColor: "rgba(0,0,0,0.55)",
                   alignItems: "center",
                   justifyContent: "center",
@@ -595,6 +608,7 @@ const ActiveVideoPlayer = React.memo(function ActiveVideoPlayer({ uri, frameWidt
             style={{
               backgroundColor: "rgba(0,0,0,0.4)",
               borderRadius: 20,
+              borderCurve: "continuous",
               padding: 6,
             }}
           >
@@ -631,92 +645,9 @@ const ActiveVideoPlayer = React.memo(function ActiveVideoPlayer({ uri, frameWidt
   );
 });
 
-// Instagram/UIPageControl-style shrinking dot window: up to 3 "normal" dots
-// centered around the active one, tapering to a small then tiny dot on
-// whichever side(s) still have more images. The normal window trails 2
-// behind the active index, but reassigns any unused "before" slots forward
-// when active is near the start (and mirrors near the end) so the 3 normal
-// dots don't run out of room.
-type DotTier = "normal" | "small" | "tiny";
-interface DotEntry {
-  index: number;
-  tier: DotTier;
-}
-const DOT_SIZE: Record<DotTier, number> = { normal: 6, small: 4.5, tiny: 3 };
-
-function getDotWindow(active: number, total: number): DotEntry[] {
-  if (total <= 1) return [];
-  if (total <= 5) {
-    return Array.from({ length: total }, (_, i) => ({ index: i, tier: "normal" as const }));
-  }
-
-  let normalStart = active - 2;
-  let normalEnd = active;
-  if (normalStart < 0) {
-    normalEnd += -normalStart;
-    normalStart = 0;
-  }
-  if (normalEnd > total - 1) {
-    normalStart -= normalEnd - (total - 1);
-    normalEnd = total - 1;
-    normalStart = Math.max(0, normalStart);
-  }
-
-  const dots: DotEntry[] = [];
-  if (normalStart - 2 >= 0) dots.push({ index: normalStart - 2, tier: "tiny" });
-  if (normalStart - 1 >= 0) dots.push({ index: normalStart - 1, tier: "small" });
-  for (let i = normalStart; i <= normalEnd; i++) dots.push({ index: i, tier: "normal" });
-  if (normalEnd + 1 <= total - 1) dots.push({ index: normalEnd + 1, tier: "small" });
-  if (normalEnd + 2 <= total - 1) dots.push({ index: normalEnd + 2, tier: "tiny" });
-
-  return dots;
-}
-
-function CarouselDot({ tier, isActive }: { tier: DotTier; isActive: boolean }) {
-  const size = useSharedValue(DOT_SIZE[tier]);
-  const activeProgress = useSharedValue(isActive ? 1 : 0);
-
-  useEffect(() => {
-    size.value = withTiming(DOT_SIZE[tier], { duration: 180 });
-  }, [tier, size]);
-
-  useEffect(() => {
-    activeProgress.value = withTiming(isActive ? 1 : 0, { duration: 180 });
-  }, [isActive, activeProgress]);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    width: size.value,
-    height: size.value,
-    borderRadius: size.value / 2,
-    backgroundColor: interpolateColor(
-      activeProgress.value,
-      [0, 1],
-      ["rgba(0, 0, 0, 0.2)", "#094569"],
-    ),
-  }));
-
-  return (
-    <AnimatedRN.View
-      entering={FadeIn.duration(150)}
-      exiting={FadeOut.duration(150)}
-      style={[{ marginHorizontal: 2.5 }, animatedStyle]}
-    />
-  );
-}
-
-function CarouselDots({ activeIndex, total }: { activeIndex: number; total: number }) {
-  const dots = useMemo(() => getDotWindow(activeIndex, total), [activeIndex, total]);
-
-  return (
-    <View style={styles.dotsRow}>
-      {dots.map(({ index, tier }) => {
-        return (
-          <CarouselDot key={index} tier={tier} isActive={index === activeIndex} />
-        );
-      })}
-    </View>
-  );
-}
+// Shared shrinking-dot carousel indicator — see components/ui/CarouselDots.tsx.
+// Also used by the product image carousel (app/(users)/product/[id].tsx) so
+// both read as the same visual system.
 
 const MediaCarousel = React.memo(
   ({
@@ -731,6 +662,7 @@ const MediaCarousel = React.memo(
     hasTaggedItems,
     onTagPress,
     onLongPress,
+    disableLoadTransition,
   }: MediaCarouselProps) => {
     const [activeIndex, setActiveIndex] = useState(0);
     const slideH = frameWidth / RATIO_PORTRAIT;
@@ -744,24 +676,27 @@ const MediaCarousel = React.memo(
     // from an actual back gesture — the two look identical when they start
     // in the same edge zone. See utils/edgeGestureRegistry.ts.
     const containerRef = useRef<View>(null);
-    const boundsRef = useRef<{ top: number; bottom: number } | null>(null);
-    const activeIndexRef = useRef(activeIndex);
-    activeIndexRef.current = activeIndex;
+    const edgeGestureHandleRef = useRef<EdgeGestureCarouselHandle | null>(null);
 
     const remeasure = useCallback(() => {
       containerRef.current?.measureInWindow((_x, y, _w, h) => {
-        boundsRef.current = { top: y, bottom: y + h };
+        edgeGestureHandleRef.current?.setBounds(y, y + h);
       });
     }, []);
 
     useEffect(() => {
       if (!multipleMedia) return;
-      const unregister = registerEdgeGestureCarousel({
-        getBounds: () => boundsRef.current,
-        hasPrevious: () => activeIndexRef.current > 0,
-      });
-      return unregister;
+      const handle = registerEdgeGestureCarousel();
+      edgeGestureHandleRef.current = handle;
+      return () => {
+        handle.unregister();
+        edgeGestureHandleRef.current = null;
+      };
     }, [multipleMedia]);
+
+    useEffect(() => {
+      edgeGestureHandleRef.current?.setHasPrevious(activeIndex > 0);
+    }, [activeIndex]);
 
     const handleImageTap = useCallback(
       (event: GestureResponderEvent, index: number) => {
@@ -857,12 +792,14 @@ const MediaCarousel = React.memo(
                 contentFit="cover"
                 backgroundColor="#000"
                 recyclingKey={item}
+                showProgress={false}
+                transition={disableLoadTransition ? 0 : undefined}
               />
             </TouchableOpacity>
           </View>
         );
       },
-      [handleImageTap, isVisible, activeIndex, onDoubleTapAt, onVideoPress, frameWidth, slideH, blurHashes],
+      [handleImageTap, isVisible, activeIndex, onDoubleTapAt, onVideoPress, frameWidth, slideH, blurHashes, disableLoadTransition],
     );
 
     if (images.length === 0) return null;
@@ -1031,6 +968,7 @@ const MiniAvatarRow = React.memo(({ users, totalLikes, onPress }: MiniAvatarRowP
               width: 22,
               height: 22,
               borderRadius: 11,
+              borderCurve: "continuous",
               borderWidth: 2,
               borderColor: "#fff",
               marginLeft: i > 0 ? -8 : 0,
@@ -1663,6 +1601,7 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp, onBa
             onVideoPress={handleVideoPress}
             onWatchMorePress={handleWatchMoreReels}
             onLongPress={onBack ? handleImageLongPress : undefined}
+            disableLoadTransition={!!onBack}
           />
           {/* Content Warning Overlay for sensitive/18+ posts */}
           {needsContentWarning && !isContentRevealed && (
@@ -1844,6 +1783,7 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp, onBa
                 alignItems: "center",
                 backgroundColor: "#eff6ff",
                 borderRadius: 20,
+                borderCurve: "continuous",
                 paddingHorizontal: 10,
                 paddingVertical: 5,
                 borderWidth: 1,
@@ -1864,6 +1804,7 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp, onBa
                 alignItems: "center",
                 backgroundColor: "#eef2ff",
                 borderRadius: 20,
+                borderCurve: "continuous",
                 paddingHorizontal: 10,
                 paddingVertical: 5,
                 borderWidth: 1,
@@ -1913,6 +1854,7 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp, onBa
                 borderWidth: 1,
                 borderColor: "#E5E7EB",
                 borderRadius: 999,
+                borderCurve: "continuous",
                 paddingHorizontal: 10,
                 paddingVertical: 4,
               }}
@@ -1995,6 +1937,7 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp, onBa
               backgroundColor: "#fff",
               borderTopLeftRadius: 26,
               borderTopRightRadius: 26,
+              borderCurve: "continuous",
             }}
           />
 
@@ -2020,6 +1963,7 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp, onBa
                   StyleSheet.absoluteFill,
                   {
                     borderRadius: 26,
+                    borderCurve: "continuous",
                     overflow: "hidden",
                     backgroundColor: Platform.OS === "ios" ? "transparent" : "rgba(255,255,255,0.85)",
                   },
@@ -2270,6 +2214,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 22,
     borderRadius: 24,
+    borderCurve: "continuous",
     minWidth: 170,
   },
   videoEndButtonSolid: {
@@ -2300,6 +2245,7 @@ const styles = StyleSheet.create({
   headerFollowPill: {
     backgroundColor: "#094569",
     borderRadius: 999,
+    borderCurve: "continuous",
     paddingVertical: 4,
     paddingHorizontal: 12,
     marginRight: 10,
@@ -2313,6 +2259,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
+    borderCurve: "continuous",
     backgroundColor: "#D1D5DB",
     alignItems: "center",
     justifyContent: "center",
@@ -2331,6 +2278,7 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
+    borderCurve: "continuous",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2338,6 +2286,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
+    borderCurve: "continuous",
     backgroundColor: "#D1D5DB",
     alignItems: "center",
     justifyContent: "center",
@@ -2351,6 +2300,7 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     backgroundColor: "#FF3B30",
     borderRadius: 4,
+    borderCurve: "continuous",
     paddingHorizontal: 4,
     paddingVertical: 1,
     borderWidth: 1,
@@ -2372,19 +2322,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 1,
   },
-  dotsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 8,
-    backgroundColor: "#fff",
-  },
   mediaCounterPill: {
     position: "absolute",
     top: 12,
     right: 12,
     backgroundColor: "rgba(0,0,0,0.55)",
     borderRadius: 999,
+    borderCurve: "continuous",
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
@@ -2399,6 +2343,7 @@ const styles = StyleSheet.create({
     left: 12,
     backgroundColor: "rgba(0,0,0,0.55)",
     borderRadius: 20,
+    borderCurve: "continuous",
     width: 30,
     height: 30,
     alignItems: "center",
@@ -2430,6 +2375,7 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
     paddingHorizontal: 16,
     borderRadius: 12,
+    borderCurve: "continuous",
     backgroundColor: "rgba(0, 0, 0, 0.75)",
     alignItems: "center",
     justifyContent: "center",

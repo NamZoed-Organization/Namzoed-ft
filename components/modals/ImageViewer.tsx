@@ -379,6 +379,7 @@ export default function ImageViewer({
               zIndex: 20,
               backgroundColor: 'rgba(0,0,0,0.55)',
               borderRadius: 20,
+              borderCurve: "continuous",
               padding: 7,
             }}
           >

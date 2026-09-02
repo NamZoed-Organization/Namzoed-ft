@@ -58,7 +58,8 @@ export default function CountdownTimer({ endsAt, compact = false }: CountdownTim
 
   // Full version for detail page
   return (
-    <View className="flex-row items-center gap-1.5 bg-amber-50 px-2 py-1 rounded-md">
+    <View
+      style={{ borderRadius: 6, borderCurve: "continuous" }} className="flex-row items-center gap-1.5 bg-amber-50 px-2 py-1">
       <Clock size={14} color="#F59E0B" />
       <Text className="text-xs text-amber-700 font-semibold">
         {timeLeft}

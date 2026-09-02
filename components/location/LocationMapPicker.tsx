@@ -156,7 +156,8 @@ export default function LocationMapPicker({
     >
       <View className="flex-1 bg-black/50">
         {/* Avoid overflow-hidden with MapView on Android (grey map + logo only). */}
-        <View className="flex-1 bg-white mt-12 rounded-t-3xl">
+        <View
+          style={{ borderTopLeftRadius: 24, borderTopRightRadius: 24, borderCurve: "continuous" }} className="flex-1 bg-white mt-12">
           {/* Header */}
           <View className="bg-white border-b border-gray-200 p-4">
             <View className="flex-row justify-between items-center mb-3">
@@ -172,7 +173,8 @@ export default function LocationMapPicker({
             </View>
 
             {/* Instructions */}
-            <View className="bg-blue-50 p-3 rounded-lg mb-2">
+            <View
+              style={{ borderRadius: 8, borderCurve: "continuous" }} className="bg-blue-50 p-3 mb-2">
               <Text className="text-sm text-blue-900 font-medium mb-1">
                 📍 How to mark locations:
               </Text>
@@ -339,7 +341,8 @@ export default function LocationMapPicker({
             {(pickupLocation || deliveryLocation) && (
               <View className="mb-3 space-y-2">
                 {pickupLocation && (
-                  <View className="bg-green-50 p-3 rounded-lg">
+                  <View
+                    style={{ borderRadius: 8, borderCurve: "continuous" }} className="bg-green-50 p-3">
                     <Text className="text-xs font-semibold text-green-900 mb-1">
                       🟢 PICKUP (Seller Location)
                     </Text>
@@ -349,7 +352,8 @@ export default function LocationMapPicker({
                   </View>
                 )}
                 {deliveryLocation && (
-                  <View className="bg-blue-50 p-3 rounded-lg">
+                  <View
+                    style={{ borderRadius: 8, borderCurve: "continuous" }} className="bg-blue-50 p-3">
                     <Text className="text-xs font-semibold text-blue-900 mb-1">
                       🔵 DELIVERY (Buyer Location)
                     </Text>
@@ -365,8 +369,9 @@ export default function LocationMapPicker({
               {/* Reset Button */}
               {(pickupLocation || deliveryLocation) && (
                 <Pressable
+                  style={{ borderRadius: 8, borderCurve: "continuous" }}
                   onPress={handleReset}
-                  className="flex-1 bg-gray-200 py-3 rounded-lg items-center"
+                  className="flex-1 bg-gray-200 py-3 items-center"
                 >
                   <Text className="text-gray-900 font-semibold text-base">
                     Reset Locations

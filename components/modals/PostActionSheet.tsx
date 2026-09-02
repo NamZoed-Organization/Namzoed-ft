@@ -39,7 +39,8 @@ export default function PostActionSheet({
 
   return (
     <ActionSheetModal visible={visible} onClose={onClose} embedded={embedded}>
-      <View className="bg-white rounded-t-3xl">
+      <View
+        style={{ borderTopLeftRadius: 24, borderTopRightRadius: 24, borderCurve: "continuous" }} className="bg-white">
         <View className="p-4 border-b border-gray-200">
           <Text className="text-lg font-semibold text-center">
             {isOwnPost ? 'Post Options' : 'Report Post'}

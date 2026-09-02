@@ -51,7 +51,12 @@ const PRIMARY = "#094569";
 const POST_SCREEN_OPTIONS = {
   gestureEnabled: false,
   presentation: "transparentModal" as const,
-  animation: "none" as const,
+  // "none" made every non-grid entry point (search, notifications, chat
+  // context cards, deep links, profile grid — see comment above) snap in
+  // instantly with no visible transition at all. The Home-grid-tap path
+  // (PostDetailOverlay) never goes through this route, so it's unaffected.
+  animation: "fade" as const,
+  animationDuration: 220,
   contentStyle: { backgroundColor: "transparent" },
 };
 

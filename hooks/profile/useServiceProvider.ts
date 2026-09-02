@@ -7,8 +7,9 @@ import {
 import { useEffect, useState } from "react";
 import { InteractionManager } from "react-native";
 
-export const useServiceProvider = (refreshKey: number) => {
+export const useServiceProvider = (refreshKey: number, viewUserId?: string) => {
   const { currentUser } = useUser();
+  const targetUserId = viewUserId ?? currentUser?.id;
   const [serviceProvider, setServiceProvider] = useState<any>(null);
   const [loadingServiceProvider, setLoadingServiceProvider] = useState(false);
   const [providerFormData, setProviderFormData] = useState({
@@ -31,11 +32,11 @@ export const useServiceProvider = (refreshKey: number) => {
 
   useEffect(() => {
     const loadServiceProvider = async () => {
-      if (!currentUser?.id) return;
+      if (!targetUserId) return;
 
       try {
         setLoadingServiceProvider(true);
-        const providerData = await fetchServiceProviderProfile(currentUser.id);
+        const providerData = await fetchServiceProviderProfile(targetUserId);
         setServiceProvider(providerData);
 
         if (providerData) {
@@ -68,15 +69,15 @@ export const useServiceProvider = (refreshKey: number) => {
       loadServiceProvider();
     });
     return () => task.cancel();
-  }, [currentUser?.id, refreshKey]);
+  }, [targetUserId, refreshKey]);
 
   useEffect(() => {
     const loadProviderServices = async () => {
-      if (!currentUser?.id) return;
+      if (!targetUserId) return;
 
       try {
         setLoadingProviderServices(true);
-        const services = await fetchUserProviderServices(currentUser.id);
+        const services = await fetchUserProviderServices(targetUserId);
         setProviderServices(services);
       } catch (error) {
         console.error("Failed to fetch provider services:", error);
@@ -89,7 +90,7 @@ export const useServiceProvider = (refreshKey: number) => {
       loadProviderServices();
     });
     return () => task.cancel();
-  }, [currentUser?.id, refreshKey]);
+  }, [targetUserId, refreshKey]);
 
   return {
     serviceProvider,

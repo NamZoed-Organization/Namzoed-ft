@@ -234,7 +234,7 @@ export default function BookMongooseModal({
       onRequestClose={handleClose}
     >
       <View className="flex-1 bg-black/50 justify-end">
-        <View className="bg-white rounded-t-3xl" style={{ maxHeight: "90%" }}>
+        <View className="bg-white" style={{ maxHeight: "90%", borderTopLeftRadius: 24, borderTopRightRadius: 24, borderCurve: "continuous" }}>
           {/* Header */}
           <View className="flex-row justify-between items-center p-5 border-b border-gray-200">
             <Text className="text-xl font-bold text-gray-900">
@@ -273,7 +273,8 @@ export default function BookMongooseModal({
             ) : (
               <>
                 {/* Availability Status */}
-                <View className="bg-green-50 p-4 rounded-lg mb-6 flex-row items-center">
+                <View
+                  style={{ borderRadius: 8, borderCurve: "continuous" }} className="bg-green-50 p-4 mb-6 flex-row items-center">
                   <Ionicons name="checkmark-circle" size={24} color="#10b981" />
                   <Text className="ml-3 text-green-800 font-medium flex-1">
                     Mongoose is available for bookings
@@ -288,9 +289,10 @@ export default function BookMongooseModal({
                       Preferred Date *
                     </Text>
                     <Pressable
+                      style={{ borderRadius: 8, borderCurve: "continuous" }}
                       onPress={() => setShowDatePicker(true)}
                       disabled={submitting}
-                      className="border border-gray-300 rounded-lg px-4 py-3 flex-row items-center justify-between bg-white"
+                      className="border border-gray-300 px-4 py-3 flex-row items-center justify-between bg-white"
                     >
                       <Text className="text-base text-gray-800">
                         {formatDisplayDate(bookingDate)}
@@ -318,9 +320,10 @@ export default function BookMongooseModal({
                       Preferred Time *
                     </Text>
                     <Pressable
+                      style={{ borderRadius: 8, borderCurve: "continuous" }}
                       onPress={() => setShowTimePicker(true)}
                       disabled={submitting}
-                      className="border border-gray-300 rounded-lg px-4 py-3 flex-row items-center justify-between bg-white"
+                      className="border border-gray-300 px-4 py-3 flex-row items-center justify-between bg-white"
                     >
                       <Text className="text-base text-gray-800">
                         {formatDisplayTime(bookingTime)}
@@ -349,8 +352,8 @@ export default function BookMongooseModal({
                       placeholder="Any special requests or details..."
                       multiline
                       numberOfLines={4}
-                      className="border border-gray-300 rounded-lg px-4 py-3 text-base"
-                      style={{ textAlignVertical: "top" }}
+                      className="border border-gray-300 px-4 py-3 text-base"
+                      style={{ textAlignVertical: "top", borderRadius: 8, borderCurve: "continuous" }}
                       editable={!submitting}
                     />
                   </View>
@@ -362,7 +365,8 @@ export default function BookMongooseModal({
                     <Text className="text-xs text-gray-400 mb-2">
                       Mongoose will contact you on this number
                     </Text>
-                    <View className="flex-row items-center border border-gray-300 rounded-lg px-4 bg-white">
+                    <View
+                      style={{ borderRadius: 8, borderCurve: "continuous" }} className="flex-row items-center border border-gray-300 px-4 bg-white">
                       <Ionicons name="call-outline" size={16} color="#6b7280" />
                       <TextInput
                         value={buyerPhone}
@@ -391,7 +395,8 @@ export default function BookMongooseModal({
                     <Text className="text-xs text-gray-400 mb-2">
                       Contact at the pickup location
                     </Text>
-                    <View className="flex-row items-center border border-gray-300 rounded-lg px-4 bg-white">
+                    <View
+                      style={{ borderRadius: 8, borderCurve: "continuous" }} className="flex-row items-center border border-gray-300 px-4 bg-white">
                       <Ionicons name="call-outline" size={16} color="#6b7280" />
                       <TextInput
                         value={sellerPhone}
@@ -416,9 +421,10 @@ export default function BookMongooseModal({
                       Pickup & Delivery Locations *
                     </Text>
                     <Pressable
+                      style={{ borderRadius: 8, borderCurve: "continuous" }}
                       onPress={() => setShowMapPicker(true)}
                       disabled={submitting}
-                      className="border-2 border-dashed border-green-300 rounded-lg p-4 bg-green-50"
+                      className="border-2 border-dashed border-green-300 p-4 bg-green-50"
                     >
                       <View className="flex-row items-center justify-center">
                         <Ionicons name="map" size={24} color="#10b981" />
@@ -439,7 +445,8 @@ export default function BookMongooseModal({
                     {(pickupLocation || deliveryLocation) && (
                       <View className="mt-3 space-y-2">
                         {pickupLocation && (
-                          <View className="bg-green-50 border border-green-200 p-3 rounded-lg">
+                          <View
+                            style={{ borderRadius: 8, borderCurve: "continuous" }} className="bg-green-50 border border-green-200 p-3">
                             <View className="flex-row items-center mb-1">
                               <View className="w-3 h-3 bg-green-600 rounded-full mr-2" />
                               <Text className="text-xs font-bold text-green-900">
@@ -453,7 +460,8 @@ export default function BookMongooseModal({
                           </View>
                         )}
                         {deliveryLocation && (
-                          <View className="bg-blue-50 border border-blue-200 p-3 rounded-lg">
+                          <View
+                            style={{ borderRadius: 8, borderCurve: "continuous" }} className="bg-blue-50 border border-blue-200 p-3">
                             <View className="flex-row items-center mb-1">
                               <View className="w-3 h-3 bg-blue-600 rounded-full mr-2" />
                               <Text className="text-xs font-bold text-blue-900">
@@ -486,7 +494,8 @@ export default function BookMongooseModal({
                   </View>
 
                   {/* User Info Display */}
-                  <View className="mt-4 bg-gray-50 p-4 rounded-lg">
+                  <View
+                    style={{ borderRadius: 8, borderCurve: "continuous" }} className="mt-4 bg-gray-50 p-4">
                     <Text className="text-sm font-medium text-gray-700 mb-2">
                       Your Contact Information
                     </Text>

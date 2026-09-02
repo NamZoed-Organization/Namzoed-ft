@@ -35,7 +35,7 @@ export default function StaticBanner() {
   return (
     <View className="mt-3" onLayout={onLayout}>
       {cardWidth > 0 && (
-        <View className="rounded-xl overflow-hidden" style={{ height: 160 }}>
+        <View className="overflow-hidden" style={{ height: 160, borderRadius: 12, borderCurve: "continuous" }}>
           <ScrollView
             ref={scrollRef}
             horizontal

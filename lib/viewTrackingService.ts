@@ -34,6 +34,9 @@ export async function trackPostView(
   viewerId: string,
   postOwnerId: string,
 ): Promise<void> {
+  // Dev and prod currently share one backend — skip real writes while
+  // running a development build so testing doesn't inflate view counts.
+  if (__DEV__) return;
   if (viewerId === postOwnerId) return; // no self-views
 
   const key = `${postId}:${viewerId}:${todayDate()}`;
@@ -66,6 +69,9 @@ export async function trackProfileView(
   profileId: string,
   viewerId: string,
 ): Promise<void> {
+  // Dev and prod currently share one backend — skip real writes while
+  // running a development build so testing doesn't inflate view counts.
+  if (__DEV__) return;
   if (viewerId === profileId) return; // no self-views
 
   const key = `${profileId}:${viewerId}:${todayDate()}`;

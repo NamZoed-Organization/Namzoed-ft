@@ -85,6 +85,7 @@ function Avatar({ user, size = 36 }: { user?: ProductReview["user"]; size?: numb
         width: size,
         height: size,
         borderRadius: radius,
+        borderCurve: "continuous",
         backgroundColor: PRIMARY,
         alignItems: "center",
         justifyContent: "center",
@@ -191,7 +192,8 @@ function ReviewActionSheet({
 }) {
   return (
     <ActionSheetModal visible={visible} onClose={onClose}>
-      <View className="bg-white rounded-t-3xl">
+      <View
+        style={{ borderTopLeftRadius: 24, borderTopRightRadius: 24, borderCurve: "continuous" }} className="bg-white">
         <View className="p-4">
           <TouchableOpacity
             className="flex-row items-center py-4 px-2"
@@ -463,6 +465,7 @@ export default function ProductReviews({
             paddingHorizontal: 12,
             backgroundColor: "#F9FAFB",
             borderRadius: 20,
+            borderCurve: "continuous",
           }}
         >
           <Text style={{ fontSize: 14, color: "#9CA3AF" }}>
@@ -511,6 +514,7 @@ export default function ProductReviews({
                       StyleSheet.absoluteFill,
                       {
                         borderRadius: 26,
+                        borderCurve: "continuous",
                         overflow: "hidden",
                         backgroundColor: Platform.OS === "ios" ? "transparent" : "rgba(255,255,255,0.95)",
                       },
@@ -634,7 +638,7 @@ export default function ProductReviews({
                           ref={inputRef}
                           value={draftText}
                           onChangeText={setDraftText}
-                          placeholder="Share your thoughts about this product…"
+                          placeholder="Share your thoughts"
                           placeholderTextColor="#9CA3AF"
                           multiline
                           maxLength={500}

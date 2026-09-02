@@ -33,8 +33,8 @@ const UserCard = ({ user, onPress, onFollow, onUnfollow, isFollowed }: {
   isFollowed: boolean;
 }) => (
   <TouchableOpacity
-    className="bg-white rounded-lg shadow-sm border border-gray-100 p-2 mb-2"
-    style={{ width: cardWidth }}
+    className="bg-white shadow-sm border border-gray-100 p-2 mb-2"
+    style={{ width: cardWidth, borderRadius: 8, borderCurve: "continuous" }}
     onPress={onPress}
     activeOpacity={0.7}
   >
@@ -321,7 +321,8 @@ const FeaturedSellers = () => {
 
       {/* Search Bar with Filter Button */}
       <View className="mb-4 flex-row gap-2 relative" style={{ zIndex: 1000 }}>
-        <View className="flex-1 gap-2 bg-white rounded-xl border border-gray-200 px-3 flex-row items-center">
+        <View
+          style={{ borderRadius: 12, borderCurve: "continuous" }} className="flex-1 gap-2 bg-white border border-gray-200 px-3 flex-row items-center">
           <Search size={18} className="text-gray-400 mr-2" />
           <TextInput
             className="flex-1 text-sm font-regular text-gray-900"
@@ -341,8 +342,8 @@ const FeaturedSellers = () => {
         <View>
           <TouchableOpacity
             onPress={() => setShowFilterMenu(!showFilterMenu)}
-            className="bg-white rounded-xl border border-gray-200 px-3.5 items-center justify-center"
-            style={{ height: 44 }}
+            className="bg-white border border-gray-200 px-3.5 items-center justify-center"
+            style={{ height: 44, borderRadius: 12, borderCurve: "continuous" }}
           >
             {React.createElement(getFilterIcon(), { size: 18, color: '#094569' })}
           </TouchableOpacity>
@@ -350,8 +351,8 @@ const FeaturedSellers = () => {
           {/* Filter Dropdown Menu */}
           {showFilterMenu && (
             <View
-              className="absolute top-full right-0 mt-2 bg-white rounded-xl border border-gray-200 overflow-hidden shadow-lg"
-              style={{ zIndex: 10000, minWidth: 180, elevation: 10 }}
+              className="absolute top-full right-0 mt-2 bg-white border border-gray-200 overflow-hidden shadow-lg"
+              style={{ zIndex: 10000, minWidth: 180, elevation: 10, borderRadius: 12, borderCurve: "continuous" }}
             >
               <TouchableOpacity
                 onPress={() => {

@@ -287,6 +287,9 @@ export const markStoryViewed = async (
   viewerId: string,
   ownerId: string,
 ): Promise<void> => {
+  // Dev and prod currently share one backend — skip real writes while
+  // running a development build so testing doesn't inflate view counts.
+  if (__DEV__) return;
   if (viewerId === ownerId) return; // no self-views
 
   const key = `${storyId}:${viewerId}`;

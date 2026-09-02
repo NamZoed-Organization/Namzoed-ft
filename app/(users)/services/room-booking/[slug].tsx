@@ -29,9 +29,10 @@ export default function RoomBookingScreen() {
       <View className="px-4 pt-3 pb-2 bg-white border-b border-gray-100">
         <View className="flex-row items-center gap-2">
           <TouchableOpacity
+            style={{ borderRadius: 12, borderCurve: "continuous" }}
             onPress={() => router.back()}
             activeOpacity={0.8}
-            className="w-10 h-10 rounded-xl bg-gray-100 items-center justify-center"
+            className="w-10 h-10 bg-gray-100 items-center justify-center"
           >
             <ChevronLeft size={22} color="#111827" />
           </TouchableOpacity>
@@ -51,8 +52,9 @@ export default function RoomBookingScreen() {
           {bookingCategory.subcategories.map((subcategory) => (
             <View key={subcategory.slug} className="w-1/2 p-2">
               <TouchableOpacity
+                style={{ borderRadius: 16, borderCurve: "continuous" }}
                 activeOpacity={0.8}
-                className="bg-white border border-gray-200 rounded-2xl px-4 py-5"
+                className="bg-white border border-gray-200 px-4 py-5"
               >
                 <Text className="text-base font-msemibold text-gray-900">
                   {subcategory.name}

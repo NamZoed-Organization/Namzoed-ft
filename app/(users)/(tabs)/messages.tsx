@@ -1350,6 +1350,7 @@ export default function MessageScreen() {
                 width: 56,
                 height: 56,
                 borderRadius: 28,
+                borderCurve: "continuous",
                 marginRight: 12,
                 backgroundColor: "#094569",
                 alignItems: "center",
@@ -1446,6 +1447,7 @@ export default function MessageScreen() {
                       width: 10,
                       height: 10,
                       borderRadius: 5,
+                      borderCurve: "continuous",
                       backgroundColor: "#094569",
                     }}
                   />
@@ -1455,6 +1457,7 @@ export default function MessageScreen() {
                       minWidth: 18,
                       height: 18,
                       borderRadius: 9,
+                      borderCurve: "continuous",
                       backgroundColor: "#094569",
                       paddingHorizontal: 4,
                       alignItems: "center",
@@ -1589,6 +1592,7 @@ export default function MessageScreen() {
               width: 46,
               height: 46,
               borderRadius: 23,
+              borderCurve: "continuous",
               backgroundColor: isBusy ? "#f97316" : "#094569",
               alignItems: "center",
               justifyContent: "center",
@@ -1613,6 +1617,7 @@ export default function MessageScreen() {
                 style={{
                   backgroundColor: isBusy ? "#fff7ed" : "#f0fdf4",
                   borderRadius: 10,
+                  borderCurve: "continuous",
                   paddingHorizontal: 8,
                   paddingVertical: 2,
                   flexDirection: "row",
@@ -1626,6 +1631,7 @@ export default function MessageScreen() {
                     width: 6,
                     height: 6,
                     borderRadius: 3,
+                    borderCurve: "continuous",
                     backgroundColor: isBusy ? "#f97316" : "#16a34a",
                     marginRight: 4,
                   }}
@@ -1655,6 +1661,7 @@ export default function MessageScreen() {
                   marginTop: 5,
                   backgroundColor: statusCfg.bg,
                   borderRadius: 8,
+                  borderCurve: "continuous",
                   paddingHorizontal: 8,
                   paddingVertical: 3,
                   alignSelf: "flex-start",
@@ -1687,6 +1694,7 @@ export default function MessageScreen() {
                 paddingHorizontal: 14,
                 paddingVertical: 9,
                 borderRadius: 10,
+                borderCurve: "continuous",
                 flexDirection: "row",
                 alignItems: "center",
               }}
@@ -1711,6 +1719,7 @@ export default function MessageScreen() {
                 paddingHorizontal: 12,
                 paddingVertical: 9,
                 borderRadius: 10,
+                borderCurve: "continuous",
                 flexDirection: "row",
                 alignItems: "center",
               }}
@@ -1735,6 +1744,7 @@ export default function MessageScreen() {
                 paddingHorizontal: 12,
                 paddingVertical: 9,
                 borderRadius: 10,
+                borderCurve: "continuous",
               }}
             >
               <Text
@@ -1750,6 +1760,7 @@ export default function MessageScreen() {
                 paddingHorizontal: 14,
                 paddingVertical: 9,
                 borderRadius: 10,
+                borderCurve: "continuous",
                 flexDirection: "row",
                 alignItems: "center",
               }}
@@ -1947,6 +1958,7 @@ export default function MessageScreen() {
                 alignItems: "center",
                 backgroundColor: "#f3f4f6",
                 borderRadius: 24,
+                borderCurve: "continuous",
                 paddingHorizontal: 14,
                 paddingVertical: 10,
               }}
@@ -2040,6 +2052,7 @@ export default function MessageScreen() {
                             width: 52,
                             height: 52,
                             borderRadius: 26,
+                            borderCurve: "continuous",
                             backgroundColor: "#094569",
                             alignItems: "center",
                             justifyContent: "center",
@@ -2123,6 +2136,7 @@ export default function MessageScreen() {
                             width: 38,
                             height: 38,
                             borderRadius: 19,
+                            borderCurve: "continuous",
                             backgroundColor: "#e0e7ef",
                             alignItems: "center",
                             justifyContent: "center",
@@ -2141,6 +2155,7 @@ export default function MessageScreen() {
                               width: 32,
                               height: 32,
                               borderRadius: 16,
+                              borderCurve: "continuous",
                               backgroundColor: "#cbd5e1",
                               alignItems: "center",
                               justifyContent: "center",
@@ -2192,6 +2207,7 @@ export default function MessageScreen() {
                             minWidth: 20,
                             height: 20,
                             borderRadius: 10,
+                            borderCurve: "continuous",
                             backgroundColor: "#094569",
                             alignItems: "center",
                             justifyContent: "center",
@@ -2304,6 +2320,7 @@ export default function MessageScreen() {
                         width: 50,
                         height: 50,
                         borderRadius: 25,
+                        borderCurve: "continuous",
                         backgroundColor: "#e0e7ef",
                         alignItems: "center",
                         justifyContent: "center",
@@ -2372,6 +2389,7 @@ export default function MessageScreen() {
                       backgroundColor: "#094569",
                       paddingVertical: 9,
                       borderRadius: 10,
+                      borderCurve: "continuous",
                       alignItems: "center",
                     }}
                   >
@@ -2394,6 +2412,7 @@ export default function MessageScreen() {
                       backgroundColor: "#f3f4f6",
                       paddingVertical: 9,
                       borderRadius: 10,
+                      borderCurve: "continuous",
                       alignItems: "center",
                     }}
                   >

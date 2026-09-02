@@ -87,6 +87,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
+    borderCurve: "continuous",
     backgroundColor: "rgba(255, 255, 255, 0.92)",
     alignItems: "center",
     justifyContent: "center",
@@ -105,6 +106,7 @@ const styles = StyleSheet.create({
     gap: 10,
     height: 56,
     borderRadius: 28,
+    borderCurve: "continuous",
     backgroundColor: "rgba(255, 255, 255, 0.96)",
   },
   pillText: {

@@ -543,5 +543,6 @@ const styles = StyleSheet.create({
     height: SIDE_HANDLE_HEIGHT,
     backgroundColor: "#000",
     borderRadius: 2,
+    borderCurve: "continuous",
   },
 });

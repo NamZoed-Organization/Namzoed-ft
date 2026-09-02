@@ -8,6 +8,12 @@ import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const PILL_HEIGHT = 56;
+// Full capsule ends (radius = half height) — but rendered with Apple's
+// continuous corner (superellipse) via borderCurve, not a plain circular
+// arc, so the curve eases into the straight top/bottom edge smoothly
+// instead of the abrupt curvature kink a plain circle has at that seam.
+// Android has no equivalent and just falls back to a normal circular corner.
+const PILL_RADIUS = PILL_HEIGHT / 2;
 const PILL_SIDE_MARGIN = 48;
 const PILL_MIN_WIDTH = 260;
 const PILL_MAX_WIDTH = 340;
@@ -50,7 +56,8 @@ export default function FloatingTabBar(props: BottomTabBarProps) {
           {
             width: pillWidth,
             height: PILL_HEIGHT,
-            borderRadius: PILL_HEIGHT / 2,
+            borderRadius: PILL_RADIUS,
+            borderCurve: "continuous",
             shadowColor: "#000",
             shadowOffset: { width: 0, height: 3 },
             shadowOpacity: 0.1,
@@ -63,7 +70,8 @@ export default function FloatingTabBar(props: BottomTabBarProps) {
         <View
           style={{
             flex: 1,
-            borderRadius: PILL_HEIGHT / 2,
+            borderRadius: PILL_RADIUS,
+            borderCurve: "continuous",
             overflow: "hidden",
             borderWidth: StyleSheet.hairlineWidth,
             borderTopColor: "rgba(255, 255, 255, 0.55)",

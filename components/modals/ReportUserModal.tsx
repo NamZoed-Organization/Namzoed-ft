@@ -117,7 +117,8 @@ export default function ReportUserModal({
           <KeyboardAvoidingView
             behavior="padding"
           >
-            <BlurView intensity={90} tint="light" className="rounded-t-3xl overflow-hidden">
+            <BlurView
+              style={{ borderTopLeftRadius: 24, borderTopRightRadius: 24, borderCurve: "continuous" }} intensity={90} tint="light" className="overflow-hidden">
               {/* Header */}
               <View className="px-6 pt-6 pb-4 border-b border-gray-200">
                 <View className="flex-row items-center justify-between mb-2">
@@ -181,8 +182,8 @@ export default function ReportUserModal({
                   multiline
                   numberOfLines={4}
                   maxLength={500}
-                  className="bg-white border border-gray-300 rounded-2xl p-4 text-gray-900 font-regular text-base min-h-[120px]"
-                  style={{ textAlignVertical: 'top' }}
+                  className="bg-white border border-gray-300 p-4 text-gray-900 font-regular text-base min-h-[120px]"
+                  style={{ textAlignVertical: 'top', borderRadius: 16, borderCurve: "continuous" }}
                 />
                 <Text className="text-xs text-gray-500 mt-2 text-right">
                   {details.length}/500

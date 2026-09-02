@@ -112,6 +112,7 @@ export default function PostViewersModal({
               width: 44,
               height: 44,
               borderRadius: 22,
+              borderCurve: "continuous",
               backgroundColor: '#094569',
               alignItems: 'center',
               justifyContent: 'center',
@@ -138,6 +139,7 @@ export default function PostViewersModal({
               paddingHorizontal: 16,
               paddingVertical: 6,
               borderRadius: 8,
+              borderCurve: "continuous",
               backgroundColor: item.isFollowing ? '#F3F4F6' : '#094569',
             }}
           >

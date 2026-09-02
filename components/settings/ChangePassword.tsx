@@ -95,7 +95,8 @@ export default function ChangePassword({ onClose }: ChangePasswordProps) {
           {/* Current Password */}
           <View className="mb-4">
             <Text className="text-sm font-medium text-gray-700 mb-2">Current Password</Text>
-            <View className="flex-row items-center bg-gray-100 rounded-lg px-4 py-3 border border-gray-300">
+            <View
+              style={{ borderRadius: 8, borderCurve: "continuous" }} className="flex-row items-center bg-gray-100 px-4 py-3 border border-gray-300">
               <TextInput
                 className="flex-1 text-base text-gray-900"
                 placeholder="Enter current password"
@@ -117,7 +118,8 @@ export default function ChangePassword({ onClose }: ChangePasswordProps) {
           {/* New Password */}
           <View className="mb-4">
             <Text className="text-sm font-medium text-gray-700 mb-2">New Password</Text>
-            <View className="flex-row items-center bg-gray-100 rounded-lg px-4 py-3 border border-gray-300">
+            <View
+              style={{ borderRadius: 8, borderCurve: "continuous" }} className="flex-row items-center bg-gray-100 px-4 py-3 border border-gray-300">
               <TextInput
                 className="flex-1 text-base text-gray-900"
                 placeholder="Enter new password"
@@ -139,7 +141,8 @@ export default function ChangePassword({ onClose }: ChangePasswordProps) {
           {/* Confirm Password */}
           <View className="mb-6">
             <Text className="text-sm font-medium text-gray-700 mb-2">Confirm Password</Text>
-            <View className="flex-row items-center bg-gray-100 rounded-lg px-4 py-3 border border-gray-300">
+            <View
+              style={{ borderRadius: 8, borderCurve: "continuous" }} className="flex-row items-center bg-gray-100 px-4 py-3 border border-gray-300">
               <TextInput
                 className="flex-1 text-base text-gray-900"
                 placeholder="Confirm new password"
@@ -160,9 +163,10 @@ export default function ChangePassword({ onClose }: ChangePasswordProps) {
 
           {/* Change Password Button */}
           <TouchableOpacity
+            style={{ borderRadius: 8, borderCurve: "continuous" }}
             onPress={handleChangePassword}
             disabled={loading}
-            className="bg-primary rounded-lg py-4 px-6"
+            className="bg-primary py-4 px-6"
           >
             <Text className="text-white text-center font-semibold text-base">
               {loading ? 'Changing Password...' : 'Change Password'}

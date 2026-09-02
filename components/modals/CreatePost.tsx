@@ -883,6 +883,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                     borderWidth: 1,
                     borderColor: "#e5e7eb",
                     borderRadius: 12,
+                    borderCurve: "continuous",
                     paddingHorizontal: 12,
                     paddingVertical: 10,
                     fontSize: 14,
@@ -909,6 +910,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                     gap: 8,
                     paddingVertical: 12,
                     borderRadius: 12,
+                    borderCurve: "continuous",
                     borderWidth: 1.5,
                     borderColor: "#094569",
                     opacity: resolvingLocation ? 0.7 : 1,
@@ -975,6 +977,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                       paddingHorizontal: 12,
                       paddingVertical: 8,
                       borderRadius: 20,
+                      borderCurve: "continuous",
                       backgroundColor:
                         mediaAspectMode === mode ? "#094569" : "#f3f4f6",
                       borderWidth: 1,
@@ -1023,6 +1026,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                   alignItems: "center",
                   backgroundColor: "#f9fafb",
                   borderRadius: 14,
+                  borderCurve: "continuous",
                   paddingVertical: 14,
                   paddingHorizontal: 8,
                   borderWidth: 1,
@@ -1035,6 +1039,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                     height: previewHeight,
                     backgroundColor: "#f3f4f6",
                     borderRadius: 10,
+                    borderCurve: "continuous",
                     overflow: "hidden",
                     alignItems: "center",
                     justifyContent: "center",
@@ -1100,6 +1105,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                         paddingHorizontal: 14,
                         paddingVertical: 10,
                         borderRadius: 22,
+                        borderCurve: "continuous",
                         backgroundColor: "#094569",
                       }}
                     >
@@ -1129,6 +1135,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                         paddingHorizontal: 14,
                         paddingVertical: 10,
                         borderRadius: 22,
+                        borderCurve: "continuous",
                         backgroundColor: "#1f2937",
                       }}
                     >
@@ -1184,6 +1191,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                 borderColor: postMedia.length > 0 ? "#bfdbfe" : "#e5e7eb",
                 borderStyle: "dashed",
                 borderRadius: 16,
+                borderCurve: "continuous",
                 paddingVertical: 20,
                 alignItems: "center",
                 justifyContent: "center",
@@ -1199,6 +1207,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                     minWidth: 20,
                     height: 20,
                     borderRadius: 10,
+                    borderCurve: "continuous",
                     backgroundColor: "#3b82f6",
                     alignItems: "center",
                     justifyContent: "center",
@@ -1217,6 +1226,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                   width: 48,
                   height: 48,
                   borderRadius: 24,
+                  borderCurve: "continuous",
                   backgroundColor: postMedia.length > 0 ? "#dbeafe" : "#eff6ff",
                   alignItems: "center",
                   justifyContent: "center",
@@ -1249,6 +1259,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                 borderColor: taggedProducts.length > 0 ? "#bfdbfe" : "#e5e7eb",
                 borderStyle: "dashed",
                 borderRadius: 16,
+                borderCurve: "continuous",
                 paddingVertical: 20,
                 alignItems: "center",
                 justifyContent: "center",
@@ -1265,6 +1276,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                     minWidth: 20,
                     height: 20,
                     borderRadius: 10,
+                    borderCurve: "continuous",
                     backgroundColor: "#094569",
                     alignItems: "center",
                     justifyContent: "center",
@@ -1283,6 +1295,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                   width: 48,
                   height: 48,
                   borderRadius: 24,
+                  borderCurve: "continuous",
                   backgroundColor:
                     taggedProducts.length > 0 ? "#dbeafe" : "#eff6ff",
                   alignItems: "center",
@@ -1313,6 +1326,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                 borderColor: taggedAccounts.length > 0 ? "#c7d2fe" : "#e5e7eb",
                 borderStyle: "dashed",
                 borderRadius: 16,
+                borderCurve: "continuous",
                 paddingVertical: 20,
                 alignItems: "center",
                 justifyContent: "center",
@@ -1329,6 +1343,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                     minWidth: 20,
                     height: 20,
                     borderRadius: 10,
+                    borderCurve: "continuous",
                     backgroundColor: "#6366f1",
                     alignItems: "center",
                     justifyContent: "center",
@@ -1347,6 +1362,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                   width: 48,
                   height: 48,
                   borderRadius: 24,
+                  borderCurve: "continuous",
                   backgroundColor:
                     taggedAccounts.length > 0 ? "#e0e7ff" : "#eef2ff",
                   alignItems: "center",
@@ -1399,6 +1415,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                           width: CARD_WIDTH,
                           height: CARD_WIDTH * 0.75,
                           borderRadius: 18,
+                          borderCurve: "continuous",
                           borderWidth: 1.5,
                           borderColor: "#e5e7eb",
                           borderStyle: "dashed",
@@ -1412,6 +1429,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                             width: 48,
                             height: 48,
                             borderRadius: 24,
+                            borderCurve: "continuous",
                             backgroundColor: "#eff6ff",
                             alignItems: "center",
                             justifyContent: "center",
@@ -1439,6 +1457,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                         width: CARD_WIDTH,
                         height: CARD_WIDTH * 0.75,
                         borderRadius: 18,
+                        borderCurve: "continuous",
                         overflow: "hidden",
                       }}
                     >
@@ -1466,6 +1485,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                           style={{
                             backgroundColor: "rgba(255,255,255,0.22)",
                             borderRadius: 12,
+                            borderCurve: "continuous",
                             paddingHorizontal: 10,
                             paddingVertical: 4,
                             borderWidth: 1,
@@ -1494,6 +1514,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                             width: 56,
                             height: 56,
                             borderRadius: 28,
+                            borderCurve: "continuous",
                             backgroundColor: "rgba(0,0,0,0.45)",
                             alignItems: "center",
                             justifyContent: "center",
@@ -1511,6 +1532,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                           width: 30,
                           height: 30,
                           borderRadius: 15,
+                          borderCurve: "continuous",
                           backgroundColor: "rgba(0,0,0,0.5)",
                           alignItems: "center",
                           justifyContent: "center",
@@ -1536,6 +1558,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                             paddingHorizontal: 10,
                             paddingVertical: 6,
                             borderRadius: 14,
+                            borderCurve: "continuous",
                             backgroundColor: "rgba(9,69,105,0.92)",
                           }}
                         >
@@ -1571,6 +1594,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                         width: i === activeMediaIndex ? 18 : 6,
                         height: 6,
                         borderRadius: 3,
+                        borderCurve: "continuous",
                         backgroundColor:
                           i === activeMediaIndex ? "#094569" : "#d1d5db",
                       }}
@@ -1595,6 +1619,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                     style={{
                       width: 116,
                       borderRadius: 16,
+                      borderCurve: "continuous",
                       overflow: "hidden",
                       backgroundColor: "#f8faff",
                       borderWidth: 1,
@@ -1654,6 +1679,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                         width: 22,
                         height: 22,
                         borderRadius: 11,
+                        borderCurve: "continuous",
                         backgroundColor: "rgba(0,0,0,0.5)",
                         alignItems: "center",
                         justifyContent: "center",
@@ -1673,6 +1699,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                     style={{
                       width: 80,
                       borderRadius: 16,
+                      borderCurve: "continuous",
                       borderWidth: 1.5,
                       borderColor: "#dbeafe",
                       borderStyle: "dashed",
@@ -1687,6 +1714,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                         width: 32,
                         height: 32,
                         borderRadius: 16,
+                        borderCurve: "continuous",
                         backgroundColor: "#eff6ff",
                         alignItems: "center",
                         justifyContent: "center",
@@ -1724,6 +1752,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                       borderWidth: 1,
                       borderColor: "#e0e7ff",
                       borderRadius: 24,
+                      borderCurve: "continuous",
                       paddingLeft: 4,
                       paddingRight: 10,
                       paddingVertical: 4,
@@ -1745,6 +1774,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                           width: 28,
                           height: 28,
                           borderRadius: 14,
+                          borderCurve: "continuous",
                           backgroundColor: "#e0e7ff",
                           alignItems: "center",
                           justifyContent: "center",
@@ -1780,6 +1810,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                         width: 18,
                         height: 18,
                         borderRadius: 9,
+                        borderCurve: "continuous",
                         backgroundColor: "#e0e7ff",
                         alignItems: "center",
                         justifyContent: "center",
@@ -1798,6 +1829,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                       alignItems: "center",
                       backgroundColor: "#eef2ff",
                       borderRadius: 24,
+                      borderCurve: "continuous",
                       paddingHorizontal: 12,
                       paddingVertical: 7,
                       borderWidth: 1,
@@ -1837,7 +1869,8 @@ export default function CreatePost({ onClose }: CreatePostProps) {
           activeOpacity={1}
           onPress={() => setShowMediaSourceModal(false)}
         />
-        <View className="bg-white rounded-t-3xl pb-10">
+        <View
+          style={{ borderTopLeftRadius: 24, borderTopRightRadius: 24, borderCurve: "continuous" }} className="bg-white pb-10">
           <View className="w-10 h-1 bg-gray-300 rounded-full self-center mt-3 mb-4" />
           <Text className="text-lg font-bold text-center text-gray-900 mb-4">
             Add Media
@@ -1886,7 +1919,8 @@ export default function CreatePost({ onClose }: CreatePostProps) {
       {/* Scanning overlay — shown while Vision checks a freshly-picked image */}
       <Modal visible={isScanningMedia} transparent animationType="fade">
         <View className="flex-1 items-center justify-center bg-black/40">
-          <View className="bg-white rounded-2xl px-6 py-5 items-center">
+          <View
+            style={{ borderRadius: 16, borderCurve: "continuous" }} className="bg-white px-6 py-5 items-center">
             <CircularLoader size="large" color="#094569" />
             <Text className="mt-3 text-base font-semibold text-gray-900">
               Checking image…
@@ -1957,12 +1991,14 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                   >
                     {item.images?.[0] ? (
                       <Image
+                        style={{ borderRadius: 12 }}
                         source={{ uri: item.images[0] }}
-                        className="w-14 h-14 rounded-xl bg-gray-100"
+                        className="w-14 h-14 bg-gray-100"
                         resizeMode="cover"
                       />
                     ) : (
-                      <View className="w-14 h-14 rounded-xl bg-gray-100 items-center justify-center">
+                      <View
+                        style={{ borderRadius: 12, borderCurve: "continuous" }} className="w-14 h-14 bg-gray-100 items-center justify-center">
                         <ShoppingBag size={20} color="#D1D5DB" />
                       </View>
                     )}
@@ -2022,7 +2058,8 @@ export default function CreatePost({ onClose }: CreatePostProps) {
 
           {/* Search Bar */}
           <View className="px-4 py-3">
-            <View className="flex-row items-center bg-gray-100 rounded-xl px-3 py-2.5">
+            <View
+              style={{ borderRadius: 12, borderCurve: "continuous" }} className="flex-row items-center bg-gray-100 px-3 py-2.5">
               <Search size={18} color="#9CA3AF" />
               <TextInput
                 className="flex-1 ml-2 text-sm text-gray-800"
@@ -2172,6 +2209,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                 backgroundColor: "#fff",
                 borderTopLeftRadius: 20,
                 borderTopRightRadius: 20,
+                borderCurve: "continuous",
                 paddingBottom: 28,
                 maxHeight: "78%",
               }}
@@ -2181,6 +2219,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                   width: 40,
                   height: 4,
                   borderRadius: 2,
+                  borderCurve: "continuous",
                   backgroundColor: "#e5e7eb",
                   alignSelf: "center",
                   marginTop: 10,
@@ -2237,6 +2276,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                       paddingHorizontal: 12,
                       paddingVertical: 8,
                       borderRadius: 18,
+                      borderCurve: "continuous",
                       backgroundColor: "#f3f4f6",
                       borderWidth: 1,
                       borderColor: "#e5e7eb",
@@ -2267,6 +2307,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                         paddingHorizontal: 12,
                         paddingVertical: 8,
                         borderRadius: 18,
+                        borderCurve: "continuous",
                         backgroundColor:
                           Math.abs(draftFrameRatio - r) < 0.02
                             ? "#094569"
@@ -2323,6 +2364,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                       flex: 1,
                       paddingVertical: 14,
                       borderRadius: 14,
+                      borderCurve: "continuous",
                       backgroundColor: "#f3f4f6",
                       alignItems: "center",
                     }}
@@ -2349,6 +2391,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                       flex: 1,
                       paddingVertical: 14,
                       borderRadius: 14,
+                      borderCurve: "continuous",
                       backgroundColor: "#094569",
                       alignItems: "center",
                     }}
@@ -2376,6 +2419,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                       gap: 8,
                       paddingVertical: 14,
                       borderRadius: 14,
+                      borderCurve: "continuous",
                       borderWidth: 1.5,
                       borderColor: "#1f2937",
                     }}

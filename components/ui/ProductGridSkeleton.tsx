@@ -40,7 +40,8 @@ export default function ProductGridSkeleton() {
     <View>
       {/* Two column grid */}
       <View className="flex-row justify-between mb-3">
-        <View className="flex-1 mr-2 bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100">
+        <View
+          style={{ borderRadius: 12, borderCurve: "continuous" }} className="flex-1 mr-2 bg-white overflow-hidden shadow-sm border border-gray-100">
           {/* Image skeleton */}
           <SkeletonBox height="160" className="w-full" />
           {/* Content skeleton */}
@@ -52,7 +53,8 @@ export default function ProductGridSkeleton() {
           </View>
         </View>
 
-        <View className="flex-1 ml-2 bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100">
+        <View
+          style={{ borderRadius: 12, borderCurve: "continuous" }} className="flex-1 ml-2 bg-white overflow-hidden shadow-sm border border-gray-100">
           {/* Image skeleton */}
           <SkeletonBox height="160" className="w-full" />
           {/* Content skeleton */}
@@ -67,7 +69,8 @@ export default function ProductGridSkeleton() {
 
       {/* Second row */}
       <View className="flex-row justify-between mb-3">
-        <View className="flex-1 mr-2 bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100">
+        <View
+          style={{ borderRadius: 12, borderCurve: "continuous" }} className="flex-1 mr-2 bg-white overflow-hidden shadow-sm border border-gray-100">
           <SkeletonBox height="160" className="w-full" />
           <View className="p-3">
             <SkeletonBox width="80%" height="16" className="mb-2" />
@@ -77,7 +80,8 @@ export default function ProductGridSkeleton() {
           </View>
         </View>
 
-        <View className="flex-1 ml-2 bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100">
+        <View
+          style={{ borderRadius: 12, borderCurve: "continuous" }} className="flex-1 ml-2 bg-white overflow-hidden shadow-sm border border-gray-100">
           <SkeletonBox height="160" className="w-full" />
           <View className="p-3">
             <SkeletonBox width="80%" height="16" className="mb-2" />
@@ -90,7 +94,8 @@ export default function ProductGridSkeleton() {
 
       {/* Third row */}
       <View className="flex-row justify-between">
-        <View className="flex-1 mr-2 bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100">
+        <View
+          style={{ borderRadius: 12, borderCurve: "continuous" }} className="flex-1 mr-2 bg-white overflow-hidden shadow-sm border border-gray-100">
           <SkeletonBox height="160" className="w-full" />
           <View className="p-3">
             <SkeletonBox width="80%" height="16" className="mb-2" />
@@ -100,7 +105,8 @@ export default function ProductGridSkeleton() {
           </View>
         </View>
 
-        <View className="flex-1 ml-2 bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100">
+        <View
+          style={{ borderRadius: 12, borderCurve: "continuous" }} className="flex-1 ml-2 bg-white overflow-hidden shadow-sm border border-gray-100">
           <SkeletonBox height="160" className="w-full" />
           <View className="p-3">
             <SkeletonBox width="80%" height="16" className="mb-2" />

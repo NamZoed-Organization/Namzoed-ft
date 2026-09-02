@@ -148,6 +148,7 @@ function GridCard({
         marginBottom: 6,
         backgroundColor: "#F7F7F8",
         borderRadius: 4,
+        borderCurve: "continuous",
         overflow: "hidden",
       }}
     >
@@ -159,6 +160,7 @@ function GridCard({
           height: imageHeight,
           borderTopLeftRadius: 4,
           borderTopRightRadius: 4,
+          borderCurve: "continuous",
           overflow: "hidden",
           backgroundColor: "#f3f4f6",
         }}
@@ -177,6 +179,7 @@ function GridCard({
               width: 24,
               height: 24,
               borderRadius: 12,
+              borderCurve: "continuous",
               overflow: "hidden",
               alignItems: "center",
               justifyContent: "center",
@@ -218,6 +221,7 @@ function GridCard({
                     width: 20,
                     height: 20,
                     borderRadius: 10,
+                    borderCurve: "continuous",
                     backgroundColor: "#D1D5DB",
                     alignItems: "center",
                     justifyContent: "center",

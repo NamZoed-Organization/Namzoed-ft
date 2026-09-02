@@ -1,4 +1,5 @@
 export { default as AboutApp } from "./AboutApp";
+export { default as EditBio } from "./EditBio";
 export { default as EditProfile } from "./EditProfile";
 export { default as EditWorkProfile } from "./EditWorkProfile";
 export { default as AppearanceManager } from "./AppearanceManager";

@@ -804,6 +804,7 @@ export default function CommentsModal({
                 backgroundColor: '#fff',
                 borderTopLeftRadius: 26,
                 borderTopRightRadius: 26,
+                borderCurve: "continuous",
               }}
             />
 
@@ -841,6 +842,7 @@ export default function CommentsModal({
                     StyleSheet.absoluteFill,
                     {
                       borderRadius: 26,
+                      borderCurve: "continuous",
                       overflow: 'hidden',
                       backgroundColor: Platform.OS === 'ios' ? 'transparent' : 'rgba(255,255,255,0.85)',
                     },
@@ -946,6 +948,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
+    borderCurve: "continuous",
   },
   handleArea: {
     paddingTop: 10,
@@ -956,6 +959,7 @@ const styles = StyleSheet.create({
     width: 40, height: 4,
     backgroundColor: '#D1D5DB',
     borderRadius: 2,
+    borderCurve: "continuous",
     alignSelf: 'center',
     marginTop: 12, marginBottom: 8,
   },

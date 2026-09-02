@@ -931,6 +931,7 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose, onMinimize, initialStr
                 maxWidth: 340,
                 backgroundColor: "#1a1a1a",
                 borderRadius: 16,
+                borderCurve: "continuous",
                 padding: 20,
               }}
             >
@@ -949,6 +950,7 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose, onMinimize, initialStr
                     flex: 1,
                     paddingVertical: 12,
                     borderRadius: 10,
+                    borderCurve: "continuous",
                     backgroundColor: "#374151",
                     alignItems: "center",
                   }}
@@ -974,6 +976,7 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose, onMinimize, initialStr
                     paddingVertical: 12,
                     backgroundColor: "#DC2626",
                     borderRadius: 10,
+                    borderCurve: "continuous",
                     alignItems: "center",
                   }}
                 >
@@ -1034,7 +1037,8 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose, onMinimize, initialStr
         </View>
 
         {errorMessage && (
-          <View className="mx-4 mb-3 rounded-lg bg-red-50 p-3">
+          <View
+            style={{ borderRadius: 8, borderCurve: "continuous" }} className="mx-4 mb-3 bg-red-50 p-3">
             <Text className="text-sm font-medium text-red-600">
               {errorMessage}
             </Text>
@@ -1045,7 +1049,8 @@ const LiveScreen: React.FC<LiveScreenProps> = ({ onClose, onMinimize, initialStr
         )}
 
         {listError && (
-          <View className="mx-4 mb-3 rounded-lg bg-yellow-50 p-3">
+          <View
+            style={{ borderRadius: 8, borderCurve: "continuous" }} className="mx-4 mb-3 bg-yellow-50 p-3">
             <Text className="text-sm font-medium text-yellow-700">
               {listError}
             </Text>
@@ -1299,7 +1304,8 @@ const LivestreamCard: React.FC<LivestreamCardProps> = ({
 
   return (
     <TouchableOpacity
-      className="relative w-[48%] overflow-hidden rounded-3xl"
+      style={{ borderRadius: 24, borderCurve: "continuous" }}
+      className="relative w-[48%] overflow-hidden"
       onPress={onPress}
       disabled={loading || disabled}
       activeOpacity={0.8}
@@ -1317,7 +1323,8 @@ const LivestreamCard: React.FC<LivestreamCardProps> = ({
             <View className="mr-2 h-2 w-2 rounded-full bg-red-500" />
             <Text className="text-xs font-semibold text-white">LIVE</Text>
             {(stream as any)?.stream_type === "business" && (
-              <View className="ml-2 bg-blue-500/80 px-2 py-0.5 rounded-sm flex-row items-center">
+              <View
+                style={{ borderRadius: 2, borderCurve: "continuous" }} className="ml-2 bg-blue-500/80 px-2 py-0.5 flex-row items-center">
                 <Ionicons name="storefront" size={10} color="#fff" />
                 <Text className="text-[10px] text-white ml-1 font-medium">
                   SHOP
@@ -1325,7 +1332,8 @@ const LivestreamCard: React.FC<LivestreamCardProps> = ({
               </View>
             )}
             {(stream as any)?.stream_type === "entertainment" && (
-              <View className="ml-2 bg-purple-500/80 px-2 py-0.5 rounded-sm flex-row items-center">
+              <View
+                style={{ borderRadius: 2, borderCurve: "continuous" }} className="ml-2 bg-purple-500/80 px-2 py-0.5 flex-row items-center">
                 <Ionicons name="sparkles" size={10} color="#fff" />
                 <Text className="text-[10px] text-white ml-1 font-medium">
                   FUN
@@ -1396,7 +1404,8 @@ const CreateLivestreamModal: React.FC<CreateLivestreamModalProps> = ({
               : 0,
         }}
       >
-        <View className="rounded-t-3xl bg-white px-6 pb-8 pt-6">
+        <View
+          style={{ borderTopLeftRadius: 24, borderTopRightRadius: 24, borderCurve: "continuous" }} className="bg-white px-6 pb-8 pt-6">
             <View className="mb-4 flex-row items-center justify-between">
               <Text className="text-lg font-semibold text-gray-900">
                 Create livestream
@@ -1479,10 +1488,11 @@ const CreateLivestreamModal: React.FC<CreateLivestreamModalProps> = ({
                 : "Go live for entertainment - no products will be shown."}
             </Text>
             <TextInput
+              style={{ borderRadius: 16, borderCurve: "continuous" }}
               value={title}
               onChangeText={onTitleChange}
               placeholder="Describe what you will stream..."
-              className="mt-4 rounded-2xl border border-gray-200 px-4 py-3 text-base text-gray-900"
+              className="mt-4 border border-gray-200 px-4 py-3 text-base text-gray-900"
               placeholderTextColor="#9CA3AF"
               maxLength={80}
             />
@@ -1764,6 +1774,7 @@ const ActiveCallHeader: React.FC<ActiveCallHeaderProps> = ({
                   width: 32,
                   height: 32,
                   borderRadius: 16,
+                  borderCurve: "continuous",
                   backgroundColor: "rgba(255,255,255,0.2)",
                   marginRight: 8,
                   alignItems: "center",
@@ -1864,7 +1875,8 @@ const ActiveCallHeader: React.FC<ActiveCallHeaderProps> = ({
           onPress={() => setShowHostActionsMenu(false)}
         >
           <Pressable onPress={() => {}}>
-            <View className="bg-white rounded-t-3xl pb-8">
+            <View
+              style={{ borderTopLeftRadius: 24, borderTopRightRadius: 24, borderCurve: "continuous" }} className="bg-white pb-8">
               <View className="px-6 py-4 border-b border-gray-200">
                 <Text className="text-lg font-mbold text-gray-900">Host Actions</Text>
               </View>
@@ -1896,8 +1908,9 @@ const ActiveCallHeader: React.FC<ActiveCallHeaderProps> = ({
                 </View>
               </TouchableOpacity>
               <TouchableOpacity
+                style={{ borderRadius: 16, borderCurve: "continuous" }}
                 onPress={() => setShowHostActionsMenu(false)}
-                className="mx-6 mt-4 py-3 rounded-2xl bg-gray-100"
+                className="mx-6 mt-4 py-3 bg-gray-100"
               >
                 <Text className="text-center text-gray-900 font-msemibold">Cancel</Text>
               </TouchableOpacity>
@@ -2516,6 +2529,7 @@ const HostCallContainer: React.FC<HostCallContainerProps> = ({
                 style={{
                   backgroundColor: "#111",
                   borderRadius: 12,
+                  borderCurve: "continuous",
                   padding: 16,
                 }}
               >
@@ -2568,6 +2582,7 @@ const HostCallContainer: React.FC<HostCallContainerProps> = ({
                           paddingVertical: 8,
                           paddingHorizontal: 12,
                           borderRadius: 8,
+                          borderCurve: "continuous",
                           backgroundColor: "#374151",
                         }}
                       >
@@ -2587,6 +2602,7 @@ const HostCallContainer: React.FC<HostCallContainerProps> = ({
                           paddingVertical: 8,
                           paddingHorizontal: 12,
                           borderRadius: 8,
+                          borderCurve: "continuous",
                           backgroundColor: "#DC2626",
                         }}
                       >
@@ -2781,7 +2797,8 @@ const HostCallContainer: React.FC<HostCallContainerProps> = ({
           {/* Co-host Requests Modal — HIDDEN pending further optimizations */}
           {false && <Modal visible={showRequestsModal} transparent animationType="slide">
             <View className="flex-1 justify-end bg-black/50">
-              <View className="bg-white rounded-t-3xl p-6 max-h-[60%]">
+              <View
+                style={{ borderTopLeftRadius: 24, borderTopRightRadius: 24, borderCurve: "continuous" }} className="bg-white p-6 max-h-[60%]">
                 <View className="flex-row items-center justify-between mb-4">
                   <Text className="text-lg font-semibold text-gray-900">
                     Join Requests ({pendingRequests.length})
@@ -3043,7 +3060,8 @@ const HostCallContainer: React.FC<HostCallContainerProps> = ({
             </View>
 
             {!isLive && isRealHost && (
-              <View className="mb-3 flex-row items-center rounded-2xl border border-red-400/35 bg-red-500/15 px-3 py-2">
+              <View
+                style={{ borderRadius: 16, borderCurve: "continuous" }} className="mb-3 flex-row items-center border border-red-400/35 bg-red-500/15 px-3 py-2">
                 <Ionicons name="information-circle" size={18} color="#FCA5A5" />
                 <Text className="ml-2 flex-1 text-xs font-semibold text-red-100">
                   You are in backstage mode. Press Start to go live.
@@ -3052,8 +3070,8 @@ const HostCallContainer: React.FC<HostCallContainerProps> = ({
             )}
 
             <View
-              className="flex-row items-center justify-around bg-zinc-900 rounded-2xl px-4 py-4"
-              style={{ marginBottom: Math.max(insets.bottom, 16) }}
+              className="flex-row items-center justify-around bg-zinc-900 px-4 py-4"
+              style={{ marginBottom: Math.max(insets.bottom, 16), borderRadius: 16, borderCurve: "continuous" }}
             >
               <TouchableOpacity
                 onPress={async () => {
@@ -3177,6 +3195,7 @@ const styles = StyleSheet.create({
     maxWidth: 400,
     backgroundColor: "#fff",
     borderRadius: 16,
+    borderCurve: "continuous",
     padding: 20,
   },
   modalTitle: { fontSize: 18, fontWeight: "700", color: "#111" },
@@ -3186,6 +3205,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 8,
+    borderCurve: "continuous",
     backgroundColor: "#f3f4f6",
   },
   btnEnd: {
@@ -3193,6 +3213,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     backgroundColor: "#ef4444",
     borderRadius: 8,
+    borderCurve: "continuous",
   },
 });
 const hostStyles = StyleSheet.create({
@@ -3201,6 +3222,7 @@ const hostStyles = StyleSheet.create({
     height: 80,
     backgroundColor: "rgba(40,40,40,0.95)",
     borderRadius: 10,
+    borderCurve: "continuous",
     overflow: "hidden",
     borderWidth: 2,
     borderColor: "rgba(255,255,255,0.1)",
@@ -3212,11 +3234,13 @@ const hostStyles = StyleSheet.create({
     width: "100%",
     height: "100%",
     borderRadius: 8,
+    borderCurve: "continuous",
   },
   productCard: {
     width: 140,
     backgroundColor: "rgba(255,255,255,0.05)",
     borderRadius: 12,
+    borderCurve: "continuous",
     padding: 10,
     marginRight: 12,
     alignItems: "center",
@@ -3231,6 +3255,7 @@ const hostStyles = StyleSheet.create({
     width: 120,
     height: 80,
     borderRadius: 8,
+    borderCurve: "continuous",
     backgroundColor: "#222",
   },
   productName: {
@@ -3251,6 +3276,7 @@ const hostStyles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 16,
+    borderCurve: "continuous",
     marginTop: 8,
   },
   shareBtnActive: {
@@ -3270,6 +3296,7 @@ const hostStyles = StyleSheet.create({
     width: 140,
     height: 90,
     borderRadius: 8,
+    borderCurve: "continuous",
   },
   viewerSharedTitle: {
     color: "#fff",
@@ -3807,6 +3834,7 @@ const ViewerCallContainer: React.FC<ViewerCallContainerProps> = ({
                     maxWidth: 420,
                     backgroundColor: "#111",
                     borderRadius: 12,
+                    borderCurve: "continuous",
                     padding: 18,
                   }}
                 >
@@ -3833,6 +3861,7 @@ const ViewerCallContainer: React.FC<ViewerCallContainerProps> = ({
                         paddingVertical: 8,
                         paddingHorizontal: 14,
                         borderRadius: 8,
+                        borderCurve: "continuous",
                         backgroundColor: "#374151",
                       }}
                     >
@@ -3845,6 +3874,7 @@ const ViewerCallContainer: React.FC<ViewerCallContainerProps> = ({
                         paddingHorizontal: 14,
                         backgroundColor: "#DC2626",
                         borderRadius: 8,
+                        borderCurve: "continuous",
                       }}
                     >
                       <Text style={{ color: "#fff", fontWeight: "600" }}>
@@ -4029,6 +4059,7 @@ const ViewerCallContainer: React.FC<ViewerCallContainerProps> = ({
                 maxWidth: 340,
                 backgroundColor: "#1a1a1a",
                 borderRadius: 16,
+                borderCurve: "continuous",
                 padding: 20,
               }}
             >
@@ -4054,6 +4085,7 @@ const ViewerCallContainer: React.FC<ViewerCallContainerProps> = ({
                     flex: 1,
                     paddingVertical: 12,
                     borderRadius: 10,
+                    borderCurve: "continuous",
                     backgroundColor: "#374151",
                     alignItems: "center",
                   }}
@@ -4067,6 +4099,7 @@ const ViewerCallContainer: React.FC<ViewerCallContainerProps> = ({
                     paddingVertical: 12,
                     backgroundColor: "#DC2626",
                     borderRadius: 10,
+                    borderCurve: "continuous",
                     alignItems: "center",
                   }}
                 >

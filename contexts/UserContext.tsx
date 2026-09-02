@@ -15,6 +15,9 @@ interface User {
   following?: number;
   profileImg?: any;
   avatar_url?: string | null;
+  bio?: string | null;
+  cover_image_url?: string | null;
+  namzoed_id?: string | null;
   dzongkhag?: string | null;
   products?: Array<{
     name: string;

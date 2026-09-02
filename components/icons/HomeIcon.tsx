@@ -1,8 +1,22 @@
 // components/icons/HomeIcon.tsx
+import { Image } from "expo-image";
 import React from "react";
 import Svg, { Path } from "react-native-svg";
 
 export default function HomeIcon({ size = 24, focused = false }) {
+  // Brand mark replaces the plain house glyph only while Home is the active
+  // tab — moved here from the top bar (see components/ui/TopNavbar.tsx),
+  // which no longer shows the logo/wordmark on any screen.
+  if (focused) {
+    return (
+      <Image
+        source={require("@/assets/images/logo.png")}
+        style={{ width: size, height: size }}
+        contentFit="contain"
+      />
+    );
+  }
+
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path

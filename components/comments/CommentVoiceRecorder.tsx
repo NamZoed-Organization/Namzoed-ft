@@ -619,6 +619,7 @@ export default function CommentVoiceRecorder({
                 bottom: WAVEFORM_PANEL_BOTTOM,
                 height: WAVEFORM_PANEL_HEIGHT,
                 borderRadius: 24,
+                borderCurve: "continuous",
                 borderWidth: 1.5,
                 borderColor: "rgba(255,255,255,0.15)",
                 backgroundColor: PRIMARY,
@@ -648,6 +649,7 @@ export default function CommentVoiceRecorder({
                       height: WAVEFORM_BAR_MAX_H,
                       marginHorizontal: 1.6,
                       borderRadius: 4,
+                      borderCurve: "continuous",
                       backgroundColor: dragZone === "cancel" ? "#fca5a5" : "#ffffff",
                       transform: [{ scaleY: bar }],
                     }}

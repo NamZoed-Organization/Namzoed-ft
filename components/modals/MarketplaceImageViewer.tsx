@@ -1,6 +1,6 @@
 import ImageWithFallback from "@/components/ui/ImageWithFallback";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Dimensions, Image as RNImage, Modal, Platform, ScrollView, TouchableOpacity, View } from "react-native";
+import { Dimensions, Modal, Platform, ScrollView, TouchableOpacity, View } from "react-native";
 import { ChevronLeft } from "lucide-react-native";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
 import Animated, {
@@ -12,13 +12,14 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const { width: screenWidth } = Dimensions.get("window");
-const screenRatio = screenWidth / Dimensions.get("window").height;
 const DISMISS_SWIPE_THRESHOLD = 90;
 const EDGE_BACK_SWIPE_THRESHOLD = 50;
 
 // Zoomable image with pinch + pan (only when zoomed) — same gesture set and
 // thresholds as the post-detail ImageViewer's ZoomableImage. When not
-// zoomed: a single tap or a vertical swipe closes the viewer.
+// zoomed: a single tap or a vertical swipe closes the viewer. Always
+// letterboxed ("contain"), matching the post-detail viewer exactly rather
+// than guessing cover-vs-contain from the image's aspect ratio.
 const ZoomableImage = ({
   uri,
   height,
@@ -31,36 +32,12 @@ const ZoomableImage = ({
   onZoomChange?: (zoomed: boolean) => void;
 }) => {
   const [isZoomed, setIsZoomed] = useState(false);
-  const [fitMode, setFitMode] = useState<"cover" | "contain">("contain");
   const scale = useSharedValue(1);
   const savedScale = useSharedValue(1);
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
   const savedTranslateX = useSharedValue(0);
   const savedTranslateY = useSharedValue(0);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    RNImage.getSize(
-      uri,
-      (width, imgHeight) => {
-        if (cancelled || !width || !imgHeight) return;
-        const imageRatio = width / imgHeight;
-        const ratioDelta = Math.abs(imageRatio - screenRatio);
-        // Use cover only when ratios are close to reduce empty bars
-        // while avoiding aggressive crop for very different image shapes.
-        setFitMode(ratioDelta <= 0.12 ? "cover" : "contain");
-      },
-      () => {
-        if (!cancelled) setFitMode("contain");
-      },
-    );
-
-    return () => {
-      cancelled = true;
-    };
-  }, [uri]);
 
   const notifyZoom = useCallback(
     (zoomed: boolean) => {
@@ -137,7 +114,7 @@ const ZoomableImage = ({
         <ImageWithFallback
           source={{ uri }}
           style={{ width: screenWidth, height }}
-          resizeMode={fitMode}
+          resizeMode="contain"
         />
       </Animated.View>
     </GestureDetector>
@@ -212,6 +189,7 @@ export default function MarketplaceImageViewer({
               zIndex: 20,
               backgroundColor: "rgba(0,0,0,0.55)",
               borderRadius: 20,
+              borderCurve: "continuous",
               padding: 7,
             }}
           >

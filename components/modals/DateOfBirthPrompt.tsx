@@ -92,7 +92,8 @@ export default function DateOfBirthPrompt({
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onSkip}>
       <View className="flex-1 bg-black/45 justify-center px-6">
-        <View className="bg-white rounded-2xl p-5">
+        <View
+          style={{ borderRadius: 16, borderCurve: "continuous" }} className="bg-white p-5">
           <View className="flex-row items-center mb-3">
             <Ionicons name="calendar" size={24} color="#094569" />
             <Text className="font-mbold text-gray-900 text-xl ml-2">
@@ -107,9 +108,10 @@ export default function DateOfBirthPrompt({
           </Text>
 
           <Pressable
+            style={{ borderRadius: 8, borderCurve: "continuous" }}
             onPress={() => setShowPicker(true)}
             disabled={saving}
-            className="border border-gray-300 rounded-lg px-4 py-3 flex-row items-center justify-between bg-white"
+            className="border border-gray-300 px-4 py-3 flex-row items-center justify-between bg-white"
           >
             <Text
               className={`text-base ${birthDate ? "text-gray-800" : "text-gray-400"}`}

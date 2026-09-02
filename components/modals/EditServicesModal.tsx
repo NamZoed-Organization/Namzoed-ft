@@ -280,7 +280,8 @@ export default function EditServicesModal({
           className="flex-1 justify-end"
         >
           <View className="flex-1 bg-black/50 justify-end">
-            <View className="bg-white rounded-t-3xl h-[90%] w-full overflow-hidden">
+            <View
+              style={{ borderTopLeftRadius: 24, borderTopRightRadius: 24, borderCurve: "continuous" }} className="bg-white h-[90%] w-full overflow-hidden">
               {/* Premium Header with BlurView */}
               <BlurView
                 intensity={90}
@@ -331,8 +332,9 @@ export default function EditServicesModal({
                         className="relative mr-3"
                       >
                         <Image
+                          style={{ borderRadius: 12 }}
                           source={{ uri: url }}
-                          className="w-24 h-24 rounded-xl"
+                          className="w-24 h-24"
                         />
 
                         {/* Selection overlay */}
@@ -353,7 +355,8 @@ export default function EditServicesModal({
                         )}
 
                         {!isImageSelectionMode && (
-                          <View className="absolute bottom-1 left-1 bg-white/80 rounded px-1">
+                          <View
+                            style={{ borderRadius: 4, borderCurve: "continuous" }} className="absolute bottom-1 left-1 bg-white/80 px-1">
                             <Text className="text-[10px] text-gray-600">
                               Existing
                             </Text>
@@ -366,8 +369,9 @@ export default function EditServicesModal({
                     {newImages.map((uri, index) => (
                       <View key={`new-${index}`} className="relative mr-3">
                         <Image
+                          style={{ borderRadius: 12 }}
                           source={{ uri }}
-                          className="w-24 h-24 rounded-xl"
+                          className="w-24 h-24"
                         />
                         <TouchableOpacity
                           onPress={() => removeNewImage(index)}
@@ -375,7 +379,8 @@ export default function EditServicesModal({
                         >
                           <X size={12} color="white" />
                         </TouchableOpacity>
-                        <View className="absolute bottom-1 left-1 bg-primary/80 rounded px-1">
+                        <View
+                          style={{ borderRadius: 4, borderCurve: "continuous" }} className="absolute bottom-1 left-1 bg-primary/80 px-1">
                           <Text className="text-[10px] text-white">New</Text>
                         </View>
                       </View>
@@ -384,8 +389,9 @@ export default function EditServicesModal({
                     {/* Add Photo Button */}
                     {!isImageSelectionMode && (
                       <TouchableOpacity
+                        style={{ borderRadius: 12, borderCurve: "continuous" }}
                         onPress={pickImage}
-                        className="w-24 h-24 border-2 border-dashed border-gray-300 rounded-xl justify-center items-center mr-3 bg-gray-50"
+                        className="w-24 h-24 border-2 border-dashed border-gray-300 justify-center items-center mr-3 bg-gray-50"
                       >
                         <Upload size={24} color="#9CA3AF" />
                         <Text className="text-xs text-gray-400 mt-1">
@@ -403,7 +409,8 @@ export default function EditServicesModal({
                       Service Name
                     </Text>
                     <TextInput
-                      className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900"
+                      style={{ borderRadius: 12, borderCurve: "continuous" }}
+                      className="bg-gray-50 border border-gray-200 px-4 py-3 text-gray-900"
                       placeholder="e.g. Professional Photography Service"
                       value={name}
                       onChangeText={setName}
@@ -415,7 +422,8 @@ export default function EditServicesModal({
                       Description
                     </Text>
                     <TextInput
-                      className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 min-h-[120px]"
+                      style={{ borderRadius: 12, borderCurve: "continuous" }}
+                      className="bg-gray-50 border border-gray-200 px-4 py-3 text-gray-900 min-h-[120px]"
                       placeholder="Describe your service..."
                       multiline
                       textAlignVertical="top"
@@ -428,7 +436,8 @@ export default function EditServicesModal({
                     <Text className="text-sm font-medium text-gray-700 mb-1">
                       Category
                     </Text>
-                    <View className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3">
+                    <View
+                      style={{ borderRadius: 12, borderCurve: "continuous" }} className="bg-gray-50 border border-gray-200 px-4 py-3">
                       <Text className="text-gray-900 font-mmedium">
                         {selectedCategory?.name || "No category selected"}
                       </Text>
@@ -446,9 +455,10 @@ export default function EditServicesModal({
               {/* Floating Delete Bar for Image Selection */}
               {isImageSelectionMode && selectedImageIndices.length > 0 && (
                 <Animated.View
+                  style={{ borderRadius: 35, borderCurve: "continuous" }}
                   entering={FadeInDown.duration(400)}
                   exiting={FadeOutDown}
-                  className="absolute bottom-24 left-6 right-6 h-20 bg-gray-900 rounded-[35px] flex-row items-center justify-between px-8 shadow-2xl"
+                  className="absolute bottom-24 left-6 right-6 h-20 bg-gray-900 flex-row items-center justify-between px-8 shadow-2xl"
                 >
                   <View>
                     <Text className="text-white font-mbold text-lg">
@@ -483,9 +493,10 @@ export default function EditServicesModal({
               >
                 <View className="px-6 py-4">
                   <TouchableOpacity
+                    style={{ borderRadius: 24, borderCurve: "continuous" }}
                     onPress={handleUpdate}
                     disabled={loading}
-                    className="bg-primary rounded-[24px] py-4 shadow-md flex-row items-center justify-center"
+                    className="bg-primary py-4 shadow-md flex-row items-center justify-center"
                   >
                     {loading ? (
                       <CircularLoader color="white" />
@@ -520,7 +531,8 @@ export default function EditServicesModal({
           onRequestClose={() => setShowDeleteConfirm(false)}
         >
           <View className="flex-1 bg-black/50 items-center justify-center px-6">
-            <View className="w-full max-w-sm bg-white rounded-3xl p-6">
+            <View
+              style={{ borderRadius: 24, borderCurve: "continuous" }} className="w-full max-w-sm bg-white p-6">
               <Text className="text-xl font-mbold text-gray-900 mb-2">
                 Delete Images
               </Text>
@@ -531,14 +543,16 @@ export default function EditServicesModal({
 
               <View className="flex-row gap-3">
                 <TouchableOpacity
+                  style={{ borderRadius: 16, borderCurve: "continuous" }}
                   onPress={() => setShowDeleteConfirm(false)}
-                  className="flex-1 bg-gray-100 rounded-2xl py-3 items-center"
+                  className="flex-1 bg-gray-100 py-3 items-center"
                 >
                   <Text className="text-gray-700 font-msemibold">Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
+                  style={{ borderRadius: 16, borderCurve: "continuous" }}
                   onPress={confirmDeleteSelectedImages}
-                  className="flex-1 bg-red-500 rounded-2xl py-3 items-center"
+                  className="flex-1 bg-red-500 py-3 items-center"
                 >
                   <Text className="text-white font-msemibold">Delete</Text>
                 </TouchableOpacity>

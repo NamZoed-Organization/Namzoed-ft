@@ -93,6 +93,7 @@ function Avatar({ user, size = 36 }: { user?: PostComment["user"]; size?: number
         width: size,
         height: size,
         borderRadius: radius,
+        borderCurve: "continuous",
         backgroundColor: PRIMARY,
         alignItems: "center",
         justifyContent: "center",
@@ -112,6 +113,7 @@ function AuthorBadge() {
       style={{
         backgroundColor: "rgba(9,69,105,0.08)",
         borderRadius: 6,
+        borderCurve: "continuous",
         paddingHorizontal: 6,
         paddingVertical: 2,
       }}
@@ -128,6 +130,7 @@ function AuthorLikedBadge() {
       style={{
         backgroundColor: "#F3F4F6",
         borderRadius: 6,
+        borderCurve: "continuous",
         paddingHorizontal: 6,
         paddingVertical: 2,
         alignSelf: "flex-start",
@@ -818,6 +821,7 @@ function InlineComments(
               StyleSheet.absoluteFill,
               {
                 borderRadius: 26,
+                borderCurve: "continuous",
                 overflow: "hidden",
                 backgroundColor: Platform.OS === "ios" ? "transparent" : "rgba(255,255,255,0.85)",
               },
@@ -963,6 +967,7 @@ function InlineComments(
             paddingHorizontal: 12,
             backgroundColor: "#F9FAFB",
             borderRadius: 20,
+            borderCurve: "continuous",
           }}
         >
           <Text style={{ fontSize: 14, color: "#9CA3AF" }}>Add a comment…</Text>

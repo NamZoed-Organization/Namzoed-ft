@@ -32,12 +32,16 @@ interface CreateProductModalProps {
   isVisible: boolean;
   onClose: () => void;
   userId: string;
+  // true = list this product under the seller's Work profile instead of
+  // their main one (see Product.is_work_listing). Defaults to false.
+  isWorkListing?: boolean;
 }
 
 export default function CreateProductModal({
   isVisible,
   onClose,
   userId,
+  isWorkListing,
 }: CreateProductModalProps) {
   const [loading, setLoading] = useState(false);
 
@@ -248,6 +252,7 @@ export default function CreateProductModal({
         tags,
         images: uploadedUrls,
         userId,
+        isWorkListing,
       });
 
       // Reset form
@@ -318,8 +323,8 @@ export default function CreateProductModal({
         >
           {/* Sheet Content */}
           <Animated.View
-            className="bg-white rounded-t-3xl flex-1 w-full overflow-hidden shadow-xl"
-            style={{ transform: [{ translateY: panY }] }}
+            className="bg-white flex-1 w-full overflow-hidden shadow-xl"
+            style={{ transform: [{ translateY: panY }], borderTopLeftRadius: 24, borderTopRightRadius: 24, borderCurve: "continuous" }}
           >
             {/* Drag Bar */}
             <View
@@ -357,8 +362,9 @@ export default function CreateProductModal({
                   className="flex-row"
                 >
                   <TouchableOpacity
+                    style={{ borderRadius: 12, borderCurve: "continuous" }}
                     onPress={pickImage}
-                    className="w-24 h-24 border-2 border-dashed border-gray-300 rounded-xl justify-center items-center mr-3 bg-gray-50"
+                    className="w-24 h-24 border-2 border-dashed border-gray-300 justify-center items-center mr-3 bg-gray-50"
                   >
                     <Upload size={24} color="#9CA3AF" />
                     <Text className="text-xs text-gray-400 mt-1">
@@ -369,8 +375,9 @@ export default function CreateProductModal({
                   {images.map((uri, index) => (
                     <View key={index} className="relative mr-3">
                       <Image
+                        style={{ borderRadius: 12 }}
                         source={{ uri }}
-                        className="w-24 h-24 rounded-xl"
+                        className="w-24 h-24"
                       />
                       <TouchableOpacity
                         onPress={() => removeImage(index)}
@@ -390,7 +397,8 @@ export default function CreateProductModal({
                     Product Name
                   </Text>
                   <TextInput
-                    className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900"
+                    style={{ borderRadius: 12, borderCurve: "continuous" }}
+                    className="bg-gray-50 border border-gray-200 px-4 py-3 text-gray-900"
                     placeholder="e.g. Vintage Leather Jacket"
                     value={name}
                     onChangeText={setName}
@@ -414,7 +422,8 @@ export default function CreateProductModal({
                       </Text>
                     </View>
                     <TextInput
-                      className="bg-gray-50 border border-gray-200 rounded-xl pl-12 pr-4 py-3 text-gray-900"
+                      style={{ borderRadius: 12, borderCurve: "continuous" }}
+                      className="bg-gray-50 border border-gray-200 pl-12 pr-4 py-3 text-gray-900"
                       placeholder="0.00"
                       keyboardType="numeric"
                       value={price}
@@ -431,10 +440,11 @@ export default function CreateProductModal({
 
                   {/* Dropdown Trigger */}
                   <TouchableOpacity
+                    style={{ borderRadius: 12, borderCurve: "continuous" }}
                     onPress={() =>
                       setShowCategoryDropdown(!showCategoryDropdown)
                     }
-                    className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 flex-row items-center justify-between"
+                    className="bg-gray-50 border border-gray-200 px-4 py-3 flex-row items-center justify-between"
                   >
                     <Text
                       className={
@@ -462,14 +472,12 @@ export default function CreateProductModal({
                   {showCategoryDropdown && (
                     <ReAnimated.View
                       entering={FadeIn.duration(200)}
-                      className="bg-white border border-gray-200 rounded-xl mt-2 p-3 shadow-lg"
-                      style={{
-                        shadowColor: "#000",
+                      className="bg-white border border-gray-200 mt-2 p-3 shadow-lg"
+                      style={{ shadowColor: "#000",
                         shadowOffset: { width: 0, height: 4 },
                         shadowOpacity: 0.1,
                         shadowRadius: 8,
-                        elevation: 5,
-                      }}
+                        elevation: 5, borderRadius: 12, borderCurve: "continuous" }}
                     >
                       <View className="flex-row flex-wrap gap-2">
                         {categoryKeys.map((cat) => {
@@ -537,7 +545,8 @@ export default function CreateProductModal({
                     )}
                   </View>
 
-                  <View className="bg-gray-50 rounded-xl p-3 min-h-[100px] border border-gray-100">
+                  <View
+                    style={{ borderRadius: 12, borderCurve: "continuous" }} className="bg-gray-50 p-3 min-h-[100px] border border-gray-100">
                     {!selectedCategory ? (
                       <View className="flex-1 justify-center items-center py-4">
                         <Text className="text-gray-400 text-center">
@@ -585,7 +594,8 @@ export default function CreateProductModal({
                     Description
                   </Text>
                   <TextInput
-                    className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 min-h-[100px]"
+                    style={{ borderRadius: 12, borderCurve: "continuous" }}
+                    className="bg-gray-50 border border-gray-200 px-4 py-3 text-gray-900 min-h-[100px]"
                     placeholder="Describe your item..."
                     multiline
                     textAlignVertical="top"

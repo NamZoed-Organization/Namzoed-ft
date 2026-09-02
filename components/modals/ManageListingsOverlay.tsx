@@ -428,7 +428,8 @@ export default function ManageListingsOverlay({
           }`}
         >
           {/* Image */}
-          <View className="w-20 h-20 rounded-xl overflow-hidden bg-gray-100">
+          <View
+            style={{ borderRadius: 12, borderCurve: "continuous" }} className="w-20 h-20 overflow-hidden bg-gray-100">
             <ImageWithFallback
               source={{ uri: image || "" }}
               className="w-full h-full"
@@ -912,8 +913,9 @@ export default function ManageListingsOverlay({
         {activeTab === "edit" && (
           <View className="px-4 pb-2">
             <TouchableOpacity
+              style={{ borderRadius: 16, borderCurve: "continuous" }}
               onPress={handleExitEdit}
-              className="flex-row items-center bg-white py-2.5 px-4 rounded-2xl border border-gray-200"
+              className="flex-row items-center bg-white py-2.5 px-4 border border-gray-200"
             >
               <ArrowLeft size={18} color="#1F2937" />
               <Text className="text-gray-700 font-msemibold ml-2">
@@ -976,9 +978,10 @@ export default function ManageListingsOverlay({
       {/* Context-Aware Floating Deletion Bar */}
       {isSelectionMode && (
         <Animated.View
+          style={{ borderRadius: 35, borderCurve: "continuous" }}
           entering={FadeInDown.duration(400)}
           exiting={FadeOutDown}
-          className="absolute bottom-10 left-6 right-6 h-20 bg-gray-900 rounded-[35px] flex-row items-center justify-between px-8 shadow-2xl"
+          className="absolute bottom-10 left-6 right-6 h-20 bg-gray-900 flex-row items-center justify-between px-8 shadow-2xl"
         >
           <View>
             <Text className="text-white font-mbold text-lg">
