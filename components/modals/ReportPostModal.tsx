@@ -16,6 +16,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import { MODAL_RADIUS } from '@/constants/theme';
 import CircularLoader from '@/components/ui/CircularLoader';
 import { reportPost } from '@/lib/reportService';
 import { feedEvents } from '@/utils/feedEvents';
@@ -216,7 +217,7 @@ export default function ReportPostModal({
               className="bg-white overflow-hidden shadow-xl w-full"
               style={{ transform: [{
                   translateY: Animated.add(panY, keyboardOffset)
-                }], borderTopLeftRadius: 24, borderTopRightRadius: 24, borderCurve: "continuous" }}
+                }], borderTopLeftRadius: MODAL_RADIUS, borderTopRightRadius: MODAL_RADIUS, borderCurve: "continuous" }}
             >
               {/* Drag Bar */}
               <View

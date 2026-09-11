@@ -1,5 +1,5 @@
 import { notifyPostLiked } from '@/services/notificationService';
-import { Post } from './postsService';
+import { PostWithUser } from './postsService';
 import { supabase } from './supabase';
 
 // Check if a user has liked a post
@@ -233,7 +233,7 @@ export const getFollowedLikers = async (
 
 // Get all posts a user has liked, most recently liked first — feeds the
 // "Likes" tab on their own profile.
-export const getUserLikedPosts = async (userId: string): Promise<Post[]> => {
+export const getUserLikedPosts = async (userId: string): Promise<PostWithUser[]> => {
   if (!userId) return [];
   try {
     const { data, error } = await supabase
@@ -242,6 +242,10 @@ export const getUserLikedPosts = async (userId: string): Promise<Post[]> => {
         created_at,
         posts (
           *,
+          profiles:user_id (
+            name,
+            avatar_url
+          ),
           post_likes ( id )
         )
       `)

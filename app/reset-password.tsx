@@ -1,41 +1,23 @@
-import { Entypo, Ionicons } from "@expo/vector-icons";
-import FormInput from "@/components/ui/FormInput";
-import CircularLoader from "@/components/ui/CircularLoader";
+import {
+  AuthButton,
+  AuthField,
+  AuthHeading,
+  AuthHint,
+  AuthScreen,
+} from "@/components/auth/AuthChrome";
 import PopupMessage from "@/components/ui/PopupMessage";
-import { clamp, useResponsive } from "@/utils/responsive";
 import { useAppRouter } from "@/utils/navigation";
 import { useLocalSearchParams } from "expo-router";
+import { Eye, EyeOff, Lock } from "lucide-react-native";
 import React, { useState } from "react";
-import {
-    Image,
-    Keyboard,
-    Pressable,
-    Text,
-    TouchableOpacity,
-    View,
-} from "react-native";
+import { TouchableOpacity, View } from "react-native";
 import { supabase } from '../lib/supabase';
 
 export default function ResetPassword() {
   const router = useAppRouter();
   const params = useLocalSearchParams();
   const { identifier, type } = params;
-  const { ms, vs, wp, hp } = useResponsive();
-  const pagePaddingX = clamp(wp(10), 20, 44);
-  const backTop = clamp(hp(5), 32, 54);
-  const backLeft = clamp(wp(3), 10, 18);
-  const backPadding = clamp(ms(8), 6, 10);
-  const backIconSize = clamp(ms(24), 20, 28);
-  const headerBottom = clamp(vs(32), 24, 40);
-  const titleSize = clamp(ms(36), 30, 42);
-  const logoSize = clamp(ms(112), 88, 132);
-  const bodyTextSize = clamp(ms(14), 12, 16);
-  const inputIconSize = clamp(ms(20), 18, 24);
-  const bulletSize = clamp(ms(24), 20, 28);
-  const sectionBottom = clamp(vs(24), 18, 30);
-  const submitPaddingY = clamp(vs(20), 14, 22);
-  const submitRadius = clamp(ms(10), 8, 14);
-  const submitTextSize = clamp(ms(18), 16, 20);
+  // Spacing and type come from the auth chrome now (§ Auth screens).
 
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -112,159 +94,11 @@ export default function ResetPassword() {
     }
   };
 
+  const longEnough = newPassword.length >= 6;
+  const matching = newPassword.length > 0 && newPassword === confirmPassword;
+
   return (
-    <Pressable onPress={Keyboard.dismiss} style={{ flex: 1 }}>
-      <View className="flex-1 bg-white">
-      <View
-        className="flex-1 justify-center items-center"
-        style={{ paddingHorizontal: pagePaddingX }}
-      >
-        {/* Back Button */}
-        <TouchableOpacity
-          onPress={() => router.back()}
-          className="absolute z-50"
-          style={{
-            top: backTop,
-            left: backLeft,
-            padding: backPadding,
-          }}
-          activeOpacity={0.6}
-        >
-          <Entypo name={"chevron-thin-left"} size={backIconSize} color="#094569" />
-        </TouchableOpacity>
-
-        <View className="w-full">
-          {/* Header */}
-          <View
-            className="flex-row justify-between items-center"
-            style={{ marginBottom: headerBottom }}
-          >
-            <View>
-              <Text
-                className="text-primary/90 font-mbold"
-                style={{ fontSize: titleSize }}
-              >
-                Reset
-              </Text>
-              <Text
-                className="text-secondary/90 font-mbold"
-                style={{ fontSize: titleSize }}
-              >
-                Password
-              </Text>
-            </View>
-            <Image
-              source={require("../assets/images/logo.png")}
-              style={{ width: logoSize, height: logoSize }}
-              resizeMode="contain"
-            />
-          </View>
-
-          {/* Info Text */}
-          <Text
-            className="text-gray-600 font-regular"
-            style={{ fontSize: bodyTextSize, marginBottom: sectionBottom }}
-          >
-            Create a new password for your account
-          </Text>
-
-          {/* New Password Input */}
-          <View className="mb-4">
-            <FormInput
-              value={newPassword}
-              onChangeText={setNewPassword}
-              placeholder="New Password"
-              secureTextEntry={!showNewPassword}
-              autoCapitalize="none"
-              leftIcon={<Ionicons name="lock-closed" size={inputIconSize} color="#6B7280" />}
-              rightAccessory={
-                <TouchableOpacity
-                  onPress={() => setShowNewPassword(!showNewPassword)}
-                  className="ml-2"
-                >
-                  <Ionicons
-                    name={showNewPassword ? "eye" : "eye-off"}
-                    size={inputIconSize}
-                    color="#6B7280"
-                  />
-                </TouchableOpacity>
-              }
-            />
-          </View>
-
-          {/* Confirm Password Input */}
-          <View className="mb-4">
-            <FormInput
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              placeholder="Confirm Password"
-              secureTextEntry={!showConfirmPassword}
-              autoCapitalize="none"
-              leftIcon={<Ionicons name="lock-closed" size={inputIconSize} color="#6B7280" />}
-              rightAccessory={
-                <TouchableOpacity
-                  onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="ml-2"
-                >
-                  <Ionicons
-                    name={showConfirmPassword ? "eye" : "eye-off"}
-                    size={inputIconSize}
-                    color="#6B7280"
-                  />
-                </TouchableOpacity>
-              }
-            />
-          </View>
-
-          {/* Password Requirements */}
-          <View style={{ marginBottom: sectionBottom }}>
-            <Text className="flex font-mlight text-gray-400 mb-2" style={{ fontSize: bodyTextSize }}>
-              <Text className="text-red-500" style={{ fontSize: bulletSize }}>• </Text>
-              Password must be at least 6 characters
-            </Text>
-            <Text className="flex font-mlight text-gray-400" style={{ fontSize: bodyTextSize }}>
-              <Text className="text-red-500" style={{ fontSize: bulletSize }}>• </Text>
-              Both passwords must match
-            </Text>
-          </View>
-
-          {/* Password Match Indicator */}
-          {newPassword && confirmPassword && (
-            <Text
-              className={`text-center mb-4 font-semibold ${
-                newPassword === confirmPassword ? "text-green-600" : "text-red-600"
-              }`}
-              style={{ fontSize: bodyTextSize }}
-            >
-              {newPassword === confirmPassword
-                ? "✓ Passwords match"
-                : "✗ Passwords don't match"}
-            </Text>
-          )}
-
-          {/* Reset Button */}
-          <TouchableOpacity
-            disabled={!isPasswordValid() || loading}
-            onPress={handleResetPassword}
-            activeOpacity={0.8}
-            className={`items-center ${
-              isPasswordValid() && !loading ? "bg-primary" : "bg-primary/50"
-            }`}
-            style={{ paddingVertical: submitPaddingY, borderRadius: submitRadius }}
-          >
-            {loading ? (
-              <CircularLoader color="#EDC06D" />
-            ) : (
-              <Text
-                className="text-secondary text-center font-semibold"
-                style={{ fontSize: submitTextSize }}
-              >
-                Reset Password
-              </Text>
-            )}
-          </TouchableOpacity>
-        </View>
-      </View>
+    <AuthScreen onBack={() => router.back()}>
       <PopupMessage
         visible={popup.visible}
         type={popup.type}
@@ -272,7 +106,71 @@ export default function ResetPassword() {
         message={popup.message}
         onHide={() => setPopup(p => ({ ...p, visible: false }))}
       />
+
+      <AuthHeading
+        title="New password"
+        subtitle="Pick something you'll remember. You'll use it to sign in from now on."
+      />
+
+      <View style={{ gap: 12 }}>
+        <AuthField
+          value={newPassword}
+          onChangeText={setNewPassword}
+          placeholder="New password"
+          secureTextEntry={!showNewPassword}
+          autoCapitalize="none"
+          icon={<Lock size={19} color="#9CA3AF" strokeWidth={1.8} />}
+          accessory={
+            <TouchableOpacity
+              onPress={() => setShowNewPassword(!showNewPassword)}
+              hitSlop={8}
+            >
+              {showNewPassword ? (
+                <EyeOff size={19} color="#9CA3AF" strokeWidth={1.8} />
+              ) : (
+                <Eye size={19} color="#9CA3AF" strokeWidth={1.8} />
+              )}
+            </TouchableOpacity>
+          }
+        />
+
+        <AuthField
+          value={confirmPassword}
+          onChangeText={setConfirmPassword}
+          placeholder="Confirm password"
+          secureTextEntry={!showConfirmPassword}
+          autoCapitalize="none"
+          icon={<Lock size={19} color="#9CA3AF" strokeWidth={1.8} />}
+          accessory={
+            <TouchableOpacity
+              onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+              hitSlop={8}
+            >
+              {showConfirmPassword ? (
+                <EyeOff size={19} color="#9CA3AF" strokeWidth={1.8} />
+              ) : (
+                <Eye size={19} color="#9CA3AF" strokeWidth={1.8} />
+              )}
+            </TouchableOpacity>
+          }
+        />
       </View>
-    </Pressable>
+
+      {/* The two rules, and whether they are met. They were a static red
+          bulleted list plus a separate "✗ Passwords don't match" line that
+          only appeared once both fields had something in them — three
+          things saying what two ticks say. */}
+      <View style={{ gap: 8, marginTop: 16, marginBottom: 24 }}>
+        <AuthHint met={longEnough}>At least 6 characters</AuthHint>
+        <AuthHint met={matching}>Both passwords match</AuthHint>
+      </View>
+
+      <AuthButton
+        label="Save password"
+        onPress={handleResetPassword}
+        loading={loading}
+        disabled={!isPasswordValid()}
+      />
+    </AuthScreen>
   );
 }

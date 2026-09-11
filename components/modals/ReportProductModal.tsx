@@ -1,3 +1,4 @@
+import { MODAL_RADIUS } from '@/constants/theme';
 import { reportProduct } from '@/lib/reportService';
 import PopupMessage from '@/components/ui/PopupMessage';
 import CircularLoader from '@/components/ui/CircularLoader';
@@ -120,7 +121,7 @@ export default function ReportProductModal({
             behavior="padding"
           >
             <View
-              style={{ borderTopLeftRadius: 24, borderTopRightRadius: 24, borderCurve: "continuous" }} className="bg-white overflow-hidden">
+              style={{ borderTopLeftRadius: MODAL_RADIUS, borderTopRightRadius: MODAL_RADIUS, borderCurve: "continuous" }} className="bg-white overflow-hidden">
               {/* Header */}
               <View className="px-6 pt-6 pb-4 border-b border-gray-200 bg-white">
                 <View className="flex-row items-center justify-between mb-2">

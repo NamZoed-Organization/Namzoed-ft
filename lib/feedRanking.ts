@@ -85,9 +85,3 @@ export function buildSessionOrder<T extends RankableItem>(
 
   return [...chosenBoosted, ...orderedRegular];
 }
-
-/** Slices a cached session order into a page — indices 0-19, 20-39, etc. */
-export function paginateOrder<T>(orderedItems: T[], page: number, pageSize: number): T[] {
-  const start = page * pageSize;
-  return orderedItems.slice(start, start + pageSize);
-}

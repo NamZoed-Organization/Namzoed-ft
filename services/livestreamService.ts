@@ -581,38 +581,6 @@ export async function addCoHostToLivestream(
   }
 }
 
-export async function removeCoHostFromLivestream(
-  livestreamId: string,
-  coHostUserId: string
-): Promise<void> {
-  const { data: stream, error: fetchError } = await supabase
-    .from(TABLE_NAME)
-    .select("co_hosts")
-    .eq("id", livestreamId)
-    .single();
-
-  if (fetchError) {
-    console.error("Failed to fetch livestream for co-host removal", fetchError);
-    throw fetchError;
-  }
-
-  const currentCoHosts = (stream?.co_hosts as string[]) ?? [];
-  const updatedCoHosts = currentCoHosts.filter((id) => id !== coHostUserId);
-
-  const { error: updateError } = await supabase
-    .from(TABLE_NAME)
-    .update({
-      co_hosts: updatedCoHosts,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", livestreamId);
-
-  if (updateError) {
-    console.error("Failed to remove co-host from livestream", updateError);
-    throw updateError;
-  }
-}
-
 export function subscribeToCoHostRequests(
   livestreamId: string,
   onChange: () => void

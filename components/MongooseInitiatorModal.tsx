@@ -7,6 +7,7 @@
  * Then builds an invite JSON payload and calls `onInviteSent` so the
  * parent chat screen can send it as a `mongoose_invite` message.
  */
+import { MODAL_RADIUS } from "@/constants/theme";
 import SingleLocationPicker, {
     PickedLocation,
 } from "@/components/location/SingleLocationPicker";
@@ -14,6 +15,7 @@ import CircularLoader from "@/components/ui/CircularLoader";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import { LIGHT_DATE_PICKER_PROPS } from "@/constants/datePicker";
 import * as Location from "expo-location";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -221,8 +223,8 @@ export default function MongooseInitiatorModal({
           <View
             style={{
               backgroundColor: "white",
-              borderTopLeftRadius: 24,
-              borderTopRightRadius: 24,
+              borderTopLeftRadius: MODAL_RADIUS,
+              borderTopRightRadius: MODAL_RADIUS,
               borderCurve: "continuous",
               maxHeight: "88%",
               overflow: "hidden",
@@ -774,6 +776,7 @@ export default function MongooseInitiatorModal({
                           setShowDatePicker(Platform.OS === "ios");
                           if (d) setBookingDate(d);
                         }}
+                        {...LIGHT_DATE_PICKER_PROPS}
                       />
                     )}
                   </View>
@@ -826,6 +829,7 @@ export default function MongooseInitiatorModal({
                           setShowTimePicker(Platform.OS === "ios");
                           if (t) setBookingTime(t);
                         }}
+                        {...LIGHT_DATE_PICKER_PROPS}
                       />
                     )}
                   </View>

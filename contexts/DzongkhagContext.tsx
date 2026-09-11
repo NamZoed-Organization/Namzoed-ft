@@ -1,7 +1,7 @@
 // context/DzongkhagContext.tsx
 
 import { useUser } from "@/contexts/UserContext";
-import { dzongkhagCenters } from "@/data/dzongkhag";
+import { nearestDzongkhag } from "@/utils/dzongkhag";
 import { supabase } from "@/lib/supabase";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Location from "expo-location";
@@ -35,20 +35,6 @@ export const DzongkhagProvider: React.FC<{ children: React.ReactNode }> = ({
   const [accessDenied, setAccessDenied] = useState(false);
   const throttleRef = useRef(false);
 
-  const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-    const toRad = (x: number) => (x * Math.PI) / 180;
-    const R = 6371;
-    const dLat = toRad(lat2 - lat1);
-    const dLon = toRad(lon2 - lon1);
-    const a =
-      Math.sin(dLat / 2) ** 2 +
-      Math.cos(toRad(lat1)) *
-        Math.cos(toRad(lat2)) *
-        Math.sin(dLon / 2) ** 2;
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
-  };
-
   const lookup = useCallback(async () => {
   if (throttleRef.current) return;
   throttleRef.current = true;
@@ -72,20 +58,7 @@ export const DzongkhagProvider: React.FC<{ children: React.ReactNode }> = ({
       setLocation({ latitude: coords.latitude, longitude: coords.longitude });
     }
 
-    let nearest = dzongkhagCenters[0];
-    let minDist = Infinity;
-
-    for (const dz of dzongkhagCenters) {
-      const d = getDistance(coords.latitude, coords.longitude, dz.lat, dz.lon);
-      if (d < minDist) {
-        minDist = d;
-        nearest = dz;
-      }
-    }
-
-    let detectedName = nearest.name;
-    if (detectedName === "Phuentsholing") detectedName = "Chhukha";
-    if (detectedName === "Gelephu") detectedName = "Sarpang";
+    const detectedName = nearestDzongkhag(coords.latitude, coords.longitude);
 
     if (isMountedRef.current) setName(detectedName);
 

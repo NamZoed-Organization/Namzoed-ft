@@ -1,4 +1,13 @@
-import GridCard, { gridCardHeight, GridCardSourceRect } from "@/components/GridCard";
+import {
+  FILTER_ROW_GAP,
+  FILTER_ROW_INSET,
+  FILTER_ROW_VERTICAL,
+} from "@/constants/theme";
+import GridCard, {
+  gridCardHeight,
+  LISTING_CARD_RATIO,
+  GridCardSourceRect,
+} from "@/components/GridCard";
 import MasonryGrid from "@/components/MasonryGrid";
 import GridSkeleton from "@/components/ui/GridSkeleton";
 import TopNavbar from "@/components/ui/TopNavbar";
@@ -10,13 +19,13 @@ import {
   fetchMarketplaceForRanking,
   MarketplaceItemWithUser,
 } from "@/lib/postMarketPlace";
-import { readCache, writeCache } from "@/lib/queryCache";
+import { CACHE_SEED_LIMIT, readCache, writeCache } from "@/lib/queryCache";
 import { supabase } from "@/lib/supabase";
 import MarketplaceDetailOverlay from "@/components/MarketplaceDetailOverlay";
-import { MapPin } from "lucide-react-native";
-import React, { useCallback, useState } from "react";
+import PullToRefresh from "@/components/ui/PullToRefresh";
+import { MapPin, Plus } from "lucide-react-native";
+import React, { useCallback, useMemo, useState } from "react";
 import {
-  RefreshControl,
   ScrollView,
   Text,
   TouchableOpacity,
@@ -24,9 +33,12 @@ import {
 } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useViewableContent } from "@/hooks/useViewableContent";
+import { useAppRouter } from "@/utils/navigation";
 
 export default function MarketplaceScreen() {
   const insets = useSafeAreaInsets();
+  const router = useAppRouter();
   const { onTabBarScroll } = useTabBarScroll();
   const { trackTap, trackFeature } = useScreenAnalytics(Screens.MARKETPLACE);
   const [activeTab, setActiveTab] = useState("all");
@@ -49,7 +61,9 @@ export default function MarketplaceScreen() {
   );
   const fetchPool = useCallback(async () => {
     const fetched = await fetchMarketplaceForRanking();
-    writeCache(MARKETPLACE_CACHE_KEY, fetched);
+    // Head of the pool only — enough to paint instantly, small enough not
+    // to crowd out every other screen's cache (lib/queryCache.ts).
+    writeCache(MARKETPLACE_CACHE_KEY, fetched.slice(0, CACHE_SEED_LIMIT));
     return fetched;
   }, []);
   const trackImpressions = useCallback(async (ids: string[]) => {
@@ -64,9 +78,22 @@ export default function MarketplaceScreen() {
     boostSlotCount: 2,
     seedFromCache,
   });
-  const marketplaceItems = ranked.items;
+  /**
+   * Safe View, an unverified age and being under 18 apply here exactly as
+   * they do in the feed — a listing is a photograph somebody uploaded, and
+   * the protection that stops at one screen is not protection
+   * (`lib/safeContent.ts`).
+   */
+  const { filter: filterViewable } = useViewableContent();
+  const marketplaceItems = useMemo(
+    () =>
+      filterViewable<MarketplaceItemWithUser>(
+        ranked.items,
+        (item) => item.user_id,
+      ),
+    [filterViewable, ranked.items],
+  );
   const isLoading = ranked.loading;
-  const refreshing = ranked.refreshing;
 
   const onRefresh = useCallback(async () => {
     await ranked.refresh();
@@ -78,7 +105,6 @@ export default function MarketplaceScreen() {
     setActiveTab(newTab);
   };
 
-  const MARKETPLACE_CARD_RATIO = 4 / 3;
 
   const handleMarketplacePress = useCallback(
     (itemId: string, rect: GridCardSourceRect) => {
@@ -102,7 +128,7 @@ export default function MarketplaceScreen() {
       <GridCard
         id={item.id}
         width={columnWidth}
-        ratio={MARKETPLACE_CARD_RATIO}
+        ratio={LISTING_CARD_RATIO}
         imageUri={item.images?.[0]}
         title={item.title}
         subtitle={item.profiles?.name}
@@ -162,8 +188,23 @@ export default function MarketplaceScreen() {
           items={data}
           loading={false}
           keyExtractor={(item) => item.id}
-          getHeight={(_item, columnWidth) => gridCardHeight(MARKETPLACE_CARD_RATIO, columnWidth)}
+          getHeight={(_item, columnWidth) => gridCardHeight(LISTING_CARD_RATIO, columnWidth)}
           emptyText="No items found — try adjusting your filters."
+          // An empty marketplace is also somebody's chance to fill it: the
+          // action goes to the screen that holds their own listings, opened
+          // on the marketplace half (app/(users)/listings.tsx).
+          emptyAction={
+            <TouchableOpacity
+              onPress={() => router.push("/(users)/listings?section=marketplace" as any)}
+              activeOpacity={0.85}
+              className="bg-primary flex-row items-center px-5 py-2.5 rounded-full"
+            >
+              <Plus size={16} color="#fff" strokeWidth={2.5} />
+              <Text className="text-white text-sm font-semibold ml-1.5">
+                List something
+              </Text>
+            </TouchableOpacity>
+          }
           renderCard={renderMarketplaceCard}
         />
       </View>
@@ -212,62 +253,78 @@ export default function MarketplaceScreen() {
           <TopNavbar />
         </View>
 
-        <ScrollView
-          className="flex-1"
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 72 + insets.bottom }}
-          onScroll={onTabBarScroll}
-          scrollEventThrottle={16}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              colors={["#094569"]}
-            />
-          }
-        >
-          {/* Tab Navigation — same plain-text style as Home's HomeTabs, and
-              like Home, scrolls away with the rest of the content — only
-              TopNavbar above stays fixed. */}
-          <View className="bg-gray-50 px-4" style={{ paddingTop: 8, paddingBottom: 8 }}>
-            <View
-              style={{
-                flexDirection: "row",
-                justifyContent: "flex-start",
-                alignItems: "center",
-                gap: 18,
-              }}
-            >
-              {MARKETPLACE_TABS.map((key) => {
-                const isActive = activeTab === key;
-                return (
-                  <TouchableOpacity
-                    key={key}
-                    onPress={() => handleTabChange(key)}
-                    disabled={isLoading}
-                    style={{ opacity: isLoading ? 0.5 : 1 }}
+        {/* Pull-to-refresh draws the app's own CircularLoader rather than
+            the platform spinner — see components/ui/PullToRefresh.tsx. The
+            native bounce is turned off so it doesn't fight the gesture. */}
+        <PullToRefresh onRefresh={onRefresh}>
+          {({ indicator, scrollEnabled, onScroll }) => (
+            <>
+              {indicator}
+              <ScrollView
+                className="flex-1"
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ paddingBottom: 72 + insets.bottom }}
+                onScroll={(e) => {
+                  onScroll(e);
+                  onTabBarScroll(e);
+                }}
+                scrollEventThrottle={16}
+                scrollEnabled={scrollEnabled}
+                bounces={false}
+                overScrollMode="never"
+              >
+                {/* Tab Navigation — same plain-text style as Home's HomeTabs, and
+                    like Home, scrolls away with the rest of the content — only
+                    TopNavbar above stays fixed. */}
+                <View
+                  className="bg-gray-50"
+                  style={{
+                    paddingHorizontal: FILTER_ROW_INSET,
+                    paddingTop: FILTER_ROW_VERTICAL,
+                    paddingBottom: FILTER_ROW_VERTICAL,
+                  }}
+                >
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "flex-start",
+                      alignItems: "center",
+                      gap: FILTER_ROW_GAP,
+                    }}
                   >
-                    <Text
-                      className={
-                        isActive
-                          ? "text-[17px] font-mbold text-gray-900"
-                          : "text-[15px] font-medium text-gray-400"
-                      }
-                    >
-                      {MARKETPLACE_TAB_LABELS[key]}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
+                    {MARKETPLACE_TABS.map((key) => {
+                      const isActive = activeTab === key;
+                      return (
+                        <TouchableOpacity
+                          key={key}
+                          onPress={() => handleTabChange(key)}
+                          disabled={isLoading}
+                          style={{ opacity: isLoading ? 0.5 : 1 }}
+                        >
+                          <Text
+                            className={
+                              isActive
+                                ? "text-[17px] font-mbold text-gray-900"
+                                : "text-[15px] font-medium text-gray-400"
+                            }
+                          >
+                            {MARKETPLACE_TAB_LABELS[key]}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
 
-          {/* Marketplace Content */}
-          {renderTabContent()}
+                {/* Marketplace Content */}
+                {renderTabContent()}
 
-          {/* Bottom Spacing */}
-          <View className="h-20" />
-        </ScrollView>
+                {/* Bottom Spacing */}
+                <View className="h-20" />
+              </ScrollView>
+            </>
+          )}
+        </PullToRefresh>
 
         <MarketplaceDetailOverlay
           visible={!!marketplaceOverlay}

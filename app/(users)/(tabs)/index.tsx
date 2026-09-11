@@ -1,5 +1,10 @@
 // Path: app/(users)/index.tsx
 
+import {
+  FILTER_ROW_GAP,
+  FILTER_ROW_INSET,
+  FILTER_ROW_VERTICAL,
+} from "@/constants/theme";
 import Banner from "@/components/Banner";
 import ClosingSaleBanner from "@/components/ClosingSaleBanner";
 import { CARD_LIST_HEIGHT, ForYouSection } from "@/components/ForYou";
@@ -10,28 +15,22 @@ import PostDetailOverlay from "@/components/PostDetailOverlay";
 import ReelsViewer from "@/components/ReelsViewer";
 import CircularLoader from "@/components/ui/CircularLoader";
 import GridSkeleton from "@/components/ui/GridSkeleton";
+import FollowedCreatorRow from "@/components/home/FollowedCreatorRow";
+import Mascot from "@/components/ui/Mascot";
 import HomeSectionTabs, { HomeSection } from "@/components/ui/HomeSectionTabs";
 import TopNavbar from "@/components/ui/TopNavbar";
 import { useTabBarScroll } from "@/contexts/TabBarScrollContext";
 import { SortOrder, useForYouData } from "@/hooks/useForYouData";
 import { useFilteredFeedPosts } from "@/hooks/useFilteredFeedPosts";
+import { useFollowedCreators } from "@/hooks/useFollowedCreators";
 import { useFollowingFeedPosts } from "@/hooks/useFollowingFeedPosts";
-import { useLivestreams } from "@/hooks/useLivestreams";
 import { useScreenAnalytics } from "@/hooks/useAnalytics";
 import { Screens } from "@/lib/analyticsService";
 import { Product } from "@/lib/productsService";
 import { VideoReel } from "@/lib/postsService";
 import { PostData } from "@/types/post";
 import { useAppRouter } from "@/utils/navigation";
-import {
-  ArrowUpDown,
-  Briefcase,
-  Eye,
-  Radio,
-  Tv2,
-  UserPlus,
-  Video,
-} from "lucide-react-native";
+import { ArrowUpDown, UserPlus } from "lucide-react-native";
 import React, {
   startTransition,
   useCallback,
@@ -54,12 +53,10 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { Image } from "expo-image";
 import ReAnimated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type TabType = "foryou" | "featured" | "live";
-type LiveFilter = "all" | "business" | "entertainment";
 
 type PageItem =
   | { key: "banner" }
@@ -68,6 +65,7 @@ type PageItem =
   | { key: "feed-posts" }
   | { key: "featured" }
   | { key: "live" }
+  | { key: "creator-row" }
   | { key: "following-posts" }
   | { key: "footer" };
 
@@ -187,13 +185,15 @@ const HomeTabs = React.memo(function HomeTabs({
   ];
 
   return (
+    // No spacing of its own: the box around this row is the shared one below
+    // (FILTER_ROW_* in constants/theme.ts), and a margin here would be a
+    // fifth number that only this tab has.
     <View
       style={{
         flexDirection: "row",
         justifyContent: "flex-start",
         alignItems: "center",
-        gap: 18,
-        marginTop: 12,
+        gap: FILTER_ROW_GAP,
       }}
     >
       {tabs.map(({ key, label }) => {
@@ -217,123 +217,29 @@ const HomeTabs = React.memo(function HomeTabs({
 });
 
 // ─── Live tab ─────────────────────────────────────────────────────────────────
-const LiveTab = React.memo(function LiveTab({
-  onOpen,
-}: {
-  onOpen: (streamId: string) => void;
-}) {
-  const { livestreams, loading } = useLivestreams();
-  const [filter, setFilter] = useState<LiveFilter>("all");
-
-  const filtered =
-    filter === "all"
-      ? livestreams
-      : livestreams.filter((s) => s.stream_type === filter);
-
+/**
+ * Live, while it is away.
+ *
+ * The tab is not empty and it is not broken — it is a feature being rebuilt,
+ * and "no live streams right now" said neither of those things. The
+ * mongoose ascending says it better than a sentence can, and the sentence
+ * under it is the joke's straight man.
+ *
+ * The streaming itself is untouched: going live from the "+" menu, the
+ * player and everything behind them still exist. This is the *tab*, which
+ * is what people look at when nothing is on.
+ */
+const LiveTab = React.memo(function LiveTab() {
   return (
-    <View className="mt-4 px-4">
-      <View className="flex-row gap-2 mb-4">
-        {(["all", "business", "entertainment"] as LiveFilter[]).map((f) => (
-          <TouchableOpacity
-            key={f}
-            onPress={() => setFilter(f)}
-            activeOpacity={0.75}
-            className={`flex-row items-center gap-1.5 px-3 py-1.5 rounded-full ${
-              filter === f ? "bg-primary" : "bg-white border border-gray-200"
-            }`}
-          >
-            {f === "all" && (
-              <Radio size={13} color={filter === f ? "white" : "#6B7280"} />
-            )}
-            {f === "business" && (
-              <Briefcase size={13} color={filter === f ? "white" : "#6B7280"} />
-            )}
-            {f === "entertainment" && (
-              <Tv2 size={13} color={filter === f ? "white" : "#6B7280"} />
-            )}
-            <Text
-              className={`text-xs font-semibold ${filter === f ? "text-white" : "text-gray-500"}`}
-            >
-              {f.charAt(0).toUpperCase() + f.slice(1)}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {loading ? (
-        <GridSkeleton rows={3} imageHeight={110} />
-      ) : filtered.length === 0 ? (
-        <View className="min-h-64 justify-center items-center px-6">
-          <View className="w-16 h-16 rounded-full bg-red-50 items-center justify-center mb-4">
-            <Video size={28} color="#EF4444" />
-          </View>
-          <Text className="text-base font-semibold text-gray-700">
-            No live streams right now
-          </Text>
-          <Text className="text-sm text-gray-400 mt-1 text-center">
-            Be the first to go live!
-          </Text>
-        </View>
-      ) : (
-        <View className="flex-row flex-wrap gap-3">
-          {filtered.map((stream) => (
-            <TouchableOpacity
-              key={stream.id}
-              onPress={() => onOpen(stream.id)}
-              activeOpacity={0.85}
-              style={{ width: "47%", borderRadius: 16, borderCurve: "continuous" }}
-              className="bg-white overflow-hidden shadow-sm border border-gray-100"
-            >
-              <View className="w-full bg-gray-100" style={{ height: 110 }}>
-                {stream.thumbnail || stream.profile_image ? (
-                  <Image
-                    source={{
-                      uri:
-                        (stream.thumbnail || stream.profile_image) ?? undefined,
-                    }}
-                    className="w-full h-full"
-                    contentFit="cover"
-                    cachePolicy="memory-disk"
-                  />
-                ) : (
-                  <View className="w-full h-full bg-primary/10 items-center justify-center">
-                    <Text className="text-primary font-bold text-3xl">
-                      {(stream.username ?? "?").charAt(0).toUpperCase()}
-                    </Text>
-                  </View>
-                )}
-                <View
-                  className="absolute top-2 left-2 bg-red-500 px-1.5 py-0.5"
-                  style={{ borderWidth: 1, borderColor: "white", borderRadius: 4, borderCurve: "continuous" }}
-                >
-                  <Text className="text-white text-[9px] font-black">LIVE</Text>
-                </View>
-                <View className="absolute bottom-2 right-2 bg-black/50 rounded-full px-2 py-0.5 flex-row items-center gap-1">
-                  <Eye size={10} color="white" />
-                  <Text className="text-white text-[9px] font-semibold">
-                    {stream.viewer_count ?? 0}
-                  </Text>
-                </View>
-              </View>
-              <View className="px-2.5 py-2 flex-row items-center gap-2">
-                <View className="w-7 h-7 rounded-full bg-primary items-center justify-center">
-                  <Text className="text-white font-bold text-xs">
-                    {(stream.username ?? "?").charAt(0).toUpperCase()}
-                  </Text>
-                </View>
-                <View className="flex-1">
-                  <Text
-                    className="text-xs font-semibold text-gray-800"
-                    numberOfLines={1}
-                  >
-                    {stream.username ?? "Unknown"}
-                  </Text>
-                </View>
-              </View>
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
+    <View className="min-h-96 items-center justify-center px-10 pt-10">
+      <Mascot mood="super" size={168} />
+      <Text className="text-[19px] font-mbold text-gray-900 mt-4 text-center">
+        Live is evolving into a higher being
+      </Text>
+      <Text className="text-sm text-gray-400 mt-2 text-center leading-5">
+        It will be back, louder. Until then the feed is where everything is
+        happening.
+      </Text>
     </View>
   );
 });
@@ -343,7 +249,7 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { onTabBarScroll } = useTabBarScroll();
   const router = useAppRouter();
-  const { trackTap, trackFeature } = useScreenAnalytics(Screens.HOME);
+  const { trackFeature } = useScreenAnalytics(Screens.HOME);
   const [mainSection, setMainSection] = useState<HomeSection>("explore");
   const [activeTab, setActiveTab] = useState<TabType>("foryou");
   const [renderedTab, setRenderedTab] = useState<TabType>("foryou");
@@ -383,7 +289,9 @@ export default function HomeScreen() {
   const [showLive, setShowLive] = useState(false);
   const [FeaturedSellersComponent, setFeaturedSellersComponent] =
     useState<React.ComponentType | null>(null);
-  const [liveStreamId, setLiveStreamId] = useState<string | undefined>();
+  // Nothing sets this while the Live tab is a placeholder; the viewer still
+  // reads it, and opens on whatever is live when it is undefined.
+  const [liveStreamId] = useState<string | undefined>();
   const [LiveScrollScreen, setLiveScrollScreen] = useState<React.ComponentType<{
     initialStreamId?: string;
     onClose: () => void;
@@ -482,6 +390,49 @@ export default function HomeScreen() {
     loadMore: loadMoreFollowingPosts,
     refresh: refreshFollowingPosts,
   } = useFollowingFeedPosts();
+
+  /**
+   * The row of faces above the Following grid, and the dot on the Explore
+   * header — one source for both (`hooks/useFollowedCreators.ts`).
+   *
+   * `null` is everybody, which is what the tab opens on: the row narrows a
+   * feed that already works rather than being a gate in front of it.
+   */
+  const {
+    creators,
+    markSeen: markCreatorSeen,
+    anyUnseen: anyCreatorUnseen,
+    latest: latestCreator,
+    refresh: refreshCreators,
+  } = useFollowedCreators();
+  const [selectedCreator, setSelectedCreator] = useState<string | null>(null);
+
+  /**
+   * Filtering is done on the posts already loaded.
+   *
+   * The Following feed is one chronological pool of everybody's posts, and
+   * the newest of any one person is by definition near the top of it — so
+   * the pool answers "their latest" without a second query, and the answer
+   * arrives instantly instead of after a round trip. Scrolling loads more of
+   * the same pool, so a quiet creator fills in as you go.
+   */
+  const shownFollowingPosts = useMemo(
+    () =>
+      selectedCreator
+        ? followingPosts.filter((post) => post.userId === selectedCreator)
+        : followingPosts,
+    [followingPosts, selectedCreator],
+  );
+
+  const onSelectCreator = useCallback(
+    (creatorId: string | null) => {
+      setSelectedCreator(creatorId);
+      // Opening somebody is what clears their dot — scrolling past one of
+      // their posts in the mixed feed is a glance, not catching up.
+      if (creatorId) markCreatorSeen(creatorId);
+    },
+    [markCreatorSeen],
+  );
 
   const onPostPress = useCallback(
     (postId: string, rect: PostGridCardSourceRect) => {
@@ -583,6 +534,9 @@ export default function HomeScreen() {
     const reloadPromise = reload();
     const feedPromise = refreshFeedPosts();
     const followingPromise = refreshFollowingPosts();
+    // The faces and their dots are read from the same pull: a refreshed
+    // feed with a stale row would show a post whose author has no dot.
+    const creatorsPromise = refreshCreators();
 
     // On "foryou", the feed grid is what actually dominates the screen —
     // Flash Deals (reloadPromise) is a small secondary row that updates
@@ -590,7 +544,7 @@ export default function HomeScreen() {
     // view, rather than holding the loader up for it too.
     const visiblePromises: Promise<unknown>[] =
       mainSection === "following"
-        ? [followingPromise]
+        ? [followingPromise, creatorsPromise]
         : activeTab === "foryou"
           ? [feedPromise]
           : []; // Featured/Live don't depend on any of these three
@@ -598,8 +552,20 @@ export default function HomeScreen() {
     await Promise.all(visiblePromises).catch(() => {});
     refreshingRef.current = false;
 
-    Promise.all([reloadPromise, feedPromise, followingPromise]).catch(() => {});
-  }, [reload, refreshFeedPosts, refreshFollowingPosts, mainSection, activeTab]);
+    Promise.all([
+      reloadPromise,
+      feedPromise,
+      followingPromise,
+      creatorsPromise,
+    ]).catch(() => {});
+  }, [
+    reload,
+    refreshFeedPosts,
+    refreshFollowingPosts,
+    refreshCreators,
+    mainSection,
+    activeTab,
+  ]);
 
   // Pull-to-refresh gesture geometry — mirrors ContextDrop's own constants
   // in spirit (a small capture threshold, a larger commit threshold).
@@ -726,7 +692,10 @@ export default function HomeScreen() {
   const hasFlashDeals = !loading && discountedProducts.length > 0;
   const items = useMemo<PageItem[]>(() => {
     if (mainSection === "following") {
-      return [{ key: "following-posts" }, { key: "footer" }];
+      // The faces are their own item so they scroll away with the posts —
+      // a row pinned above a grid is chrome, and this is a caption on what
+      // follows.
+      return [{ key: "creator-row" }, { key: "following-posts" }, { key: "footer" }];
     }
     // The tabs row (For You/Featured/...) is no longer a list item at all —
     // it's rendered as its own absolutely-positioned, collapsing header (see
@@ -787,6 +756,10 @@ export default function HomeScreen() {
     followingLoadingMore,
     followingHasMore,
     hasFollows,
+    creators,
+    selectedCreator,
+    shownFollowingPosts,
+    onSelectCreator,
   });
   dataRef.current = {
     loading,
@@ -817,6 +790,10 @@ export default function HomeScreen() {
     followingLoadingMore,
     followingHasMore,
     hasFollows,
+    creators,
+    selectedCreator,
+    shownFollowingPosts,
+    onSelectCreator,
   };
 
   const renderItem = useCallback<ListRenderItem<PageItem>>(
@@ -995,16 +972,16 @@ export default function HomeScreen() {
         }
 
         case "live":
-          if (!isCurrentTabReady) {
-            return <TabContentLoadingState label="Live streams" />;
-          }
+          // Nothing to wait for while the tab is a placeholder — a skeleton
+          // in front of a fixed message is a wait for nothing.
+          return <LiveTab />;
+
+        case "creator-row":
           return (
-            <LiveTab
-              onOpen={(id) => {
-                trackTap("live_card", "live_stream_join", { stream_id: id });
-                setLiveStreamId(id);
-                setShowLive(true);
-              }}
+            <FollowedCreatorRow
+              creators={d.creators}
+              selected={d.selectedCreator}
+              onSelect={d.onSelectCreator}
             />
           );
 
@@ -1031,9 +1008,25 @@ export default function HomeScreen() {
               </View>
             );
           }
+          // Nobody's posts have loaded for this creator yet — the pool is
+          // chronological, so more of them are further down it.
+          if (d.selectedCreator && d.shownFollowingPosts.length === 0) {
+            return (
+              <View className="mt-12 min-h-64 justify-center items-center px-8">
+                <Text className="text-base font-semibold text-gray-700 text-center">
+                  {d.followingLoading || d.followingLoadingMore
+                    ? "Looking…"
+                    : "Nothing from them yet"}
+                </Text>
+                <Text className="text-sm text-gray-400 mt-1 text-center">
+                  Their posts will appear here as the feed loads.
+                </Text>
+              </View>
+            );
+          }
           return (
             <FeedGrid
-              posts={d.followingPosts}
+              posts={d.shownFollowingPosts}
               loading={d.followingLoading || d.followingLoadingMore}
               onPostPress={d.onPostPress}
             />
@@ -1067,7 +1060,14 @@ export default function HomeScreen() {
       <View className="bg-background">
         <TopNavbar
           centerContent={
-            <HomeSectionTabs active={mainSection} onChange={setMainSection} />
+            <HomeSectionTabs
+              active={mainSection}
+              onChange={setMainSection}
+              // On Explore, Following is a face: whoever posted most
+              // recently, with a dot when there is something unopened.
+              followingAvatarUrl={latestCreator?.avatarUrl}
+              followingUnseen={anyCreatorUnseen}
+            />
           }
         />
       </View>
@@ -1107,8 +1107,9 @@ export default function HomeScreen() {
                   // taking effect (NativeWind's resolved style can end up
                   // overriding/dropping it).
                   backgroundColor: "#f8f9fa",
-                  paddingHorizontal: 16,
-                  paddingBottom: 12,
+                  paddingHorizontal: FILTER_ROW_INSET,
+                  paddingTop: FILTER_ROW_VERTICAL,
+                  paddingBottom: FILTER_ROW_VERTICAL,
                 },
                 tabsRowStyle,
               ]}

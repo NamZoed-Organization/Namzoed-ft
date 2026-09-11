@@ -94,6 +94,20 @@ export default function OneSignalBootstrap() {
           router.push("/(users)/notifications" as any);
           break;
         }
+        case "qr_connect_request": {
+          // Opens on the Confirm, which is what the push is asking for.
+          router.push("/(users)/add-friends" as any);
+          break;
+        }
+        case "qr_connect_accepted": {
+          const actorId = String(additionalData?.actor_id ?? "");
+          if (actorId) {
+            router.push(`/(users)/profile/${actorId}` as any);
+          } else {
+            router.push("/(users)/notifications" as any);
+          }
+          break;
+        }
         case "user_went_live": {
           const streamId = String(additionalData?.reference_id ?? "");
           if (streamId) {

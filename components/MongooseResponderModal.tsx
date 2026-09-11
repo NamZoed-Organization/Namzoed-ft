@@ -7,6 +7,7 @@
  * • Auto-fetches the responder's GPS (with map-override option)
  * • On confirm → inserts into `booking_requests` + calls onConfirmed(bookingRequestId)
  */
+import { MODAL_RADIUS } from "@/constants/theme";
 import { MongooseInviteData } from "@/components/MongooseInviteCard";
 import SingleLocationPicker, {
     PickedLocation,
@@ -293,8 +294,8 @@ export default function MongooseResponderModal({
           <View
             style={{
               backgroundColor: "white",
-              borderTopLeftRadius: 24,
-              borderTopRightRadius: 24,
+              borderTopLeftRadius: MODAL_RADIUS,
+              borderTopRightRadius: MODAL_RADIUS,
               borderCurve: "continuous",
               maxHeight: "90%",
               overflow: "hidden",

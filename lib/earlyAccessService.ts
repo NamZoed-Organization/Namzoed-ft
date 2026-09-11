@@ -127,53 +127,6 @@ export async function getUserBadgesWithSkins(userId: string): Promise<UserBadge[
   }
 }
 
-/**
- * Persists a new skin choice for one of the user's badges and invalidates
- * the in-memory caches so the next fetch reflects the change.
- */
-export async function updateBadgeSkin(
-  userId:  string,
-  badgeId: string,
-  skin:    BadgeSkin,
-): Promise<boolean> {
-  if (!userId || !badgeId) return false;
-
-  try {
-    const { error } = await supabase
-      .from('user_badges')
-      .update({ selected_skin: skin })
-      .eq('user_id', userId)
-      .eq('badge_id', badgeId);
-
-    if (error) {
-      return false;
-    }
-
-    // Invalidate caches so the next read hits the DB
-    primaryBadgeCache.delete(userId);
-    allBadgesCache.delete(userId);
-    return true;
-  } catch (err) {
-    return false;
-  }
-}
-
-/**
- * Clears all cached badge data for a specific user, or the entire cache
- * when called without arguments (e.g. on logout).
- */
-export function clearBadgeCache(userId?: string): void {
-  if (userId) {
-    primaryBadgeCache.delete(userId);
-    allBadgesCache.delete(userId);
-    activeBadgeCache.delete(userId);
-  } else {
-    primaryBadgeCache.clear();
-    allBadgesCache.clear();
-    activeBadgeCache.clear();
-  }
-}
-
 // ── New API (active badge selection + skin-free badge list) ──────────────────
 
 const activeBadgeCache   = new Map<string, EarlyAccessBadgeType>();

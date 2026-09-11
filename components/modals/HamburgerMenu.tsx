@@ -2,7 +2,7 @@
 import AuthPromptModal from "@/components/modals/AuthPromptModal";
 import { useUser } from "@/contexts/UserContext";
 import { useAppRouter } from "@/utils/navigation";
-import { Bookmark, Briefcase, Headset, Leaf, Settings, Store, UserPlus, Wallet } from "lucide-react-native";
+import { Bike, Briefcase, Headset, Leaf, Settings, Store, UserPlus, Wallet } from "lucide-react-native";
 import React, { useState } from "react";
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import Animated, { Easing, FadeIn, FadeOut, SlideInLeft, SlideOutLeft } from "react-native-reanimated";
@@ -14,36 +14,53 @@ interface HamburgerMenuProps {
 }
 
 interface MenuItem {
-  icon: typeof Bookmark;
+  icon: typeof Settings;
   label: string;
-  pathname: "/settings" | "/profile" | "/norbu-wallet" | "/profile/work";
+  pathname:
+    | "/settings"
+    | "/profile"
+    | "/norbu-wallet"
+    | "/profile/work"
+    | "/add-friends"
+    | "/listings"
+    | "/mongoose";
   params?: Record<string, string>;
 }
 
 // Grouped like TikTok's side drawer, but trimmed to destinations that
-// actually exist in this app — everything else here (Cart/Orders/Scan/Add
-// friends/Creator Center/Drafts) has no screen to send users to. Saved
-// Posts / Community Guidelines / Help Center / Settings all live on the
-// standalone Settings screen (app/(users)/settings/index.tsx); Manage
-// Listings is its own overlay off the Profile screen; Norbu Wallet is its
+// actually exist in this app — everything else here (Cart/Orders/Creator
+// Center/Drafts) has no screen to send users to, and anything already one
+// tap away somewhere people go anyway (saved posts, on the profile) is not
+// worth a second door. Community Guidelines / Help Center / Settings all
+// live on the standalone Settings screen (app/(users)/settings/index.tsx); Manage
+// Listings is its own screen (app/(users)/listings.tsx), which is also
+// where the "+" menu, the Marketplace tab's empty state and both profiles'
+// Products tabs send people; Norbu Wallet is its
 // own placeholder screen (app/(users)/norbu-wallet.tsx) — replaced the old
 // "Norbu" tab that used to live in Home's tab row.
 const MENU_GROUPS: MenuItem[][] = [
   [
-    // Stands in for a real add-friends flow for now by surfacing pending
-    // follow requests (app/(users)/profile/index.tsx's FollowRequests modal,
-    // previously opened from a header icon that's since moved into this
-    // drawer).
-    { icon: UserPlus, label: "+ Add Friends", pathname: "/profile", params: { openFollowRequests: "1" } },
-    { icon: Bookmark, label: "Saved Posts", pathname: "/settings", params: { modal: "savedPosts" } },
+    // Your QR code, and both directions of the pending handshake
+    // (app/(users)/add-friends.tsx). Until that screen existed this stood
+    // in for it by surfacing pending follow requests on the profile.
+    { icon: UserPlus, label: "+ Add Friends", pathname: "/add-friends" },
+    // Saved Posts was here too and is gone: the profile already has a
+    // Saved tab, and a drawer entry to somewhere one tap away on a screen
+    // people visit anyway is a second door nobody needed.
   ],
   [{ icon: Wallet, label: "Norbu Wallet", pathname: "/norbu-wallet" }],
-  [{ icon: Store, label: "Manage Listings", pathname: "/profile", params: { openManageListings: "1" } }],
+  // Booking a delivery rider (app/(users)/mongoose.tsx). It was the second
+  // tab on the Messages screen until Setlog took that slot, and a feature
+  // with no entry point is a removed feature.
+  [{ icon: Bike, label: "Mongoose delivery", pathname: "/mongoose" }],
+  // Straight to the screen, not to the profile with a flag on it: it is a
+  // place now, and everything that lists something arrives at the same one.
+  [{ icon: Store, label: "Manage Listings", pathname: "/listings" }],
   // Every profile already has an (initially empty) service_providers row —
   // this is both how you set one up for the first time and how you manage
   // it afterward. Replaces the old "Work" tab on the profile screen, which
   // was dead space for anyone who'd never filled theirs in.
-  [{ icon: Briefcase, label: "Work Profile", pathname: "/profile/work" }],
+  [{ icon: Briefcase, label: "Business", pathname: "/profile/work" }],
   [{ icon: Leaf, label: "Community Guidelines", pathname: "/settings", params: { modal: "communityGuidelines" } }],
 ];
 
@@ -166,10 +183,14 @@ export default function HamburgerMenu({ visible, onClose }: HamburgerMenuProps) 
         </Animated.View>
       </View>
 
+      {/* Embedded: this drawer is already a native Modal, and nesting a
+          second one inside it is the presentation hazard utils/modal.ts
+          exists for. */}
       <AuthPromptModal
         visible={showAuthModal}
         onClose={() => setShowAuthModal(false)}
         message="Sign in to access this"
+        embedded
       />
     </Modal>
   );

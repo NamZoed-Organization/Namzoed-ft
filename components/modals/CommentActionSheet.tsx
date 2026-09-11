@@ -1,3 +1,4 @@
+import { MODAL_RADIUS } from '@/constants/theme';
 import * as Haptics from 'expo-haptics';
 import { AlertCircle, CornerUpLeft, Trash2 } from 'lucide-react-native';
 import React from 'react';
@@ -45,7 +46,7 @@ export default function CommentActionSheet({
   return (
     <ActionSheetModal visible={visible} onClose={onClose}>
       <View
-        style={{ borderTopLeftRadius: 24, borderTopRightRadius: 24, borderCurve: "continuous" }} className="bg-white">
+        style={{ borderTopLeftRadius: MODAL_RADIUS, borderTopRightRadius: MODAL_RADIUS, borderCurve: "continuous" }} className="bg-white">
         <View className="p-4">
           <TouchableOpacity
             className="flex-row items-center py-4 px-2"

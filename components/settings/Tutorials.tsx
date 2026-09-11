@@ -1,209 +1,143 @@
 /**
- * Tutorials – Settings Panel
+ * Settings › How Namzoed works — the tours, on demand.
  *
- * Accessible from Profile → Settings → "Tutorials".
- * Shows two tutorial cards the user can replay at any time:
- *   1. How to Add Products
- *   2. How to Tag People & Products in Posts
+ * This replaced a carousel of captioned screenshots, and the reason is the
+ * thing the carousel could never do: every one of these runs **on the real
+ * screen**, points at the real control and waits for you to use it. So the
+ * list here is not the tutorial — it is a way back into one, and pressing a
+ * row closes Settings and drops you where that tour lives.
+ *
+ * A tour that has been run all the way through says so. Nothing is locked,
+ * nothing is ordered, and "Show the tips again" undoes both the ones that
+ * were finished and a Skip held down until it turned them all off.
  */
 
-import OnboardingTutorial from '@/components/onboarding/OnboardingTutorial';
-import type { TutorialId } from '@/hooks/useOnboardingTutorial';
-import { useOnboardingTutorial } from '@/hooks/useOnboardingTutorial';
-import { ArrowLeft, CheckCircle2, Package, PlayCircle, ShoppingBag, Tag } from 'lucide-react-native';
-import React, { useState } from 'react';
-import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import {
+  SettingsGroup,
+  SettingsRow,
+  SettingsScreen,
+} from "@/components/settings/SettingsChrome";
+import Mascot from "@/components/ui/Mascot";
+import { useTutorial } from "@/contexts/TutorialContext";
+import { TOURS, TOUR_ORDER, type TourId } from "@/lib/tutorialTours";
+import { useAppRouter } from "@/utils/navigation";
+import {
+  BadgeCheck,
+  Check,
+  Hand,
+  KeyRound,
+  Plus,
+  RotateCcw,
+  ShoppingBag,
+  SquarePen,
+  Store,
+  Video,
+} from "lucide-react-native";
+import React from "react";
+import { ScrollView, Text, View } from "react-native";
 
 interface TutorialsProps {
   onClose?: () => void;
 }
 
-// ─── Card data ────────────────────────────────────────────────────────────────
-
-const TUTORIAL_CARDS = [
+/** One icon per tour, and where the tour actually happens — a row that
+ *  started a tour on the wrong screen would spotlight nothing. */
+const TOUR_META: Record<
+  TourId,
   {
-    id: 'addProducts' as TutorialId,
-    icon: ShoppingBag,
-    secondaryIcon: Package,
-    accentColor: '#094569',
-    title: 'How to Add Products',
-    subtitle: 'List & sell on your profile',
-    description:
-      'Learn how to create product listings on your profile so customers can discover and buy from you.',
-    steps: ['Go to your Profile', 'Open the Products tab', 'Tap "+ Add Product"', 'Fill in details & post'],
-  },
-  {
-    id: 'tagInPosts' as TutorialId,
-    icon: Tag,
-    secondaryIcon: ShoppingBag,
-    accentColor: '#0369a1',
-    title: 'Tag in Feed Posts',
-    subtitle: 'Link products & mention people',
-    description:
-      'Discover how to link your product listings and mention other users directly inside your feed posts.',
-    steps: ['Open Post Creator', 'Tap "Tag Products"', 'Tap "Tag People"', 'Share your post'],
-  },
-] as const;
-
-// ─── Component ────────────────────────────────────────────────────────────────
+    icon: React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>;
+    /** Where to send the user before it starts. */
+    go?: string;
+  }
+> = {
+  create: { icon: Plus, go: "/(users)/(tabs)" },
+  post: { icon: SquarePen, go: "/(users)/(tabs)" },
+  setlog: { icon: Video, go: "/(users)/(tabs)/messages" },
+  product: { icon: ShoppingBag, go: "/(users)/(tabs)" },
+  marketplace: { icon: Store, go: "/(users)/(tabs)/marketplace" },
+  business: { icon: BadgeCheck, go: "/(users)/profile/work" },
+  contextdrop: { icon: Hand, go: "/(users)/(tabs)" },
+};
 
 export default function Tutorials({ onClose }: TutorialsProps) {
-  const { state: tutorialState, markComplete } = useOnboardingTutorial();
+  const router = useAppRouter();
+  const { startTour, isDone, resetTours, tipsOff } = useTutorial();
 
-  const [activeTutorial, setActiveTutorial] = useState<TutorialId | null>(null);
-
-  const handleViewTutorial = (id: TutorialId) => {
-    setActiveTutorial(id);
-  };
-
-  const handleTutorialDone = async () => {
-    if (activeTutorial) {
-      await markComplete(activeTutorial);
-    }
-    setActiveTutorial(null);
+  const run = (id: TourId) => {
+    const meta = TOUR_META[id];
+    onClose?.();
+    if (meta.go) router.push(meta.go as any);
+    // The tour points at controls on that screen, so it starts once the
+    // screen it belongs to is the one in front — a spotlight on a screen
+    // still sliding in lands on nothing.
+    setTimeout(() => startTour(id), 420);
   };
 
   return (
-    <View className="flex-1 bg-white">
-      {/* ── Header ──────────────────────────────────────────────────────── */}
-      <View className="flex-row items-center p-4 border-b border-gray-100">
-        <TouchableOpacity onPress={onClose} className="mr-3 p-1" hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <View>
-          <Text className="text-lg font-semibold text-gray-900">Tutorials</Text>
-          <Text className="text-xs text-gray-400 mt-0.5">Learn how to use Namzoed's features</Text>
-        </View>
-      </View>
-
-      {/* ── Content ─────────────────────────────────────────────────────── */}
+    <SettingsScreen title="How Namzoed works" onClose={onClose}>
       <ScrollView
-        className="flex-1"
+        contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 32 }}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 20, paddingBottom: 40 }}
       >
-        {/* Intro blurb */}
-        <Text className="text-sm text-gray-500 mb-6 leading-5">
-          Step-by-step walkthroughs to help you get the most out of Namzoed. Tap any tutorial to replay it.
-        </Text>
+        {/* The mongoose is the one who does the walking, so it introduces
+            the list — and pulls a face when it has been told to stop. */}
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 12,
+            paddingHorizontal: 4,
+            paddingTop: 2,
+            paddingBottom: 14,
+          }}
+        >
+          <Mascot mood={tipsOff ? "sad" : "excited"} size={56} />
+          <Text style={{ flex: 1, fontSize: 15, lineHeight: 21, color: "#6B7280" }}>
+            {tipsOff
+              ? "Tips are switched off, so none of these will turn up on their own. You can still run any of them from here."
+              : "Each of these runs on the real screen and waits for you to press the thing it points at."}
+          </Text>
+        </View>
 
-        {/* Tutorial cards */}
-        {TUTORIAL_CARDS.map((card) => {
-          const Icon = card.icon;
-          const isDone = tutorialState[card.id];
-
-          return (
-            <View
-              key={card.id}
-              className="mb-4 bg-white overflow-hidden border border-gray-100"
-              style={{ shadowColor: '#000',
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.06,
-                shadowRadius: 8,
-                elevation: 3, borderRadius: 16, borderCurve: "continuous" }}
-            >
-              {/* Card header strip */}
-              <View
-                className="px-4 py-3 flex-row items-center justify-between"
-                style={{ backgroundColor: card.accentColor }}
-              >
-                <View className="flex-row items-center gap-2">
-                  <View
-                    style={{
-                      backgroundColor: 'rgba(255,255,255,0.2)',
-                      borderRadius: 10,
-                      borderCurve: "continuous",
-                      padding: 6,
-                    }}
-                  >
-                    <Icon size={20} color="#fff" strokeWidth={1.8} />
-                  </View>
-                  <View>
-                    <Text className="text-white font-semibold text-sm">{card.title}</Text>
-                    <Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: 11 }}>{card.subtitle}</Text>
-                  </View>
-                </View>
-
-                {/* Completion badge */}
-                {isDone && (
-                  <View
-                    style={{
-                      backgroundColor: 'rgba(255,255,255,0.25)',
-                      borderRadius: 12,
-                      borderCurve: "continuous",
-                      paddingHorizontal: 8,
-                      paddingVertical: 3,
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 4,
-                    }}
-                  >
-                    <CheckCircle2 size={12} color="#fff" />
-                    <Text style={{ color: '#fff', fontSize: 11, fontWeight: '600' }}>Done</Text>
-                  </View>
-                )}
-              </View>
-
-              {/* Card body */}
-              <View className="px-4 pt-3 pb-4">
-                <Text className="text-gray-600 text-sm leading-5 mb-3">{card.description}</Text>
-
-                {/* Mini step previews */}
-                <View className="flex-row flex-wrap gap-2 mb-4">
-                  {card.steps.map((step, idx) => (
-                    <View
-                      key={idx}
-                      className="flex-row items-center gap-1 px-2 py-1 rounded-full"
-                      style={{ backgroundColor: `${card.accentColor}14` }}
-                    >
-                      <Text
-                        style={{
-                          color: card.accentColor,
-                          fontSize: 10,
-                          fontWeight: '700',
-                          minWidth: 14,
-                          textAlign: 'center',
-                        }}
-                      >
-                        {idx + 1}
-                      </Text>
-                      <Text style={{ color: card.accentColor, fontSize: 11, fontWeight: '500' }}>{step}</Text>
+        <SettingsGroup label="Walk me through it">
+          {TOUR_ORDER.map((id, i) => {
+            const tour = TOURS[id];
+            const done = isDone(id);
+            return (
+              <SettingsRow
+                key={id}
+                first={i === 0}
+                icon={TOUR_META[id].icon}
+                label={tour.title}
+                description={tour.blurb}
+                onPress={() => run(id)}
+                right={
+                  done ? (
+                    <View style={{ flexDirection: "row", alignItems: "center" }}>
+                      <Check size={18} color="#0369A1" strokeWidth={2.4} />
                     </View>
-                  ))}
-                </View>
+                  ) : undefined
+                }
+              />
+            );
+          })}
+        </SettingsGroup>
 
-                {/* CTA button */}
-                <TouchableOpacity
-                  onPress={() => handleViewTutorial(card.id)}
-                  activeOpacity={0.8}
-                  className="flex-row items-center justify-center gap-2 py-3"
-                  style={{ backgroundColor: card.accentColor, borderRadius: 12, borderCurve: "continuous" }}
-                >
-                  <PlayCircle size={16} color="#fff" />
-                  <Text className="text-white font-semibold text-sm">
-                    {isDone ? 'Replay Tutorial' : 'View Tutorial'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          );
-        })}
-
-        {/* Footer note */}
-        <Text className="text-xs text-gray-400 text-center mt-2 leading-4">
-          These tutorials walk you through the core features step by step.{'\n'}You can come back here and replay them anytime.
-        </Text>
+        <SettingsGroup label="Tips">
+          <SettingsRow
+            first
+            icon={RotateCcw}
+            label="Show the tips again"
+            description="Offer every walkthrough the next time you reach it"
+            onPress={resetTours}
+          />
+          <SettingsRow
+            icon={KeyRound}
+            label="How they behave"
+            description="A tip waits for you to press the thing it points at. Skip ends one; holding Skip turns them all off."
+          />
+        </SettingsGroup>
       </ScrollView>
-
-      {/* ── Tutorial Modal ──────────────────────────────────────────────── */}
-      {activeTutorial !== null && (
-        <OnboardingTutorial
-          visible={activeTutorial !== null}
-          mode={activeTutorial}
-          onComplete={handleTutorialDone}
-          onDismiss={handleTutorialDone}
-        />
-      )}
-    </View>
+    </SettingsScreen>
   );
 }

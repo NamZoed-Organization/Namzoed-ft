@@ -139,7 +139,15 @@
       "@react-native-community/datetimepicker",
       "expo-audio",
       "expo-image",
-      "expo-video"
+      "expo-video",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow $(PRODUCT_NAME) to save the reels and collages you export to your photos.",
+          "savePhotosPermission": "Allow $(PRODUCT_NAME) to save the reels and collages you export to your photos.",
+          "isAccessMediaLocationEnabled": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

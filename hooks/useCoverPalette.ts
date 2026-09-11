@@ -1,71 +1,69 @@
 // hooks/useCoverPalette.ts
+import { extractCoverHue, peekCoverHue } from "@/lib/coverHue";
 import {
   buildCoverPalette,
   CoverPalette,
-  extractHue,
   getFallbackHue,
+  normalizeHue,
 } from "@/lib/coverTheme";
 import { useEffect, useState } from "react";
-import { getColors } from "react-native-image-colors";
-
-// Extracting a photo's dominant hue is a network fetch + native decode —
-// worth caching per URI so scrolling a feed of profiles (or this profile
-// re-rendering) doesn't re-extract the same cover photo repeatedly.
-const hueCache = new Map<string, number>();
 
 /**
  * Per-user cover color identity — see lib/coverTheme.ts for the reasoning.
- * `seed` should be a stable per-user id (used for the no-photo fallback
- * hue); `coverImageUrl` is the actual cover photo, if any.
+ *
+ * `storedHue` is profiles.cover_hue and is authoritative: when it's set, the
+ * very first paint is already the final color and nothing is extracted. The
+ * extraction path below only runs for profiles saved before cover_hue
+ * existed (a cover photo, but no hue stored yet); `onHueResolved` lets the
+ * owner's own profile screen write that recovered hue back so it happens
+ * once, not on every visit.
+ *
+ * `seed` should be a stable per-user id — it only feeds the last-resort hue
+ * for a profile with neither a stored hue nor a cover photo. It stays a hash
+ * rather than a random roll so that this fallback is at least stable for the
+ * moments before the real hue arrives.
  */
 export function useCoverPalette(
   seed: string | undefined,
   coverImageUrl?: string | null,
+  storedHue?: number | null,
+  onHueResolved?: (hue: number) => void,
 ): CoverPalette {
+  const normalizedStored = normalizeHue(storedHue);
   const fallbackHue = seed ? getFallbackHue(seed) : 200;
-  const [hue, setHue] = useState<number>(() => {
-    if (coverImageUrl && hueCache.has(coverImageUrl)) {
-      return hueCache.get(coverImageUrl)!;
-    }
-    return fallbackHue;
-  });
+  const [extractedHue, setExtractedHue] = useState<number | null>(() =>
+    coverImageUrl ? peekCoverHue(coverImageUrl) : null,
+  );
 
   useEffect(() => {
-    if (!coverImageUrl) {
-      setHue(fallbackHue);
+    // A stored hue means there's nothing to work out.
+    if (normalizedStored != null || !coverImageUrl) {
+      setExtractedHue(null);
       return;
     }
 
-    const cached = hueCache.get(coverImageUrl);
+    const cached = peekCoverHue(coverImageUrl);
     if (cached != null) {
-      setHue(cached);
+      setExtractedHue(cached);
+      onHueResolved?.(cached);
       return;
     }
 
     let cancelled = false;
-    getColors(coverImageUrl, {
-      fallback: "#0F5075",
-      cache: true,
-      quality: "low",
-    })
-      .then((result) => {
-        if (cancelled) return;
-        const hex =
-          result.platform === "ios" ? result.primary : result.dominant;
-        const extracted = extractHue(hex);
-        hueCache.set(coverImageUrl, extracted);
-        setHue(extracted);
-      })
-      .catch(() => {
-        if (!cancelled) setHue(fallbackHue);
-      });
+    extractCoverHue(coverImageUrl).then((hue) => {
+      if (cancelled || hue == null) return;
+      setExtractedHue(hue);
+      onHueResolved?.(hue);
+    });
 
     return () => {
       cancelled = true;
     };
-    // fallbackHue depends only on `seed`, which is included below.
+    // onHueResolved is a callback the callers keep stable; re-running on its
+    // identity would re-extract for nothing.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [coverImageUrl, seed]);
+  }, [coverImageUrl, normalizedStored]);
 
+  const hue = normalizedStored ?? extractedHue ?? fallbackHue;
   return buildCoverPalette(hue);
 }

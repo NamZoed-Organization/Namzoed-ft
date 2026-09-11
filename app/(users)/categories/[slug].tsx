@@ -1,5 +1,9 @@
 // app/(users)/categories/[slug].tsx
-import GridCard, { gridCardHeight, GridCardSourceRect } from "@/components/GridCard";
+import GridCard, {
+  gridCardHeight,
+  GridCardSourceRect,
+  LISTING_CARD_RATIO,
+} from "@/components/GridCard";
 import MasonryGrid from "@/components/MasonryGrid";
 import AuthPromptModal from "@/components/modals/AuthPromptModal";
 import ReportProductModal from "@/components/modals/ReportProductModal";
@@ -7,7 +11,6 @@ import ProductDetailOverlay from "@/components/ProductDetailOverlay";
 import TopNavbar from "@/components/ui/TopNavbar";
 import { useUser } from "@/contexts/UserContext";
 import { categories as categoryData, categoryNames, SubCategory } from "@/data/categories";
-import { RATIO_SQUARE } from "@/lib/postMediaDisplay";
 import {
   fetchProductsForRanking,
   ProductWithUser,
@@ -342,13 +345,13 @@ export default function CategoryDetailScreen() {
             items={displayedProducts}
             loading={loading}
             keyExtractor={(product) => product.id}
-            getHeight={(_product, columnWidth) => gridCardHeight(RATIO_SQUARE, columnWidth)}
+            getHeight={(_product, columnWidth) => gridCardHeight(LISTING_CARD_RATIO, columnWidth)}
             emptyText="No products found."
             renderCard={(product, columnWidth, deferred, priority) => (
               <GridCard
                 id={product.id}
                 width={columnWidth}
-                ratio={RATIO_SQUARE}
+                ratio={LISTING_CARD_RATIO}
                 imageUri={product.images?.[0]}
                 title={product.name}
                 subtitle={product.profiles?.name || "Unknown"}

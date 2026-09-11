@@ -18,7 +18,17 @@ export type NotificationType =
   /** Someone you follow added a new story */
   | "new_story"
   /** Someone rated/reviewed one of your product listings */
-  | "product_reviewed";
+  | "product_reviewed"
+  /** Somebody wrote your name into a comment or a reply */
+  | "comment_mention"
+  /** Setlog's hourly prompt: "It's 3pm — two seconds?". Only ever sent to
+   *  installs at or past SETLOG_FEATURE_VERSION (lib/setlogSettings.ts) —
+   *  older builds have no Setlog tab for it to open. */
+  | "setlog_prompt"
+  /** Someone scanned your QR code and wants to connect — needs your confirm */
+  | "qr_connect_request"
+  /** The person whose QR you scanned confirmed; you now follow each other */
+  | "qr_connect_accepted";
 
 export interface AppNotification {
   id: string;

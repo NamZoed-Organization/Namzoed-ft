@@ -11,10 +11,15 @@ import ReportPostModal from "@/components/modals/ReportPostModal";
 import ReelsViewer from "@/components/ReelsViewer";
 import ShareComposerModal from "@/components/modals/ShareComposerModal";
 import TaggedItemsModal from "@/components/modals/TaggedItemsModal";
+import TaggedProductsCard, { taggedItemHref } from "@/components/post/TaggedProductsCard";
+import { useProductPeek } from "@/contexts/ProductPeekContext";
 import MaskedView from "@react-native-masked-view/masked-view";
 import CarouselDots from "@/components/ui/CarouselDots";
 import LoadingBar from "@/components/ui/LoadingBar";
 import PopupMessage from "@/components/ui/PopupMessage";
+import ProfilePreviewTrigger from "@/components/profile/ProfilePreviewTrigger";
+import { useProfilePreviewElevation } from "@/contexts/ProfilePreviewContext";
+import HashtagText from "@/components/ui/HashtagText";
 import ProgressiveImage from "@/components/ui/ProgressiveImage";
 import { ContentWarning } from "@/components/ContentWarning";
 import { useUser } from "@/contexts/UserContext";
@@ -32,10 +37,11 @@ import {
 } from "@/lib/likesService";
 import { RATIO_PORTRAIT } from "@/lib/postMediaDisplay";
 import { deletePost, fetchVideoReels, VideoReel } from "@/lib/postsService";
+import { recordView } from "@/lib/historyService";
 import { getPostSaveCount, trackPostView } from "@/lib/viewTrackingService";
 import { buildPostExternalSharePayload } from "@/lib/shareUtils";
 import { playSound } from "@/lib/soundUtils";
-import { PostData } from "@/types/post";
+import { PostData, type TaggedProduct } from "@/types/post";
 import { EdgeGestureCarouselHandle, registerEdgeGestureCarousel } from "@/utils/edgeGestureRegistry";
 import { feedEvents } from "@/utils/feedEvents";
 import { useAppRouter } from "@/utils/navigation";
@@ -318,9 +324,20 @@ interface MediaCarouselProps {
   onVideoPress?: (uri: string) => void;
   /** "Watch More" tapped from a video's end-of-playback overlay. */
   onWatchMorePress?: (uri: string) => void;
+  /** A video in this carousel played past the "watched" threshold. */
+  onVideoWatched?: () => void;
   isVisible?: boolean;
   hasTaggedItems: boolean;
   onTagPress: () => void;
+  /**
+   * Tags that were pinned to a spot on a picture, rather than listed under
+   * it. Drawn over the slide they belong to at the fraction of the frame
+   * they were placed at, so the label stays on the thing it points at
+   * whatever width the feed is — see `components/create/media/`.
+   */
+  pinnedTags?: TaggedProduct[];
+  /** Opening the pinned product; the same destination the card's rows use. */
+  onPinnedTagPress?: (product: TaggedProduct) => void;
   /** Long-press anywhere on an image slide — used by the post-detail screen
    * to surface post feedback (actions sheet for the owner, Report overlay
    * for everyone else) now that its header button is Share. */
@@ -355,7 +372,11 @@ interface InlineVideoPlayerProps {
   onExpand?: () => void;
   /** "Watch More" tapped from the end-of-video overlay — advance to the next reel. */
   onWatchMore?: () => void;
+  onWatched?: () => void;
 }
+
+/** How long a clip has to actually play before it counts as watched. */
+const WATCHED_SECONDS = 3;
 
 // Top-level wrapper: only mounts the heavy ExoPlayer-backed component when the
 // slide is actually visible. This keeps memory bounded as the FlatList window
@@ -366,7 +387,7 @@ interface InlineVideoPlayerProps {
 // pause-on-scroll-out for free: the player (and its playback position) is
 // created fresh each time the slide re-enters view, and torn down the
 // moment it leaves — no explicit play()/pause() toggling needed for that.
-const InlineVideoPlayer = React.memo(function InlineVideoPlayer({ uri, frameWidth, slideHeight, isVisible, onDoubleTapAt, onExpand, onWatchMore }: InlineVideoPlayerProps) {
+const InlineVideoPlayer = React.memo(function InlineVideoPlayer({ uri, frameWidth, slideHeight, isVisible, onDoubleTapAt, onExpand, onWatchMore, onWatched }: InlineVideoPlayerProps) {
   if (!isVisible) {
     return <View style={{ width: frameWidth, height: slideHeight, backgroundColor: "#000" }} />;
   }
@@ -378,6 +399,7 @@ const InlineVideoPlayer = React.memo(function InlineVideoPlayer({ uri, frameWidt
       onDoubleTapAt={onDoubleTapAt}
       onExpand={onExpand}
       onWatchMore={onWatchMore}
+      onWatched={onWatched}
     />
   );
 });
@@ -389,9 +411,13 @@ interface ActiveVideoPlayerProps {
   onDoubleTapAt?: (x: number, y: number) => void;
   onExpand?: () => void;
   onWatchMore?: () => void;
+  /** Fires once, the first time this clip has actually played past
+   *  WATCHED_SECONDS — what counts as "watched" for the viewer's History. */
+  onWatched?: () => void;
 }
 
-const ActiveVideoPlayer = React.memo(function ActiveVideoPlayer({ uri, frameWidth, slideHeight: videoH, onDoubleTapAt, onExpand, onWatchMore }: ActiveVideoPlayerProps) {
+const ActiveVideoPlayer = React.memo(function ActiveVideoPlayer({ uri, frameWidth, slideHeight: videoH, onDoubleTapAt, onExpand, onWatchMore, onWatched }: ActiveVideoPlayerProps) {
+  const watchedRef = useRef(false);
   const [isHolding, setIsHolding] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
@@ -459,10 +485,17 @@ const ActiveVideoPlayer = React.memo(function ActiveVideoPlayer({ uri, frameWidt
   useEffect(() => {
     if (!player) return;
     const interval = setInterval(() => {
-      setCurrentTime(player.currentTime ?? 0);
+      const time = player.currentTime ?? 0;
+      setCurrentTime(time);
       setDuration(player.duration ?? 0);
       setIsLoading(player.status === 'idle' || player.status === 'loading');
       setIsPlaying(player.playing ?? false);
+      // Position, not elapsed wall time: a clip that's buffering or paused
+      // isn't being watched.
+      if (!watchedRef.current && time >= WATCHED_SECONDS) {
+        watchedRef.current = true;
+        onWatched?.();
+      }
     }, 200);
     return () => clearInterval(interval);
   }, [player]);
@@ -658,11 +691,14 @@ const MediaCarousel = React.memo(
     onImagePress,
     onVideoPress,
     onWatchMorePress,
+    onVideoWatched,
     isVisible = true,
     hasTaggedItems,
     onTagPress,
     onLongPress,
     disableLoadTransition,
+    pinnedTags,
+    onPinnedTagPress,
   }: MediaCarouselProps) => {
     const [activeIndex, setActiveIndex] = useState(0);
     const slideH = frameWidth / RATIO_PORTRAIT;
@@ -764,6 +800,7 @@ const MediaCarousel = React.memo(
                 onDoubleTapAt={onDoubleTapAt}
                 onExpand={() => onVideoPress?.(item)}
                 onWatchMore={() => onWatchMorePress?.(item)}
+                onWatched={onVideoWatched}
               />
             </View>
           );
@@ -796,10 +833,79 @@ const MediaCarousel = React.memo(
                 transition={disableLoadTransition ? 0 : undefined}
               />
             </TouchableOpacity>
+
+            {/* What is in the picture, on the picture. A pinned label sits
+                where the poster put it — the whole point is that what is
+                being pointed at is never in doubt — and is its own touch
+                target, so tapping the jacket opens the jacket rather than
+                the post. */}
+            {(pinnedTags ?? [])
+              .filter((p) => p.pin?.image === index)
+              .map((product) => {
+                const pin = product.pin!;
+                return (
+                  <View
+                    key={`${product.id}-pin`}
+                    pointerEvents="box-none"
+                    style={{
+                      position: "absolute",
+                      left: 0,
+                      top: 0,
+                      width: w,
+                      height: h,
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <TouchableOpacity
+                      activeOpacity={0.85}
+                      onPress={() => onPinnedTagPress?.(product)}
+                      style={{
+                        transform: [
+                          { translateX: (pin.x - 0.5) * w },
+                          { translateY: (pin.y - 0.5) * h },
+                        ],
+                        flexDirection: pin.side === "left" ? "row-reverse" : "row",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      <View
+                        style={{
+                          width: 10,
+                          height: 10,
+                          borderRadius: 5,
+                          borderCurve: "continuous",
+                          backgroundColor: "#fff",
+                          borderWidth: 2,
+                          borderColor: "rgba(17,24,39,0.6)",
+                        }}
+                      />
+                      <View
+                        style={{
+                          backgroundColor: "rgba(17,24,39,0.72)",
+                          paddingHorizontal: 9,
+                          paddingVertical: 5,
+                          borderRadius: 999,
+                          borderCurve: "continuous",
+                          maxWidth: w * 0.6,
+                        }}
+                      >
+                        <Text
+                          numberOfLines={1}
+                          style={{ color: "#fff", fontSize: 12.5, fontWeight: "600" }}
+                        >
+                          {product.name}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
           </View>
         );
       },
-      [handleImageTap, isVisible, activeIndex, onDoubleTapAt, onVideoPress, frameWidth, slideH, blurHashes, disableLoadTransition],
+      [handleImageTap, isVisible, activeIndex, onDoubleTapAt, onVideoPress, onVideoWatched, frameWidth, slideH, blurHashes, disableLoadTransition, pinnedTags, onPinnedTagPress],
     );
 
     if (images.length === 0) return null;
@@ -1076,6 +1182,7 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp, onBa
   const hasTaggedItems = hasTaggedProducts || hasTaggedAccounts;
   const { currentUser } = useUser();
   const router = useAppRouter();
+  const productPeek = useProductPeek();
 
   const isOwnPost = currentUser?.id === post.userId;
   const isAuthorLive = isAuthorLiveProp ?? false;
@@ -1153,6 +1260,9 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp, onBa
       // Reset so it can be retried if the insert failed transiently
       viewTrackedRef.current = false;
     });
+    // The viewer's own History — separate from the owner-facing view count
+    // above, and never blocking on it.
+    recordView("post", post.id, currentUser.id, post.userId);
   }, [isVisible, currentUser?.id, post.id, post.userId]);
 
   // Load save count for own posts, and also in detail mode (fixed bottom
@@ -1422,6 +1532,10 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp, onBa
     setShowReportModal(true);
   };
 
+  const authorPreviewElevation = useProfilePreviewElevation(
+    isOwnPost ? null : post.userId,
+  );
+
   const navigateToProfile = () => {
     const navigate = () => {
       if (isOwnPost) {
@@ -1453,6 +1567,19 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp, onBa
   return (
     <View style={[{ backgroundColor: "#fff" }, onBack && { flex: 1 }]}>
     <View style={onBack ? { flex: 1, position: "relative" } : undefined}>
+      {/* What this post is about, when it is about something for sale —
+          above the author row, because it is the post's subject and not a
+          footnote to it. In detail mode the header floats over the media, so
+          there is nothing to sit above; the card goes under the media there
+          instead, which is the same place in the reading order. */}
+      {!onBack && hasTaggedProducts && (
+        <TaggedProductsCard
+          products={post.tagged_products}
+          onMore={() => setShowTaggedItems(true)}
+          style={{ paddingTop: 12, paddingBottom: 2 }}
+        />
+      )}
+
       {/* Header — floats over the media with a translucent matte blur when
           onBack is set (post-detail screen); plain in-flow header otherwise
           (main feed, where every card needs its own normal header). */}
@@ -1505,11 +1632,22 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp, onBa
             <ChevronLeft size={20} color="#111" />
           </HeaderGlassButton>
         )}
+        {/* Raised while this author's preview is open: the Follow pill beside
+            it is this row's sibling, so the island inside can't out-stack it
+            on its own. */}
         <TouchableOpacity
           onPress={navigateToProfile}
-          style={{ flexDirection: "row", alignItems: "center", flex: 1 }}
+          style={[
+            { flexDirection: "row", alignItems: "center", flex: 1 },
+            authorPreviewElevation,
+          ]}
           activeOpacity={0.7}
         >
+          {/* Hold the avatar for the profile peek — the avatar itself is the
+              island that expands, so only it is wrapped. The tap still
+              navigates; the trigger claims the touch only once the hold has
+              activated. */}
+          <ProfilePreviewTrigger userId={isOwnPost ? null : post.userId} name={post.username}>
           {isAuthorLive ? (
             <LinearGradient
               colors={["#FF0080", "#FF3B30", "#FF8C00"]}
@@ -1541,6 +1679,7 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp, onBa
               )}
             </View>
           )}
+          </ProfilePreviewTrigger>
           <View style={{ flex: 1, marginLeft: 12 }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
               <Text style={[styles.username, { flex: 1 }]} numberOfLines={1}>
@@ -1600,8 +1739,23 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp, onBa
             }}
             onVideoPress={handleVideoPress}
             onWatchMorePress={handleWatchMoreReels}
+            onVideoWatched={() =>
+              recordView("video", post.id, currentUser?.id, post.userId)
+            }
             onLongPress={onBack ? handleImageLongPress : undefined}
             disableLoadTransition={!!onBack}
+            // Tags the poster pinned to a spot rather than listed under the
+            // picture. The card below still lists every tag, pinned or not:
+            // a label on the picture is a shortcut, never the only way in.
+            pinnedTags={post.tagged_products?.filter((p) => p.pin)}
+            // A pin previews in the same sheet the card and the grid strip
+            // use — one tag, one way of looking at it, whichever kind.
+            onPinnedTagPress={(product) =>
+              productPeek.open(
+                product.id,
+                product.kind === "service" ? "service" : "product",
+              )
+            }
           />
           {/* Content Warning Overlay for sensitive/18+ posts */}
           {needsContentWarning && !isContentRevealed && (
@@ -1726,7 +1880,7 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp, onBa
             >
               <Text style={styles.captionUsername}>{post.username || "Unknown"}</Text>
               {"  "}
-              {post.content}
+              <HashtagText text={post.content} disabled />
             </Text>
           )}
           <TouchableOpacity
@@ -1745,7 +1899,7 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp, onBa
                 <Text style={styles.captionUsername}>{post.username || "Unknown"}</Text>
               )}
               {!onBack && "  "}
-              {post.content}
+              <HashtagText text={post.content} />
             </Text>
           </TouchableOpacity>
           {!onBack && captionOverflows && !captionExpanded && (
@@ -1760,8 +1914,19 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp, onBa
         </View>
       ) : null}
 
-      {/* Tagged strip — shown when post has no media (tag icon already appears on media carousel) */}
-      {hasTaggedItems && post.images.length === 0 && (
+      {onBack && hasTaggedProducts && (
+        <TaggedProductsCard
+          products={post.tagged_products}
+          onMore={() => setShowTaggedItems(true)}
+        />
+      )}
+
+      {/* Tagged accounts strip — shown when the post has no media (the tag
+          icon already appears on the media carousel). Products are not in
+          here any more: they have their own card at the top of the post, and
+          a pill repeating what that card already says is the same thing
+          twice. */}
+      {hasTaggedAccounts && post.images.length === 0 && (
         <TouchableOpacity
           onPress={() => setShowTaggedItems(true)}
           activeOpacity={0.8}
@@ -1775,27 +1940,6 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp, onBa
             marginBottom: 2,
           }}
         >
-          {(post.tagged_products ?? []).slice(0, 3).map((p: any) => (
-            <View
-              key={p.id}
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                backgroundColor: "#eff6ff",
-                borderRadius: 20,
-                borderCurve: "continuous",
-                paddingHorizontal: 10,
-                paddingVertical: 5,
-                borderWidth: 1,
-                borderColor: "#bfdbfe",
-              }}
-            >
-              <ShoppingBag size={12} color="#094569" />
-              <Text style={{ fontSize: 12, fontWeight: "600", color: "#094569", marginLeft: 5 }} numberOfLines={1}>
-                {p.name}
-              </Text>
-            </View>
-          ))}
           {(post.tagged_accounts ?? []).slice(0, 3).map((a: any) => (
             <View
               key={a.id}
@@ -1817,10 +1961,10 @@ function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp, onBa
               </Text>
             </View>
           ))}
-          {(post.tagged_products ?? []).length + (post.tagged_accounts ?? []).length > 6 && (
+          {(post.tagged_accounts ?? []).length > 3 && (
             <View style={{ backgroundColor: "#f3f4f6", borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5 }}>
               <Text style={{ fontSize: 12, color: "#6b7280", fontWeight: "600" }}>
-                +{(post.tagged_products ?? []).length + (post.tagged_accounts ?? []).length - 6} more
+                +{(post.tagged_accounts ?? []).length - 3} more
               </Text>
             </View>
           )}

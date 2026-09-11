@@ -1,3 +1,6 @@
+import { MODAL_RADIUS } from "@/constants/theme";
+import PriceSanityNote from "@/components/ui/PriceSanityNote";
+import { usePriceSanity } from "@/hooks/usePriceSanity";
 import ImageCropperOverlay from "@/components/modals/ImageCropperOverlay";
 import ImagePickerSheet from "@/components/ui/ImagePickerSheet";
 import CircularLoader from "@/components/ui/CircularLoader";
@@ -257,6 +260,14 @@ export default function EditProductModal({
     }
   };
 
+  // Same check the create form runs — an edit is where a mistyped price is
+  // most often noticed, and it would be odd for the form that made it to be
+  // the only one that says nothing (lib/priceSanity.ts).
+  const priceSanity = usePriceSanity({
+    text: `${name} ${description} ${selectedCategory ?? ""} ${tags.join(" ")}`,
+    price: parseFloat(price),
+  });
+
   const handleUpdate = async () => {
     // Validation
     if (!name || !price || !selectedCategory) {
@@ -345,7 +356,7 @@ export default function EditProductModal({
         >
           <View className="flex-1 bg-black/50 justify-end">
             <View
-              style={{ borderTopLeftRadius: 24, borderTopRightRadius: 24, borderCurve: "continuous" }} className="bg-white h-[90%] w-full overflow-hidden">
+              style={{ borderTopLeftRadius: MODAL_RADIUS, borderTopRightRadius: MODAL_RADIUS, borderCurve: "continuous" }} className="bg-white h-[90%] w-full overflow-hidden">
               {/* Premium Header with BlurView */}
               <BlurView
                 intensity={90}
@@ -474,6 +485,7 @@ export default function EditProductModal({
                         onChangeText={setPrice}
                       />
                     </View>
+                    <PriceSanityNote check={priceSanity.check} />
                   </View>
 
                   {/* CONDITIONAL: Closing Sale (Food) vs Discount (Non-Food) */}
@@ -792,7 +804,7 @@ export default function EditProductModal({
               >
                 <View className="p-5">
                   <TouchableOpacity
-                    onPress={handleUpdate}
+                    onPress={() => priceSanity.guard(handleUpdate)}
                     disabled={loading}
                     className={`w-full py-4 rounded-[24px] flex-row justify-center items-center shadow-lg ${
                       loading ? "bg-gray-300" : "bg-primary"
@@ -814,6 +826,7 @@ export default function EditProductModal({
       </Animated.View>
 
       {/* Success/Error Popups */}
+      {priceSanity.dialog}
       <PopupMessage
         visible={showSuccess}
         type="success"

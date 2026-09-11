@@ -1,4 +1,5 @@
 // app/(users)/chat/[id].tsx
+import { MODAL_RADIUS } from "@/constants/theme";
 import MongooseInitiatorModal from "@/components/MongooseInitiatorModal";
 import MongooseInviteCard, {
   type MongooseInviteData,
@@ -7,6 +8,12 @@ import MongooseResponderModal from "@/components/MongooseResponderModal";
 import AudioMessagePlayer from "@/components/chat/AudioMessagePlayer";
 import ChatImageViewer from "@/components/chat/ChatImageViewer";
 import ChatMultiMediaPicker from "@/components/chat/ChatMultiMediaPicker";
+import ComposerAttachments from "@/components/chat/ComposerAttachments";
+import ImageStack from "@/components/chat/ImageStack";
+import {
+  MAX_ATTACHMENTS,
+  usePendingAttachments,
+} from "@/hooks/chat/usePendingAttachments";
 import MessageStatusDot, {
   type MessageStatusDotStatus,
 } from "@/components/chat/MessageStatusDot";
@@ -25,6 +32,12 @@ import ChatBackgroundPicker, {
 } from "@/components/settings/ChatBackgroundPicker";
 import ActionSheetModal from "@/components/ui/ActionSheetModal";
 import CircularLoader from "@/components/ui/CircularLoader";
+import ComposerContextCard, {
+  formatSharedCardDate,
+  sharedContextKind,
+  type SharedContextMeta,
+} from "@/components/chat/ComposerContextCard";
+import { endNavHandoff } from "@/utils/navHandoff";
 import MongooseWorkerNavBar, {
   MONGOOSE_WORKER_NAV_BAR_HEIGHT,
 } from "@/components/ui/MongooseWorkerNavBar";
@@ -244,33 +257,10 @@ type ReplyMeta = {
   snippet: string;
 };
 
-type ProductMeta = {
-  id: string;
-  title: string;
-  price?: string;
-  imageUrl?: string;
-  source?: "product" | "marketplace" | "post" | "profile";
-  /** Post caption / product description / profile bio — the card's body text. */
-  caption?: string;
-  /** ISO date string — post/listing creation date. */
-  date?: string;
-  /** Free-text location — currently only populated for posts. */
-  location?: string;
-  /** Author / seller / profile handle. */
-  username?: string;
-  isVerified?: boolean;
-};
-
-const formatSharedCardDate = (iso?: string): string => {
-  if (!iso) return "";
-  const parsed = new Date(iso);
-  if (Number.isNaN(parsed.getTime())) return "";
-  return parsed.toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-};
+/** The shape of an attached post/product/listing/profile. Defined with the
+ *  composer's own card so the preview and the card that lands in the
+ *  conversation cannot describe different things. */
+type ProductMeta = SharedContextMeta;
 
 type OutgoingDeliveryStatus = "sent" | "delivered" | "seen";
 type ComposerInputKind = "text" | "voice";
@@ -951,6 +941,41 @@ export default function ChatScreen() {
   // be sized to reach exactly halfway up the pill rather than only
   // starting at its bottom edge.
   const [inputPillHeight, setInputPillHeight] = useState(44);
+
+  // Both heights above are measured from onLayout, and the attachment card
+  // animates the composer's height — which fires onLayout every frame it
+  // moves. Re-rendering this screen thirty times over a 240ms transition to
+  // chase a number that is about to change again is the one thing that
+  // would make the transition itself stutter, so while the card is opening
+  // or closing the measurements are remembered and applied once it settles.
+  // What they feed (the white backdrop's height, the list's bottom
+  // clearance) is not something anyone can catch lagging by a quarter of a
+  // second; a dropped frame in the animation is.
+  const composerResizingRef = useRef(false);
+  const measuredBarHeightRef = useRef(inputBarHeight);
+  const measuredPillHeightRef = useRef(inputPillHeight);
+
+  const applyComposerBarHeight = useCallback((measured: number) => {
+    measuredBarHeightRef.current = measured;
+    if (composerResizingRef.current) return;
+    setInputBarHeight((prev) => (Math.abs(measured - prev) > 2 ? measured : prev));
+  }, []);
+
+  const applyComposerPillHeight = useCallback((measured: number) => {
+    measuredPillHeightRef.current = measured;
+    if (composerResizingRef.current) return;
+    setInputPillHeight((prev) => (Math.abs(measured - prev) > 2 ? measured : prev));
+  }, []);
+
+  const beginComposerResize = useCallback(() => {
+    composerResizingRef.current = true;
+  }, []);
+
+  const endComposerResize = useCallback(() => {
+    composerResizingRef.current = false;
+    applyComposerBarHeight(measuredBarHeightRef.current);
+    applyComposerPillHeight(measuredPillHeightRef.current);
+  }, [applyComposerBarHeight, applyComposerPillHeight]);
   // Measured total height of the floating header overlay (status bar inset
   // + header row), so the message list can reserve exactly that much
   // clearance at rest instead of guessing a fixed number.
@@ -1015,6 +1040,19 @@ export default function ChatScreen() {
     ? chatPartnerRouteParam[0]
     : chatPartnerRouteParam;
   const effectiveCurrentUserUUID = currentUserUUID || contextUserUUID;
+
+  /**
+   * Pictures waiting in the composer.
+   *
+   * They upload the moment they are picked and are sent with whatever gets
+   * typed, as one message — see `hooks/chat/usePendingAttachments.ts` for
+   * why the upload does not wait for Send.
+   */
+  const attachments = usePendingAttachments(
+    [String(effectiveCurrentUserUUID ?? ""), String(chatPartnerId ?? "")]
+      .sort()
+      .join("_"),
+  );
 
   // Track whether the current user has blocked this chat partner, to render
   // the correct Block/Unblock option in the chat actions menu.
@@ -1573,6 +1611,16 @@ export default function ChatScreen() {
 
     loadChatPartnerData();
   }, [chatPartnerId]);
+
+  // Ends the loading overlay the ContextDrop "Contact Author" drop (and any
+  // other slow push into this screen) put up — see utils/navHandoff.ts. It
+  // ends when the chat is a chat, not at mount: the wait is one wait, and
+  // handing it to this screen's own skeleton halfway through would only put
+  // a flicker in the middle of it. A handoff nobody ends times out anyway,
+  // so a partner that never loads cannot hold the scrim.
+  useEffect(() => {
+    if (!isLoadingPartner) endNavHandoff();
+  }, [isLoadingPartner]);
 
   // Load badge tiers so badge holders get gradient chat bubbles
   useEffect(() => {
@@ -2223,8 +2271,121 @@ export default function ChatScreen() {
     router.replace("/(users)/messages" as any);
   }, [router]);
 
+  /**
+   * Send the pictures in the composer, with whatever was typed as their
+   * caption — one row, however many pictures.
+   *
+   * The uploads were started when the files were picked, so this usually
+   * waits on nothing; when it does wait, it waits on the promises already in
+   * flight rather than starting them again. The optimistic bubble shows the
+   * *local* files, so the stack is on screen before the network has finished
+   * with it.
+   */
+  const sendAttachments = async (caption: string) => {
+    if (!effectiveCurrentUserUUID || !chatPartnerId) return;
+
+    const localUris = attachments.items.map((item) => item.uri);
+    const optimisticId = `temp-${Date.now()}-${Math.random()}`;
+    const replyMeta = replyingToMessage
+      ? buildReplyMetaForMessage(replyingToMessage)
+      : null;
+    const messageContent = caption
+      ? buildMessageMetaContent(caption, {
+          replyMeta,
+          productMeta: pendingProductContext,
+        })
+      : null;
+
+    setLocalMessages((prev) => [
+      ...prev,
+      {
+        id: optimisticId,
+        sender_id: effectiveCurrentUserUUID,
+        receiver_id: chatPartnerId,
+        message_type: "image",
+        image_url: localUris[0],
+        image_urls: localUris,
+        content: messageContent,
+        created_at: new Date().toISOString(),
+        is_read: false,
+        isOptimistic: true,
+        localStatus: "sending",
+      },
+    ]);
+
+    setMessageText("");
+    setReplyingToMessage(null);
+    setPendingProductContext(null);
+    attachments.clear();
+    void triggerSendHaptic();
+    void playSendSound();
+
+    const urls = await attachments.resolve();
+    if (urls.length === 0) {
+      setLocalMessages((prev) =>
+        prev.map((m) =>
+          m.id === optimisticId ? { ...m, localStatus: "failed" } : m,
+        ),
+      );
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("messages")
+        .insert([
+          {
+            sender_id: effectiveCurrentUserUUID,
+            receiver_id: chatPartnerId,
+            message_type: "image",
+            // The first picture also lives in `image_url`, so older clients
+            // and the type/payload constraint both still work — see
+            // supabase/migrations/add_chat_image_groups.sql.
+            image_url: urls[0],
+            image_urls: urls,
+            content: messageContent,
+            is_read: false,
+          },
+        ])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setLocalMessages((prev) =>
+        prev.map((m) =>
+          m.id === optimisticId ? { ...m, localStatus: "sent" } : m,
+        ),
+      );
+      updateOutgoingStatus(data?.id, "sent");
+
+      void sendChatPushNotification({
+        senderId: String(effectiveCurrentUserUUID),
+        receiverId: String(chatPartnerId),
+        messageType: "image",
+        messagePreview: caption || undefined,
+      });
+    } catch (e) {
+      console.error("❌ Attachment send failed", e);
+      setLocalMessages((prev) =>
+        prev.map((m) =>
+          m.id === optimisticId ? { ...m, localStatus: "failed" } : m,
+        ),
+      );
+    }
+  };
+
   const handleSendMessage = async () => {
     const baseMessageContent = messageText.trim();
+
+    // Pictures in the composer are the message; the text becomes their
+    // caption rather than a second message underneath them.
+    if (attachments.any) {
+      chatInputRef.current?.clear();
+      await sendAttachments(baseMessageContent);
+      return;
+    }
+
     if (!baseMessageContent || !effectiveCurrentUserUUID || !chatPartnerId) {
       return;
     }
@@ -2710,32 +2871,6 @@ export default function ChatScreen() {
   };
 
   // Image picker handlers
-  const handleOptimisticImage = (optimisticMsg: any) => {
-    setLocalMessages((prev) => [...prev, optimisticMsg]);
-  };
-
-  const handleImageUploadSuccess = (finalMsg: any, optimisticId: string) => {
-    // Fallback: add manually if realtime doesn't pick it up
-    setTimeout(() => {
-      setMessages((prev) => {
-        if (prev.some((m) => m.id === finalMsg.id)) {
-          return prev;
-        }
-        return [...prev, finalMsg];
-      });
-      // Remove optimistic message
-      setLocalMessages((prev) => prev.filter((m) => m.id !== optimisticId));
-    }, 2000);
-  };
-
-  const handleImageUploadError = (optimisticId: string) => {
-    setLocalMessages((prev) =>
-      prev.map((m) =>
-        m.id === optimisticId ? { ...m, localStatus: "failed" } : m,
-      ),
-    );
-  };
-
   // Audio recorder handlers
   const handleOptimisticAudio = (optimisticMsg: any) => {
     setLocalMessages((prev) => [...prev, optimisticMsg]);
@@ -3202,6 +3337,9 @@ export default function ChatScreen() {
       const hasVisibleTextContent = visibleTextContent.trim().length > 0;
       const embeddedReplyMeta = parsedContent.replyMeta;
       const embeddedProductMeta = parsedContent.productMeta;
+      // Same names, icons and call to action the composer's own preview of
+      // this card used — see components/chat/ComposerContextCard.tsx.
+      const embeddedKind = sharedContextKind(embeddedProductMeta?.source);
       const shouldRenderTextBubble =
         hasVisibleTextContent || !!embeddedReplyMeta;
       const RADIUS_LARGE = 20;
@@ -3257,9 +3395,25 @@ export default function ChatScreen() {
         }
       };
 
-      const handleImagePress = () => {
-        if (isImage && message.image_url) {
-          const idx = chatImageIndexByUrl[message.image_url] ?? -1;
+      /** Every picture in this message, oldest rows included: `image_urls`
+       *  arrived with grouping, and anything written before it has one. */
+      const imageUrls: string[] = Array.isArray(message.image_urls)
+        ? message.image_urls.filter(Boolean)
+        : message.image_url
+          ? [message.image_url]
+          : [];
+
+      /** An image message's `content` is its caption — the same meta
+       *  wrapper text messages use, so a reply or a product context on it
+       *  still reads. */
+      const imageCaption = isImage
+        ? (parseMessageMetaContent(message.content ?? "")?.text ?? "").trim()
+        : "";
+
+      const handleImagePress = (which = 0) => {
+        const uri = imageUrls[which] ?? imageUrls[0];
+        if (isImage && uri) {
+          const idx = chatImageIndexByUrl[uri] ?? -1;
           setPreviewImageIndex(idx >= 0 ? idx : 0);
           setShowImagePreview(true);
         }
@@ -3444,7 +3598,6 @@ export default function ChatScreen() {
               )}
               <View>
                 <Pressable
-                  onPress={handleImagePress}
                   onLongPress={(e) =>
                     openMessageActions(message, e.nativeEvent.pageY, isCurrentUser)
                   }
@@ -3459,21 +3612,39 @@ export default function ChatScreen() {
                         marginRight: isCurrentUser ? 8 : 0,
                         marginLeft: isCurrentUser ? 0 : 8,
                         opacity: isOptimistic ? 0.7 : 1,
+                        backgroundColor: imageCaption ? "#111827" : undefined,
                       },
                     ]}
                   >
-                    <ExpoImage
-                      source={{ uri: message.image_url }}
-                      style={{ width: 200, height: 200 }}
-                      contentFit="cover"
-                      cachePolicy="memory-disk"
+                    {/* One bubble however many pictures — a set sent
+                        together is one thing somebody sent. Rows written
+                        before groups existed have no `image_urls`, so the
+                        single `image_url` stands in. */}
+                    <ImageStack
+                      urls={imageUrls}
+                      onPressImage={(index) => handleImagePress(index)}
+                      dimmed={isOptimistic}
                     />
+                    {/* The caption belongs to the pictures, so it is inside
+                        their bubble rather than a second message under it. */}
+                    {imageCaption ? (
+                      <Text
+                        style={{
+                          color: "#fff",
+                          fontSize: 15,
+                          lineHeight: 20,
+                          paddingHorizontal: 10,
+                          paddingTop: 8,
+                          paddingBottom: 9,
+                          maxWidth: 220,
+                        }}
+                      >
+                        {imageCaption}
+                      </Text>
+                    ) : null}
                     {isOptimistic && (
-                      <View className="absolute inset-0 bg-black/30 items-center justify-center">
+                      <View className="absolute inset-0 bg-black/25 items-center justify-center">
                         <CircularLoader color="white" />
-                        <Text className="text-white text-xs mt-2">
-                          Uploading...
-                        </Text>
                       </View>
                     )}
                   </View>
@@ -3634,31 +3805,13 @@ export default function ChatScreen() {
                     height: productCardImageHeight,
                   }}
                 >
-                  <Ionicons
-                    name={
-                      embeddedProductMeta.source === "profile"
-                        ? "person-circle-outline"
-                        : embeddedProductMeta.source === "post"
-                          ? "image-outline"
-                          : embeddedProductMeta.source === "marketplace"
-                            ? "storefront-outline"
-                            : "pricetag-outline"
-                    }
-                    size={44}
-                    color="#9ca3af"
-                  />
+                  <Ionicons name={embeddedKind.icon} size={44} color="#9ca3af" />
                 </View>
               )}
 
               <View className="px-3.5 pt-3 pb-2.5">
                 <Text className="text-[11px] font-semibold text-primary uppercase tracking-wide">
-                  {embeddedProductMeta.source === "profile"
-                    ? "Profile"
-                    : embeddedProductMeta.source === "post"
-                      ? "Post"
-                      : embeddedProductMeta.source === "marketplace"
-                        ? "Marketplace"
-                        : "Product"}
+                  {embeddedKind.label}
                 </Text>
 
                 <View className="flex-row items-center mt-1">
@@ -3745,13 +3898,7 @@ export default function ChatScreen() {
 
               <View className="flex-row items-center justify-center border-t border-gray-100 py-2.5">
                 <Text className="text-[13px] font-semibold text-primary mr-1">
-                  {embeddedProductMeta.source === "profile"
-                    ? "View Profile"
-                    : embeddedProductMeta.source === "post"
-                      ? "Go to Post"
-                      : embeddedProductMeta.source === "marketplace"
-                        ? "View Listing"
-                        : "View Product"}
+                  {embeddedKind.cta}
                 </Text>
                 <Ionicons name="arrow-forward" size={13} color="#094569" />
               </View>
@@ -4135,10 +4282,36 @@ export default function ChatScreen() {
           onClose={() => setShowChatActionsMenu(false)}
         >
           <View
-            style={{ borderTopLeftRadius: 24, borderTopRightRadius: 24, borderCurve: "continuous" }} className="bg-white pb-8">
+            style={{ borderTopLeftRadius: MODAL_RADIUS, borderTopRightRadius: MODAL_RADIUS, borderCurve: "continuous" }} className="bg-white pb-8">
             <View className="px-6 py-4 border-b border-gray-200">
               <Text className="text-lg font-mbold text-gray-900">Chat Actions</Text>
             </View>
+            {/* The same screen the header's avatar opens — the menu is
+                where people look for "everything else about this chat", so
+                it cannot be the one place that does not offer it. */}
+            <TouchableOpacity
+              onPress={() => {
+                setShowChatActionsMenu(false);
+                setTimeout(
+                  () =>
+                    router.push(
+                      `/(users)/chat/details/${chatPartnerId}` as any,
+                    ),
+                  300,
+                );
+              }}
+              className="flex-row items-center px-6 py-4 border-b border-gray-100"
+            >
+              <Ionicons name="information-circle-outline" size={24} color="#374151" />
+              <View className="ml-4 flex-1">
+                <Text className="text-base font-msemibold text-gray-900">
+                  Chat details
+                </Text>
+                <Text className="text-sm text-gray-500 font-regular">
+                  Search, shared media and links, mute
+                </Text>
+              </View>
+            </TouchableOpacity>
             <TouchableOpacity
               onPress={() => {
                 setShowChatActionsMenu(false);
@@ -4224,8 +4397,8 @@ export default function ChatScreen() {
             style={{
               marginTop: "auto",
               backgroundColor: "#fff",
-              borderTopLeftRadius: 24,
-              borderTopRightRadius: 24,
+              borderTopLeftRadius: MODAL_RADIUS,
+              borderTopRightRadius: MODAL_RADIUS,
               borderCurve: "continuous",
               paddingBottom: 40,
               paddingTop: 16,
@@ -4401,10 +4574,15 @@ export default function ChatScreen() {
           <Ionicons name="chevron-back-outline" size={22} color="#007AFF" />
         </TouchableOpacity>
 
-        {/* Profile Image or Avatar */}
+        {/* Profile Image or Avatar — opens the conversation's own details
+            (search, shared media and links, mute, block), not the public
+            profile. What you want from this tap inside a chat is almost
+            always about *this conversation*; their profile is one row down
+            the screen it opens. */}
         <TouchableOpacity
           onPress={() =>
-            chatPartnerId && router.push(`/(users)/profile/${chatPartnerId}`)
+            chatPartnerId &&
+            router.push(`/(users)/chat/details/${chatPartnerId}` as any)
           }
           activeOpacity={0.7}
           className="mr-3"
@@ -4436,7 +4614,16 @@ export default function ChatScreen() {
           ) : null}
         </TouchableOpacity>
 
-        <View className="flex-1">
+        {/* The name goes where the avatar goes — the two are one target as
+            far as anybody tapping them is concerned. */}
+        <TouchableOpacity
+          className="flex-1"
+          activeOpacity={0.7}
+          onPress={() =>
+            chatPartnerId &&
+            router.push(`/(users)/chat/details/${chatPartnerId}` as any)
+          }
+        >
           <View className="flex-row items-center gap-1.5 flex-wrap">
             <Text className="font-semibold text-gray-800 text-lg">
               {chatPartnerName}
@@ -4465,7 +4652,7 @@ export default function ChatScreen() {
               {partnerPresenceText}
             </Text>
           )}
-        </View>
+        </TouchableOpacity>
 
         {/* Optional: Add call or video call buttons */}
         <TouchableOpacity
@@ -4646,9 +4833,7 @@ export default function ChatScreen() {
             }}
             onLayout={(e) => {
               const measured = Math.round(e.nativeEvent.layout.height);
-              if (measured > 0 && Math.abs(measured - inputBarHeight) > 2) {
-                setInputBarHeight(measured);
-              }
+              if (measured > 0) applyComposerBarHeight(measured);
             }}
           >
             <View
@@ -4656,9 +4841,7 @@ export default function ChatScreen() {
               style={{ borderRadius: INPUT_PILL_RADIUS }}
               onLayout={(e) => {
                 const measured = Math.round(e.nativeEvent.layout.height);
-                if (measured > 0 && Math.abs(measured - inputPillHeight) > 2) {
-                  setInputPillHeight(measured);
-                }
+                if (measured > 0) applyComposerPillHeight(measured);
               }}
             >
               {/* Clipped separately from the actual content below — the
@@ -4726,59 +4909,27 @@ export default function ChatScreen() {
                   </TouchableOpacity>
                 </View>
               ) : null}
-              {pendingProductContext ? (
-                <View className="px-3 pt-2 pb-2 border-b border-gray-200/80">
-                  <Pressable
-                    style={{ borderRadius: 12, borderCurve: "continuous" }}
-                    onPress={() => openProductContext(pendingProductContext)}
-                    className="border border-gray-200 bg-white p-2 flex-row items-center"
-                  >
-                    {pendingProductContext.imageUrl ? (
-                      <Image
-                        style={{ borderRadius: 8 }}
-                        source={{ uri: pendingProductContext.imageUrl }}
-                        className="w-10 h-10 mr-2"
-                        resizeMode="cover"
-                      />
-                    ) : null}
-                    <View className="flex-1">
-                      <Text
-                        className="text-[11px] font-semibold text-primary"
-                        numberOfLines={1}
-                      >
-                        {pendingProductContext.source === "profile"
-                          ? "Shared profile"
-                          : pendingProductContext.source === "post"
-                            ? "Shared post"
-                            : pendingProductContext.source === "marketplace"
-                              ? "Shared marketplace item"
-                              : "Interested in this product"}
-                      </Text>
-                      <Text
-                        className="text-[12px] text-gray-700"
-                        numberOfLines={1}
-                      >
-                        {pendingProductContext.title}
-                      </Text>
-                      {pendingProductContext.source !== "profile" &&
-                      pendingProductContext.price ? (
-                        <Text
-                          className="text-[11px] text-gray-500"
-                          numberOfLines={1}
-                        >
-                          Nu. {pendingProductContext.price}
-                        </Text>
-                      ) : null}
-                    </View>
-                    <TouchableOpacity
-                      onPress={() => setPendingProductContext(null)}
-                      className="ml-2 w-7 h-7 items-center justify-center"
-                    >
-                      <Ionicons name="close" size={16} color="#6b7280" />
-                    </TouchableOpacity>
-                  </Pressable>
-                </View>
-              ) : null}
+              {/* What you came here to talk about, at a size that says what
+                  it is — and the composer grows into it rather than
+                  jumping, which is why this is mounted whether or not
+                  there is anything attached. */}
+              <ComposerContextCard
+                meta={pendingProductContext}
+                onOpen={openProductContext}
+                onRemove={() => setPendingProductContext(null)}
+                onTransitionStart={beginComposerResize}
+                onTransitionEnd={endComposerResize}
+              />
+
+              {/* What is waiting to be sent, and how far along it is. Same
+                  place and the same growth as the context card above it. */}
+              <ComposerAttachments
+                items={attachments.items}
+                onRemove={attachments.remove}
+                onRetry={attachments.retry}
+                onTransitionStart={beginComposerResize}
+                onTransitionEnd={endComposerResize}
+              />
 
               <View className="flex-row items-center px-2 py-1">
                 {/* Chevron — tap to bring back the icons while keyboard is up */}
@@ -4799,12 +4950,11 @@ export default function ChatScreen() {
                 {/* Collapsible icons: photo, camera, location — hidden in voice mode */}
                 {showIcons && (
                   <View className="mr-1 flex-row items-center">
+                    {/* Picks only. What comes back waits in the composer
+                        and uploads there — see usePendingAttachments. */}
                     <ChatMultiMediaPicker
-                      currentUserUUID={effectiveCurrentUserUUID || ""}
-                      chatPartnerId={chatPartnerId as string}
-                      onOptimisticImage={handleOptimisticImage}
-                      onUploadSuccess={handleImageUploadSuccess}
-                      onUploadError={handleImageUploadError}
+                      onPicked={(media) => attachments.add(media)}
+                      remaining={MAX_ATTACHMENTS - attachments.items.length}
                     />
                     <GifStickerButton
                       visible={showGifStickerDrawer}
@@ -4871,6 +5021,7 @@ export default function ChatScreen() {
                     !isEditMode &&
                     !replyingToMessage &&
                     !pendingProductContext &&
+                    !attachments.any &&
                     !messageText.trim() ? (
                       <View className="flex-1 self-center min-h-[38px] justify-center">
                         <WeChatVoiceRecorder
@@ -4942,7 +5093,7 @@ export default function ChatScreen() {
                       </TouchableOpacity>
                     )}
 
-                    {messageText.trim() ? (
+                    {messageText.trim() || attachments.any ? (
                       <TouchableOpacity
                         onPress={() => {
                           if (isEditMode) {

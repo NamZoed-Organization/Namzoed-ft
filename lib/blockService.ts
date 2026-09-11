@@ -71,21 +71,3 @@ export const unblockUser = async (
     return { success: false, error: error.message || 'Failed to unblock user' };
   }
 };
-
-// Get list of blocked user IDs
-export const getBlockedUsers = async (
-  userId: string
-): Promise<string[]> => {
-  try {
-    const { data, error } = await supabase
-      .from('user_blocks')
-      .select('blocked_id')
-      .eq('blocker_id', userId);
-
-    if (error) throw error;
-    return (data || []).map(row => row.blocked_id);
-  } catch (error) {
-    console.error('Error fetching blocked users:', error);
-    return [];
-  }
-};

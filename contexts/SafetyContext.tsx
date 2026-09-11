@@ -71,13 +71,33 @@ export function SafetyProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     try {
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from("profiles")
         .select("birth_date, age_verified, safe_view")
         .eq("id", userId)
         .maybeSingle();
 
-      if (error || !data) return;
+      if (error) {
+        // PostgREST rejects the whole select when any one column is
+        // unknown, so a missing `safe_view` used to take the age fields
+        // down with it — isAdult stayed false for everyone, and Safe View
+        // was permanently locked with nothing logged anywhere. Age gating
+        // must not depend on the preference column being present.
+        console.warn(
+          "Safety: profile read failed, retrying without safe_view:",
+          error.message,
+        );
+        ({ data, error } = await supabase
+          .from("profiles")
+          .select("birth_date, age_verified")
+          .eq("id", userId)
+          .maybeSingle());
+      }
+
+      if (error || !data) {
+        if (error) console.warn("Safety: profile read failed:", error.message);
+        return;
+      }
 
       if (data.birth_date) {
         setUserAge(getAgeFromDate(new Date(data.birth_date)));
@@ -87,9 +107,9 @@ export function SafetyProvider({ children }: { children: React.ReactNode }) {
       setIsAgeVerified(!!data.age_verified);
 
       // Server value wins when present; keep the cache in sync.
-      if (typeof data.safe_view === "boolean") {
-        setSafeViewState(data.safe_view);
-        AsyncStorage.setItem(KEY_SAFE_VIEW, String(data.safe_view)).catch(
+      if (typeof (data as any).safe_view === "boolean") {
+        setSafeViewState((data as any).safe_view);
+        AsyncStorage.setItem(KEY_SAFE_VIEW, String((data as any).safe_view)).catch(
           () => {},
         );
       }

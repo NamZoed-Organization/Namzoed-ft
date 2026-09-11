@@ -17,6 +17,11 @@ const SCREEN_WIDTH = Dimensions.get("window").width;
 const GRID_GAP = 4;
 const GRID_PADDING = GRID_GAP;
 
+/** The ground the grid sits on. Exported so a screen that hosts a grid can
+ *  paint the same color behind and below it — otherwise the grid reads as a
+ *  band of a different shade wherever the content runs out. */
+export const GRID_BACKGROUND = "#F0F1F3";
+
 interface PositionedItem<T> {
   item: T;
   top: number;
@@ -53,9 +58,12 @@ export interface MasonryGridProps<T> {
    * win bandwidth contention over ones merely pre-revealed ahead of scroll. */
   renderCard: (item: T, columnWidth: number, deferred: boolean, priority: "low" | "normal" | "high") => React.ReactNode;
   emptyText?: string;
+  /** Optional call-to-action rendered below emptyText (e.g. a "Create a
+   * Post" button) — omit for a plain text-only empty state. */
+  emptyAction?: React.ReactNode;
 }
 
-function MasonryGrid<T>({ items, loading, keyExtractor, getHeight, renderCard, emptyText = "Nothing here yet." }: MasonryGridProps<T>) {
+function MasonryGrid<T>({ items, loading, keyExtractor, getHeight, renderCard, emptyText = "Nothing here yet.", emptyAction }: MasonryGridProps<T>) {
   const columnWidth = (SCREEN_WIDTH - GRID_PADDING * 2 - GRID_GAP) / 2;
   const { left, right } = useMemo(() => splitIntoColumns(items, getHeight, columnWidth), [items, getHeight, columnWidth]);
   const { containerRef, isNear, isAboveFold, markAllRevealed, rearm } = useGridReveal();
@@ -79,16 +87,23 @@ function MasonryGrid<T>({ items, loading, keyExtractor, getHeight, renderCard, e
           paddingHorizontal: GRID_PADDING,
           paddingVertical: loading ? 12 : 48,
           alignItems: loading ? "stretch" : "center",
-          backgroundColor: "#F0F1F3",
+          backgroundColor: GRID_BACKGROUND,
         }}
       >
-        {loading ? <GridSkeleton rows={3} /> : <Text style={{ fontSize: 14, color: "#9CA3AF" }}>{emptyText}</Text>}
+        {loading ? (
+          <GridSkeleton rows={3} />
+        ) : (
+          <>
+            <Text style={{ fontSize: 14, color: "#9CA3AF" }}>{emptyText}</Text>
+            {emptyAction != null && <View style={{ marginTop: 16 }}>{emptyAction}</View>}
+          </>
+        )}
       </View>
     );
   }
 
   return (
-    <View ref={containerRef} collapsable={false} style={{ paddingHorizontal: GRID_PADDING, backgroundColor: "#F0F1F3" }}>
+    <View ref={containerRef} collapsable={false} style={{ paddingHorizontal: GRID_PADDING, backgroundColor: GRID_BACKGROUND }}>
       <View style={{ flexDirection: "row", gap: GRID_GAP }}>
         <View style={{ flex: 1 }}>
           {left.map(({ item, top, height }) => (

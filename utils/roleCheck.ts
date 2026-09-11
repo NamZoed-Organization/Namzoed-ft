@@ -11,10 +11,3 @@ export const isMongooseUser = (email?: string | null): boolean => {
   if (email == null || typeof email !== "string") return false;
   return email.trim().toLowerCase() === MONGOOSE_EMAIL.toLowerCase();
 };
-
-/**
- * Check if current user is Mongoose based on user object
- */
-export const isUserMongoose = (user: any): boolean => {
-  return isMongooseUser(user?.email);
-};

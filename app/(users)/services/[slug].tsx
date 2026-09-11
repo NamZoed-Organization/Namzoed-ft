@@ -8,9 +8,9 @@ import { useAppRouter } from "@/utils/navigation";
 import { getInitials } from "@/utils/initials";
 import { Href, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { Image } from "expo-image";
-import { ArrowUpDown, Shuffle, ChevronLeft, Search, Verified } from "lucide-react-native";
+import { ArrowUpDown, Shuffle, ChevronLeft, Verified } from "lucide-react-native";
 import React, { useEffect, useState, useMemo, useCallback } from "react";
-import { FlatList, StyleSheet, Text, TouchableOpacity, View, BackHandler } from "react-native";
+import { FlatList, Text, TouchableOpacity, View, BackHandler } from "react-native";
 import * as Haptics from "expo-haptics";
 import { useUser } from "@/contexts/UserContext";
 
@@ -413,7 +413,17 @@ export default function ServiceDetailScreen() {
 
   return (
     <View className="flex-1 bg-background">
-      <TopNavbar />
+      {/* One search, in the bar, scoped to this category — the field that
+          used to sit under the tabs asked the same question the bar's own
+          field was already asking, two rows apart (see TopNavbar's
+          `search`). */}
+      <TopNavbar
+        search={{
+          placeholder: `Search ${category?.name?.toLowerCase() || "services"}`,
+          onPress: () =>
+            router.push(`/(users)/services/search?scope=${slug}` as any),
+        }}
+      />
 
       {/* Top bar: back + title + add */}
       <View className="flex-row items-center px-4 pt-2 pb-2 bg-background">
@@ -590,18 +600,6 @@ export default function ServiceDetailScreen() {
           ))}
       </View>
 
-      {/* Search trigger (opens modal scoped to this category) */}
-      <TouchableOpacity
-        onPress={() => router.push(`/(users)/services/search?scope=${slug}` as any)}
-        activeOpacity={0.85}
-        style={slugStyles.searchContainer}
-      >
-        <Search size={15} color="#94A3B8" style={{ marginRight: 8 }} />
-        <Text style={slugStyles.searchPlaceholder}>
-          {`Search ${category?.name?.toLowerCase() || 'services'}...`}
-        </Text>
-      </TouchableOpacity>
-
       {/* Content */}
       {activeTab === 'services' ? (
         shuffling ? (
@@ -651,22 +649,3 @@ export default function ServiceDetailScreen() {
     </View>
   );
 }
-
-const slugStyles = StyleSheet.create({
-  searchContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#F1F5F9",
-    borderRadius: 10,
-    borderCurve: "continuous",
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    marginHorizontal: 16,
-    marginBottom: 4,
-  },
-  searchPlaceholder: {
-    flex: 1,
-    fontSize: 13,
-    color: "#94A3B8",
-  },
-});

@@ -1,27 +1,37 @@
 import {
-  Ionicons,
-  MaterialIcons
-} from "@expo/vector-icons";
-import FormInput from "@/components/ui/FormInput";
+  AuthButton,
+  AuthField,
+  AuthFooterLink,
+  AuthHeading,
+  AuthScreen,
+} from "@/components/auth/AuthChrome";
+import { MODAL_RADIUS } from "@/constants/theme";
+import {
+  Cake,
+  ChevronRight,
+  Eye,
+  EyeOff,
+  Lock,
+  Mail,
+  Phone,
+  User,
+} from "lucide-react-native";
 import PopupMessage from "@/components/ui/PopupMessage";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { SETTINGS_BACKGROUND } from "@/components/settings/SettingsChrome";
 import PrivacyPolicy from "@/components/settings/PrivacyPolicy";
 import TermsOfService from "@/components/settings/TermsOfService";
-import { clamp, useResponsive } from "@/utils/responsive";
 import { useAppRouter } from "@/utils/navigation";
 import { formatDisplayDate, getAgeFromDate, toISODate } from "@/utils/age";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { Link } from "expo-router";
-import React, { useRef, useState } from "react";
+import { LIGHT_DATE_PICKER_PROPS } from "@/constants/datePicker";
+import React, { useState } from "react";
 import {
   Alert,
-  Image,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
-  ScrollView,
   Text,
-  TouchableOpacity,
   View,
 } from "react-native";
 import { supabase } from '../lib/supabase';
@@ -38,28 +48,12 @@ export default function SignupTab2() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const scrollRef = useRef<ScrollView>(null);
 
   const [loading, setLoading] = useState(false);
   const [legalModal, setLegalModal] = useState<"privacy" | "terms" | null>(null);
   const [popup, setPopup] = useState<{visible: boolean, type: 'success'|'error'|'warning'|'white', title: string, message: string}>({visible: false, type: 'success', title: '', message: ''});
-  const { ms, vs, wp } = useResponsive();
 
-  const showPopup = (type: 'success'|'error'|'warning'|'white', title: string, message: string) => {
-    setPopup({visible: true, type, title, message});
-    setTimeout(() => setPopup(p => ({...p, visible: false})), 2500);
-  };
-  const pagePaddingX = clamp(wp(10), 20, 44);
-  const contentPaddingY = clamp(vs(40), 24, 52);
-  const fieldGap = clamp(vs(15), 12, 20);
-  const headerBottomSpacing = clamp(vs(24), 18, 32);
-  const titleSize = clamp(ms(36), 30, 42);
-  const logoSize = clamp(ms(96), 76, 118);
-  const iconSize = clamp(ms(20), 18, 24);
-  const termsSize = clamp(ms(14), 12, 16);
-  const submitPaddingY = clamp(vs(16), 12, 20);
-  const submitRadius = clamp(ms(8), 8, 12);
-  const submitSize = clamp(ms(16), 14, 18);
+  // Spacing and type come from the auth chrome now (§ Auth screens).
 
   // Check if phone number already exists
   const checkPhoneExists = async (phoneNumber: string): Promise<boolean> => {
@@ -199,222 +193,173 @@ export default function SignupTab2() {
     confirmPassword === password;
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : "padding"}
-      style={{ flex: 1, backgroundColor: "#fff" }}
+    <>
+    <AuthScreen
+      onBack={() => router.back()}
+      footer={
+        <AuthFooterLink
+          prompt="Already have an account?"
+          action="Sign in"
+          onPress={() => router.replace("/login")}
+        />
+      }
     >
-      <ScrollView
-          ref={scrollRef}
-          className="flex-1"
-          keyboardShouldPersistTaps="always"
-          contentContainerStyle={{
-            flexGrow: 1,
-            justifyContent: "center",
-            paddingVertical: contentPaddingY,
-            rowGap: fieldGap,
-            paddingHorizontal: pagePaddingX,
+      <AuthHeading
+        title="Create an account"
+        subtitle="A name, a way to reach you, and a password. That's all."
+      />
+
+      <View style={{ gap: 12 }}>
+        <AuthField
+          placeholder="Full name"
+          value={name}
+          onChangeText={setName}
+          autoCapitalize="words"
+          icon={<User size={19} color="#9CA3AF" strokeWidth={1.8} />}
+        />
+
+        <AuthField
+          placeholder="Email"
+          value={email}
+          onChangeText={setEmail}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoCorrect={false}
+          icon={<Mail size={19} color="#9CA3AF" strokeWidth={1.8} />}
+        />
+
+        <AuthField
+          placeholder="XXXXXXXX"
+          keyboardType="phone-pad"
+          value={phone}
+          onChangeText={setPhone}
+          maxLength={8}
+          icon={<Phone size={19} color="#9CA3AF" strokeWidth={1.8} />}
+          accessory={undefined}
+          style={undefined}
+        />
+
+        {/* The date of birth is a choice, so it opens a picker rather than
+            pretending to be a field you type into — but it wears the field's
+            own shape so the column does not break. */}
+        <Pressable
+          onPress={() => setShowDatePicker(true)}
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            backgroundColor: "#fff",
+            borderRadius: MODAL_RADIUS,
+            borderCurve: "continuous",
+            paddingHorizontal: 14,
+            minHeight: 52,
           }}
         >
-          {/* Header */}
-          <View
-            className="flex-row justify-between items-center"
-            style={{ marginBottom: headerBottomSpacing }}
-          >
-            <View>
-              <Text
-                className="font-mblack text-primary/90 mb-2"
-                style={{ fontSize: titleSize }}
-              >
-                Create an
-              </Text>
-              <Text
-                className="font-mbold text-secondary/90"
-                style={{ fontSize: titleSize }}
-              >
-                Account
-              </Text>
-            </View>
-            <Image
-              source={require("../assets/images/logo.png")}
-              style={{ width: logoSize, height: logoSize }}
-              resizeMode="contain"
-            />
+          <View style={{ width: 26 }}>
+            <Cake size={19} color="#9CA3AF" strokeWidth={1.8} />
           </View>
-
-          {/* Name */}
-          <FormInput
-            placeholder="Full Name"
-            value={name}
-            onChangeText={setName}
-            leftIcon={<MaterialIcons name="person" size={iconSize} color="#6B7280" />}
-          />
-
-          {/* Email */}
-          <FormInput
-            placeholder="E-mail"
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            leftIcon={<MaterialIcons name="email" size={iconSize} color="#6B7280" />}
-          />
-
-          {/* Phone */}
-          <FormInput
-            placeholder="XXXXXXXX"
-            keyboardType="phone-pad"
-            value={phone}
-            onChangeText={setPhone}
-            maxLength={8}
-            leftIcon={
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                <MaterialIcons name="phone" size={iconSize} color="#6B7280" />
-                <Text style={{ color: "#374151", fontSize: clamp(ms(15), 13, 17), fontWeight: "500" }}>
-                  975 -
-                </Text>
-              </View>
-            }
-          />
-
-          {/* Date of Birth */}
-          <Pressable
-            onPress={() => setShowDatePicker(true)}
+          <Text
             style={{
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "space-between",
-              borderWidth: 1,
-              borderColor: "#E5E7EB",
-              borderRadius: 12,
-              borderCurve: "continuous",
-              paddingVertical: 14,
-              paddingHorizontal: 16,
-              backgroundColor: "#F9FAFB",
+              flex: 1,
+              fontSize: 16,
+              color: birthDate ? "#111" : "#9CA3AF",
             }}
           >
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-              <MaterialIcons name="cake" size={iconSize} color="#6B7280" />
-              <Text
-                className="font-regular"
-                style={{
-                  fontSize: clamp(ms(15), 13, 17),
-                  color: birthDate ? "#374151" : "#9CA3AF",
-                }}
-              >
-                {birthDate ? formatDisplayDate(birthDate) : "Date of Birth (optional)"}
-              </Text>
-            </View>
-            <MaterialIcons name="calendar-today" size={iconSize} color="#6B7280" />
-          </Pressable>
-          {showDatePicker && (
-            <DateTimePicker
-              value={birthDate ?? defaultBirthDate}
-              mode="date"
-              display={Platform.OS === "ios" ? "spinner" : "default"}
-              onChange={onDateChange}
-              maximumDate={new Date()}
-            />
-          )}
-          <Text
-            className="font-mlight text-gray-400"
-            style={{ fontSize: clamp(ms(12), 10, 14), marginTop: -fieldGap + 4 }}
-          >
-            Used to apply age-related content restrictions (e.g. adult health
-            items are hidden for users under 18).
+            {birthDate ? formatDisplayDate(birthDate) : "Date of birth (optional)"}
           </Text>
-
-          {/* Password */}
-          <FormInput
-            placeholder="Password"
-            secureTextEntry={!showPassword}
-            value={password}
-            onChangeText={setPassword}
-            leftIcon={<MaterialIcons name="lock" size={iconSize} color="#6B7280" />}
-            rightAccessory={
-              <Pressable onPress={() => setShowPassword(!showPassword)}>
-                <Ionicons
-                  name={showPassword ? "eye" : "eye-off"}
-                  size={iconSize}
-                  color="#6B7280"
-                />
-              </Pressable>
-            }
+          <ChevronRight size={18} color="#C7C7CC" />
+        </Pressable>
+        {showDatePicker && (
+          <DateTimePicker
+            value={birthDate ?? defaultBirthDate}
+            mode="date"
+            display={Platform.OS === "ios" ? "spinner" : "default"}
+            onChange={onDateChange}
+            maximumDate={new Date()}
+            {...LIGHT_DATE_PICKER_PROPS}
           />
+        )}
+        <Text style={{ fontSize: 13, lineHeight: 18, color: "#9CA3AF", marginTop: -4 }}>
+          Used to hide age-restricted listings. Nobody sees it on your profile.
+        </Text>
 
-          {/* Confirm Password */}
-          <FormInput
-            placeholder="Confirm Password"
-            secureTextEntry={!showConfirmPassword}
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            onFocus={() => setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 300)}
-            leftIcon={
-              <MaterialIcons name="lock-outline" size={iconSize} color="#6B7280" />
-            }
-            rightAccessory={
-              <Pressable
-                onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-              >
-                <Ionicons
-                  name={showConfirmPassword ? "eye" : "eye-off"}
-                  size={iconSize}
-                  color="#6B7280"
-                />
-              </Pressable>
-            }
-          />
+        <AuthField
+          placeholder="Password"
+          secureTextEntry={!showPassword}
+          value={password}
+          onChangeText={setPassword}
+          autoCapitalize="none"
+          icon={<Lock size={19} color="#9CA3AF" strokeWidth={1.8} />}
+          accessory={
+            <Pressable onPress={() => setShowPassword(!showPassword)} hitSlop={8}>
+              {showPassword ? (
+                <EyeOff size={19} color="#9CA3AF" strokeWidth={1.8} />
+              ) : (
+                <Eye size={19} color="#9CA3AF" strokeWidth={1.8} />
+              )}
+            </Pressable>
+          }
+        />
 
-          {/* Terms */}
-          <Text
-            className="font-mlight text-center text-gray-500"
-            style={{ fontSize: termsSize }}
-          >
-            By clicking the <Text className="text-red-600">Register</Text>{" "}
-            button, you agree to the{" "}
-            <Text
-              className="text-primary font-msemibold"
-              onPress={() => setLegalModal("terms")}
+        <AuthField
+          placeholder="Confirm password"
+          secureTextEntry={!showConfirmPassword}
+          value={confirmPassword}
+          onChangeText={setConfirmPassword}
+          autoCapitalize="none"
+          icon={<Lock size={19} color="#9CA3AF" strokeWidth={1.8} />}
+          accessory={
+            <Pressable
+              onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+              hitSlop={8}
             >
-              Terms of Service
-            </Text>{" "}
-            and{" "}
-            <Text
-              className="text-primary font-msemibold"
-              onPress={() => setLegalModal("privacy")}
-            >
-              Privacy Policy
-            </Text>
-          </Text>
+              {showConfirmPassword ? (
+                <EyeOff size={19} color="#9CA3AF" strokeWidth={1.8} />
+              ) : (
+                <Eye size={19} color="#9CA3AF" strokeWidth={1.8} />
+              )}
+            </Pressable>
+          }
+        />
+      </View>
 
-          {/* Register Button */}
-          <TouchableOpacity
-            onPress={handleSignup}
-            activeOpacity={0.8}
-            disabled={!isFormValid || loading}
-            style={{ backgroundColor: isFormValid && !loading ? "#094569" : "#09456980",
-              paddingVertical: submitPaddingY,
-              borderRadius: submitRadius,
-              borderCurve: "continuous" }}
-          >
-            <Text
-              className="text-secondary text-center font-semibold"
-              style={{ fontSize: submitSize }}
-            >
-              {loading ? "Creating Account..." : "Create Account"}
-            </Text>
-          </TouchableOpacity>
+      <View style={{ height: 22 }} />
 
-          {/* Already have account */}
-          <Text
-            className="text-center text-gray-500 font-regular"
-            style={{ fontSize: termsSize }}
-          >
-            Already have an account?{" "}
-            <Link href="/login" className="text-primary font-semibold">
-              Login
-            </Link>
-          </Text>
-      </ScrollView>
+      <AuthButton
+        label="Create account"
+        onPress={handleSignup}
+        loading={loading}
+        disabled={!isFormValid}
+      />
+
+      {/* Under the button, because it is a consequence of pressing it. The
+          red "Register" this replaced named a button that says something
+          else, in the app's one destructive colour. */}
+      <Text
+        style={{
+          fontSize: 13,
+          lineHeight: 19,
+          color: "#9CA3AF",
+          textAlign: "center",
+          marginTop: 14,
+        }}
+      >
+        By creating an account you agree to our{" "}
+        <Text
+          style={{ color: "#0369A1", fontWeight: "600" }}
+          onPress={() => setLegalModal("terms")}
+        >
+          Terms of Service
+        </Text>{" "}
+        and{" "}
+        <Text
+          style={{ color: "#0369A1", fontWeight: "600" }}
+          onPress={() => setLegalModal("privacy")}
+        >
+          Privacy Policy
+        </Text>
+        .
+      </Text>
+    </AuthScreen>
 
       {/* Popup */}
       <PopupMessage
@@ -425,18 +370,26 @@ export default function SignupTab2() {
         onHide={() => setPopup(p => ({ ...p, visible: false }))}
       />
 
-      {/* Terms of Service / Privacy Policy */}
+      {/* Terms of Service / Privacy Policy. Opened from Settings these sit
+          inside a container that already pays the top inset; presented here
+          as a modal of their own, nothing does, so this pays it — and in the
+          documents' own grey, so the ground runs behind the status bar. */}
       <Modal
         visible={legalModal !== null}
         animationType="slide"
         onRequestClose={() => setLegalModal(null)}
       >
-        {legalModal === "terms" ? (
-          <TermsOfService onClose={() => setLegalModal(null)} />
-        ) : legalModal === "privacy" ? (
-          <PrivacyPolicy onClose={() => setLegalModal(null)} />
-        ) : null}
+        <SafeAreaView
+          edges={["top"]}
+          style={{ flex: 1, backgroundColor: SETTINGS_BACKGROUND }}
+        >
+          {legalModal === "terms" ? (
+            <TermsOfService onClose={() => setLegalModal(null)} />
+          ) : legalModal === "privacy" ? (
+            <PrivacyPolicy onClose={() => setLegalModal(null)} />
+          ) : null}
+        </SafeAreaView>
       </Modal>
-    </KeyboardAvoidingView>
+    </>
   );
 }

@@ -14,9 +14,16 @@
  * router.back() for the route, or the overlay's shrink-down animation).
  */
 
+import RestrictedContentGate from "@/components/ui/RestrictedContentGate";
+import { useViewableContent } from "@/hooks/useViewableContent";
+import { canView } from "@/lib/safeContent";
+import ProfilePreviewTrigger from "@/components/profile/ProfilePreviewTrigger";
+import { useProfilePreviewElevation } from "@/contexts/ProfilePreviewContext";
 import CountdownTimer from "@/components/CountdownTimer";
 import MarketplaceImageViewer from "@/components/modals/MarketplaceImageViewer";
 import PostFeedbackOverlay from "@/components/modals/PostFeedbackOverlay";
+import SellerCredibilityCard from "@/components/SellerCredibilityCard";
+import SellerRatingSheet from "@/components/SellerRatingSheet";
 import ProductReviews from "@/components/ProductReviews";
 import ReportProductModal from "@/components/modals/ReportProductModal";
 import ShareComposerModal from "@/components/modals/ShareComposerModal";
@@ -25,12 +32,15 @@ import CarouselDots from "@/components/ui/CarouselDots";
 import PopupMessage from "@/components/ui/PopupMessage";
 import ProgressiveImage from "@/components/ui/ProgressiveImage";
 import { useUser } from "@/contexts/UserContext";
+import { useSellerRating } from "@/hooks/useSellerRating";
+import { recordView } from "@/lib/historyService";
 import { RATIO_PORTRAIT } from "@/lib/postMediaDisplay";
 import { ProductWithUser } from "@/lib/productsService";
 import { buildProductExternalSharePayload } from "@/lib/shareUtils";
 import { supabase } from "@/lib/supabase";
 import { EdgeGestureCarouselHandle, registerEdgeGestureCarousel } from "@/utils/edgeGestureRegistry";
 import { useAppRouter } from "@/utils/navigation";
+import { beginNavHandoff } from "@/utils/navHandoff";
 import { getInitials } from "@/utils/initials";
 import MaskedView from "@react-native-masked-view/masked-view";
 import { BlurView } from "expo-blur";
@@ -141,9 +151,63 @@ export interface ProductDetailContentProps {
    * plain route usage (this component rendered from product/[id].tsx) omits
    * it, so navigation just happens immediately as a normal push. */
   onNavigateAway?: (navigate: () => void) => void;
+  /**
+   * Something to draw in place of the built-in hero carousel.
+   *
+   * `ProductPeekSheet` supplies its own, because the pictures are the one
+   * thing that has to *animate* between a 70% preview and this screen —
+   * everything below them is identical, and identical is what makes the
+   * transition invisible. Nothing else may use this to draw a different
+   * kind of hero: the point is that there is one product screen, seen at
+   * two sizes.
+   */
+  heroSlot?: React.ReactNode;
+  /**
+   * What the scroller reserves at the top. Defaults to the status bar plus
+   * the floating header; the sheet passes its own, because in a sheet the
+   * top of the screen belongs to the sheet, not to this.
+   */
+  topInset?: number;
+  /** The floating back/seller/share bar. Off while this is a preview inside
+   *  a sheet that has its own handle and close button. */
+  showHeader?: boolean;
+  /**
+   * Whether this owns the status bar.
+   *
+   * RN merges `StatusBar` props last-mounted-wins, and this component is
+   * mounted *inside* the peek sheet — so without this it would set
+   * dark-content over the sheet's dark scrim and the icons would vanish.
+   * The sheet turns it off until it is the screen.
+   */
+  ownsStatusBar?: boolean;
+  /**
+   * Whether the page scrolls at all.
+   *
+   * The peek sheet turns it off while it is still a preview: reading
+   * through a 70% window is a letterbox, and a live scroller there makes
+   * the pull-up feel like a second hidden gesture. The sheet takes the
+   * vertical until it *is* the screen.
+   */
+  scrollEnabled?: boolean;
+  /** Told the scroll position, so the sheet knows when a downward drag
+   *  means "put it back" rather than "scroll up past the top". */
+  onScrollOffset?: (y: number) => void;
 }
 
-export default function ProductDetailContent({ product, onBack, onRefresh, refreshing = false, onNavigateAway }: ProductDetailContentProps) {
+export default function ProductDetailContent({
+  product,
+  onBack,
+  onRefresh,
+  refreshing = false,
+  onNavigateAway,
+  heroSlot,
+  topInset,
+  showHeader = true,
+  ownsStatusBar = true,
+  scrollEnabled = true,
+  onScrollOffset,
+}: ProductDetailContentProps) {
+  const sellerPreviewElevation = useProfilePreviewElevation(product.user_id);
   const router = useAppRouter();
   const { currentUser } = useUser();
   const insets = useSafeAreaInsets();
@@ -172,6 +236,17 @@ export default function ProductDetailContent({ product, onBack, onRefresh, refre
   const [showReportModal, setShowReportModal] = useState(false);
   const [showFeedbackOverlay, setShowFeedbackOverlay] = useState(false);
   const [showShareComposer, setShowShareComposer] = useState(false);
+
+  // The seller behind this listing, and whether this buyer has rated them.
+  // Product stars and seller stars stay separate everywhere (see
+  // lib/sellerService.ts) — this is the second of the two, asked once the
+  // buyer has already said something about the item.
+  const sellerRating = useSellerRating({
+    ownerUserId: product.user_id as string | undefined,
+    buyerId: currentUser?.id,
+    kind: "shop",
+    fallbackName: product.profiles?.name,
+  });
 
   const [showSuccess, setShowSuccess] = useState(false);
   const [showError, setShowError] = useState(false);
@@ -203,6 +278,11 @@ export default function ProductDetailContent({ product, onBack, onRefresh, refre
 
   // Seller verification badge — self-contained so both the route and the
   // overlay get it without the caller needing to also fetch it.
+  // Viewer's own History — opening the detail counts as having seen it.
+  useEffect(() => {
+    recordView("product", product.id, currentUser?.id, product.user_id);
+  }, [product.id, product.user_id, currentUser?.id]);
+
   useEffect(() => {
     let cancelled = false;
     if (!product.user_id) return;
@@ -358,14 +438,33 @@ export default function ProductDetailContent({ product, onBack, onRefresh, refre
   const hasImages = productImageUrls.length > 0;
   const images = productImageUrls;
 
+  /**
+   * A link, a share, a search result or a notification can land somebody on
+   * this screen directly, so filtering the lists it is reached from is not
+   * enough — the gate has to be here too, where the content would otherwise
+   * be drawn (`lib/safeContent.ts`).
+   */
+  const { viewer } = useViewableContent();
+  const mayView = canView(product, viewer, product.user_id);
+
   const savings = product.is_currently_active ? product.price - (product.current_price || 0) : 0;
+
+  if (!mayView) {
+    return (
+      <RestrictedContentGate
+        onBack={onBack}
+        reason={viewer.safeView ? "safeView" : "age"}
+      />
+    );
+  }
 
   return (
     <View className="flex-1 bg-[#FAFBFC]">
-      <StatusBar barStyle="dark-content" />
+      {ownsStatusBar && <StatusBar barStyle="dark-content" />}
 
       {/* Pinned header — floats above the media with a translucent blurred
           bar (same glassmorphism as FeedPost's onBack detail header). */}
+      {showHeader && (
       <View
         style={{
           position: "absolute",
@@ -408,11 +507,18 @@ export default function ProductDetailContent({ product, onBack, onRefresh, refre
           <ChevronLeft size={20} color="#111" />
         </HeaderGlassButton>
 
+        {/* Raised while the seller's preview is open — the header's other
+            buttons are this row's siblings. */}
         <TouchableOpacity
           onPress={() => navigateAway(() => router.push(`/(users)/profile/${product.user_id}`))}
-          style={{ flexDirection: "row", alignItems: "center", flex: 1 }}
+          style={[
+            { flexDirection: "row", alignItems: "center", flex: 1 },
+            sellerPreviewElevation,
+          ]}
           activeOpacity={0.7}
         >
+          {/* Only the avatar — it is the island that expands. */}
+          <ProfilePreviewTrigger userId={product.user_id} name={(product.profiles as any)?.name}>
           {(product.profiles as any)?.avatar_url ? (
             <ProgressiveImage
               uri={(product.profiles as any).avatar_url}
@@ -428,6 +534,7 @@ export default function ProductDetailContent({ product, onBack, onRefresh, refre
               </Text>
             </View>
           )}
+          </ProfilePreviewTrigger>
           <View style={{ marginLeft: 10, flex: 1 }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
               <Text style={{ fontSize: 14, fontWeight: "700", color: "#111" }} numberOfLines={1}>
@@ -442,13 +549,20 @@ export default function ProductDetailContent({ product, onBack, onRefresh, refre
           <Send size={17} color="#374151" />
         </HeaderGlassButton>
       </View>
+      )}
 
       <ScrollView
         className="flex-1"
+        scrollEnabled={scrollEnabled}
+        onScroll={(e) => onScrollOffset?.(e.nativeEvent.contentOffset.y)}
+        scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
         bounces={true}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingTop: insets.top + 56, paddingBottom: isOwnProduct ? 16 : Math.max(insets.bottom, 16) + 52 }}
+        contentContainerStyle={{
+          paddingTop: topInset ?? insets.top + 56,
+          paddingBottom: isOwnProduct ? 16 : Math.max(insets.bottom, 16) + 52,
+        }}
         refreshControl={
           onRefresh ? (
             <RefreshControl
@@ -461,7 +575,10 @@ export default function ProductDetailContent({ product, onBack, onRefresh, refre
         }
       >
         {/* Hero Image Section — fixed 4:5 frame, cover-fit images, and
-            pagination — same design as the post-detail carousel. */}
+            pagination — same design as the post-detail carousel. A sheet
+            growing into this screen supplies its own, so the pictures can
+            animate while everything under them stays put. */}
+        {heroSlot ?? (
         <View ref={carouselContainerRef} collapsable={false} onLayout={remeasureCarousel} style={{ position: "relative" }}>
         <View style={{ height: PRODUCT_HERO_HEIGHT, overflow: "hidden", backgroundColor: "#000" }}>
           {hasImages ? (
@@ -557,6 +674,7 @@ export default function ProductDetailContent({ product, onBack, onRefresh, refre
           <CarouselDots activeIndex={activeImageIndex} total={images.length} />
         )}
         </View>
+        )}
 
         {/* Content Card */}
         <View className="bg-white">
@@ -728,13 +846,29 @@ export default function ProductDetailContent({ product, onBack, onRefresh, refre
               })}
             </Text>
           </View>
-          <View style={{ height: 1, backgroundColor: "#F3F4F6", marginHorizontal: 14 }} />
+          {/* Who you'd be buying from, and what is measured about them —
+              above the reviews, because a shopper deciding whether to trust
+              a listing asks about the seller before reading opinions on the
+              item. */}
+          <View style={{ paddingHorizontal: 14, paddingTop: 14 }}>
+            <SellerCredibilityCard
+              ownerId={product.user_id}
+              onPress={() =>
+                navigateAway(() => router.push(`/(users)/profile/${product.user_id}`))
+              }
+              onRate={sellerRating.canRate ? sellerRating.openSheet : undefined}
+              hasRated={sellerRating.hasRated}
+            />
+          </View>
+
+          <View style={{ height: 1, backgroundColor: "#F3F4F6", marginHorizontal: 14, marginTop: 14 }} />
 
           <ProductReviews
             productId={product.id}
             productOwnerId={product.user_id}
             averageRating={product.average_rating}
             reviewCount={product.review_count}
+            onReviewSubmitted={sellerRating.promptIfUnrated}
           />
         </View>
       </ScrollView>
@@ -836,6 +970,21 @@ export default function ProductDetailContent({ product, onBack, onRefresh, refre
         />
       )}
 
+      {sellerRating.providerId && currentUser?.id && (
+        <SellerRatingSheet
+          visible={sellerRating.sheetOpen}
+          onClose={sellerRating.closeSheet}
+          providerId={sellerRating.providerId}
+          buyerId={currentUser.id}
+          businessName={sellerRating.businessName}
+          kind={sellerRating.kind}
+          onSubmitted={() => {
+            sellerRating.markRated();
+            showSuccessPopup("Thanks — your rating helps other buyers", "Rating saved");
+          }}
+        />
+      )}
+
       <PopupMessage visible={showSuccess} type="success" title={popupTitle} message={popupMessage} />
       <PopupMessage visible={showError} type="error" title={popupTitle} message={popupMessage} />
     </View>
@@ -859,6 +1008,10 @@ export function useProductContactSellerTarget(
       icon: <MessageCircle size={18} color="#fff" fill="none" />,
       armedIcon: <MessageCircle size={18} color={PRIMARY} fill={PRIMARY} />,
       onDrop: () => {
+        // The chat screen is a heavy mount and the stack does not animate, so
+        // without this the drop lands on a screen that just sits there — see
+        // utils/navHandoff.ts. Chat itself ends it once it is really open.
+        beginNavHandoff();
         router.push({
           pathname: "/(users)/chat/[id]",
           params: {

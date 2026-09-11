@@ -300,51 +300,6 @@ export const logOneSignalDebugState = async (
   }
 };
 
-export const getOneSignalDebugState = async (
-  expectedExternalId?: string | null,
-): Promise<OneSignalDebugState | null> => {
-  if (!ensureOneSignalInitialized()) return null;
-
-  const sdk = getOneSignalSdk();
-  if (!sdk) return null;
-
-  try {
-    const [
-      permission,
-      canRequestPermission,
-      permissionNative,
-      externalId,
-      oneSignalId,
-      pushSubscriptionId,
-      pushToken,
-      pushOptedIn,
-    ] = await Promise.all([
-      sdk.OneSignal.Notifications.getPermissionAsync(),
-      sdk.OneSignal.Notifications.canRequestPermission(),
-      sdk.OneSignal.Notifications.permissionNative(),
-      sdk.OneSignal.User.getExternalId(),
-      sdk.OneSignal.User.getOnesignalId(),
-      sdk.OneSignal.User.pushSubscription.getIdAsync(),
-      sdk.OneSignal.User.pushSubscription.getTokenAsync(),
-      sdk.OneSignal.User.pushSubscription.getOptedInAsync(),
-    ]);
-
-    return {
-      expectedExternalId: expectedExternalId ? String(expectedExternalId) : null,
-      externalId,
-      oneSignalId,
-      permission,
-      canRequestPermission,
-      permissionNative: typeof permissionNative === "number" ? permissionNative : null,
-      pushSubscriptionId,
-      pushOptedIn,
-      pushTokenPrefix: pushToken ? String(pushToken).slice(0, 16) : null,
-    };
-  } catch (error) {
-    return null;
-  }
-};
-
 export const getNotificationPermission = async (): Promise<boolean> => {
   const sdk = getOneSignalSdk();
   if (!sdk) return false;

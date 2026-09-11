@@ -1,3 +1,4 @@
+import { useViewableContent } from "@/hooks/useViewableContent";
 import CircularLoader from "@/components/ui/CircularLoader";
 import ProgressiveImage from "@/components/ui/ProgressiveImage";
 import { useUser } from "@/contexts/UserContext";
@@ -12,7 +13,8 @@ import { useScreenAnalytics } from "@/hooks/useAnalytics";
 import { Screens } from "@/lib/analyticsService";
 import { useAppRouter } from "@/utils/navigation";
 import { clamp, useResponsive } from "@/utils/responsive";
-import { TrendingEntry, useTrendingSubcategories } from "@/hooks/useTrendingSubcategories";
+import { useTrendingTopics } from "@/hooks/useTrendingTopics";
+import { recordTrendingSignal, TrendingTopic } from "@/lib/trendingService";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams } from "expo-router";
 import { ChevronLeft } from "lucide-react-native";
@@ -29,6 +31,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function GlobalSearchScreen() {
+  const { filter: filterViewable } = useViewableContent();
   const router = useAppRouter();
   const insets = useSafeAreaInsets();
   const { currentUser } = useUser();
@@ -64,7 +67,7 @@ export default function GlobalSearchScreen() {
   );
   const tabBarVisibleWidth = useRef(0);
 
-  const { trending } = useTrendingSubcategories();
+  const { trending } = useTrendingTopics();
 
   // Load this user's recent searches on mount
   useEffect(() => {
@@ -78,6 +81,10 @@ export default function GlobalSearchScreen() {
       setThrottledQuery(trimmed);
       if (trimmed.length >= 2) {
         addRecentSearch(currentUser?.id, trimmed).then(setRecentSearches);
+        // A committed search — not a keystroke — is what counts toward
+        // trending. The debounce effect below fires on every pause in typing,
+        // which would score every prefix of every word.
+        recordTrendingSignal(trimmed, "search", currentUser?.id);
       }
     },
     [currentUser?.id],
@@ -98,6 +105,7 @@ export default function GlobalSearchScreen() {
     Keyboard.dismiss();
     if (query.trim().length >= 2) {
       addRecentSearch(currentUser?.id, query.trim()).then(setRecentSearches);
+      recordTrendingSignal(query.trim(), "search", currentUser?.id);
     }
   }, [query, currentUser?.id]);
 
@@ -189,32 +197,42 @@ export default function GlobalSearchScreen() {
     ));
   };
 
+  /**
+   * Search is a browse surface like any other, so the same gate applies —
+   * Safe View, an unverified age and being under 18 (`lib/safeContent.ts`).
+   * A result list is exactly where a reader would otherwise walk around the
+   * protection the feed gives them.
+   */
   const getFilteredResults = (): SearchResult[] => {
     if (!searchResults) return [];
-    if (activeTab === "all") {
-      return [
-        ...searchResults.products,
-        ...searchResults.services,
-        ...searchResults.users,
-        ...searchResults.marketplace,
-        ...searchResults.posts,
-      ];
-    }
-    return searchResults[activeTab] || [];
+    const all =
+      activeTab === "all"
+        ? [
+            ...searchResults.products,
+            ...searchResults.services,
+            ...searchResults.users,
+            ...searchResults.marketplace,
+            ...searchResults.posts,
+          ]
+        : searchResults[activeTab] || [];
+    return filterViewable<SearchResult>(all);
   };
 
+  /** Counted after the gate, or a tab would promise results it will not
+   *  show. */
   const getTabCount = (tab: string): number => {
     if (!searchResults) return 0;
-    if (tab === "all") {
-      return (
-        searchResults.users.length +
-        searchResults.services.length +
-        searchResults.products.length +
-        searchResults.marketplace.length +
-        searchResults.posts.length
-      );
-    }
-    return searchResults[tab as keyof SearchResults]?.length || 0;
+    const rows =
+      tab === "all"
+        ? [
+            ...searchResults.users,
+            ...searchResults.services,
+            ...searchResults.products,
+            ...searchResults.marketplace,
+            ...searchResults.posts,
+          ]
+        : searchResults[tab as keyof SearchResults] || [];
+    return filterViewable<SearchResult>(rows).length;
   };
 
   const tabs = [
@@ -258,14 +276,13 @@ export default function GlobalSearchScreen() {
     return () => cancelAnimationFrame(raf);
   }, [searchResults, activeTab, scrollTabIntoView]);
 
-  const handleTrendingPress = (entry: TrendingEntry) => {
-    trackFeature("search", "trending_chip", "search", {
-      subcategory: entry.subcategoryName,
-    });
+  const handleTrendingPress = (topic: TrendingTopic) => {
+    trackFeature("search", "trending_chip", "search", { term: topic.term });
     Keyboard.dismiss();
-    setQuery(entry.subcategoryName);
-    setThrottledQuery(entry.subcategoryName);
-    setActiveTab("products");
+    // "all", not "products": a trending term is now just as likely to be a
+    // hashtag off a post as it is a product subcategory.
+    setActiveTab("all");
+    runSearch(topic.term);
   };
 
   const handleTouchEnd = (e: any) => {
@@ -575,16 +592,16 @@ export default function GlobalSearchScreen() {
                     paddingHorizontal: 16,
                   }}
                 >
-                  {trending.map((entry) => (
+                  {trending.map((topic) => (
                     <TouchableOpacity
-                      key={`${entry.categoryKey}-${entry.subcategoryName}`}
-                      onPress={() => handleTrendingPress(entry)}
+                      key={topic.term}
+                      onPress={() => handleTrendingPress(topic)}
                       activeOpacity={0.8}
                       className="px-3.5 py-2 rounded-full bg-gray-100 flex-row items-center gap-1.5"
                     >
                       <Ionicons name="trending-up" size={12} color="#094569" />
                       <Text className="text-sm font-medium text-gray-700 capitalize">
-                        {entry.subcategoryName}
+                        {topic.term}
                       </Text>
                     </TouchableOpacity>
                   ))}

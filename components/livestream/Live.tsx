@@ -1,3 +1,4 @@
+import { MODAL_RADIUS } from "@/constants/theme";
 import CircularLoader from "@/components/ui/CircularLoader";
 import PopupMessage from "@/components/ui/PopupMessage";
 import ReportUserModal from "@/components/modals/ReportUserModal";
@@ -1405,7 +1406,7 @@ const CreateLivestreamModal: React.FC<CreateLivestreamModalProps> = ({
         }}
       >
         <View
-          style={{ borderTopLeftRadius: 24, borderTopRightRadius: 24, borderCurve: "continuous" }} className="bg-white px-6 pb-8 pt-6">
+          style={{ borderTopLeftRadius: MODAL_RADIUS, borderTopRightRadius: MODAL_RADIUS, borderCurve: "continuous" }} className="bg-white px-6 pb-8 pt-6">
             <View className="mb-4 flex-row items-center justify-between">
               <Text className="text-lg font-semibold text-gray-900">
                 Create livestream
@@ -1876,7 +1877,7 @@ const ActiveCallHeader: React.FC<ActiveCallHeaderProps> = ({
         >
           <Pressable onPress={() => {}}>
             <View
-              style={{ borderTopLeftRadius: 24, borderTopRightRadius: 24, borderCurve: "continuous" }} className="bg-white pb-8">
+              style={{ borderTopLeftRadius: MODAL_RADIUS, borderTopRightRadius: MODAL_RADIUS, borderCurve: "continuous" }} className="bg-white pb-8">
               <View className="px-6 py-4 border-b border-gray-200">
                 <Text className="text-lg font-mbold text-gray-900">Host Actions</Text>
               </View>
@@ -1934,7 +1935,7 @@ const ActiveCallHeader: React.FC<ActiveCallHeaderProps> = ({
     {role === "host" && (
       <Modal visible={showViewersModal} transparent animationType="slide">
         <View style={{ flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.5)" }}>
-          <View style={{ backgroundColor: "#1a1a1a", borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, maxHeight: "70%" }}>
+          <View style={{ backgroundColor: "#1a1a1a", borderTopLeftRadius: MODAL_RADIUS, borderTopRightRadius: MODAL_RADIUS, borderCurve: "continuous", padding: 20, maxHeight: "70%" }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
               <Text style={{ color: "#fff", fontSize: 17, fontWeight: "700" }}>
                 Viewers ({viewerParticipants.length})
@@ -2798,7 +2799,7 @@ const HostCallContainer: React.FC<HostCallContainerProps> = ({
           {false && <Modal visible={showRequestsModal} transparent animationType="slide">
             <View className="flex-1 justify-end bg-black/50">
               <View
-                style={{ borderTopLeftRadius: 24, borderTopRightRadius: 24, borderCurve: "continuous" }} className="bg-white p-6 max-h-[60%]">
+                style={{ borderTopLeftRadius: MODAL_RADIUS, borderTopRightRadius: MODAL_RADIUS, borderCurve: "continuous" }} className="bg-white p-6 max-h-[60%]">
                 <View className="flex-row items-center justify-between mb-4">
                   <Text className="text-lg font-semibold text-gray-900">
                     Join Requests ({pendingRequests.length})

@@ -1,3 +1,6 @@
+import ProfilePreviewTrigger from '@/components/profile/ProfilePreviewTrigger';
+import { useProfilePreviewElevator } from '@/contexts/ProfilePreviewContext';
+import { MODAL_RADIUS } from '@/constants/theme';
 import CommentMediaGallery from '@/components/comments/CommentMediaGallery';
 import CommentMediaMessage from '@/components/comments/CommentMediaMessage';
 import CommentMediaPicker, { PendingCommentMedia } from '@/components/comments/CommentMediaPicker';
@@ -23,6 +26,10 @@ import { playSound } from '@/lib/soundUtils';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { CornerDownRight, Send, Trash2, X } from 'lucide-react-native';
+import MentionSuggestions from '@/components/comments/MentionSuggestions';
+import MentionText from '@/components/ui/MentionText';
+import { type MentionCandidate } from '@/lib/mentionService';
+import { useMentionComposer } from '@/hooks/useMentionComposer';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Image } from 'expo-image';
 import {
@@ -76,23 +83,32 @@ function fmt(dateStr: string): string {
   return d < 7 ? `${d}d` : `${Math.floor(d / 7)}w`;
 }
 
+// Hold a commenter's avatar for the profile peek. Wrapping it here rather
+// than at each call site means every avatar in the sheet — comments and
+// replies both — gets it from one place.
 function Avatar({ user, size = 36 }: { user?: PostComment['user']; size?: number }) {
   const radius = size / 2;
-  if (user?.avatar_url) {
-    return (
-      <Image
-        source={{ uri: user.avatar_url }}
-        style={{ width: size, height: size, borderRadius: radius, backgroundColor: '#E5E7EB' }}
-        cachePolicy="memory-disk"
-      />
-    );
-  }
-  return (
+  const inner = user?.avatar_url ? (
+    <Image
+      source={{ uri: user.avatar_url }}
+      style={{ width: size, height: size, borderRadius: radius, backgroundColor: '#E5E7EB' }}
+      cachePolicy="memory-disk"
+    />
+  ) : (
     <View style={[styles.avatarFallback, { width: size, height: size, borderRadius: radius }]}>
       <Text style={{ color: '#fff', fontSize: size * 0.38, fontWeight: '700' }}>
         {(user?.name || 'U').charAt(0).toUpperCase()}
       </Text>
     </View>
+  );
+
+  return (
+    <ProfilePreviewTrigger
+      userId={(user as any)?.id ?? null}
+      name={user?.name}
+    >
+      {inner}
+    </ProfilePreviewTrigger>
   );
 }
 
@@ -114,6 +130,7 @@ export default function CommentsModal({
   sheetTopRatio,
   headerContent,
 }: CommentsModalProps) {
+  const elevationFor = useProfilePreviewElevator();
   const { currentUser } = useUser();
   const userId = currentUser?.id ?? '';
 
@@ -126,7 +143,6 @@ export default function CommentsModal({
     commentOwnerId: string;
     name: string;
   } | null>(null);
-  const [text, setText]     = useState('');
   const [loading, setLoading] = useState(true);
   const [posting, setPosting] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
@@ -135,6 +151,29 @@ export default function CommentsModal({
   const [composerInputKind, setComposerInputKind] = useState<'text' | 'voice'>('text');
   const [isHoldRecording, setIsHoldRecording] = useState(false);
   const inputRef = useRef<TextInput>(null);
+
+  // ── Mentions ────────────────────────────────────────────────────────
+  // The composer's text lives in the hook along with the `@` handling, and
+  // so does the caret — "which @ am I inside" is a question about the
+  // cursor, and the cursor after a keystroke is not the one
+  // onSelectionChange last reported. Shared with InlineComments so the two
+  // comment composers behind the same button cannot disagree about whether
+  // mentions exist. See hooks/useMentionComposer.ts.
+  const {
+    text,
+    reset,
+    toStorage,
+    activeMention,
+    candidates: mentionCandidates,
+    loading: mentionLoading,
+    pickMention: applyPickedMention,
+    inputProps: mentionInputProps,
+  } = useMentionComposer({ userId, enabled: visible });
+
+  const pickMention = (candidate: MentionCandidate) => {
+    applyPickedMention(candidate);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  };
   // Measured height of the floating input pill — the backdrop behind it only
   // needs to reach up through half that height (same cutoff rule as the
   // post-detail bottom bar / chat composer).
@@ -290,7 +329,7 @@ export default function CommentsModal({
     }
     if (!visible) {
       setReplyTarget(null);
-      setText('');
+      reset();
       setExpanded(new Set());
       setReplies({});
     }
@@ -303,6 +342,10 @@ export default function CommentsModal({
     if ((!text.trim() && !hasMedia) || !userId || posting || hasPendingUploads) return;
     setPosting(true);
 
+    // The field shows names; the comment stores `@[Name](id)`. This is the
+    // one place the two are reconciled (hooks/useMentionComposer.ts).
+    const body = toStorage();
+
     const media = pendingMedia
       .filter((m) => m.uploadedUrl)
       .map((m) => ({ url: m.uploadedUrl!, type: m.type, duration: m.duration }));
@@ -312,7 +355,7 @@ export default function CommentsModal({
         ? await addReplyWithGallery(
             replyTarget.commentId,
             userId,
-            text,
+            body,
             postOwnerId,
             replyTarget.commentOwnerId,
             postId,
@@ -321,7 +364,7 @@ export default function CommentsModal({
         : await addReply(
             replyTarget.commentId,
             userId,
-            text,
+            body,
             postOwnerId,
             replyTarget.commentOwnerId,
             postId,
@@ -344,15 +387,15 @@ export default function CommentsModal({
       setReplyTarget(null);
     } else {
       const comment = hasMedia
-        ? await addPostCommentWithGallery(postId, userId, text, media)
-        : await addPostComment(postId, userId, text);
+        ? await addPostCommentWithGallery(postId, userId, body, media)
+        : await addPostComment(postId, userId, body);
       if (comment) {
         void playSound('comment');
         setComments((prev) => [...prev, comment]);
         onCommentCountChange?.(comments.length + 1);
       }
     }
-    setText('');
+    reset();
     animateMediaLayout();
     setPendingMedia([]);
     setPosting(false);
@@ -554,14 +597,18 @@ export default function CommentsModal({
   const renderReply = (reply: CommentReply, commentId: string) => {
     const isOwn = reply.user_id === userId;
     return (
-      <View key={reply.id} style={styles.replyRow}>
+      <View key={reply.id} style={[styles.replyRow, elevationFor(reply.user_id)]}>
         <CornerDownRight size={14} color="#D1D5DB" style={{ marginTop: 10, marginRight: 6 }} />
         <Avatar user={reply.user} size={28} />
         <View style={{ flex: 1, marginLeft: 8 }}>
           <View style={styles.nameRow}>
             <Text style={styles.nameText}>{reply.user?.name ?? 'Unknown'}</Text>
           </View>
-          {!!reply.text && <Text style={styles.bodyText}>{reply.text}</Text>}
+          {!!reply.text && (
+            <Text style={styles.bodyText}>
+              <MentionText text={reply.text} />
+            </Text>
+          )}
           {reply.media_url && reply.media_type && (
             <View style={{ marginTop: 6 }}>
               <CommentMediaMessage
@@ -622,14 +669,21 @@ export default function CommentsModal({
     const commentReplies = replies[item.id] ?? [];
 
     return (
-      <View style={styles.commentWrapper}>
+      // Raised while this commenter's preview is open: rows in a list are
+      // siblings, so a card expanding out of row N would otherwise be painted
+      // under row N+1.
+      <View style={[styles.commentWrapper, elevationFor(item.user_id)]}>
         <View style={styles.commentRow}>
           <Avatar user={item.user} size={36} />
           <View style={{ flex: 1, marginLeft: 10 }}>
             <View style={styles.nameRow}>
               <Text style={styles.nameText}>{item.user?.name ?? 'Unknown'}</Text>
             </View>
-            {!!item.text && <Text style={styles.bodyText}>{item.text}</Text>}
+            {!!item.text && (
+              <Text style={styles.bodyText}>
+                <MentionText text={item.text} />
+              </Text>
+            )}
             {item.media_url && item.media_type && (
               <View style={{ marginTop: 6 }}>
                 <CommentMediaMessage
@@ -858,6 +912,16 @@ export default function CommentsModal({
                     this row in place, no separate modal, keyboard stays up. */}
                 <PendingMediaStrip items={pendingMedia} onRemove={removePendingMedia} />
 
+                {/* Directly above the composer, so the name being chosen and
+                    the sentence it lands in are one glance apart. */}
+                {activeMention && (
+                  <MentionSuggestions
+                    candidates={mentionCandidates}
+                    loading={mentionLoading}
+                    onSelect={pickMention}
+                  />
+                )}
+
                 <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8 }}>
                   {composerInputKind === 'text' && (
                     <CommentMediaPicker
@@ -905,8 +969,7 @@ export default function CommentsModal({
                     <>
                       <TextInput
                         ref={inputRef}
-                        value={text}
-                        onChangeText={setText}
+                        {...mentionInputProps}
                         placeholder={replyTarget ? `Reply to ${replyTarget.name}…` : 'Add a comment…'}
                         placeholderTextColor="#9CA3AF"
                         multiline
@@ -946,8 +1009,8 @@ const styles = StyleSheet.create({
     right: 0,
     // bottom is set dynamically via keyboardPad Animated.Value
     backgroundColor: '#fff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: MODAL_RADIUS,
+    borderTopRightRadius: MODAL_RADIUS,
     borderCurve: "continuous",
   },
   handleArea: {

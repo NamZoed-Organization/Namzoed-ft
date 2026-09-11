@@ -1,3 +1,4 @@
+import { MODAL_RADIUS } from "@/constants/theme";
 import { useUser } from "@/contexts/UserContext";
 import { supabase } from "@/lib/supabase";
 import PopupMessage from "@/components/ui/PopupMessage";
@@ -5,6 +6,7 @@ import CircularLoader from "@/components/ui/CircularLoader";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import { LIGHT_DATE_PICKER_PROPS } from "@/constants/datePicker";
 import React, { useEffect, useState } from "react";
 import {
   Modal,
@@ -234,7 +236,7 @@ export default function BookMongooseModal({
       onRequestClose={handleClose}
     >
       <View className="flex-1 bg-black/50 justify-end">
-        <View className="bg-white" style={{ maxHeight: "90%", borderTopLeftRadius: 24, borderTopRightRadius: 24, borderCurve: "continuous" }}>
+        <View className="bg-white" style={{ maxHeight: "90%", borderTopLeftRadius: MODAL_RADIUS, borderTopRightRadius: MODAL_RADIUS, borderCurve: "continuous" }}>
           {/* Header */}
           <View className="flex-row justify-between items-center p-5 border-b border-gray-200">
             <Text className="text-xl font-bold text-gray-900">
@@ -310,6 +312,7 @@ export default function BookMongooseModal({
                         display={Platform.OS === "ios" ? "spinner" : "default"}
                         onChange={onDateChange}
                         minimumDate={new Date()}
+                        {...LIGHT_DATE_PICKER_PROPS}
                       />
                     )}
                   </View>
@@ -337,6 +340,7 @@ export default function BookMongooseModal({
                         display={Platform.OS === "ios" ? "spinner" : "default"}
                         onChange={onTimeChange}
                         is24Hour={false}
+                        {...LIGHT_DATE_PICKER_PROPS}
                       />
                     )}
                   </View>

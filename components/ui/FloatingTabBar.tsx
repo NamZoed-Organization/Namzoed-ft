@@ -7,7 +7,10 @@ import { Platform, StyleSheet, useWindowDimensions, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const PILL_HEIGHT = 56;
+/** Exported: the create menu morphs out of the "+" in this bar and has to
+ *  know where that button is (components/create/LiquidCreateMenu.tsx). Two
+ *  copies of these numbers is a menu that erupts from the wrong place. */
+export const PILL_HEIGHT = 56;
 // Full capsule ends (radius = half height) — but rendered with Apple's
 // continuous corner (superellipse) via borderCurve, not a plain circular
 // arc, so the curve eases into the straight top/bottom edge smoothly
@@ -17,7 +20,7 @@ const PILL_RADIUS = PILL_HEIGHT / 2;
 const PILL_SIDE_MARGIN = 48;
 const PILL_MIN_WIDTH = 260;
 const PILL_MAX_WIDTH = 340;
-const FLOAT_GAP = 6;
+export const PILL_FLOAT_GAP = 6;
 const BLUR_INTENSITY = 50;
 const ANDROID_BACKGROUND = "rgba(255, 255, 255, 0.77)";
 
@@ -46,7 +49,7 @@ export default function FloatingTabBar(props: BottomTabBarProps) {
         position: "absolute",
         left: 0,
         right: 0,
-        bottom: Math.max(insets.bottom - 16, 0) + FLOAT_GAP,
+        bottom: Math.max(insets.bottom - 16, 0) + PILL_FLOAT_GAP,
         alignItems: "center",
         zIndex: 100,
       }}

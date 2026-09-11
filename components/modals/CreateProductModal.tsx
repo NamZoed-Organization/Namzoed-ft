@@ -1,9 +1,18 @@
+import { MODAL_RADIUS } from "@/constants/theme";
+import PriceSanityNote from "@/components/ui/PriceSanityNote";
+import TutorialAnchor from "@/components/tutorial/TutorialAnchor";
+import TutorialOverlay from "@/components/tutorial/TutorialOverlay";
+import { useTutorial } from "@/contexts/TutorialContext";
+import { TUTORIAL_SCREENS } from "@/lib/tutorialTours";
+import { usePriceSanity } from "@/hooks/usePriceSanity";
 import ImageCropperOverlay from "@/components/modals/ImageCropperOverlay";
 import ImagePickerSheet from "@/components/ui/ImagePickerSheet";
 import CircularLoader from "@/components/ui/CircularLoader";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { categories, categoryNames } from "@/data/categories";
 import { createProduct, uploadProductImages } from "@/lib/productsService";
+import { canListProducts } from "@/lib/sellerService";
+import VerifyToSellNotice from "@/components/VerifyToSellNotice";
 import { BlurView } from "expo-blur";
 import * as ImagePicker from "expo-image-picker";
 import { Check, ChevronDown, Upload, X } from "lucide-react-native";
@@ -32,6 +41,9 @@ interface CreateProductModalProps {
   isVisible: boolean;
   onClose: () => void;
   userId: string;
+  /** Carried over from a post draft the composer read as a listing. */
+  initialName?: string;
+  initialDescription?: string;
   // true = list this product under the seller's Work profile instead of
   // their main one (see Product.is_work_listing). Defaults to false.
   isWorkListing?: boolean;
@@ -42,18 +54,40 @@ export default function CreateProductModal({
   onClose,
   userId,
   isWorkListing,
+  initialName,
+  initialDescription,
 }: CreateProductModalProps) {
   const [loading, setLoading] = useState(false);
+  // Whether this user may list on the shopping catalogue at all. Null while
+  // it's being checked, so the form doesn't flash a refusal at someone who
+  // turns out to be verified.
+  const [canList, setCanList] = useState<boolean | null>(null);
 
   // Form State
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
+  const [name, setName] = useState(initialName ?? "");
+  const [description, setDescription] = useState(initialDescription ?? "");
   const [price, setPrice] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [images, setImages] = useState<string[]>([]);
 
+  // The product form teaches itself the first time it is opened, on its own
+  // fields (lib/tutorialTours.ts) — including the part the form cannot say
+  // on its own: a product nobody posts about sits in the catalogue unseen.
+  const { arrive } = useTutorial();
+  useEffect(() => {
+    if (isVisible) arrive(TUTORIAL_SCREENS.CREATE_PRODUCT);
+  }, [arrive, isVisible]);
+
   // Tag State (Selected tags)
   const [tags, setTags] = useState<string[]>([]);
+
+  // Does the price make sense for whatever the seller has described? A car
+  // at Nu 100 is a typo, and it is the buyer who wastes the trip — see
+  // lib/priceSanity.ts. It advises, it never refuses.
+  const priceSanity = usePriceSanity({
+    text: `${name} ${description} ${selectedCategory ?? ""} ${tags.join(" ")}`,
+    price: parseFloat(price),
+  });
 
   // Success popup state
   const [showSuccess, setShowSuccess] = useState(false);
@@ -219,6 +253,21 @@ export default function CreateProductModal({
     setTimeout(() => setShowError(false), 2500);
   };
 
+  // Asked on open, not on submit. The database refuses an unverified
+  // seller's insert regardless (see enforce_verified_seller_for_products) —
+  // this is so they find out before filling in a form, and are pointed at
+  // the marketplace, which is where selling your own used things belongs.
+  useEffect(() => {
+    if (!isVisible || !userId) return;
+    let cancelled = false;
+    canListProducts(userId).then((allowed) => {
+      if (!cancelled) setCanList(allowed);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isVisible, userId]);
+
   // In handlePost:
   const handlePost = async () => {
     if (!name || !price || !selectedCategory) {
@@ -282,6 +331,13 @@ export default function CreateProductModal({
     }
   };
 
+  // Refuse early and usefully. `canList === null` is still checking, and
+  // the form renders as normal until the answer arrives — showing a refusal
+  // and then taking it back would be worse than a moment's wait.
+  if (isVisible && canList === false) {
+    return <VerifyToSellNotice visible={isVisible} onClose={onClose} />;
+  }
+
   return (
     <Modal
       animationType="none"
@@ -294,6 +350,8 @@ export default function CreateProductModal({
         behavior="padding"
         className="flex-1 justify-end"
       >
+        {/* Its own Modal window — the root overlay is behind it. */}
+        <TutorialOverlay hostId="create-product" />
         {/* Backdrop - blur with fade in/out */}
         <ReAnimated.View
           entering={FadeIn.duration(300)}
@@ -324,7 +382,7 @@ export default function CreateProductModal({
           {/* Sheet Content */}
           <Animated.View
             className="bg-white flex-1 w-full overflow-hidden shadow-xl"
-            style={{ transform: [{ translateY: panY }], borderTopLeftRadius: 24, borderTopRightRadius: 24, borderCurve: "continuous" }}
+            style={{ transform: [{ translateY: panY }], borderTopLeftRadius: MODAL_RADIUS, borderTopRightRadius: MODAL_RADIUS, borderCurve: "continuous" }}
           >
             {/* Drag Bar */}
             <View
@@ -361,16 +419,18 @@ export default function CreateProductModal({
                   showsHorizontalScrollIndicator={false}
                   className="flex-row"
                 >
-                  <TouchableOpacity
-                    style={{ borderRadius: 12, borderCurve: "continuous" }}
-                    onPress={pickImage}
-                    className="w-24 h-24 border-2 border-dashed border-gray-300 justify-center items-center mr-3 bg-gray-50"
-                  >
-                    <Upload size={24} color="#9CA3AF" />
-                    <Text className="text-xs text-gray-400 mt-1">
-                      Add Photo
-                    </Text>
-                  </TouchableOpacity>
+                  <TutorialAnchor id="product.photos" radius={12} style={{ marginRight: 12 }}>
+                    <TouchableOpacity
+                      style={{ borderRadius: 12, borderCurve: "continuous" }}
+                      onPress={pickImage}
+                      className="w-24 h-24 border-2 border-dashed border-gray-300 justify-center items-center bg-gray-50"
+                    >
+                      <Upload size={24} color="#9CA3AF" />
+                      <Text className="text-xs text-gray-400 mt-1">
+                        Add Photo
+                      </Text>
+                    </TouchableOpacity>
+                  </TutorialAnchor>
 
                   {images.map((uri, index) => (
                     <View key={index} className="relative mr-3">
@@ -405,7 +465,7 @@ export default function CreateProductModal({
                   />
                 </View>
 
-                <View>
+                <TutorialAnchor id="product.price" radius={12}>
                   <Text className="text-sm font-medium text-gray-700 mb-1">
                     Price
                   </Text>
@@ -430,7 +490,8 @@ export default function CreateProductModal({
                       onChangeText={setPrice}
                     />
                   </View>
-                </View>
+                  <PriceSanityNote check={priceSanity.check} />
+                </TutorialAnchor>
 
                 {/* Category Selection - Dropdown */}
                 <View>
@@ -612,7 +673,7 @@ export default function CreateProductModal({
             {/* Footer / Submit Button */}
             <View className="absolute bottom-0 left-0 right-0 p-5 bg-white border-t border-gray-100 shadow-lg">
               <TouchableOpacity
-                onPress={handlePost}
+                onPress={() => priceSanity.guard(handlePost)}
                 disabled={loading}
                 className={`w-full py-4 rounded-xl flex-row justify-center items-center ${
                   loading ? "bg-gray-300" : "bg-primary"
@@ -629,6 +690,10 @@ export default function CreateProductModal({
             </View>
           </Animated.View>
         </ReAnimated.View>
+
+        {/* Asked once, on submit, when the price is still out of range —
+            never a refusal. */}
+        {priceSanity.dialog}
 
         {/* Success Popup */}
         <PopupMessage

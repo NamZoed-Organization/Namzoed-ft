@@ -1,3 +1,4 @@
+import { MODAL_RADIUS } from "@/constants/theme";
 import MapPinMarker from "@/components/maps/MapPinMarker";
 import CircularLoader from "@/components/ui/CircularLoader";
 import PopupMessage from "@/components/ui/PopupMessage";
@@ -157,7 +158,7 @@ export default function LocationMapPicker({
       <View className="flex-1 bg-black/50">
         {/* Avoid overflow-hidden with MapView on Android (grey map + logo only). */}
         <View
-          style={{ borderTopLeftRadius: 24, borderTopRightRadius: 24, borderCurve: "continuous" }} className="flex-1 bg-white mt-12">
+          style={{ borderTopLeftRadius: MODAL_RADIUS, borderTopRightRadius: MODAL_RADIUS, borderCurve: "continuous" }} className="flex-1 bg-white mt-12">
           {/* Header */}
           <View className="bg-white border-b border-gray-200 p-4">
             <View className="flex-row justify-between items-center mb-3">

@@ -1,16 +1,14 @@
-import CircularLoader from "@/components/ui/CircularLoader";
+import DialogCard from "@/components/ui/DialogCard";
+import { LIGHT_DATE_PICKER_PROPS } from "@/constants/datePicker";
+import { MODAL_RADIUS } from "@/constants/theme";
 import { supabase } from "@/lib/supabase";
 import { formatDisplayDate, getAgeFromDate, toISODate } from "@/utils/age";
-import { Ionicons } from "@expo/vector-icons";
-import DateTimePicker from "@react-native-community/datetimepicker";
+import DateTimePicker, {
+  DateTimePickerAndroid,
+} from "@react-native-community/datetimepicker";
+import { Cake, ChevronRight } from "lucide-react-native";
 import React, { useState } from "react";
-import {
-  Modal,
-  Platform,
-  Pressable,
-  Text,
-  View,
-} from "react-native";
+import { Platform, Pressable, Text, View } from "react-native";
 
 interface DateOfBirthPromptProps {
   visible: boolean;
@@ -37,6 +35,8 @@ export default function DateOfBirthPrompt({
   eighteenYearsAgo.setFullYear(eighteenYearsAgo.getFullYear() - 18);
 
   const [birthDate, setBirthDate] = useState<Date | null>(null);
+  // iOS shows the wheel inline inside this card; Android has no inline
+  // picker here at all (see openPicker).
   const [showPicker, setShowPicker] = useState(Platform.OS === "ios");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,6 +47,24 @@ export default function DateOfBirthPrompt({
       setBirthDate(selected);
       setError(null);
     }
+  };
+
+  // Android's picker is a native dialog owned by the activity window, so
+  // rendering <DateTimePicker> inline here put it behind whatever window was
+  // on top — tapping the field appeared to do nothing and there was no way
+  // to pick a date at all. The imperative API presents the dialog itself,
+  // above everything, and stays correct however this card is mounted.
+  const openPicker = () => {
+    if (Platform.OS !== "android") {
+      setShowPicker(true);
+      return;
+    }
+    DateTimePickerAndroid.open({
+      value: birthDate ?? eighteenYearsAgo,
+      mode: "date",
+      maximumDate: new Date(),
+      onChange: onDateChange,
+    });
   };
 
   const handleSave = async () => {
@@ -90,70 +108,78 @@ export default function DateOfBirthPrompt({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onSkip}>
-      <View className="flex-1 bg-black/45 justify-center px-6">
+    <DialogCard
+      visible={visible}
+      // No scrim dismissal: skipping is a decision with a consequence
+      // (age-restricted listings stay visible), so it is a button somebody
+      // presses rather than something that happens by tapping past.
+      title="Confirm your age"
+      message="Your date of birth lets us hide age-restricted listings. It is optional, and it never appears on your profile."
+      icon={<Cake size={22} color="#094569" strokeWidth={1.9} />}
+      actions={[
+        { label: "Not now", style: "cancel", onPress: saving ? undefined : onSkip },
+        {
+          label: saving ? "Saving…" : "Save",
+          loading: saving,
+          onPress: saving ? undefined : handleSave,
+        },
+      ]}
+    >
+      {/* The field wears the form screens' shape: white on the card, no
+          border, MODAL_RADIUS — except it sits on white here, so it takes
+          the grey instead. The field is still the lighter-or-different
+          surface, which is what the rule is actually about. */}
+      <Pressable
+        onPress={openPicker}
+        disabled={saving}
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          backgroundColor: "#F5F5F5",
+          borderRadius: MODAL_RADIUS,
+          borderCurve: "continuous",
+          paddingHorizontal: 14,
+          minHeight: 50,
+          marginTop: 16,
+        }}
+      >
+        <Text
+          style={{ fontSize: 16, color: birthDate ? "#111" : "#9CA3AF" }}
+        >
+          {birthDate ? formatDisplayDate(birthDate) : "Date of birth"}
+        </Text>
+        <ChevronRight size={18} color="#C7C7CC" />
+      </Pressable>
+
+      {showPicker && Platform.OS === "ios" && (
         <View
-          style={{ borderRadius: 16, borderCurve: "continuous" }} className="bg-white p-5">
-          <View className="flex-row items-center mb-3">
-            <Ionicons name="calendar" size={24} color="#094569" />
-            <Text className="font-mbold text-gray-900 text-xl ml-2">
-              Confirm Your Age
-            </Text>
-          </View>
-
-          <Text className="text-sm text-gray-600 mb-4 leading-5">
-            Sharing your date of birth lets us apply age-related content
-            restrictions — for example, hiding adult health items from users
-            under 18. This is optional; you can skip it and continue.
-          </Text>
-
-          <Pressable
-            style={{ borderRadius: 8, borderCurve: "continuous" }}
-            onPress={() => setShowPicker(true)}
-            disabled={saving}
-            className="border border-gray-300 px-4 py-3 flex-row items-center justify-between bg-white"
-          >
-            <Text
-              className={`text-base ${birthDate ? "text-gray-800" : "text-gray-400"}`}
-            >
-              {birthDate ? formatDisplayDate(birthDate) : "Select date of birth"}
-            </Text>
-            <Ionicons name="calendar-outline" size={20} color="#6b7280" />
-          </Pressable>
-
-          {showPicker && (
-            <DateTimePicker
-              value={birthDate ?? eighteenYearsAgo}
-              mode="date"
-              display={Platform.OS === "ios" ? "spinner" : "default"}
-              onChange={onDateChange}
-              maximumDate={new Date()}
-            />
-          )}
-
-          {error && (
-            <Text className="text-red-600 text-sm mt-2">{error}</Text>
-          )}
-
-          <Pressable
-            onPress={handleSave}
-            disabled={saving}
-            className={`mt-4 py-3 rounded-xl items-center ${
-              saving ? "bg-gray-300" : "bg-primary"
-            }`}
-          >
-            {saving ? (
-              <CircularLoader color="#fff" />
-            ) : (
-              <Text className="text-white font-msemibold">Save & Continue</Text>
-            )}
-          </Pressable>
-
-          <Pressable onPress={onSkip} disabled={saving} className="mt-2 py-3 items-center">
-            <Text className="text-gray-500 font-msemibold">Skip for now</Text>
-          </Pressable>
+          style={{
+            marginTop: 10,
+            backgroundColor: "#F5F5F5",
+            borderRadius: MODAL_RADIUS,
+            borderCurve: "continuous",
+            overflow: "hidden",
+          }}
+        >
+          <DateTimePicker
+            value={birthDate ?? eighteenYearsAgo}
+            mode="date"
+            display="spinner"
+            onChange={onDateChange}
+            maximumDate={new Date()}
+            {...LIGHT_DATE_PICKER_PROPS}
+          />
         </View>
-      </View>
-    </Modal>
+      )}
+
+      {error ? (
+        <Text
+          style={{ fontSize: 13.5, lineHeight: 18, color: "#DC2626", marginTop: 10 }}
+        >
+          {error}
+        </Text>
+      ) : null}
+    </DialogCard>
   );
 }

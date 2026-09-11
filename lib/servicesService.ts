@@ -418,55 +418,6 @@ export const fetchAllProviderServices = async (page: number = 0, pageSize: numbe
   return (data || []) as ProviderServiceWithDetails[];
 };
 
-// Fetch all service providers with their services (only providers who have services)
-export const fetchAllServiceProviders = async (): Promise<any[]> => {
-  const { data, error } = await supabase
-    .from('service_providers')
-    .select(`
-      id,
-      user_id,
-      name,
-      master_bio,
-      profile_url,
-      email,
-      contact,
-      email_active,
-      contact_active,
-      verification_status,
-      profiles (
-        name,
-        email,
-        phone,
-        avatar_url
-      ),
-      provider_services (
-        id,
-        name,
-        description,
-        images,
-        created_at,
-        service_categories (
-          id,
-          name,
-          slug
-        )
-      )
-    `)
-    .order('created_at', { ascending: false });
-
-  if (error) {
-    console.error('Error fetching service providers:', error);
-    throw error;
-  }
-
-  // Filter out providers with no services
-  const providersWithServices = (data || []).filter(
-    provider => provider.provider_services && provider.provider_services.length > 0
-  );
-
-  return providersWithServices;
-}
-
 // Fetch service provider profile for a user
 export const fetchServiceProviderProfile = async (userId: string): Promise<any | null> => {
   const { data, error } = await supabase
@@ -483,6 +434,12 @@ export const fetchServiceProviderProfile = async (userId: string): Promise<any |
       email_active,
       contact_active,
       verification_status,
+      category_id,
+      service_categories (
+        id,
+        name,
+        slug
+      ),
       profiles (
         name,
         email,
@@ -534,6 +491,9 @@ export const updateServiceProviderProfile = async (
     contact_active?: boolean;
     identification?: any;
     verification_status?: 'verified' | 'not_verified' | 'pending';
+    /** The business's own type — decides which sections its profile
+     *  shows (see lib/businessSections.ts). */
+    category_id?: string;
   }
 ): Promise<void> => {
   const { error } = await supabase

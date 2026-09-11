@@ -1,17 +1,13 @@
-import { Entypo, MaterialIcons } from "@expo/vector-icons";
-import FormInput from "@/components/ui/FormInput";
-import CircularLoader from "@/components/ui/CircularLoader";
-import { clamp, useResponsive } from "@/utils/responsive";
-import { useAppRouter } from "@/utils/navigation";
-import React, { useState } from "react";
 import {
-  Image,
-  Keyboard,
-  Pressable,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+  AuthButton,
+  AuthField,
+  AuthHeading,
+  AuthScreen,
+} from "@/components/auth/AuthChrome";
+import { useAppRouter } from "@/utils/navigation";
+import { Mail, Phone } from "lucide-react-native";
+import React, { useState } from "react";
+import { View } from "react-native";
 import { supabase } from '../lib/supabase';
 import { sendOTPSMS } from '../services/smsService';
 import PopupMessage from '../components/ui/PopupMessage';
@@ -22,23 +18,7 @@ export default function Forgot() {
   const [inputType, setInputType] = useState<"email" | "phone" | null>(null);
   const [popup, setPopup] = useState({ visible: false, type: 'error' as 'success' | 'error' | 'warning', title: '', message: '' });
   const router = useAppRouter();
-  const { ms, vs, wp, hp } = useResponsive();
-  const pagePaddingX = clamp(wp(10), 20, 44);
-  const backTop = clamp(hp(5), 32, 54);
-  const backLeft = clamp(wp(3), 10, 18);
-  const backPadding = clamp(ms(8), 6, 10);
-  const backIconSize = clamp(ms(24), 20, 28);
-  const headerBottom = clamp(vs(32), 24, 40);
-  const titleSize = clamp(ms(36), 30, 42);
-  const logoSize = clamp(ms(112), 88, 132);
-  const inputBottom = clamp(vs(16), 12, 20);
-  const bodyTextSize = clamp(ms(14), 12, 16);
-  const bulletSize = clamp(ms(24), 20, 28);
-  const instructionBottom = clamp(vs(40), 28, 52);
-  const submitPaddingY = clamp(vs(20), 14, 22);
-  const submitRadius = clamp(ms(10), 8, 14);
-  const submitTextSize = clamp(ms(18), 16, 20);
-  const inputIconSize = clamp(ms(20), 18, 24);
+  // Spacing and type come from the auth chrome now (§ Auth screens).
 
   const showPopup = (type: 'success' | 'error' | 'warning', title: string, message: string) => {
     setPopup({ visible: true, type, title, message });
@@ -173,115 +153,47 @@ export default function Forgot() {
   };
 
   return (
-    <Pressable onPress={Keyboard.dismiss} style={{ flex: 1 }}>
-      <View
-        className="flex-1 justify-center items-center bg-white"
-        style={{ paddingHorizontal: pagePaddingX }}
-      >
-        {/* Popup Message */}
-        <PopupMessage
-          visible={popup.visible}
-          type={popup.type}
-          title={popup.title}
-          message={popup.message}
-          onHide={() => setPopup(p => ({ ...p, visible: false }))}
-        />
+    <AuthScreen onBack={() => router.back()}>
+      <PopupMessage
+        visible={popup.visible}
+        type={popup.type}
+        title={popup.title}
+        message={popup.message}
+        onHide={() => setPopup(p => ({ ...p, visible: false }))}
+      />
 
-        {/* Back Button */}
-        <TouchableOpacity
-          onPress={() => router.back()}
-          className="absolute z-50"
-          style={{
-            top: backTop,
-            left: backLeft,
-            padding: backPadding,
-          }}
-          activeOpacity={0.6}
-        >
-          <Entypo name={"chevron-thin-left"} size={backIconSize} color="#094569" />
-        </TouchableOpacity>
-        <View className="w-full">
-          {/* Header */}
-          <View
-            className="flex-row justify-between items-center"
-            style={{ marginBottom: headerBottom }}
-          >
-            <View>
-              <Text
-                className="text-primary/90 font-mbold"
-                style={{ fontSize: titleSize }}
-              >
-                Forgot
-              </Text>
-              <Text
-                className="text-secondary/90 font-mbold"
-                style={{ fontSize: titleSize }}
-              >
-                Password?
-              </Text>
-            </View>
-            <Image
-              source={require("../assets/images/logo.png")}
-              style={{ width: logoSize, height: logoSize }}
-              resizeMode="contain"
-            />
-          </View>
+      <AuthHeading
+        title="Forgot password"
+        subtitle="Tell us the email or phone on your account and we'll send a code to reset it."
+      />
 
-          {/* Email/Phone Input */}
-          <View style={{ marginBottom: inputBottom }}>
-            <FormInput
-              value={identifier}
-              onChangeText={(text) => {
-                setIdentifier(text);
-                detectInputType(text);
-              }}
-              placeholder="Enter your email or phone number"
-              keyboardType={inputType === "email" ? "email-address" : "phone-pad"}
-              autoCapitalize="none"
-              leftIcon={
-                <MaterialIcons
-                  name={inputType === "email" ? "email" : "phone"}
-                  size={inputIconSize}
-                  color="#6B7280"
-                />
-              }
-            />
-          </View>
+      <AuthField
+        value={identifier}
+        onChangeText={(text: string) => {
+          setIdentifier(text);
+          detectInputType(text);
+        }}
+        placeholder="Email or phone"
+        keyboardType={inputType === "email" ? "email-address" : "phone-pad"}
+        autoCapitalize="none"
+        autoCorrect={false}
+        icon={
+          inputType === "email" ? (
+            <Mail size={19} color="#9CA3AF" strokeWidth={1.8} />
+          ) : (
+            <Phone size={19} color="#9CA3AF" strokeWidth={1.8} />
+          )
+        }
+      />
 
-          {/* Instructional Text */}
-          <Text
-            className="flex font-mlight text-gray-400"
-            style={{ marginBottom: instructionBottom, fontSize: bodyTextSize }}
-          >
-            <Text className="text-red-500" style={{ fontSize: bulletSize }}>• </Text>
-            We will send you an OTP to reset your password
-          </Text>
+      <View style={{ height: 20 }} />
 
-          {/* Submit Button */}
-          <TouchableOpacity
-            disabled={(!isValidBhutanesePhone(identifier) && !isValidEmail(identifier)) || loading}
-            onPress={handleSubmit}
-            activeOpacity={0.8}
-            className={`items-center ${
-              (isValidBhutanesePhone(identifier) || isValidEmail(identifier)) && !loading
-                ? "bg-primary"
-                : "bg-primary/50"
-            }`}
-            style={{ paddingVertical: submitPaddingY, borderRadius: submitRadius }}
-          >
-            {loading ? (
-              <CircularLoader color="#EDC06D" />
-            ) : (
-              <Text
-                className="text-secondary text-center font-semibold"
-                style={{ fontSize: submitTextSize }}
-              >
-                Submit
-              </Text>
-            )}
-          </TouchableOpacity>
-        </View>
-      </View>
-    </Pressable>
+      <AuthButton
+        label="Send code"
+        onPress={handleSubmit}
+        loading={loading}
+        disabled={!isValidBhutanesePhone(identifier) && !isValidEmail(identifier)}
+      />
+    </AuthScreen>
   );
 }

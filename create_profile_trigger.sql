@@ -8,9 +8,14 @@ BEGIN
     v_birth_date := (NEW.raw_user_meta_data->>'birth_date')::date;
   END IF;
 
+  -- A generated avatar from the first moment the row exists, so no account
+  -- ever starts out as initials on a grey circle. See lib/dicebear.ts and
+  -- supabase/migrations/20260909120000_generated_avatars.sql, which owns
+  -- dicebear_avatar_url().
   INSERT INTO public.profiles (
     id, name, phone, dzongkhag, email, birth_date, age_verified,
-    age_verification_date, created_at, updated_at
+    age_verification_date, avatar_url, avatar_style, avatar_animation,
+    created_at, updated_at
   )
   VALUES (
     NEW.id,
@@ -21,6 +26,9 @@ BEGIN
     v_birth_date,
     v_birth_date IS NOT NULL,
     CASE WHEN v_birth_date IS NOT NULL THEN NOW() ELSE NULL END,
+    public.dicebear_avatar_url(NEW.id::text),
+    'notionists-neutral',
+    'none',
     NOW(),
     NOW()
   );

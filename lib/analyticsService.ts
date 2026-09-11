@@ -271,12 +271,3 @@ export function trackInteraction(payload: TrackPayload): void {
     scheduleFlush();
   }
 }
-
-/** Force an immediate flush — call on app background/close events */
-export function flushInteractions(): Promise<void> {
-  if (flushTimer) {
-    clearTimeout(flushTimer);
-    flushTimer = null;
-  }
-  return flush();
-}

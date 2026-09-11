@@ -30,9 +30,6 @@ export const buildProductDeepLink = (product: ShareableProduct) =>
 export const buildPostDeepLink = (post: ShareablePost) =>
   `namzoed://post/${encodeURIComponent(post.id)}?ref=external`;
 
-export const buildProfileDeepLink = (profile: ShareableProfile) =>
-  `namzoed://profile/${encodeURIComponent(profile.id)}?ref=external`;
-
 const buildProductWebShareUrl = (product: ShareableProduct) => {
   const deepLink = buildProductDeepLink(product);
   return `${SHARE_WEB_BASE_URL}/product/${encodeURIComponent(product.id)}?ref=external&deep_link=${encodeURIComponent(deepLink)}`;

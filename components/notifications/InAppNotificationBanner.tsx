@@ -48,6 +48,8 @@ function typeIconName(type: string): keyof typeof Ionicons.glyphMap {
     case "post_commented": return "chatbubble";
     case "user_went_live": return "radio";
     case "new_post":       return "document-text";
+    case "qr_connect_request":  return "qr-code";
+    case "qr_connect_accepted": return "people";
     default:               return "notifications";
   }
 }
@@ -59,6 +61,8 @@ function typeIconBg(type: string): string {
     case "post_commented": return "#f59e0b";
     case "user_went_live": return "#8b5cf6";
     case "new_post":       return "#22c55e";
+    case "qr_connect_request":  return "#0369A1";
+    case "qr_connect_accepted": return "#094569";
     default:               return "#6b7280";
   }
 }
@@ -70,6 +74,8 @@ function typeLabel(type: string): string {
     case "post_commented": return "New Comment";
     case "user_went_live": return "Live Now";
     case "new_post":       return "New Post";
+    case "qr_connect_request":  return "Connect Request";
+    case "qr_connect_accepted": return "Connected";
     default:               return "Notification";
   }
 }
@@ -170,6 +176,13 @@ export default function InAppNotificationBanner() {
       case "user_went_live":
         if (b.referenceId) router.push(`/(users)/(tabs)/feed?streamId=${b.referenceId}` as any);
         else router.push(`/(users)/profile/${b.actorId}` as any);
+        break;
+      // The Confirm this is asking for lives on Add Friends.
+      case "qr_connect_request":
+        router.push("/(users)/add-friends" as any);
+        break;
+      case "qr_connect_accepted":
+        router.push(`/(users)/profile/${b.actorId}` as any);
         break;
       default:
         router.push("/(users)/notifications" as any);

@@ -1,3 +1,4 @@
+import { MODAL_RADIUS } from "@/constants/theme";
 import MapPinMarker from "@/components/maps/MapPinMarker";
 import CircularLoader from "@/components/ui/CircularLoader";
 import { supabase } from "@/lib/supabase";
@@ -280,8 +281,8 @@ export default function TrackMongooseModal({
             flex: 1,
             backgroundColor: 'white',
             marginTop: 48,
-            borderTopLeftRadius: 24,
-            borderTopRightRadius: 24,
+            borderTopLeftRadius: MODAL_RADIUS,
+            borderTopRightRadius: MODAL_RADIUS,
             borderCurve: "continuous",
           }}
         >

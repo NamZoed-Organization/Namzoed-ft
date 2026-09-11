@@ -1,11 +1,11 @@
 import MaskedView from "@react-native-masked-view/masked-view";
-import FollowRequests from "@/components/modals/FollowRequests";
 import FollowRequestsOverlay from "@/components/modals/FollowRequestsOverlay";
 import HamburgerMenu from "@/components/modals/HamburgerMenu";
 import ImageCropOverlay from "@/components/modals/ImageCropOverlay";
-import ManageListingsOverlay from "@/components/modals/ManageListingsOverlay";
+import CoverImageViewer from "@/components/modals/CoverImageViewer";
 import ProfileImageViewer from "@/components/modals/ProfileImageViewer";
 import ShareComposerModal from "@/components/modals/ShareComposerModal";
+import { MODAL_RADIUS } from "@/constants/theme";
 import { useUser } from "@/contexts/UserContext";
 import { useIsFocused } from "@react-navigation/native";
 import CreatePost from "@/components/modals/CreatePost";
@@ -13,35 +13,54 @@ import CreatePost from "@/components/modals/CreatePost";
 import { useProfileData } from "@/hooks/profile/useProfileData";
 import { useServiceProvider } from "@/hooks/profile/useServiceProvider";
 import { useUserPosts } from "@/hooks/profile/useUserPosts";
-import { useUserProducts } from "@/hooks/profile/useUserProducts";
+import { useUserMarketplace } from "@/hooks/profile/useUserMarketplace";
 import { useCoverPalette } from "@/hooks/useCoverPalette";
 import { useEarlyAccessBadge } from "@/hooks/useEarlyAccessBadge";
 // Profile components
 import EarlyAccessBadge from "@/components/EarlyAccessBadge";
+import { MARKETPLACE_TYPE_LABEL } from "@/lib/postMarketPlace";
+import BusinessSummaryCard from "@/components/profile/BusinessSummaryCard";
+import ProfileTabRow from "@/components/profile/ProfileTabRow";
+import PostDetailOverlay from "@/components/PostDetailOverlay";
+import { usePostDetailMorph } from "@/hooks/usePostDetailMorph";
+import { toPostData } from "@/lib/postData";
 import ShareArcIcon from "@/components/icons/ShareArcIcon";
-import ProfilePostGridItem, { profileGridCellHeight } from "@/components/profile/ProfilePostGridItem";
+import GridCard, { gridCardHeight, LISTING_CARD_RATIO } from "@/components/GridCard";
+import TaggedProductStrip from "@/components/post/TaggedProductStrip";
+import MasonryGrid from "@/components/MasonryGrid";
 import ProgressiveImage from "@/components/ui/ProgressiveImage";
 import BottomNavBar from "@/components/ui/BottomNavBar";
-import CircularLoader from "@/components/ui/CircularLoader";
 import { useBottomBarScroll } from "@/hooks/useBottomBarScroll";
-import { useGridReveal } from "@/hooks/useGridReveal";
+import LoadingOverlay from "@/components/ui/LoadingOverlay";
+import AvatarStylePicker from "@/components/modals/AvatarStylePicker";
+import GeneratedAvatar from "@/components/ui/GeneratedAvatar";
+import {
+  generatedAvatarFor,
+  isAnimatedStyle,
+  type AvatarAnimation,
+} from "@/lib/dicebear";
 import PopupMessage from "@/components/ui/PopupMessage";
 import {
     deleteAvatar,
     deleteCoverImage,
     updateUserProfile,
-    uploadAvatar,
-    uploadCoverImage,
 } from "@/lib/profileService";
+import { extractCoverHue } from "@/lib/coverHue";
+import { getRandomHue } from "@/lib/coverTheme";
+import { saveAvatarPhoto, saveCoverPhoto } from "@/lib/profileMedia";
 import { getUserBookmarks } from "@/lib/bookmarkService";
 import { getUserCommentedPosts } from "@/lib/commentsService";
 import { getUserLikedPosts } from "@/lib/likesService";
-import { Post } from "@/lib/postsService";
+import { Post, PostWithUser } from "@/lib/postsService";
+import { ratioForUniformMode } from "@/lib/postMediaDisplay";
+import { peekCache, readCache, writeCache } from "@/lib/queryCache";
 import { getProfileViewCount7d } from "@/lib/viewTrackingService";
 import {
     buildProfileExternalSharePayload,
 } from "@/lib/shareUtils";
 import { useAppRouter } from "@/utils/navigation";
+import { presentSystemPicker, waitForIosModalDismiss } from "@/utils/modal";
+import { birthdayBadge } from "@/utils/zodiac";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
@@ -50,29 +69,26 @@ import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import {
-    Bookmark,
     Camera,
     Edit3,
     Eye,
-    Grid,
     Heart,
+    History,
     ImageIcon,
-    MessageCircle,
     Menu,
     QrCode,
     ScanLine,
-    ShoppingBag,
-    Store,
+    Sparkles,
     Trash2,
     User,
     Verified,
+    Wallet,
     Wrench,
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
     Alert,
     Dimensions,
-    InteractionManager,
     Modal,
     Platform,
     Pressable,
@@ -86,6 +102,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
+
 
 // HEADER_GRADIENT/COVER_GRADIENT used to be a fixed navy-blue pair here —
 // now they're computed per-user by useCoverPalette (see below), so the
@@ -103,6 +120,15 @@ const HEADER_HEIGHT = 84;
 // (cover photo showing through) to the solid gradient, so icons stay
 // legible once the cover has scrolled out of view.
 const HEADER_FADE_DISTANCE = 150;
+// How far the tab bar's rounded-corner "sheet" overlaps up into the cover
+// above it (both in its normal in-flow spot and once pinned below the
+// header) — see the tab bar wrapper's JSX for how this factors into the
+// sticky spacer's height.
+const TAB_BAR_CORNER_OVERLAP = 20;
+
+/** Sub-pixel overlap between adjoining sections that share a background
+ *  color, so no sliver of what's behind them shows through the seam. */
+const SECTION_SEAM_OVERLAP = 0.5;
 
 // Rendered by renderTabRow below — a single shared list so the tab row's
 // magnet-pinned state never needs a duplicate copy to stay in sync.
@@ -113,6 +139,7 @@ const PROFILE_TABS = [
   { key: "saves", label: "Saves" },
   { key: "comments", label: "Comments" },
 ] as const;
+const PROFILE_TAB_ORDER = PROFILE_TABS.map((tab) => tab.key);
 
 // Eases the blur mask below from 0 at the panel's top edge to 1 at its
 // bottom, instead of the blur switching on abruptly — same smoothstep
@@ -142,10 +169,17 @@ function isVideoUrl(url: string): boolean {
   );
 }
 
+// v2: entries cached before these grids started showing the original
+// author carry no profile on them, and would render as "Unknown" until the
+// refetch landed. A new key just skips them.
+const likedPostsCacheKey = (userId: string) => `profile:liked:v2:${userId}`;
+const commentedPostsCacheKey = (userId: string) => `profile:commented:v2:${userId}`;
+const savedItemsCacheKey = (userId: string) => `profile:saved:v2:${userId}`;
+
 /** Same PostThumbnail shape hooks/profile/useUserPosts.ts builds for the
- *  Posts tab — reused here so the Likes/Comments tabs render with the exact
- *  same ProfilePostGridItem grid. */
-function toThumbnails(posts: Post[]) {
+ *  Posts tab — reused here so the Likes/Comments tabs render in the exact
+ *  same MasonryGrid/GridCard layout. */
+function toThumbnails(posts: PostWithUser[]) {
   return posts
     .filter((post) => post.images && post.images.length > 0)
     .map((post) => ({
@@ -158,11 +192,96 @@ function toThumbnails(posts: Post[]) {
     }));
 }
 
-// --- Reanimated & Gesture Handler ---
+/** Display name of whoever actually posted something shown in the
+ *  Likes/Comments grids. These tabs list *other people's* content the user
+ *  interacted with, so the footer has to name the author — never the
+ *  viewer, which is what it used to do. */
+function postAuthorName(post: PostWithUser): string {
+  return post.profiles?.name || "Unknown";
+}
+
+/** Real media aspect ratio for a post's first image, same formula
+ *  PostGridCard uses for the home feed grid, so profile grids balance
+ *  columns/frame images identically instead of a fixed guess. */
+function postThumbRatio(post: Post): number {
+  return (
+    post.media_display?.ratios?.[0] ??
+    ratioForUniformMode(post.media_display?.mode ?? "portrait")
+  );
+}
+
+/** Saved items are polymorphic (a post, product, or marketplace listing) —
+ *  this normalizes whichever one a bookmark row points at into the shape
+ *  the Saves tab's grid needs. Returns null for rows with none of the
+ *  three (shouldn't happen, but keeps the grid from rendering a blank
+ *  card if one ever does). */
+function savedItemInfo(item: any): {
+  id: string;
+  href: string;
+  image: string | undefined;
+  title: string;
+  price: number | null;
+  ratio: number;
+  isVideo: boolean;
+  /** Whoever posted/listed the saved item — the viewer saved it, they
+   *  didn't create it, so the card credits its owner. */
+  authorName: string;
+  authorAvatar: string | undefined;
+} | null {
+  const post = item.posts;
+  const product = item.products;
+  const listing = item.marketplace;
+  const owner = (row: any) => ({
+    authorName: row?.profiles?.name || "Unknown",
+    authorAvatar: row?.profiles?.avatar_url ?? undefined,
+  });
+  if (post) {
+    return {
+      id: item.id,
+      href: `/(users)/post/${post.id}`,
+      image: post.images?.[0],
+      title: post.content,
+      price: null,
+      ratio: postThumbRatio(post),
+      isVideo: post.images?.[0] ? isVideoUrl(post.images[0]) : false,
+      ...owner(post),
+    };
+  }
+  if (product) {
+    return {
+      id: item.id,
+      href: `/(users)/product/${product.id}`,
+      image: product.images?.[0],
+      title: product.name,
+      price: product.price,
+      ratio: LISTING_CARD_RATIO,
+      isVideo: false,
+      ...owner(product),
+    };
+  }
+  if (listing) {
+    return {
+      id: item.id,
+      href: `/(users)/marketplace/${listing.id}`,
+      image: listing.images?.[0],
+      title: listing.title,
+      price: listing.price,
+      ratio: LISTING_CARD_RATIO,
+      isVideo: false,
+      ...owner(listing),
+    };
+  }
+  return null;
+}
+
+// --- Reanimated ---
 import Animated, {
     SlideInDown,
     SlideOutDown,
+    measure,
     runOnJS,
+    runOnUI,
+    useAnimatedRef,
     useAnimatedScrollHandler,
     useAnimatedStyle,
     useSharedValue,
@@ -172,6 +291,10 @@ export default function ProfileScreen() {
   const { currentUser, setCurrentUser } = useUser();
   const router = useAppRouter();
   const insets = useSafeAreaInsets();
+  // All three post grids below morph their card into the detail view —
+  // see UI_STANDARD.md § Grid to detail. Each already holds the whole post,
+  // so there is nothing to refetch and no spinner to sit through.
+  const { openPost, overlayProps } = usePostDetailMorph();
   // A screen pushed on top of this one (e.g. /post/[id], presented as a
   // transparentModal so this stays mounted/visible underneath while its own
   // ContextDrop edge-swipe-back is in progress) shouldn't leave this still
@@ -183,10 +306,18 @@ export default function ProfileScreen() {
   const isFocused = useIsFocused();
   const { scale: bottomBarScale, onScroll: onBottomBarScroll } = useBottomBarScroll();
 
-  const { openManageListings, openFollowRequests } = useLocalSearchParams<{
+  const { openManageListings } = useLocalSearchParams<{
     openManageListings?: string;
-    openFollowRequests?: string;
   }>();
+
+  // Live scroll position, written straight from the UI-thread scroll
+  // worklet below (mainScrollHandler) — declared up here, before anything
+  // that closes over it, because a worklet's closure captures whatever a
+  // variable resolves to at the line the worklet is *defined*, not the line
+  // it's later *called* from. Several worklets below (measureAvatarContentY,
+  // the stretchy-cover style, mainScrollHandler itself) all read
+  // scrollY.value, so it has to exist before all of them.
+  const scrollY = useSharedValue(0);
 
   // Fixed header now overlays the cover (transparent at rest, so the cover
   // photo/gradient is visible from the status bar down) — fades to its
@@ -198,15 +329,35 @@ export default function ProfileScreen() {
 
   // Mini avatar in the header — stays hidden until the real avatar (in the
   // cover) is ~90% passed behind the header, then slides up + fades in over
-  // MINI_AVATAR_REVEAL_DISTANCE of additional scroll. avatarContentYRef is
+  // MINI_AVATAR_REVEAL_DISTANCE of additional scroll. avatarContentY is
   // filled in by the avatar's onLayout measurement below (content-space Y,
   // scroll-offset independent), since its on-screen position shifts with
-  // badge/dzongkhag layout and shouldn't be hardcoded.
+  // badge/dzongkhag layout and shouldn't be hardcoded. Both this and
+  // headerBgOpacity below used to be computed from a JS-thread function
+  // (runOnJS'd on every single scroll event) — moved into the UI-thread
+  // scroll worklet instead (see mainScrollHandler): it removes a bridge
+  // crossing from every scroll frame, which matters most exactly when it's
+  // most likely to be missed — fast/sustained scrolling, where that
+  // JS-thread work was competing with MasonryGrid mounting newly-revealed
+  // cards for the same frame budget and showing up as stutter across the
+  // whole header, not just here. avatarContentY needs to be a shared value
+  // (not a plain ref) for the worklet to read it directly.
   const AVATAR_SIZE = 86;
   const MINI_AVATAR_REVEAL_DISTANCE = 70;
-  const avatarContentYRef = React.useRef<number | null>(null);
-  const avatarRef = React.useRef<View>(null);
-  const mainScrollYRef = React.useRef(0);
+  const avatarContentY = useSharedValue<number>(Number.POSITIVE_INFINITY);
+  const avatarRef = useAnimatedRef<View>();
+  // measure() can return null on the very first layout pass — retry
+  // across a few frames until it succeeds rather than leaving
+  // avatarContentY stuck at its Infinity sentinel forever.
+  const measureAvatarContentY = (attempt = 0) => {
+    "worklet";
+    const m = measure(avatarRef);
+    if (m) {
+      avatarContentY.value = m.pageY + scrollY.value;
+    } else if (attempt < 10) {
+      requestAnimationFrame(() => measureAvatarContentY(attempt + 1));
+    }
+  };
   const miniAvatarProgress = useSharedValue(0);
   const miniAvatarAnimatedStyle = useAnimatedStyle(() => ({
     opacity: miniAvatarProgress.value,
@@ -218,83 +369,133 @@ export default function ProfileScreen() {
   const editProfilePillAnimatedStyle = useAnimatedStyle(() => ({
     opacity: 1 - miniAvatarProgress.value,
   }));
-  const computeMiniAvatarProgress = (y: number) => {
-    const avatarContentY = avatarContentYRef.current;
-    if (avatarContentY == null) return 0;
-    const triggerY = avatarContentY + AVATAR_SIZE * 0.9 - HEADER_HEIGHT;
-    return Math.max(0, Math.min(1, (y - triggerY) / MINI_AVATAR_REVEAL_DISTANCE));
-  };
 
   // Magnetic tab bar — the SAME Posts/Marketplace/etc. row (no duplicate)
-  // gets a translateY that exactly cancels out its own natural upward
-  // scroll once its top edge would slide behind the fixed header, so it
-  // appears to lock in place right there while the rest of the content
-  // keeps scrolling underneath; below that threshold translateY is 0 and it
-  // scrolls completely normally.
+  // locks in place right below the fixed header once scrolled up to meet
+  // it, via the ScrollView's own native `stickyHeaderIndices` (see the
+  // Animated.ScrollView below) rather than a hand-computed translateY.
+  // This used to be driven by a UI-thread scroll worklet doing its own
+  // measure()-based position tracking + `Math.max(0, y - triggerY)` math —
+  // technically correct, but every one of those measure() calls, the
+  // reaction to remeasurement, and the transform recompute was still this
+  // screen's own JS/UI-thread code competing for the same frame budget as
+  // everything else this heavy screen does on a fresh scroll (async data
+  // settling, images decoding, grid cards mounting) — and any hitch there
+  // read as the pin stuttering, since it was the one thing on screen that
+  // *had* to update every single frame to stay glued to the scroll.
+  // `stickyHeaderIndices` hands that job to the platform's native scroll
+  // implementation instead (the same mechanism SectionList uses for
+  // sticky section headers) — zero custom per-frame computation, so
+  // there's nothing left for this screen's own workload to stall.
   //
-  // This has to be computed on the UI thread (via useAnimatedScrollHandler
-  // below), not from the plain JS-thread onScroll callback the rest of this
-  // header uses — a JS-thread update lags a frame or more behind the
-  // ScrollView's own native-driven position, and since this transform is
-  // fighting to stay glued to a fast-moving native scroll (rather than just
-  // easing an opacity/translate in over a fixed distance, like the header
-  // fade/mini-avatar below), that lag is what read as "wobbling": the bar
-  // visibly hunting to catch up to where the scroll actually is instead of
-  // tracking it 1:1. tabBarContentY is a shared value (not a plain ref) so
-  // the worklet can read it directly; it's filled in from the row's own
-  // onLayout measurement, same content-space-Y approach as
-  // avatarContentYRef above, just JS-thread-writable/UI-thread-readable.
-  const tabBarRef = React.useRef<View>(null);
-  const tabBarContentY = useSharedValue<number>(Number.POSITIVE_INFINITY);
-  const tabBarTranslateY = useSharedValue(0);
-  const tabBarAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: tabBarTranslateY.value }],
-  }));
-  // HEADER_HEIGHT is a rough constant (it doesn't account for status bar
-  // height varying by device) — fine for the avatar-reveal threshold above,
-  // which just needs to be roughly right, but the tab bar needs to stop
-  // exactly flush with the header's real bottom edge or a sliver of it ends
-  // up hidden underneath. headerActualHeight is measured from the header's
-  // own onLayout, falling back to the constant until that first measurement
-  // lands.
-  const headerActualHeight = useSharedValue(HEADER_HEIGHT);
+  // The tricky part: stickyHeaderIndices pins its target flush to the
+  // ScrollView's own top edge (true y=0, i.e. under the status bar), but
+  // the fixed header lives *outside* the ScrollView as a separate
+  // absolutely-positioned overlay — so the tab bar needs to land at
+  // headerHeight, not 0. The tab bar wrapper below solves this with an
+  // invisible spacer the height of the header, offset by an equal
+  // negative marginTop on the wrapper itself: in normal (unstuck) flow the
+  // negative margin exactly cancels the spacer out (renders identically to
+  // not having one), but once natively pinned, that cancellation no longer
+  // applies to what's *inside* the pinned block — the spacer still
+  // occupies its own headerHeight at the top, landing right behind the
+  // fixed header, and the real tab row content starts exactly where the
+  // spacer ends. See the wrapper's JSX below for the actual layout.
+  //
+  // headerHeight is measured from the fixed header's own onLayout (falling
+  // back to the HEADER_HEIGHT constant until that first measurement
+  // lands) — a rough hardcoded constant doesn't account for status bar
+  // height varying by device, which would leave a device-dependent sliver
+  // of the tab bar hidden under (or a gap below) the header once pinned.
+  const [headerHeight, setHeaderHeight] = useState(HEADER_HEIGHT);
 
+  // Stretchy cover — on overscroll (pulling down past the top, contentOffset
+  // going negative) the cover image/gradient scales up to fill the gap that
+  // would otherwise show blank background, instead of just the native
+  // bounce revealing empty space above it. coverContainerHeight is measured
+  // from the cover's own onLayout (it spans down through the avatar/name/
+  // stats/bio, not a fixed banner height, so this can't be hardcoded);
+  // scrollY (declared up near avatarContentY, since the measure*ContentY
+  // worklets above close over it too — a worklet's closure captures
+  // whatever a variable resolves to at the line it's defined, so it needs
+  // to already exist by then, not just by the time it's called) is written
+  // straight from the UI-thread scroll worklet below so the stretch tracks
+  // the finger with zero lag.
+  const coverContainerHeight = useSharedValue(500);
+  const coverAnimatedStyle = useAnimatedStyle(() => {
+    const pull = Math.max(0, -scrollY.value);
+    if (pull === 0) {
+      return { transform: [{ translateY: 0 }, { scale: 1 }] };
+    }
+    const scale = 1 + pull / coverContainerHeight.value;
+    // Center-anchored scale grows the layer both up and down by pull/2;
+    // shifting it up by that same amount cancels the downward half so the
+    // bottom edge (where the avatar/name row sits, unscaled, right below)
+    // stays put while all the growth goes into filling the gap above.
+    return { transform: [{ translateY: -pull / 2 }, { scale }] };
+  });
+
+  // The only thing left that still needs the JS thread on every scroll
+  // frame — BottomNavBar's shrink-on-scroll lives in a shared hook
+  // (useBottomBarScroll, also used by the reels screen) that isn't worth
+  // forking just for this. Everything else moved onto the UI thread below.
   const onProfileScroll = (event: any) => {
-    const y = event.nativeEvent.contentOffset.y;
-    mainScrollYRef.current = y;
-    headerBgOpacity.value = Math.max(0, Math.min(1, y / HEADER_FADE_DISTANCE));
-    miniAvatarProgress.value = computeMiniAvatarProgress(y);
     onBottomBarScroll(event);
   };
 
-  // Drives tabBarTranslateY directly on the UI thread every scroll frame
-  // (zero bridge latency), then hands the event off to the existing
-  // JS-thread onProfileScroll for everything else it already does
-  // (header fade, mini avatar, bottom bar hide/show) — unchanged.
+  // Drives headerBgOpacity and miniAvatarProgress directly on the UI thread
+  // every scroll frame (zero bridge latency), then hands the event off to
+  // the JS-thread onProfileScroll for just the one remaining thing that
+  // needs it (bottom bar shrink). The tab bar's own pin no longer needs
+  // anything here — see stickyHeaderIndices above.
   const mainScrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
       const y = event.contentOffset.y;
-      const triggerY = tabBarContentY.value - headerActualHeight.value;
-      tabBarTranslateY.value = Math.max(0, y - triggerY);
+      scrollY.value = y;
+
+      headerBgOpacity.value = Math.max(0, Math.min(1, y / HEADER_FADE_DISTANCE));
+      const avatarTriggerY = avatarContentY.value + AVATAR_SIZE * 0.9 - HEADER_HEIGHT;
+      miniAvatarProgress.value = Math.max(
+        0,
+        Math.min(1, (y - avatarTriggerY) / MINI_AVATAR_REVEAL_DISTANCE),
+      );
+
       runOnJS(onProfileScroll)({ nativeEvent: event });
     },
   });
+
   const [activeTab, setActiveTab] = useState<
     "images" | "products" | "likes" | "saves" | "comments"
   >("images");
 
+  // Bringing the active tab's full label into view — whether it was tapped
+  // or reached by swiping the content — is ProfileTabRow's own job now.
+
   // Likes/Saves/Comments — only ever shown on your own profile, so these
   // load lazily the first time each tab is opened rather than eagerly like
   // Posts/Marketplace, to avoid three extra queries most visits never need.
-  const [likedPosts, setLikedPosts] = useState<Post[]>([]);
+  // Seeded from cache below (see the Likes/Saves/Comments cache-key
+  // constants and the "Lazy-load" effects further down) so reopening these
+  // tabs after the screen has remounted shows the last-known content
+  // instantly instead of a blank loading spinner.
+  const cachedLikedPosts = currentUser?.id
+    ? peekCache<PostWithUser[]>(likedPostsCacheKey(currentUser.id))?.data ?? null
+    : null;
+  const [likedPosts, setLikedPosts] = useState<PostWithUser[]>(cachedLikedPosts ?? []);
   const [loadingLikedPosts, setLoadingLikedPosts] = useState(false);
   const [likedPostsLoaded, setLikedPostsLoaded] = useState(false);
 
-  const [commentedPosts, setCommentedPosts] = useState<Post[]>([]);
+  const cachedCommentedPosts = currentUser?.id
+    ? peekCache<PostWithUser[]>(commentedPostsCacheKey(currentUser.id))?.data ?? null
+    : null;
+  const [commentedPosts, setCommentedPosts] = useState<PostWithUser[]>(cachedCommentedPosts ?? []);
   const [loadingCommentedPosts, setLoadingCommentedPosts] = useState(false);
   const [commentedPostsLoaded, setCommentedPostsLoaded] = useState(false);
 
-  const [savedItems, setSavedItems] = useState<any[]>([]);
+  const cachedSavedItems = currentUser?.id
+    ? peekCache<any[]>(savedItemsCacheKey(currentUser.id))?.data ?? null
+    : null;
+  const [savedItems, setSavedItems] = useState<any[]>(cachedSavedItems ?? []);
   const [loadingSavedItems, setLoadingSavedItems] = useState(false);
   const [savedItemsLoaded, setSavedItemsLoaded] = useState(false);
 
@@ -310,11 +511,9 @@ export default function ProfileScreen() {
   >(null);
   const [showCoverMenu, setShowCoverMenu] = useState(false);
   const [showFollowRequests, setShowFollowRequests] = useState(false);
-  const [showPendingRequests, setShowPendingRequests] = useState(false);
   const [followRequestsTab, setFollowRequestsTab] = useState<
     "following" | "followers"
   >("following");
-  const [showManageListings, setShowManageListings] = useState(false);
   // Hamburger drawer — same component/trigger as the Home tab's TopNavbar,
   // now replacing the header's separate Follow Requests / Manage Listings
   // icons (Manage Listings already lives inside this menu).
@@ -325,6 +524,15 @@ export default function ProfileScreen() {
     width: number;
     height: number;
   } | null>(null);
+  // Covers the two gaps that otherwise show nothing happening: "picking" is
+  // the wait between tapping a camera/gallery option and the system picker
+  // actually appearing, and "saving" is the upload afterwards, before its
+  // success/error popup lands. They are separate phases because only the
+  // second one may use a native modal — see LoadingOverlay's
+  // `presentation` prop and presentSystemPicker in utils/modal.ts.
+  const [imageBusy, setImageBusy] = useState<null | "picking" | "saving">(
+    null,
+  );
 
   // Refresh state
   const [refreshing, setRefreshing] = useState(false);
@@ -332,6 +540,8 @@ export default function ProfileScreen() {
 
   // Profile image viewer state
   const [showProfileImageViewer, setShowProfileImageViewer] = useState(false);
+  const [showAvatarStyles, setShowAvatarStyles] = useState(false);
+  const [showCoverImageViewer, setShowCoverImageViewer] = useState(false);
 
   const [showShareComposer, setShowShareComposer] = useState(false);
 
@@ -383,6 +593,8 @@ export default function ProfileScreen() {
     setProfileImage,
     coverImage,
     setCoverImage,
+    coverHue,
+    setCoverHue,
     bio,
     namzoedId,
     followerCount,
@@ -391,19 +603,57 @@ export default function ProfileScreen() {
     setFollowingCount,
   } = useProfileData(refreshKey);
 
-  // Per-user cover color identity — derived from the cover photo's dominant
-  // hue when there is one (so the header/gradient/matte tint blend with it),
-  // or a deterministic fallback hue keyed to the user's id otherwise. Same
-  // "dark matte navy" formula either way (see lib/coverTheme.ts), just with
-  // a different hue, so it's unique per user without ever looking garish.
+  // Per-user cover color identity. The hue lives on the profile row
+  // (profiles.cover_hue) — extracted from the cover photo when one is
+  // uploaded, random when there isn't one — so the first paint is already
+  // the right color instead of settling on it a moment later. Same "dark
+  // matte navy" formula either way (see lib/coverTheme.ts), just with a
+  // different hue, so it's unique per user without ever looking garish.
+  //
+  // persistCoverHue is the recovery path for profiles that predate the
+  // column: the hook extracts the hue from their existing cover photo once
+  // and hands it here to be stored, after which the extraction never runs
+  // again for that profile.
+  const persistCoverHue = useCallback(
+    (hue: number) => {
+      const userId = currentUser?.id;
+      if (!userId) return;
+      setCoverHue(hue);
+      updateUserProfile(userId, { cover_hue: hue }).catch((error) =>
+        console.error("Failed to save cover gradient hue:", error),
+      );
+    },
+    // setCoverHue is a setState function, stable across renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [currentUser?.id],
+  );
+
   const { header: HEADER_GRADIENT, cover: COVER_GRADIENT, tintRgb } =
-    useCoverPalette(currentUser?.id, coverImage);
+    useCoverPalette(currentUser?.id, coverImage, coverHue, persistCoverHue);
+
+  const birthday = birthdayBadge(
+    currentUser?.birth_date,
+    currentUser?.show_birthday,
+    currentUser?.birthday_display,
+  );
 
   // 7-day rolling profile view count
-  const [profileViews7d, setProfileViews7d] = useState<number>(0);
+  const profileViewsCacheKey = currentUser?.id ? `profile:views7d:${currentUser.id}` : null;
+  const [profileViews7d, setProfileViews7d] = useState<number>(
+    () => (profileViewsCacheKey ? peekCache<number>(profileViewsCacheKey)?.data ?? 0 : 0),
+  );
   useEffect(() => {
     if (!currentUser?.id) return;
-    getProfileViewCount7d(currentUser.id).then(setProfileViews7d).catch(() => {});
+    const key = `profile:views7d:${currentUser.id}`;
+    readCache<number>(key).then((cached) => {
+      if (cached) setProfileViews7d(cached.data);
+    });
+    getProfileViewCount7d(currentUser.id)
+      .then((count) => {
+        setProfileViews7d(count);
+        writeCache(key, count);
+      })
+      .catch(() => {});
   }, [currentUser?.id]);
 
   // Early-access badge for the logged-in user
@@ -423,13 +673,11 @@ export default function ProfileScreen() {
     loadingPosts,
     postThumbnails,
   } = useUserPosts(refreshKey, showErrorPopup);
-  const postGridReveal = useGridReveal();
-  useEffect(() => {
-    postGridReveal.rearm();
-  }, [postThumbnails.length, postGridReveal.rearm]);
 
-  // User products hook
-  const { userProducts, setUserProducts, loadingProducts } = useUserProducts(
+  // The Marketplace tab shows marketplace listings, not products: products
+  // are the shopping catalogue and belong to a verified shop's work profile.
+  // See hooks/profile/useUserMarketplace.
+  const { marketplaceItems, loadingMarketplace } = useUserMarketplace(
     refreshKey,
     showErrorPopup,
   );
@@ -443,38 +691,71 @@ export default function ProfileScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshKey]);
 
-  // Lazy-load Likes/Saves/Comments the first time each tab is opened.
+  // Lazy-load Likes/Saves/Comments the first time each tab is opened. Each
+  // is seeded from cache above (so reopening the tab after the screen has
+  // remounted shows the last-known content immediately, not a blank
+  // spinner) and writes the fresh result back to cache once this resolves.
   useEffect(() => {
     if (activeTab !== "likes" || likedPostsLoaded || !currentUser?.id) return;
-    setLoadingLikedPosts(true);
-    getUserLikedPosts(currentUser.id)
-      .then((posts) => {
+    const userId = currentUser.id;
+    if (likedPosts.length === 0) setLoadingLikedPosts(true);
+    (async () => {
+      const cached = await readCache<PostWithUser[]>(likedPostsCacheKey(userId));
+      if (cached) {
+        setLikedPosts(cached.data);
+        setLoadingLikedPosts(false);
+      }
+      try {
+        const posts = await getUserLikedPosts(userId);
         setLikedPosts(posts);
         setLikedPostsLoaded(true);
-      })
-      .finally(() => setLoadingLikedPosts(false));
+        await writeCache(likedPostsCacheKey(userId), posts);
+      } finally {
+        setLoadingLikedPosts(false);
+      }
+    })();
   }, [activeTab, likedPostsLoaded, currentUser?.id]);
 
   useEffect(() => {
     if (activeTab !== "comments" || commentedPostsLoaded || !currentUser?.id) return;
-    setLoadingCommentedPosts(true);
-    getUserCommentedPosts(currentUser.id)
-      .then((posts) => {
+    const userId = currentUser.id;
+    if (commentedPosts.length === 0) setLoadingCommentedPosts(true);
+    (async () => {
+      const cached = await readCache<PostWithUser[]>(commentedPostsCacheKey(userId));
+      if (cached) {
+        setCommentedPosts(cached.data);
+        setLoadingCommentedPosts(false);
+      }
+      try {
+        const posts = await getUserCommentedPosts(userId);
         setCommentedPosts(posts);
         setCommentedPostsLoaded(true);
-      })
-      .finally(() => setLoadingCommentedPosts(false));
+        await writeCache(commentedPostsCacheKey(userId), posts);
+      } finally {
+        setLoadingCommentedPosts(false);
+      }
+    })();
   }, [activeTab, commentedPostsLoaded, currentUser?.id]);
 
   useEffect(() => {
     if (activeTab !== "saves" || savedItemsLoaded || !currentUser?.id) return;
-    setLoadingSavedItems(true);
-    getUserBookmarks(currentUser.id)
-      .then((items) => {
+    const userId = currentUser.id;
+    if (savedItems.length === 0) setLoadingSavedItems(true);
+    (async () => {
+      const cached = await readCache<any[]>(savedItemsCacheKey(userId));
+      if (cached) {
+        setSavedItems(cached.data);
+        setLoadingSavedItems(false);
+      }
+      try {
+        const items = await getUserBookmarks(userId);
         setSavedItems(items as any[]);
         setSavedItemsLoaded(true);
-      })
-      .finally(() => setLoadingSavedItems(false));
+        await writeCache(savedItemsCacheKey(userId), items);
+      } finally {
+        setLoadingSavedItems(false);
+      }
+    })();
   }, [activeTab, savedItemsLoaded, currentUser?.id]);
 
   // (Animation logic for avatar/picker modals removed — using native Modal animations now)
@@ -484,19 +765,9 @@ export default function ProfileScreen() {
   // at its own route (app/(users)/settings/index.tsx).
   useEffect(() => {
     if (openManageListings === "1") {
-      setShowManageListings(true);
+      router.push("/(users)/listings" as any);
     }
-  }, [openManageListings]);
-
-  // Deep-link param from the hamburger drawer's "+ Add Friends" item —
-  // stands in for a real add-friends flow for now by surfacing the pending
-  // follow requests list (the same one the header's old UserPlus icon used
-  // to open) until that flow exists.
-  useEffect(() => {
-    if (openFollowRequests === "1") {
-      setShowPendingRequests(true);
-    }
-  }, [openFollowRequests]);
+  }, [openManageListings, router]);
 
   // Close all overlays when navigating away from screen
   useFocusEffect(
@@ -504,11 +775,9 @@ export default function ProfileScreen() {
       return () => {
         // Cleanup function runs when screen loses focus
         setShowFollowRequests(false);
-        setShowPendingRequests(false);
         setShowImagePicker(false);
         setPendingImageOption(null);
         setShowMainAvatarMenu(false);
-        setShowManageListings(false);
         setShowCropOverlay(false);
         setShowProfileImageViewer(false);
       };
@@ -542,27 +811,37 @@ export default function ProfileScreen() {
     }
     setShowMainAvatarMenu(true);
   };
-  const handleManageListings = () => setShowManageListings(true);
+  // Listings management is no longer on the Norbu Wallet card (that now
+  // opens the wallet screen itself, same as the drawer entry) — this is
+  // still what the drawer's ?openManageListings=1 arrival calls.
+  const handleManageListings = () => router.push("/(users)/listings" as any);
 
   // UPDATED: Save Logic
   const handleCropSave = async (croppedUri: string) => {
-    if (!currentUser?.id) return;
+    if (!currentUser?.id) {
+      setImageBusy(null);
+      return;
+    }
 
     // 1. Optimistic Update (Immediate UI feedback)
     setProfileImage(croppedUri);
     setShowCropOverlay(false);
     setSelectedImageUri(null);
     setSelectedImageDims(null);
+    // Hands over from the inline "picking" indicator to the modal overlay,
+    // covering the upload below however this was reached — straight from the
+    // iOS picker, or from the crop overlay.
+    setImageBusy("saving");
 
     try {
-      // 2. Upload to Supabase Storage
-      // Note: Ensure your 'profile' bucket exists and has RLS policies for uploads
-      const publicUrl = await uploadAvatar(croppedUri, currentUser.id);
+      // 2. Upload, point the profile at it, and bin the file it replaced
+      const publicUrl = await saveAvatarPhoto(
+        currentUser.id,
+        croppedUri,
+        (currentUser as any)?.avatar_url,
+      );
 
-      // 3. Update User Profile in Database
-      await updateUserProfile(currentUser.id, { avatar_url: publicUrl });
-
-      // 4. Update UserContext and AsyncStorage to sync across app
+      // 3. Update UserContext and AsyncStorage to sync across app
       const updatedUser = { ...currentUser, avatar_url: publicUrl };
       await AsyncStorage.setItem("currentUser", JSON.stringify(updatedUser));
       setCurrentUser(updatedUser);
@@ -578,6 +857,8 @@ export default function ProfileScreen() {
         "Save Failed",
       );
       // Optional: Revert profileImage state here if needed
+    } finally {
+      setImageBusy(null);
     }
   };
 
@@ -585,6 +866,7 @@ export default function ProfileScreen() {
     setShowCropOverlay(false);
     setSelectedImageUri(null);
     setSelectedImageDims(null);
+    setImageBusy(null);
   };
 
   const ensureCameraPermission = async (
@@ -598,15 +880,14 @@ export default function ProfileScreen() {
     return true;
   };
 
-  const waitForIosModalDismiss = async () => {
-    if (Platform.OS !== "ios") return;
-    await new Promise<void>((resolve) => {
-      InteractionManager.runAfterInteractions(() => resolve());
-    });
-    await new Promise<void>((resolve) => setTimeout(resolve, 120));
-  };
-
   const openImageOption = async (option: "camera" | "gallery") => {
+    // Covers the permission prompt and the picker's own startup — the
+    // screen is back to the bare profile by now, with no other sign that
+    // anything is coming. "picking" renders inline rather than as a modal,
+    // because a native modal here either eats the picker or freezes the
+    // app; see LoadingOverlay. It stays up *under* the picker until one of
+    // the branches below takes over.
+    setImageBusy("picking");
     try {
       const useNativeEditor = Platform.OS === "ios";
       // Defensive cleanup to avoid any stale overlays intercepting touches.
@@ -619,26 +900,34 @@ export default function ProfileScreen() {
         const cameraGranted = await ensureCameraPermission(
           "Camera access is needed.",
         );
-        if (!cameraGranted) return;
-        result = await ImagePicker.launchCameraAsync({
-          mediaTypes: ["images"],
-          allowsEditing: useNativeEditor,
-          aspect: [1, 1],
-          quality: 1.0,
-        });
+        if (!cameraGranted) {
+          setImageBusy(null);
+          return;
+        }
+        result = await presentSystemPicker(() =>
+          ImagePicker.launchCameraAsync({
+            mediaTypes: ["images"],
+            allowsEditing: useNativeEditor,
+            aspect: [1, 1],
+            quality: 1.0,
+          }),
+        );
       } else {
         const galleryPermission =
           await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!galleryPermission.granted) {
           showErrorPopup("Gallery access is needed.", "Permission Denied");
+          setImageBusy(null);
           return;
         }
-        result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ["images"],
-          allowsEditing: useNativeEditor,
-          aspect: [1, 1],
-          quality: 1.0,
-        });
+        result = await presentSystemPicker(() =>
+          ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ["images"],
+            allowsEditing: useNativeEditor,
+            aspect: [1, 1],
+            quality: 1.0,
+          }),
+        );
       }
 
       if (!result.canceled && result.assets[0]) {
@@ -646,6 +935,7 @@ export default function ProfileScreen() {
         if (useNativeEditor) {
           // iOS: use native editor result directly to avoid custom crop overlay
           // modal interactions that can leave touches blocked after camera return.
+          // handleCropSave switches imageBusy over to the upload overlay.
           await handleCropSave(asset.uri);
         } else {
           setSelectedImageUri(asset.uri);
@@ -656,11 +946,51 @@ export default function ProfileScreen() {
             setSelectedImageDims(null);
           }
           setShowCropOverlay(true);
+          // The crop overlay is now the interactive surface — no longer a
+          // "nothing's happening" gap.
+          setImageBusy(null);
         }
+      } else {
+        setImageBusy(null); // user canceled the picker
       }
     } catch (error) {
       console.error("Error picking image:", error);
       showErrorPopup("Failed to select image.", "Selection Failed");
+      setImageBusy(null);
+    }
+  };
+
+  // What the profile is wearing: a generated avatar carries its recipe on
+  // the row (lib/dicebear.ts), a real photo carries none.
+  const avatarStyle = ((currentUser as any)?.avatar_style ?? null) as string | null;
+  const avatarAnimation = (((currentUser as any)?.avatar_animation ??
+    "none") as AvatarAnimation);
+  // The only avatar in the app that plays: one, large, and on your own
+  // profile. See components/ui/GeneratedAvatar.tsx for why it is not every
+  // avatar.
+  const avatarPlays =
+    !!avatarStyle && isAnimatedStyle(avatarStyle) && avatarAnimation !== "none";
+
+  const saveGeneratedAvatar = async (
+    style: string,
+    animation: AvatarAnimation,
+  ) => {
+    if (!currentUser?.id) return;
+    setImageBusy("saving");
+    try {
+      const patch = generatedAvatarFor(currentUser.id, style, animation);
+      await updateUserProfile(currentUser.id, patch);
+      const updatedUser = { ...currentUser, ...patch };
+      await AsyncStorage.setItem("currentUser", JSON.stringify(updatedUser));
+      setCurrentUser(updatedUser as any);
+      setProfileImage(patch.avatar_url);
+      setShowAvatarStyles(false);
+      showSuccessPopup("Your avatar has been updated", "Avatar Saved!");
+    } catch (error) {
+      console.error("Failed to save generated avatar:", error);
+      showErrorPopup("Failed to save the avatar. Please try again.", "Save Failed");
+    } finally {
+      setImageBusy(null);
     }
   };
 
@@ -674,67 +1004,100 @@ export default function ProfileScreen() {
   // crop editor (banner aspect) on both platforms, so there's no need for
   // ImageCropOverlay's Android-only flow here.
   const handleCoverSave = async (uri: string) => {
-    if (!currentUser?.id) return;
+    if (!currentUser?.id) {
+      setImageBusy(null);
+      return;
+    }
 
     const previousCover = coverImage;
+    const previousHue = coverHue;
+
+    // Hands over from the inline "picking" indicator to the modal overlay,
+    // covering the hue extraction and upload below.
+    setImageBusy("saving");
+
+    // Work the gradient hue out from the local file *before* the upload, so
+    // the new cover and its matching gradient appear together — and so the
+    // hue can go into the same profile update as the URL below.
+    const nextHue = (await extractCoverHue(uri)) ?? previousHue ?? getRandomHue();
+
+    setCoverHue(nextHue);
     setCoverImage(uri);
 
     try {
-      const publicUrl = await uploadCoverImage(uri, currentUser.id);
-      await updateUserProfile(currentUser.id, { cover_image_url: publicUrl });
+      const { url: publicUrl } = await saveCoverPhoto(currentUser.id, uri, {
+        previousUrl: previousCover,
+        fallbackHue: nextHue,
+      });
       setCoverImage(publicUrl);
 
-      const updatedUser = { ...currentUser, cover_image_url: publicUrl };
+      const updatedUser = {
+        ...currentUser,
+        cover_image_url: publicUrl,
+        cover_hue: nextHue,
+      };
       await AsyncStorage.setItem("currentUser", JSON.stringify(updatedUser));
       setCurrentUser(updatedUser);
-
-      if (previousCover) {
-        deleteCoverImage(previousCover).catch((error) =>
-          console.error("Failed to delete previous cover image:", error),
-        );
-      }
 
       showSuccessPopup("Cover photo has been updated.", "Cover Updated!");
     } catch (error) {
       console.error("Failed to save cover image:", error);
       setCoverImage(previousCover);
+      setCoverHue(previousHue);
       showErrorPopup("Failed to save cover photo. Please try again.", "Save Failed");
+    } finally {
+      setImageBusy(null);
     }
   };
 
   const openCoverImageOption = async (option: "camera" | "gallery") => {
+    // See openImageOption's matching comment — inline while the picker is
+    // coming up, and handleCoverSave switches it to the modal overlay for
+    // the upload.
+    setImageBusy("picking");
     try {
       setShowCoverMenu(false);
       let result;
       if (option === "camera") {
         const cameraGranted = await ensureCameraPermission("Camera access is needed.");
-        if (!cameraGranted) return;
-        result = await ImagePicker.launchCameraAsync({
-          mediaTypes: ["images"],
-          allowsEditing: true,
-          aspect: [3, 1],
-          quality: 1.0,
-        });
+        if (!cameraGranted) {
+          setImageBusy(null);
+          return;
+        }
+        result = await presentSystemPicker(() =>
+          ImagePicker.launchCameraAsync({
+            mediaTypes: ["images"],
+            allowsEditing: true,
+            aspect: [3, 1],
+            quality: 1.0,
+          }),
+        );
       } else {
         const galleryPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!galleryPermission.granted) {
           showErrorPopup("Gallery access is needed.", "Permission Denied");
+          setImageBusy(null);
           return;
         }
-        result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ["images"],
-          allowsEditing: true,
-          aspect: [3, 1],
-          quality: 1.0,
-        });
+        result = await presentSystemPicker(() =>
+          ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ["images"],
+            allowsEditing: true,
+            aspect: [3, 1],
+            quality: 1.0,
+          }),
+        );
       }
 
       if (!result.canceled && result.assets[0]) {
         await handleCoverSave(result.assets[0].uri);
+      } else {
+        setImageBusy(null); // user canceled the picker
       }
     } catch (error) {
       console.error("Error picking cover image:", error);
       showErrorPopup("Failed to select image.", "Selection Failed");
+      setImageBusy(null);
     }
   };
 
@@ -765,10 +1128,22 @@ export default function ProfileScreen() {
                 }
               }
 
-              await updateUserProfile(currentUser.id, { cover_image_url: null });
+              // No photo left to take a color from, so the profile goes
+              // back to a randomly assigned one — stored, so it stays put
+              // from here on rather than being re-rolled on every load.
+              const nextHue = getRandomHue();
+              await updateUserProfile(currentUser.id, {
+                cover_image_url: null,
+                cover_hue: nextHue,
+              });
               setCoverImage(null);
+              setCoverHue(nextHue);
 
-              const updatedUser = { ...currentUser, cover_image_url: null };
+              const updatedUser = {
+                ...currentUser,
+                cover_image_url: null,
+                cover_hue: nextHue,
+              };
               await AsyncStorage.setItem("currentUser", JSON.stringify(updatedUser));
               setCurrentUser(updatedUser);
 
@@ -842,23 +1217,30 @@ export default function ProfileScreen() {
                 }
               }
 
-              // Update database
-              await updateUserProfile(currentUser.id, { avatar_url: null });
+              // Removing a photo lands on a generated avatar, not on an
+              // empty circle — nobody in this app is a grey silhouette
+              // (§ Generated avatars). Keeps whatever style was chosen
+              // before, so removing a photo you added over one restores the
+              // avatar you had rather than resetting your choice.
+              const patch = generatedAvatarFor(
+                currentUser.id,
+                avatarStyle || undefined,
+                avatarAnimation,
+              );
+              await updateUserProfile(currentUser.id, patch);
 
-              // Update local state
-              setProfileImage(null);
+              setProfileImage(patch.avatar_url);
 
-              // Update UserContext and AsyncStorage
-              const updatedUser = { ...currentUser, avatar_url: null };
+              const updatedUser = { ...currentUser, ...patch };
               await AsyncStorage.setItem(
                 "currentUser",
                 JSON.stringify(updatedUser),
               );
-              setCurrentUser(updatedUser);
+              setCurrentUser(updatedUser as any);
 
               Haptics.notificationAsync(NotificationFeedbackType.Success);
               showSuccessPopup(
-                "Profile picture removed successfully",
+                "Your photo was replaced with a generated avatar",
                 "Removed!",
               );
             } catch (error) {
@@ -892,58 +1274,295 @@ export default function ProfileScreen() {
     );
   }
 
-  // Posts/Marketplace/Likes/Saves/Comments row — shared between the in-flow
-  // tab bar (rendered inside the ScrollView, overlapping the cover's rounded
-  // corners) and its pinned duplicate (an absolute overlay right below the
-  // fixed header, shown once the in-flow one has scrolled up to meet it), so
-  // the two never drift out of sync.
+  // One tab's grid content, by key — pulled out of the carousel JSX so the
+  // same body can render whichever of prev/current/next a given slot needs
+  // (see the "Tab Content" carousel below and tabSwipeGesture above).
+  const renderTabPanel = (
+    key: (typeof PROFILE_TAB_ORDER)[number],
+  ): React.ReactNode => {
+    switch (key) {
+      case "images":
+        return (
+          <MasonryGrid
+            items={postThumbnails}
+            loading={loadingPosts}
+            keyExtractor={(thumb) => thumb.postId}
+            getHeight={(thumb, width) => gridCardHeight(postThumbRatio(thumb.post), width)}
+            renderCard={(thumb, width, deferred, priority) => (
+              <GridCard
+                id={thumb.postId}
+                width={width}
+                ratio={postThumbRatio(thumb.post)}
+                imageUri={thumb.thumbnailUrl}
+                blurhash={thumb.thumbnailBlurHash ?? undefined}
+                isVideo={thumb.isVideo}
+                title={thumb.post.content}
+                // What the post is selling, in the grid — the same tag the
+                // opened post shows at the top, at tile scale.
+                belowTitle={
+                  <TaggedProductStrip
+                    products={(thumb.post as any).tagged_products}
+                  />
+                }
+                avatarUri={profileImage ?? undefined}
+                avatarLabel={currentUser.name}
+                subtitle={currentUser.name}
+                footerRight={
+                  <View className="flex-row items-center">
+                    <Heart size={15} color="#9CA3AF" />
+                    <Text className="text-xs text-gray-400 ml-1">
+                      {thumb.post.likes}
+                    </Text>
+                  </View>
+                }
+                onPress={(_id, rect) =>
+                  openPost(
+                    toPostData(thumb.post, {
+                      name: currentUser?.name,
+                      avatarUrl: (currentUser as any)?.avatar_url,
+                    }),
+                    rect,
+                  )
+                }
+                deferred={deferred}
+                priority={priority}
+              />
+            )}
+            emptyText="Share your first moment"
+            emptyAction={
+              <TouchableOpacity
+                onPress={() => setShowCreatePost(true)}
+                className="bg-primary px-5 py-2.5 rounded-full"
+              >
+                <Text className="text-white text-sm font-semibold">
+                  Create a Post
+                </Text>
+              </TouchableOpacity>
+            }
+          />
+        );
+
+      case "products":
+        return (
+          <MasonryGrid
+            items={marketplaceItems}
+            loading={loadingMarketplace}
+            keyExtractor={(item) => item.id}
+            getHeight={(_item, width) => gridCardHeight(LISTING_CARD_RATIO, width)}
+            renderCard={(item, width, deferred, priority) => (
+              <GridCard
+                id={item.id}
+                width={width}
+                ratio={LISTING_CARD_RATIO}
+                imageUri={item.images?.[0]}
+                title={item.title}
+                subtitle={MARKETPLACE_TYPE_LABEL[item.type]}
+                footerRight={
+                  // A free listing says so rather than showing "Nu. 0",
+                  // which reads as a missing price.
+                  <Text className="text-sm font-mbold text-primary">
+                    {item.type === "free" || !item.price
+                      ? "Free"
+                      : `Nu. ${item.price.toLocaleString()}`}
+                  </Text>
+                }
+                onPress={(id) => router.push(`/(users)/marketplace/${id}` as any)}
+                deferred={deferred}
+                priority={priority}
+              />
+            )}
+            emptyText="Sell something you no longer need"
+            // Your own empty tab wants the screen where you *list*
+            // something, not the tab where you browse everyone else's —
+            // "Open Marketplace" answered a question nobody asked here.
+            emptyAction={
+              <TouchableOpacity
+                onPress={() =>
+                  router.push("/(users)/listings?section=marketplace" as any)
+                }
+                className="bg-primary px-5 py-2.5 rounded-full"
+              >
+                <Text className="text-white text-sm font-semibold">
+                  List something
+                </Text>
+              </TouchableOpacity>
+            }
+          />
+        );
+
+      case "likes":
+        return (
+          <MasonryGrid
+            items={toThumbnails(likedPosts)}
+            loading={loadingLikedPosts}
+            keyExtractor={(thumb) => thumb.postId}
+            getHeight={(thumb, width) => gridCardHeight(postThumbRatio(thumb.post), width)}
+            renderCard={(thumb, width, deferred, priority) => (
+              <GridCard
+                id={thumb.postId}
+                width={width}
+                ratio={postThumbRatio(thumb.post)}
+                imageUri={thumb.thumbnailUrl}
+                blurhash={thumb.thumbnailBlurHash ?? undefined}
+                isVideo={thumb.isVideo}
+                title={thumb.post.content}
+                belowTitle={
+                  <TaggedProductStrip
+                    products={(thumb.post as any).tagged_products}
+                  />
+                }
+                avatarUri={thumb.post.profiles?.avatar_url ?? undefined}
+                avatarLabel={postAuthorName(thumb.post)}
+                subtitle={postAuthorName(thumb.post)}
+                footerRight={
+                  <View className="flex-row items-center">
+                    <Heart size={15} color="#e91e63" fill="#e91e63" />
+                    <Text className="text-xs text-gray-400 ml-1">
+                      {thumb.post.likes}
+                    </Text>
+                  </View>
+                }
+                onPress={(_id, rect) => openPost(toPostData(thumb.post), rect)}
+                deferred={deferred}
+                priority={priority}
+              />
+            )}
+            emptyText="Posts you like will show up here"
+            emptyAction={
+              <TouchableOpacity
+                onPress={() => router.push("/(users)/(tabs)" as any)}
+                className="bg-primary px-5 py-2.5 rounded-full"
+              >
+                <Text className="text-white text-sm font-semibold">
+                  Explore Posts
+                </Text>
+              </TouchableOpacity>
+            }
+          />
+        );
+
+      case "comments":
+        return (
+          <MasonryGrid
+            items={toThumbnails(commentedPosts)}
+            loading={loadingCommentedPosts}
+            keyExtractor={(thumb) => thumb.postId}
+            getHeight={(thumb, width) => gridCardHeight(postThumbRatio(thumb.post), width)}
+            renderCard={(thumb, width, deferred, priority) => (
+              <GridCard
+                id={thumb.postId}
+                width={width}
+                ratio={postThumbRatio(thumb.post)}
+                imageUri={thumb.thumbnailUrl}
+                blurhash={thumb.thumbnailBlurHash ?? undefined}
+                isVideo={thumb.isVideo}
+                title={thumb.post.content}
+                belowTitle={
+                  <TaggedProductStrip
+                    products={(thumb.post as any).tagged_products}
+                  />
+                }
+                avatarUri={thumb.post.profiles?.avatar_url ?? undefined}
+                avatarLabel={postAuthorName(thumb.post)}
+                subtitle={postAuthorName(thumb.post)}
+                footerRight={
+                  <View className="flex-row items-center">
+                    <Heart size={15} color="#9CA3AF" />
+                    <Text className="text-xs text-gray-400 ml-1">
+                      {thumb.post.likes}
+                    </Text>
+                  </View>
+                }
+                onPress={(_id, rect) => openPost(toPostData(thumb.post), rect)}
+                deferred={deferred}
+                priority={priority}
+              />
+            )}
+            emptyText="Posts you've commented on will show up here"
+            emptyAction={
+              <TouchableOpacity
+                onPress={() => router.push("/(users)/(tabs)" as any)}
+                className="bg-primary px-5 py-2.5 rounded-full"
+              >
+                <Text className="text-white text-sm font-semibold">
+                  Explore Posts
+                </Text>
+              </TouchableOpacity>
+            }
+          />
+        );
+
+      case "saves":
+        return (
+          <MasonryGrid
+            items={savedItems.filter((item) => savedItemInfo(item) !== null)}
+            loading={loadingSavedItems}
+            keyExtractor={(item) => item.id}
+            getHeight={(item, width) => gridCardHeight(savedItemInfo(item)!.ratio, width)}
+            renderCard={(item, width, deferred, priority) => {
+              const info = savedItemInfo(item)!;
+              return (
+                <GridCard
+                  id={info.id}
+                  width={width}
+                  ratio={info.ratio}
+                  imageUri={info.image}
+                  isVideo={info.isVideo}
+                  title={info.title}
+                  avatarUri={info.authorAvatar}
+                  avatarLabel={info.authorName}
+                  subtitle={info.authorName}
+                  footerRight={
+                    info.price != null ? (
+                      <Text className="text-sm font-mbold text-primary">
+                        Nu. {info.price.toLocaleString()}
+                      </Text>
+                    ) : undefined
+                  }
+                  onPress={() => router.push(info.href as any)}
+                  deferred={deferred}
+                  priority={priority}
+                />
+              );
+            }}
+            emptyText="Tap the bookmark icon on any post, product or listing to save it here"
+            emptyAction={
+              <TouchableOpacity
+                onPress={() =>
+                  router.push("/(users)/(tabs)/categories" as any)
+                }
+                className="bg-primary px-5 py-2.5 rounded-full"
+              >
+                <Text className="text-white text-sm font-semibold">
+                  Explore Marketplace
+                </Text>
+              </TouchableOpacity>
+            }
+          />
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  // Posts/Marketplace/Likes/Saves/Comments row. The row itself lives in
+  // components/profile/ProfileTabRow so the work profile uses the same one
+  // rather than a second copy that quietly drifts from this.
   const renderTabRow = () => (
-    <View style={{ position: "relative" }}>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ flexGrow: 1 }}
-      >
-        {PROFILE_TABS.map((tab) => (
-          <TouchableOpacity
-            key={tab.key}
-            className="px-5 pt-4 pb-3 items-center"
-            onPress={() => setActiveTab(tab.key)}
-          >
-            <Text
-              className={`font-msemibold text-lg ${
-                activeTab === tab.key ? "text-primary" : "text-gray-500"
-              }`}
-            >
-              {tab.label}
-            </Text>
-            <View
-              className={`w-6 h-[2px] rounded-full mt-1.5 ${
-                activeTab === tab.key ? "bg-primary" : "bg-transparent"
-              }`}
-            />
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-      <LinearGradient
-        colors={["#ffffff", "rgba(255,255,255,0)"]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-        pointerEvents="none"
-        style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 20 }}
-      />
-      <LinearGradient
-        colors={["rgba(255,255,255,0)", "#ffffff"]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-        pointerEvents="none"
-        style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 20 }}
-      />
-    </View>
+    <ProfileTabRow
+      tabs={PROFILE_TABS}
+      activeKey={activeTab}
+      onChange={setActiveTab}
+    />
   );
 
   return (
-    <View className="flex-1 bg-background" pointerEvents={isFocused ? "auto" : "none"}>
+    <View
+      className="flex-1"
+      style={{ backgroundColor: "#F0F1F3" }}
+      pointerEvents={isFocused ? "auto" : "none"}
+    >
       {/* Light status-bar icons — the header/cover gradient behind them is
           dark, so the app's default dark-content bar would be unreadable
           here. Overrides the global one from app/_layout.tsx while focused. */}
@@ -956,7 +1575,12 @@ export default function ProfileScreen() {
       <View
         style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 100 }}
         onLayout={(e) => {
-          headerActualHeight.value = e.nativeEvent.layout.height;
+          // Rounded: the tab bar wrapper below cancels this exact value with
+          // a negative margin, and a fractional height (status bars vary by
+          // device) let the spacer and that margin round in opposite
+          // directions — leaving a hairline of bare cover showing between
+          // the bio panel and the buttons' backing below it.
+          setHeaderHeight(Math.round(e.nativeEvent.layout.height));
         }}
       >
         <Animated.View
@@ -1033,12 +1657,12 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             </Animated.View>
 
-            {/* Scan — no scanner screen exists yet, so this is a placeholder
-                stub for now rather than a dead, unresponsive icon. */}
+            {/* Scan — reads another person's Namzoed code
+                (app/(users)/qr-scanner.tsx). Scanning writes nothing on its
+                own: it opens a confirmation, and the two of you follow each
+                other only once they confirm too. */}
             <TouchableOpacity
-              onPress={() =>
-                Alert.alert("Coming Soon", "QR scanning isn't available yet.")
-              }
+              onPress={() => router.push("/qr-scanner" as any)}
               className="w-10 h-10 items-center justify-center"
             >
               <ScanLine size={22} strokeWidth={1.7} color="#fff" />
@@ -1063,6 +1687,15 @@ export default function ProfileScreen() {
           contentContainerStyle={{ paddingBottom: 100 }}
           onScroll={mainScrollHandler}
           scrollEventThrottle={16}
+          // Natively pins direct child index 1 (the tab bar wrapper below)
+          // to the ScrollView's own top edge once scrolled up to meet it —
+          // see the long comment above the headerHeight declaration for why
+          // this replaced a hand-rolled transform, and the tab bar
+          // wrapper's own JSX for how it lands
+          // flush below the separate fixed header despite pinning to true
+          // y=0. Index 0 is the cover container right above it; index 2 is
+          // the tab content panel right after.
+          stickyHeaderIndices={[1]}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -1077,8 +1710,27 @@ export default function ProfileScreen() {
                   Manage buttons, stopping right above the Media/Products/
                   Services tab row. Default linear gradient when no cover
                   photo is set. */}
-              <View className="relative overflow-hidden">
-                <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}>
+              <View
+                className="relative overflow-hidden"
+                onLayout={(e) => {
+                  coverContainerHeight.value = e.nativeEvent.layout.height;
+                }}
+              >
+                {/* Tapping anywhere on the cover that isn't already claimed
+                    by a more specific control below (avatar, name, stats,
+                    bio, Norbu Wallet/History) opens the full-screen cover
+                    viewer — those controls render later/on top in the same
+                    outer container and claim their own taps first, so this
+                    only fires on the actual empty cover space. The
+                    Pressable itself stays a static, unscaled hit target;
+                    the stretch-on-overscroll transform lives on the
+                    Animated.View inside it instead, so tap bounds don't
+                    shift as it zooms. */}
+                <Pressable
+                  onPress={() => setShowCoverImageViewer(true)}
+                  style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
+                >
+                <Animated.View style={[{ flex: 1 }, coverAnimatedStyle]}>
                   {coverImage ? (
                     <ProgressiveImage
                       uri={coverImage}
@@ -1101,30 +1753,23 @@ export default function ProfileScreen() {
                   <View
                     style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(70,72,76,0.58)" }}
                   />
-                </View>
-                <TouchableOpacity
-                  onPress={() => setShowCoverMenu(true)}
-                  style={{ top: HEADER_HEIGHT + 12 }}
-                  className="absolute right-3 w-9 h-9 rounded-full bg-black/40 items-center justify-center"
-                >
-                  <Camera size={16} strokeWidth={1.5} color="white" />
-                </TouchableOpacity>
+                </Animated.View>
+                </Pressable>
 
                 {/* Profile Info Section — Instagram style. Top padding clears
                     the fixed header row now that the cover renders behind it. */}
-                <View className="px-4" style={{ paddingTop: HEADER_HEIGHT + 20 }}>
+                <View className="px-4" style={{ paddingTop: HEADER_HEIGHT + 32 }}>
                   {/* Row: Avatar + Name/Email/Location */}
-                  <View className="flex-row items-center mb-3">
+                  <View className="flex-row items-center mb-1">
                     {/* Avatar — measured on layout so the header's mini
                         avatar knows exactly when this one is ~90% scrolled
-                        behind the header (see avatarContentYRef). */}
+                        behind the header (see avatarContentY above). */}
                     <View
                       ref={avatarRef}
+                      collapsable={false}
                       className="relative"
                       onLayout={() => {
-                        avatarRef.current?.measure((_x, _y, _w, _h, _pageX, pageY) => {
-                          avatarContentYRef.current = pageY + mainScrollYRef.current;
-                        });
+                        runOnUI(measureAvatarContentY)();
                       }}
                     >
                       {/* No camera badge — long-press still opens the
@@ -1140,7 +1785,17 @@ export default function ProfileScreen() {
                         activeOpacity={0.85}
                         className="w-[86px] h-[86px] rounded-full bg-gray-200 overflow-hidden border border-white"
                       >
-                        {profileImage ? (
+                        {avatarPlays ? (
+                          // The generated avatar's own SVG, which is where
+                          // its animation lives — the raster one every
+                          // other surface reads cannot move.
+                          <GeneratedAvatar
+                            seed={currentUser.id ?? ""}
+                            style={avatarStyle}
+                            animation={avatarAnimation}
+                            size={86}
+                          />
+                        ) : profileImage ? (
                           <ProgressiveImage
                             uri={profileImage}
                             style={{ width: "100%", height: "100%" }}
@@ -1158,7 +1813,7 @@ export default function ProfileScreen() {
                     {/* Name, Email & Location */}
                     <View className="flex-1 ml-4">
                       <View className="flex-row items-center gap-1.5 mb-0.5">
-                        <Text className="text-lg font-mbold text-white">
+                        <Text className="text-3xl font-mbold text-white">
                           {currentUser.name}
                         </Text>
                         {verificationStatus === "verified" && (
@@ -1178,20 +1833,20 @@ export default function ProfileScreen() {
                         >
                           <Text
                             style={{ flexShrink: 1 }}
-                            className="text-base font-regular text-white/80"
+                            className="text-sm font-regular text-white/50"
                             numberOfLines={1}
                           >
                             NamZoed ID: {namzoedId}
                           </Text>
-                          <QrCode size={16} color="rgba(255,255,255,0.8)" />
+                          <QrCode size={14} color="rgba(255,255,255,0.5)" />
                         </TouchableOpacity>
                       )}
                       {currentUser.dzongkhag && (
                         <View className="flex-row items-center gap-1">
-                          <Text className="text-base font-msemibold text-white/80">
+                          <Text className="text-sm font-msemibold text-white/50">
                             GP:
                           </Text>
-                          <Text className="text-base font-regular text-white/80">
+                          <Text className="text-sm font-regular text-white/50">
                             {currentUser.dzongkhag}
                           </Text>
                         </View>
@@ -1228,7 +1883,7 @@ export default function ProfileScreen() {
                     of the cover photo — and not below it either: the buttons
                     get their own flat (non-gradient) backing instead, right
                     below. */}
-                <View className="relative overflow-hidden" style={{ marginTop: 12 }}>
+                <View className="relative overflow-hidden" style={{ marginTop: 4 }}>
                   {Platform.OS === "ios" && (
                     <MaskedView
                       style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
@@ -1256,44 +1911,44 @@ export default function ProfileScreen() {
                     end={{ x: 0, y: 1 }}
                     style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
                   />
-                  <View className="px-4 pt-3 pb-3">
+                  <View className="px-4 pt-2 pb-3">
                   {/* Stats row — below the avatar/name row */}
-                  <View className="flex-row items-center justify-around mb-3">
-                    <View className="items-center">
-                      <Text className="text-lg font-mbold text-white">
+                  <View className="flex-row items-center justify-start gap-8 mb-4">
+                    <View className="flex-row items-baseline gap-1">
+                      <Text className="text-xl font-mbold text-white">
                         {userPosts.length}
                       </Text>
-                      <Text className="text-xs font-regular text-white/70">
+                      <Text className="text-lg font-medium text-white/70">
                         Posts
                       </Text>
                     </View>
                     <TouchableOpacity
-                      className="items-center"
+                      className="flex-row items-baseline gap-1"
                       onPress={() => {
                         setFollowRequestsTab("followers");
                         setShowFollowRequests(true);
                       }}
                       activeOpacity={0.8}
                     >
-                      <Text className="text-lg font-mbold text-white">
+                      <Text className="text-xl font-mbold text-white">
                         {followerCount}
                       </Text>
-                      <Text className="text-xs font-regular text-white/70">
+                      <Text className="text-lg font-medium text-white/70">
                         Followers
                       </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      className="items-center"
+                      className="flex-row items-baseline gap-1"
                       onPress={() => {
                         setFollowRequestsTab("following");
                         setShowFollowRequests(true);
                       }}
                       activeOpacity={0.8}
                     >
-                      <Text className="text-lg font-mbold text-white">
+                      <Text className="text-xl font-mbold text-white">
                         {followingCount}
                       </Text>
-                      <Text className="text-xs font-regular text-white/70">
+                      <Text className="text-lg font-medium text-white/70">
                         Following
                       </Text>
                     </TouchableOpacity>
@@ -1301,16 +1956,16 @@ export default function ProfileScreen() {
                     {profileViews7d > 0 && (
                       <>
                         <Text className="text-white/40 text-xl font-light">|</Text>
-                        <View className="items-center">
+                        <View className="flex-row items-baseline gap-1">
                           <View className="flex-row items-center" style={{ gap: 3 }}>
-                            <Eye size={14} color="#fff" />
-                            <Text className="text-lg font-mbold text-white">
+                            <Eye size={16} color="#fff" />
+                            <Text className="text-xl font-mbold text-white">
                               {profileViews7d > 999
                                 ? `${(profileViews7d / 1000).toFixed(1)}k`
                                 : profileViews7d}
                             </Text>
                           </View>
-                          <Text className="text-xs font-regular text-white/70">
+                          <Text className="text-lg font-medium text-white/70">
                             Profile views
                           </Text>
                         </View>
@@ -1331,15 +1986,30 @@ export default function ProfileScreen() {
                     }
                   >
                     {bio ? (
-                      <Text className="text-sm font-regular text-white/90 mb-1">
+                      <Text className="text-base font-medium text-white/70">
                         {bio}
                       </Text>
                     ) : (
-                      <Text className="text-sm font-regular text-white/50 italic mb-1">
+                      <Text className="text-base font-medium text-white/70 italic">
                         Insert your bio here
                       </Text>
                     )}
                   </TouchableOpacity>
+
+                  {/* Age / animal year / sun sign — whatever was picked on
+                      the Birthday screen, as a pill under the bio. The date
+                      itself is never shown, here or on anyone else's
+                      profile. */}
+                  {birthday && (
+                    <View
+                      className="flex-row items-center gap-1 self-start mt-2.5 px-2.5 py-1 bg-white/[0.14]"
+                      style={{ borderRadius: 999, borderCurve: "continuous" }}
+                    >
+                      <Text className="text-xs font-msemibold text-white/80">
+                        {birthday.label}
+                      </Text>
+                    </View>
+                  )}
                   </View>
                 </View>
 
@@ -1351,6 +2021,15 @@ export default function ProfileScreen() {
                   className="px-4 pt-3"
                   style={{
                     backgroundColor: `rgba(${tintRgb.r},${tintRgb.g},${tintRgb.b},0.95)`,
+                    // Pulled up by half a point so this backing and the
+                    // gradient panel above it overlap rather than merely
+                    // meeting. The panel's gradient ends on exactly this
+                    // color, but the two are separate views on a fractional
+                    // boundary, and rasterising each to its own edge left a
+                    // sub-pixel line of bare cover photo showing between
+                    // them. They're the same color, so overlapping costs
+                    // nothing visually.
+                    marginTop: -SECTION_SEAM_OVERLAP,
                     // Extra bottom padding so the buttons keep clear space
                     // below them even though the tab bar overlaps this
                     // section by 20px (its own corner radius) to blend with
@@ -1359,135 +2038,135 @@ export default function ProfileScreen() {
                     paddingBottom: 32,
                   }}
                 >
-                  {/* Work profile summary — shown first, above Edit
+                  {/* Business summary — shown first, above Edit
                       Profile/Manage, to give it top billing when it exists.
                       Only shown once a business name is actually set (every
                       profile auto-gets an empty service_providers row, so a
-                      null/empty name means "no work profile" in practice).
+                      null/empty name means "no business" in practice).
                       Full management (license, service listings) lives on
                       the pushed /profile/work screen; setting one up for the
                       first time is reachable from the hamburger menu instead
                       of a tab, since an unused Work tab was dead weight for
                       anyone without one. */}
-                  {serviceProvider?.name?.trim() && (
-                    <TouchableOpacity
-                      activeOpacity={0.85}
+                  {currentUser?.id && (
+                    <BusinessSummaryCard
+                      userId={currentUser.id}
+                      providerId={serviceProvider?.id}
+                      providerName={serviceProvider?.name}
+                      fallbackName={(currentUser as any)?.name}
+                      isVerified={verificationStatus === "verified"}
                       onPress={() => router.push("/(users)/profile/work" as any)}
-                      style={{ borderRadius: 8, borderCurve: "continuous" }}
-                      className="mb-2 py-3 px-3 flex-row items-center bg-white/15 border border-white/30"
-                    >
-                      <View className="flex-1 pr-3">
-                        <View className="flex-row items-center gap-1.5 mb-0.5">
-                          <Text
-                            className="text-sm font-semibold text-white flex-shrink"
-                            numberOfLines={1}
-                          >
-                            {serviceProvider.name}
-                          </Text>
-                          {verificationStatus === "verified" && (
-                            <Verified size={13} color="#7FD1FF" />
-                          )}
-                        </View>
-                        {serviceProvider.master_bio ? (
-                          <Text
-                            className="text-xs font-regular text-white/70"
-                            numberOfLines={1}
-                          >
-                            {serviceProvider.master_bio}
-                          </Text>
-                        ) : (
-                          <Text className="text-xs font-regular text-white/50 italic">
-                            Work profile
-                          </Text>
-                        )}
-                      </View>
-                      <View className="w-10 h-10 rounded-full bg-white/15 overflow-hidden items-center justify-center">
-                        {providerImageUri ? (
-                          <ProgressiveImage
-                            uri={providerImageUri}
-                            style={{ width: "100%", height: "100%" }}
-                            showProgress={false}
-                          />
-                        ) : (
-                          <Wrench size={18} strokeWidth={1.5} color="rgba(255,255,255,0.8)" />
-                        )}
-                      </View>
-                    </TouchableOpacity>
+                    />
                   )}
 
                   <View className="flex-row gap-2">
-                    {/* Edit Profile moved up into the header as a pill next
-                        to Scan/Share — no history screen exists yet, so this
-                        is a placeholder stub for now rather than a dead,
-                        unresponsive button. */}
                     <TouchableOpacity
                       style={{ borderRadius: 8, borderCurve: "continuous" }}
-                      onPress={() =>
-                        Alert.alert("Coming Soon", "Activity history isn't available yet.")
-                      }
-                      className="flex-1 py-[9px] flex-row items-center justify-center bg-white/15 border border-white/30"
+                      onPress={() => router.push("/(users)/norbu-wallet" as any)}
+                      className="flex-1 py-[9px] px-3 items-start bg-white/[0.07]"
                     >
-                      <Text className="text-sm font-semibold text-white">
-                        History
+                      <View className="flex-row items-center gap-1.5">
+                        <Wallet size={16} color="#fff" />
+                        <Text className="text-sm font-semibold text-white">
+                          Norbu Wallet
+                        </Text>
+                      </View>
+                      <Text className="text-xs font-regular text-white/60 mt-0.5">
+                        Manage your balance
                       </Text>
                     </TouchableOpacity>
+                    {/* Everything this user has viewed — posts, watched
+                        videos, products, services and listings. */}
                     <TouchableOpacity
                       style={{ borderRadius: 8, borderCurve: "continuous" }}
-                      onPress={handleManageListings}
-                      className="flex-1 py-[9px] flex-row items-center justify-center bg-white/15 border border-white/30"
+                      onPress={() => router.push("/(users)/history" as any)}
+                      className="flex-1 py-[9px] px-3 items-start bg-white/[0.07]"
                     >
-                      <Text className="text-sm font-semibold text-white">
-                        Manage
+                      <View className="flex-row items-center gap-1.5">
+                        <History size={16} color="#fff" />
+                        <Text className="text-sm font-semibold text-white">
+                          History
+                        </Text>
+                      </View>
+                      <Text className="text-xs font-regular text-white/60 mt-0.5">
+                        Everything you've viewed
                       </Text>
                     </TouchableOpacity>
                   </View>
                 </View>
               </View>
 
-              {/* Tab Navigation — rounded top corners so it reads as a sheet
-                  rising out of the dark cover above. Pulled up to overlap
-                  the cover by the same amount as the corner radius, with an
-                  internal dark strip (not a reveal-through-clip trick) so
-                  the corners read consistently dark whether this sits in
-                  its normal in-flow spot or is magnet-pinned to the header
-                  (see tabBarAnimatedStyle below) — otherwise, once pinned,
-                  the clipped corners would end up showing whatever grid
-                  content happens to be scrolling past behind them instead
-                  of a stable color. Text-only (no icons); Services moved
-                  out entirely, since it now only ever appears via the Work
-                  profile summary card above when the user has actually
-                  added one.
+              {/* Tab Navigation — pinned below the fixed header via the
+                  ScrollView's own stickyHeaderIndices (set on
+                  Animated.ScrollView above) once scrolled up to meet it,
+                  instead of a hand-computed transform. Rounded top corners
+                  so it reads as a sheet rising out of the dark cover above,
+                  with an internal dark strip (not a reveal-through-clip
+                  trick) so the corners read consistently dark whether this
+                  sits in its normal in-flow spot or is natively pinned —
+                  otherwise, once pinned, the clipped corners would end up
+                  showing whatever grid content happens to be scrolling
+                  past behind them instead of a stable color. Text-only (no
+                  icons); Services moved out entirely, since it now only
+                  ever appears via the Work profile summary card above when
+                  the user has actually added one.
 
-                  The outer View here is only for layout/measurement (ref +
-                  onLayout feed the tabBarContentY shared value, and
-                  marginTop keeps the same overlap density as before); the
-                  actual magnetic translateY lives on the inner
-                  Animated.View so transform never disturbs the measured
-                  layout position or pushes Tab Content around. */}
+                  The outer marginTop exactly cancels the spacer's own
+                  height right below it — net zero, so normal (unstuck)
+                  flow renders identically to not having either. Once
+                  natively pinned to the ScrollView's top edge though, that
+                  cancellation only affects this wrapper's position *among
+                  its siblings*, not the layout *inside* it: the spacer
+                  still occupies its full height at the pinned block's own
+                  top, landing right behind the separate fixed header above
+                  it. That reserved height has to be headerHeight PLUS the
+                  inner marginTop:-20 corner-overlap below (not just
+                  headerHeight) — the inner wrapper pulls itself up by 20
+                  regardless of whether it's sticky or not, so the spacer
+                  needs those extra 20 to still land the tab row's actual
+                  content flush with the header's bottom edge once pinned,
+                  rather than 20px too high into the header. */}
               <View
-                ref={tabBarRef}
-                onLayout={() => {
-                  tabBarRef.current?.measure((_x: number, _y: number, _w: number, _h: number, _pageX: number, pageY: number) => {
-                    tabBarContentY.value = pageY + mainScrollYRef.current;
-                  });
+                style={{
+                  marginTop: -(headerHeight + TAB_BAR_CORNER_OVERLAP),
+                  zIndex: 10,
+                  elevation: 10,
+                  // pointerEvents in the STYLE, not as a prop, and that is
+                  // load-bearing. This View is the sticky child, and
+                  // ScrollViewStickyHeader wraps it in an Animated.View of
+                  // its own built from `child.props.style` (re-cloning this
+                  // one as flex:1). So the view that actually overlaps the
+                  // section above — the band this wrapper is pulled up over,
+                  // right where Norbu Wallet / History sit — is RN's
+                  // wrapper, not this. A `pointerEvents` *prop* stays on
+                  // this inner view and never reaches it, which is why the
+                  // buttons stayed dead; in the style object it's copied up
+                  // and the wrapper stops swallowing those taps. RN blocks
+                  // touches on an overlapping view even with no handler of
+                  // its own — they don't fall through to what's behind.
+                  pointerEvents: "box-none",
                 }}
-                style={{ marginTop: -20 }}
               >
-                <Animated.View style={[{ zIndex: 10 }, tabBarAnimatedStyle]}>
+                {/* Pure spacer — reserves height, takes no touches. */}
+                <View
+                  pointerEvents="none"
+                  style={{ height: headerHeight + TAB_BAR_CORNER_OVERLAP }}
+                />
+                <View style={{ marginTop: -TAB_BAR_CORNER_OVERLAP }}>
                   <View
                     style={{
                       position: "absolute",
                       top: 0,
                       left: 0,
                       right: 0,
-                      height: 20,
+                      height: TAB_BAR_CORNER_OVERLAP,
                       backgroundColor: `rgba(${tintRgb.r},${tintRgb.g},${tintRgb.b},0.95)`,
                     }}
                   />
                   <View
                     style={{
-                      borderTopLeftRadius: 20,
-                      borderTopRightRadius: 20,
+                      borderTopLeftRadius: 12,
+                      borderTopRightRadius: 12,
                       borderCurve: "continuous",
                       // Clips the edge fades (and anything else inside) to
                       // the rounded corners below, instead of them
@@ -1499,289 +2178,119 @@ export default function ProfileScreen() {
                   >
                     {renderTabRow()}
                   </View>
-                </Animated.View>
+                </View>
               </View>
 
-              {/* Tab Content */}
-              <View className="min-h-[300px]">
-                {activeTab === "images" && (
-                  <View
-                    ref={postGridReveal.containerRef}
-                    collapsable={false}
-                    className="flex-row flex-wrap"
-                  >
-                    {loadingPosts ? (
-                      <CircularLoader size="large" color="#059669" />
-                    ) : postThumbnails.length > 0 ? (
-                      postThumbnails.map((thumb, index) => {
-                        const cellHeight = profileGridCellHeight(SCREEN_WIDTH);
-                        const top = Math.floor(index / 3) * cellHeight;
-                        return (
-                          <ProfilePostGridItem
-                            key={thumb.postId}
-                            thumbnailUrl={thumb.thumbnailUrl}
-                            thumbnailBlurHash={thumb.thumbnailBlurHash}
-                            isVideo={thumb.isVideo}
-                            mediaCount={thumb.mediaCount}
-                            deferred={!postGridReveal.isNear(thumb.postId, top, cellHeight)}
-                            priority={postGridReveal.isAboveFold(top) ? "high" : "normal"}
-                            onPress={() =>
-                              router.push(
-                                `/(users)/post/${thumb.postId}` as any,
-                              )
-                            }
-                          />
-                        );
-                      })
-                    ) : (
-                      <View className="w-full py-16 items-center px-6">
-                        <View className="w-14 h-14 rounded-full bg-blue-50 items-center justify-center mb-3">
-                          <Grid size={26} strokeWidth={1.5} color="#3B82F6" />
-                        </View>
-                        <Text className="text-sm font-semibold text-gray-700">
-                          Share your first moment
-                        </Text>
-                        <Text className="text-xs text-gray-400 mt-1 text-center">
-                          Your posts and media will show up here
-                        </Text>
-                        <TouchableOpacity
-                          onPress={() => setShowCreatePost(true)}
-                          className="mt-4 bg-primary px-5 py-2.5 rounded-full"
-                        >
-                          <Text className="text-white text-sm font-semibold">
-                            Create a Post
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    )}
-                  </View>
-                )}
-
-                {activeTab === "products" && (
-                  <View className="flex-row flex-wrap">
-                    {loadingProducts ? (
-                      <CircularLoader size="large" color="#059669" />
-                    ) : userProducts.length > 0 ? (
-                      userProducts.map((product) => (
-                        <View key={product.id} className="w-[50%] p-2">
-                          <TouchableOpacity
-                            style={{ borderRadius: 12, borderCurve: "continuous" }}
-                            onPress={() =>
-                              router.push(
-                                `/(users)/product/${product.id}` as any,
-                              )
-                            }
-                            className="bg-white overflow-hidden border border-gray-100"
-                          >
-                            {product.images && product.images.length > 0 ? (
-                              <ProgressiveImage
-                                uri={product.images[0]}
-                                style={{ width: "100%", height: 160 }}
-                                showProgress={false}
-                                recyclingKey={product.id}
-                              />
-                            ) : (
-                              <View className="w-full h-40 bg-gray-100 items-center justify-center">
-                                <ShoppingBag
-                                  size={32}
-                                  strokeWidth={1.5}
-                                  className="text-gray-300"
-                                />
-                              </View>
-                            )}
-                            <View className="p-3">
-                              <Text
-                                className="text-sm font-msemibold text-gray-900"
-                                numberOfLines={2}
-                              >
-                                {product.name}
-                              </Text>
-                              <Text
-                                className="text-xs font-regular text-gray-500 mt-1"
-                                numberOfLines={1}
-                              >
-                                {product.category}
-                              </Text>
-                              <Text className="text-base font-mbold text-primary mt-2">
-                                Nu. {product.price.toLocaleString()}
-                              </Text>
-                            </View>
-                          </TouchableOpacity>
-                        </View>
-                      ))
-                    ) : (
-                      <View className="w-full py-16 items-center px-6">
-                        <View className="w-14 h-14 rounded-full bg-emerald-50 items-center justify-center mb-3">
-                          <ShoppingBag
-                            size={26}
-                            strokeWidth={1.5}
-                            color="#059669"
-                          />
-                        </View>
-                        <Text className="text-sm font-semibold text-gray-700">
-                          Start selling on Namzoed
-                        </Text>
-                        <Text className="text-xs text-gray-400 mt-1 text-center">
-                          List your first product and reach buyers nearby
-                        </Text>
-                        <TouchableOpacity
-                          onPress={() =>
-                            router.push("/(users)/(tabs)/categories" as any)
-                          }
-                          className="mt-4 bg-emerald-600 px-5 py-2.5 rounded-full"
-                        >
-                          <Text className="text-white text-sm font-semibold">
-                            List a Product
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    )}
-                  </View>
-                )}
-
-                {activeTab === "likes" && (
-                  <View className="flex-row flex-wrap">
-                    {loadingLikedPosts ? (
-                      <CircularLoader size="large" color="#059669" />
-                    ) : likedPosts.length > 0 ? (
-                      toThumbnails(likedPosts).map((thumb) => (
-                        <ProfilePostGridItem
-                          key={thumb.postId}
-                          thumbnailUrl={thumb.thumbnailUrl}
-                          thumbnailBlurHash={thumb.thumbnailBlurHash}
-                          isVideo={thumb.isVideo}
-                          mediaCount={thumb.mediaCount}
-                          onPress={() =>
-                            router.push(`/(users)/post/${thumb.postId}` as any)
-                          }
-                        />
-                      ))
-                    ) : (
-                      <View className="w-full py-16 items-center px-6">
-                        <View className="w-14 h-14 rounded-full bg-pink-50 items-center justify-center mb-3">
-                          <Heart size={26} strokeWidth={1.5} color="#e91e63" />
-                        </View>
-                        <Text className="text-sm font-semibold text-gray-700">
-                          No liked posts yet
-                        </Text>
-                        <Text className="text-xs text-gray-400 mt-1 text-center">
-                          Posts you like will show up here
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                )}
-
-                {activeTab === "comments" && (
-                  <View className="flex-row flex-wrap">
-                    {loadingCommentedPosts ? (
-                      <CircularLoader size="large" color="#059669" />
-                    ) : commentedPosts.length > 0 ? (
-                      toThumbnails(commentedPosts).map((thumb) => (
-                        <ProfilePostGridItem
-                          key={thumb.postId}
-                          thumbnailUrl={thumb.thumbnailUrl}
-                          thumbnailBlurHash={thumb.thumbnailBlurHash}
-                          isVideo={thumb.isVideo}
-                          mediaCount={thumb.mediaCount}
-                          onPress={() =>
-                            router.push(`/(users)/post/${thumb.postId}` as any)
-                          }
-                        />
-                      ))
-                    ) : (
-                      <View className="w-full py-16 items-center px-6">
-                        <View className="w-14 h-14 rounded-full bg-blue-50 items-center justify-center mb-3">
-                          <MessageCircle size={26} strokeWidth={1.5} color="#3B82F6" />
-                        </View>
-                        <Text className="text-sm font-semibold text-gray-700">
-                          No comments yet
-                        </Text>
-                        <Text className="text-xs text-gray-400 mt-1 text-center">
-                          Posts you've commented on will show up here
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                )}
-
-                {activeTab === "saves" && (
-                  <View className="flex-row flex-wrap">
-                    {loadingSavedItems ? (
-                      <CircularLoader size="large" color="#059669" />
-                    ) : savedItems.length > 0 ? (
-                      savedItems.map((item) => {
-                        const post = item.posts;
-                        const product = item.products;
-                        const listing = item.marketplace;
-                        const target = post
-                          ? { href: `/(users)/post/${post.id}`, image: post.images?.[0], label: post.content, price: null as number | null }
-                          : product
-                            ? { href: `/(users)/product/${product.id}`, image: product.images?.[0], label: product.name, price: product.price }
-                            : listing
-                              ? { href: `/(users)/marketplace/${listing.id}`, image: listing.images?.[0], label: listing.title, price: listing.price }
-                              : null;
-                        if (!target) return null;
-                        return (
-                          <View key={item.id} className="w-[50%] p-2">
-                            <TouchableOpacity
-                              style={{ borderRadius: 12, borderCurve: "continuous" }}
-                              onPress={() => router.push(target.href as any)}
-                              className="bg-white overflow-hidden border border-gray-100"
-                            >
-                              {target.image ? (
-                                <ProgressiveImage
-                                  uri={target.image}
-                                  style={{ width: "100%", height: 160 }}
-                                  showProgress={false}
-                                  recyclingKey={item.id}
-                                />
-                              ) : (
-                                <View className="w-full h-40 bg-gray-100 items-center justify-center">
-                                  {product ? (
-                                    <ShoppingBag size={32} strokeWidth={1.5} className="text-gray-300" />
-                                  ) : listing ? (
-                                    <Store size={32} strokeWidth={1.5} className="text-gray-300" />
-                                  ) : (
-                                    <Bookmark size={32} strokeWidth={1.5} className="text-gray-300" />
-                                  )}
-                                </View>
-                              )}
-                              <View className="p-3">
-                                <Text
-                                  className="text-sm font-msemibold text-gray-900"
-                                  numberOfLines={2}
-                                >
-                                  {target.label}
-                                </Text>
-                                {target.price != null && (
-                                  <Text className="text-base font-mbold text-primary mt-2">
-                                    Nu. {target.price.toLocaleString()}
-                                  </Text>
-                                )}
-                              </View>
-                            </TouchableOpacity>
-                          </View>
-                        );
-                      })
-                    ) : (
-                      <View className="w-full py-16 items-center px-6">
-                        <View className="w-14 h-14 rounded-full bg-amber-50 items-center justify-center mb-3">
-                          <Bookmark size={26} strokeWidth={1.5} color="#D97706" />
-                        </View>
-                        <Text className="text-sm font-semibold text-gray-700">
-                          No saved items yet
-                        </Text>
-                        <Text className="text-xs text-gray-400 mt-1 text-center">
-                          Tap the bookmark icon on any post, product or listing to save it here
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                )}
-              </View>
+              {/* Tab Content — single mounted panel per tab (see
+                  renderTabPanel above). */}
+              {renderTabPanel(activeTab)}
             </Animated.ScrollView>
       </View>
+
+      {/* Full-screen viewers — opened by tapping the avatar/cover image
+          itself. Their "Change ... Photo" card hands off to the existing
+          gallery picker directly instead of the Take Photo/Choose
+          Gallery/Remove action sheet — that sheet is still reachable via
+          the small camera icon (cover) and long-press (avatar). */}
+      {/* Android's avatar crop step. iOS uses the picker's own editor
+          (see openImageOption), so this is the Android half of that flow —
+          without it, picking an avatar on Android set the state and then
+          did nothing at all. */}
+      {showCropOverlay && selectedImageUri && (
+        <Modal
+          transparent
+          statusBarTranslucent
+          animationType="fade"
+          visible={showCropOverlay}
+          onRequestClose={handleCropCancel}
+        >
+          <ImageCropOverlay
+            imageUri={selectedImageUri}
+            imageWidth={selectedImageDims?.width}
+            imageHeight={selectedImageDims?.height}
+            onSave={handleCropSave}
+            onCancel={handleCropCancel}
+          />
+        </Modal>
+      )}
+
+      {/* Followers / Following list — same presentation the other-user
+          profile uses for it. */}
+      {showFollowRequests && currentUser?.id && (
+        <Modal
+          transparent
+          statusBarTranslucent
+          navigationBarTranslucent
+          animationType="none"
+          visible={showFollowRequests}
+          onRequestClose={() => setShowFollowRequests(false)}
+        >
+          <Animated.View
+            entering={SlideInDown.springify()}
+            exiting={SlideOutDown}
+            style={{
+              height: "100%",
+              borderTopLeftRadius: MODAL_RADIUS,
+              borderTopRightRadius: MODAL_RADIUS,
+              borderCurve: "continuous",
+              overflow: "hidden",
+            }}
+          >
+            <FollowRequestsOverlay
+              onClose={() => setShowFollowRequests(false)}
+              userId={currentUser.id}
+              actorUserId={currentUser.id}
+              initialTab={followRequestsTab}
+            />
+          </Animated.View>
+        </Modal>
+      )}
+
+      {/* Both sources live on the viewer itself — "Choose from Library" /
+          "Take a Photo" — rather than a single "Change ..." action that
+          always meant the library. */}
+      <ProfileImageViewer
+        visible={showProfileImageViewer}
+        imageUri={profileImage}
+        onClose={() => setShowProfileImageViewer(false)}
+        onChangePhoto={() => {
+          setShowProfileImageViewer(false);
+          handleImageOption("gallery");
+        }}
+        onTakePhoto={() => {
+          setShowProfileImageViewer(false);
+          handleImageOption("camera");
+        }}
+        onGeneratedAvatar={() => {
+          setShowProfileImageViewer(false);
+          setShowAvatarStyles(true);
+        }}
+      />
+      {/* Sixty-one versions of this account's own avatar — see
+          components/modals/AvatarStylePicker.tsx. */}
+      <AvatarStylePicker
+        visible={showAvatarStyles}
+        userId={currentUser?.id ?? ""}
+        currentStyle={avatarStyle}
+        currentAnimation={avatarAnimation}
+        saving={imageBusy === "saving"}
+        onClose={() => setShowAvatarStyles(false)}
+        onSave={saveGeneratedAvatar}
+      />
+      <CoverImageViewer
+        visible={showCoverImageViewer}
+        imageUri={coverImage}
+        gradientColors={COVER_GRADIENT}
+        onClose={() => setShowCoverImageViewer(false)}
+        onChangePhoto={() => {
+          setShowCoverImageViewer(false);
+          handleCoverImageOption("gallery");
+        }}
+        onTakePhoto={() => {
+          setShowCoverImageViewer(false);
+          handleCoverImageOption("camera");
+        }}
+      />
 
       {/* ------------------------------------------------------ */}
       {/* MAIN PROFILE AVATAR ACTION MENU MODAL (merged) */}
@@ -1836,7 +2345,26 @@ export default function ProfileScreen() {
                     </Text>
                   </TouchableOpacity>
 
-                  {profileImage && (
+                  {/* The third source, beside the two cameras: what this
+                      circle shows is one decision, and not owning a photo of
+                      yourself is not a reason to have no face. */}
+                  <TouchableOpacity
+                    style={{ borderRadius: 12, borderCurve: "continuous" }}
+                    onPress={() => {
+                      setShowMainAvatarMenu(false);
+                      setShowAvatarStyles(true);
+                    }}
+                    className="flex-1 items-center bg-gray-50 py-2"
+                  >
+                    <Sparkles size={18} color="#374151" />
+                    <Text className="text-[10px] font-msemibold text-gray-900 mt-1">
+                      Generated
+                    </Text>
+                  </TouchableOpacity>
+
+                  {/* Only a real photo can be removed — removing a generated
+                      avatar would land on the thing it was there to replace. */}
+                  {profileImage && !avatarStyle && (
                     <TouchableOpacity
                       style={{ borderRadius: 12, borderCurve: "continuous" }}
                       onPress={handleRemoveMainAvatar}
@@ -1960,6 +2488,14 @@ export default function ProfileScreen() {
         title={popupTitle}
         message={popupMessage}
       />
+
+      {/* Covers the gap before the native image picker appears, and the
+          upload afterward, before the popups above land — see imageBusy's
+          declaration for why the two phases are presented differently. */}
+      <PostDetailOverlay {...overlayProps} />
+
+      <LoadingOverlay visible={imageBusy === "saving"} />
+      <LoadingOverlay visible={imageBusy === "picking"} presentation="inline" />
 
       {profileSharePayload && (
         <ShareComposerModal

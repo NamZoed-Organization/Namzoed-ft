@@ -13,6 +13,9 @@
  * fetching-by-id, loading/error states, and what "back" means.
  */
 
+import RestrictedContentGate from "@/components/ui/RestrictedContentGate";
+import { useViewableContent } from "@/hooks/useViewableContent";
+import { canView } from "@/lib/safeContent";
 import MarketplaceImageViewer from "@/components/modals/MarketplaceImageViewer";
 import ReportProductModal from "@/components/modals/ReportProductModal";
 import PopupMessage from "@/components/ui/PopupMessage";
@@ -22,9 +25,11 @@ import { useUser } from "@/contexts/UserContext";
 import {
   MarketplaceItemWithUser,
 } from "@/lib/postMarketPlace";
+import { recordView } from "@/lib/historyService";
 import { supabase } from "@/lib/supabase";
 import { EdgeGestureCarouselHandle, registerEdgeGestureCarousel } from "@/utils/edgeGestureRegistry";
 import { useAppRouter } from "@/utils/navigation";
+import { beginNavHandoff } from "@/utils/navHandoff";
 import { BlurView } from "expo-blur";
 import { Image as ExpoImage } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
@@ -85,10 +90,29 @@ export interface MarketplaceDetailContentProps {
   onNavigateAway?: (navigate: () => void) => void;
 }
 
+/** A listing's description as one line of text. `description` is a string on
+ *  most rows, `{ text }` on some, and a job vacancy's three-part object on
+ *  others — the shared card wants whichever of those is the prose. */
+const marketplaceCaption = (item: MarketplaceItemWithUser): string => {
+  const d = item.description as any;
+  if (typeof d === "string") return d;
+  if (d && typeof d === "object") return String(d.text ?? d.description ?? "");
+  return "";
+};
+
 export default function MarketplaceDetailContent({ item, onBack, onRefresh, refreshing = false, onNavigateAway }: MarketplaceDetailContentProps) {
   const router = useAppRouter();
   const { currentUser } = useUser();
   const insets = useSafeAreaInsets();
+
+  /**
+   * A link, a share, a search result or a notification can land somebody on
+   * this screen directly, so filtering the lists it is reached from is not
+   * enough — the gate has to be here too, where the content would otherwise
+   * be drawn (`lib/safeContent.ts`).
+   */
+  const { viewer } = useViewableContent();
+  const mayView = canView(item, viewer, item.user_id);
 
   const navigateAway = useCallback(
     (navigate: () => void) => {
@@ -97,6 +121,11 @@ export default function MarketplaceDetailContent({ item, onBack, onRefresh, refr
     },
     [onNavigateAway],
   );
+
+  // Viewer's own History — opening the detail counts as having seen it.
+  useEffect(() => {
+    recordView("marketplace", item.id, currentUser?.id, item.user_id);
+  }, [item.id, item.user_id, currentUser?.id]);
 
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [showImageViewer, setShowImageViewer] = useState(false);
@@ -215,6 +244,11 @@ export default function MarketplaceDetailContent({ item, onBack, onRefresh, refr
           context_product_price: String(item.price || ""),
           context_product_image: item.images?.[0] || "",
           context_source: "marketplace",
+          context_caption: marketplaceCaption(item),
+          context_date: item.created_at || "",
+          context_location: item.dzongkhag || "",
+          context_username: item.profiles?.name || "",
+          context_verified: item.isVerified ? "true" : "",
         },
       } as any),
     );
@@ -324,6 +358,15 @@ export default function MarketplaceDetailContent({ item, onBack, onRefresh, refr
 
   const sellerName = item.profiles?.name || "Anonymous";
   const sellerInitial = sellerName.charAt(0).toUpperCase();
+
+  if (!mayView) {
+    return (
+      <RestrictedContentGate
+        onBack={onBack}
+        reason={viewer.safeView ? "safeView" : "age"}
+      />
+    );
+  }
 
   return (
     <View className="flex-1 bg-[#FAFBFC]">
@@ -797,6 +840,10 @@ export function useMarketplaceContactSellerTarget(
       icon: <MessageCircle size={18} color="#fff" fill="none" />,
       armedIcon: <MessageCircle size={18} color={PRIMARY} fill={PRIMARY} />,
       onDrop: () => {
+        // The chat screen is a heavy mount and the stack does not animate, so
+        // without this the drop lands on a screen that just sits there — see
+        // utils/navHandoff.ts. Chat itself ends it once it is really open.
+        beginNavHandoff();
         router.push({
           pathname: "/(users)/chat/[id]",
           params: {
@@ -806,6 +853,11 @@ export function useMarketplaceContactSellerTarget(
             context_product_price: String(item.price || ""),
             context_product_image: item.images?.[0] || "",
             context_source: "marketplace",
+            context_caption: marketplaceCaption(item),
+            context_date: item.created_at || "",
+            context_location: item.dzongkhag || "",
+            context_username: item.profiles?.name || "",
+            context_verified: item.isVerified ? "true" : "",
           },
         } as any);
       },

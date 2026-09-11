@@ -7,9 +7,28 @@ export interface Profile {
   email?: string;
   phone?: string;
   avatar_url?: string | null;
+  /** DiceBear style id when the avatar is generated rather than a photo the
+   *  person uploaded; null means avatar_url is theirs. See lib/dicebear.ts. */
+  avatar_style?: string | null;
+  /** DiceBear animationVariant ('none' unless they asked for movement). */
+  avatar_animation?: string | null;
   bio?: string | null;
   cover_image_url?: string | null;
+  /** Hue (0-359) the profile's cover/header gradient is built from —
+   *  extracted from the cover photo, or random when there isn't one.
+   *  See lib/coverTheme.ts. */
+  cover_hue?: number | null;
   namzoed_id?: string | null;
+  /** Private — drives age-gating, never shown to anyone. What a profile
+   *  shows instead is governed by the two fields below. */
+  birth_date?: string | null;
+  age_verified?: boolean | null;
+  age_verification_date?: string | null;
+  /** Set once the user has declined the login date-of-birth prompt. */
+  dob_prompt_skipped?: boolean | null;
+  show_birthday?: boolean | null;
+  /** 'age' | 'animal' | 'sun' — see utils/zodiac.ts. */
+  birthday_display?: string | null;
   follower_count?: number;
   following_count?: number;
   dzongkhag?: string | null;

@@ -1,4 +1,11 @@
+import { MODAL_RADIUS, SWITCH_COLORS } from "@/constants/theme";
 import ContentRatingSuggestion from "@/components/ContentRatingSuggestion";
+import CreateProductModal from "@/components/modals/CreateProductModal";
+import MarketplacePostOverlay from "@/components/modals/MarketplacePostOverlay";
+import SellingIntentSuggestion from "@/components/post/SellingIntentSuggestion";
+import VerifyToSellNotice from "@/components/VerifyToSellNotice";
+import { detectSellingIntent } from "@/lib/sellingIntent";
+import { canListProducts } from "@/lib/sellerService";
 import FeedAspectReframeOverlay from "@/components/modals/FeedAspectReframeOverlay";
 import CircularLoader from "@/components/ui/CircularLoader";
 import PopupMessage from "@/components/ui/PopupMessage";
@@ -19,7 +26,14 @@ import {
   slideHeight,
 } from "@/lib/postMediaDisplay";
 import { createPost, uploadImages, uploadVideos } from "@/lib/postsService";
-import { fetchUserProducts, Product } from "@/lib/productsService";
+import MediaEditor, { type EditorResult } from "@/components/create/media/MediaEditor";
+import type { ImageEdit } from "@/lib/mediaEdit";
+import TutorialAnchor from "@/components/tutorial/TutorialAnchor";
+import TutorialOverlay from "@/components/tutorial/TutorialOverlay";
+import { useTutorial } from "@/contexts/TutorialContext";
+import { TUTORIAL_SCREENS } from "@/lib/tutorialTours";
+import { searchTaggableItems, type TaggableItem } from "@/lib/taggableItems";
+import { taggedItemPrice } from "@/utils/price";
 import { supabase } from "@/lib/supabase";
 import type { ContentRating, TaggedAccount, TaggedProduct } from "@/types/post";
 import { useAppRouter } from "@/utils/navigation";
@@ -39,11 +53,13 @@ import {
   Ratio,
   Search,
   ShoppingBag,
+  Sparkles,
   UserPlus,
   Video,
   X,
 } from "lucide-react-native";
-import React, { useCallback, useEffect, useState } from "react";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Dimensions,
   FlatList,
@@ -92,15 +108,70 @@ function ratioPresetLabel(r: number): string {
   return `${r.toFixed(2)} (w÷h)`;
 }
 
-interface CreatePostProps {
-  onClose?: () => void;
+/**
+ * A file the composer should open with, rather than one somebody picks.
+ *
+ * Deliberately the same shape `addPickedMedia` already takes, so seeded media
+ * goes through the identical path a picked file does — including the Vision
+ * scan. A second way in that skipped moderation is exactly the hole a
+ * "share to the app" button would otherwise open.
+ */
+export interface ComposerSeedMedia {
+  uri: string;
+  type: "image" | "video";
+  width?: number;
+  height?: number;
 }
 
-export default function CreatePost({ onClose }: CreatePostProps) {
+interface CreatePostProps {
+  onClose?: () => void;
+  /** Media already on the device — a Setlog export, today. */
+  initialMedia?: ComposerSeedMedia[];
+  /** A caption to start from. The composer owns it from then on. */
+  initialText?: string;
+}
+
+export default function CreatePost({
+  onClose,
+  initialMedia,
+  initialText,
+}: CreatePostProps) {
+  const insets = useSafeAreaInsets();
+  /**
+   * How much room a `pageSheet` picker needs above its header.
+   *
+   * These two were spaced with a flat `h-14` (56pt), which is roughly the
+   * status bar on a phone that has one — but a `pageSheet` on iOS is
+   * *already* inset from the top of the screen and has no status bar of its
+   * own, so the spacer was 56pt of nothing above the title. On Android the
+   * presentation style is ignored and the modal is full-screen, where the
+   * inset is real. Asking for the inset gets both right and neither wrong.
+   */
+  const sheetTopInset = Math.max(insets.top, 12);
+
+  // The composer teaches itself the first time it is opened — on the real
+  // fields, in the order they are used (lib/tutorialTours.ts).
+  const { arrive, notify } = useTutorial();
+  useEffect(() => {
+    arrive(TUTORIAL_SCREENS.CREATE_POST);
+  }, [arrive]);
+
   const router = useAppRouter();
   const { currentUser } = useUser();
-  const [postText, setPostText] = useState("");
+  const [postText, setPostText] = useState(initialText ?? "");
   const [postMedia, setPostMedia] = useState<MediaItem[]>([]);
+  /**
+   * The editor's work, kept beside the pictures rather than inside them.
+   *
+   * `original` is the file that was picked and is never overwritten, so
+   * reopening the editor shows the crop and the filter where they were left
+   * instead of starting again from an already-flattened copy. The item's own
+   * `uri` is the rendered result — that is what uploads.
+   */
+  const [mediaEdits, setMediaEdits] = useState<
+    Record<string, { original: string; edit: ImageEdit }>
+  >({});
+  const [editingMediaId, setEditingMediaId] = useState<string | null>(null);
   const [mediaAspectMode, setMediaAspectMode] =
     useState<PostMediaDisplayMode>("portrait");
   const [isUploading, setIsUploading] = useState(false);
@@ -118,7 +189,8 @@ export default function CreatePost({ onClose }: CreatePostProps) {
 
   // Product tagging
   const [showProductPicker, setShowProductPicker] = useState(false);
-  const [userProducts, setUserProducts] = useState<Product[]>([]);
+  const [taggableItems, setTaggableItems] = useState<TaggableItem[]>([]);
+  const [productQuery, setProductQuery] = useState("");
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [taggedProducts, setTaggedProducts] = useState<TaggedProduct[]>([]);
 
@@ -154,6 +226,42 @@ export default function CreatePost({ onClose }: CreatePostProps) {
   >(null);
   const [showLocationPermissionPopup, setShowLocationPermissionPopup] =
     useState(false);
+
+  // ── "This looks like a listing" ──────────────────────────────────────
+  // A post selling something scrolls past once; the same thing as a listing
+  // keeps its price and stays findable. See lib/sellingIntent.ts — it
+  // suggests, it never redirects.
+  const [sellingDismissed, setSellingDismissed] = useState(false);
+  const [canSell, setCanSell] = useState<boolean | null>(null);
+  const [showMarketplaceForm, setShowMarketplaceForm] = useState(false);
+  const [showProductForm, setShowProductForm] = useState(false);
+  const [showVerifyNotice, setShowVerifyNotice] = useState(false);
+
+  const sellingIntent = React.useMemo(
+    // A post that already tags a product is pointing at a listing; it does
+    // not need to be told to make one.
+    () =>
+      taggedProducts.length > 0 ? null : detectSellingIntent(postText),
+    [postText, taggedProducts.length],
+  );
+
+  // Asked only once, and only once there is something to ask about — every
+  // composer opening does not need a shop lookup.
+  const sellerId = (currentUser as any)?.id as string | undefined;
+  useEffect(() => {
+    if (!sellingIntent || !sellerId || canSell !== null) return;
+    let alive = true;
+    canListProducts(sellerId)
+      .then((allowed) => alive && setCanSell(allowed))
+      .catch(() => alive && setCanSell(false));
+    return () => {
+      alive = false;
+    };
+  }, [sellingIntent, sellerId, canSell]);
+
+  /** The draft, in the shape a listing form wants: a title out of the first
+   *  line, the whole thing as the description. */
+  const draftTitle = postText.trim().split("\n")[0].slice(0, 60);
 
   // Content moderation
   const [contentRating, setContentRating] = useState<ContentRating>("general");
@@ -299,6 +407,8 @@ export default function CreatePost({ onClose }: CreatePostProps) {
 
     if (accepted.length > 0) {
       setPostMedia((prev) => [...prev, ...accepted].slice(0, 10));
+      // The composer's first step ends when a picture is actually chosen.
+      notify("post.media-picked");
       const strictest = accepted.reduce<ContentRating>(
         (acc, m) =>
           m.moderationRating ? stricterRating(acc, m.moderationRating) : acc,
@@ -313,6 +423,23 @@ export default function CreatePost({ onClose }: CreatePostProps) {
       showErrorPopup(blockedReasons[0], "Image Blocked");
     }
   };
+
+  /**
+   * Anything handed in at open time goes through the picker's own path.
+   *
+   * Once, guarded by a ref rather than by an empty dependency list: the
+   * caller passes a fresh array literal each render, so depending on
+   * `initialMedia` would re-add the file on every keystroke in the caption.
+   */
+  const seeded = useRef(false);
+  useEffect(() => {
+    if (seeded.current || !initialMedia?.length) return;
+    seeded.current = true;
+    void addPickedMedia(initialMedia);
+    // addPickedMedia is redefined every render and adding it here would make
+    // this effect re-run; the ref above is what actually guards it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialMedia]);
 
   // --- Unified media picker ---
   const pickMediaFromGallery = async () => {
@@ -443,29 +570,41 @@ export default function CreatePost({ onClose }: CreatePostProps) {
     }
   }, []);
 
-  // --- Product tagging ---
-  const loadUserProducts = useCallback(async () => {
-    if (!userId) return;
+  // --- Product and service tagging ---
+  // Anything in the app, not only your own: a post about somebody's shop is
+  // worth more to that shop than a post by it, and the seller gets an
+  // audience they do not have to own (see lib/taggableItems.ts).
+  const loadTaggableItems = useCallback(async (query: string) => {
     setLoadingProducts(true);
     try {
-      const products = await fetchUserProducts(userId);
-      setUserProducts(products);
+      setTaggableItems(await searchTaggableItems(query));
     } catch {
-      showErrorPopup("Failed to load your products.", "Load Failed");
+      showErrorPopup("Couldn't load products and services.", "Load Failed");
+      setTaggableItems([]);
     } finally {
       setLoadingProducts(false);
     }
-  }, [userId]);
+  }, []);
 
-  const toggleProduct = (product: Product) => {
+  // Debounced, because every keystroke is two queries otherwise. Runs on an
+  // empty query too — the blank picker shows the newest of both kinds rather
+  // than nothing, since somebody tagging a thing they just saw should not
+  // have to know its name to find it.
+  useEffect(() => {
+    if (!showProductPicker) return;
+    const t = setTimeout(() => loadTaggableItems(productQuery), 220);
+    return () => clearTimeout(t);
+  }, [showProductPicker, productQuery, loadTaggableItems]);
+
+  const toggleProduct = (item: TaggableItem) => {
     setTaggedProducts((prev) => {
-      const exists = prev.find((p) => p.id === product.id);
+      const exists = prev.find((p) => p.id === item.id);
       if (exists) {
-        return prev.filter((p) => p.id !== product.id);
+        return prev.filter((p) => p.id !== item.id);
       }
       if (prev.length >= 5) {
         showErrorPopup(
-          "You can tag up to 5 products per post.",
+          "You can tag up to 5 items per post.",
           "Limit Reached",
         );
         return prev;
@@ -473,13 +612,16 @@ export default function CreatePost({ onClose }: CreatePostProps) {
       return [
         ...prev,
         {
-          id: product.id,
-          name: product.name,
-          price: product.price,
-          image: product.images?.[0],
-          current_price: product.current_price,
-          is_currently_active: product.is_currently_active,
-          discount_percent: product.discount_percent,
+          id: item.id,
+          kind: item.kind,
+          name: item.name,
+          price: item.price,
+          image: item.image,
+          current_price: item.currentPrice,
+          is_currently_active: item.discountActive,
+          discount_percent: item.discountPercent,
+          owner_id: item.ownerId,
+          owner_name: item.ownerName,
         },
       ];
     });
@@ -744,8 +886,13 @@ export default function CreatePost({ onClose }: CreatePostProps) {
   // --- Render ---
   return (
     <View className="flex-1 bg-white">
-      {/* Safe area spacer */}
-      <View className="h-14 bg-white" />
+      {/* Presented in its own Modal window, so the root overlay cannot
+          reach it — the tour draws from here while the composer is open. */}
+      <TutorialOverlay hostId="create-post" />
+      {/* The real inset rather than a flat 56 — this is presented
+          full-screen, so it is the status bar's own height that matters
+          and it is not the same on every phone. */}
+      <View style={{ height: insets.top, backgroundColor: "#fff" }} />
 
       {/* Header */}
       <View className="flex-row items-center justify-between px-4 py-3 border-b border-gray-100">
@@ -759,6 +906,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
 
         <Text className="text-lg font-bold text-gray-900">New Post</Text>
 
+        <TutorialAnchor id="post.share" radius={999}>
         <TouchableOpacity
           onPress={handleSharePost}
           disabled={isUploading || !canShare}
@@ -778,6 +926,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
             </Text>
           )}
         </TouchableOpacity>
+        </TutorialAnchor>
       </View>
 
       <KeyboardAvoidingView
@@ -809,6 +958,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
           </View>
 
           {/* Caption */}
+          <TutorialAnchor id="post.caption" radius={12}>
           <TextInput
             style={{
               paddingHorizontal: 16,
@@ -825,6 +975,23 @@ export default function CreatePost({ onClose }: CreatePostProps) {
             value={postText}
             onChangeText={setPostText}
           />
+          </TutorialAnchor>
+
+          {/* Selling? Offer the surfaces built for it (§ Shopping vs
+              marketplace). Under the caption, because it is a reaction to
+              what was just typed. */}
+          {sellingIntent && !sellingDismissed && (
+            <View style={{ marginHorizontal: 16, marginTop: 10 }}>
+              <SellingIntentSuggestion
+                intent={sellingIntent}
+                canListProducts={canSell}
+                onDismiss={() => setSellingDismissed(true)}
+                onListProduct={() => setShowProductForm(true)}
+                onListMarketplace={() => setShowMarketplaceForm(true)}
+                onExplainVerification={() => setShowVerifyNotice(true)}
+              />
+            </View>
+          )}
 
           {/* Content rating suggestion */}
           {suggestion.suggested !== "general" && (
@@ -872,8 +1039,9 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                     setLocationCoords(null);
                   }
                 }}
-                trackColor={{ false: "#e5e7eb", true: "#94c9e8" }}
-                thumbColor={addPostLocation ? "#094569" : "#f4f4f5"}
+                trackColor={{ false: SWITCH_COLORS.trackOff, true: SWITCH_COLORS.trackOn }}
+                thumbColor={SWITCH_COLORS.thumb}
+                ios_backgroundColor={SWITCH_COLORS.trackOff}
               />
             </View>
             {addPostLocation && (
@@ -1151,6 +1319,38 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                       </Text>
                     </TouchableOpacity>
                   )}
+                  {/* The editor proper: crop, filters, adjustments, words
+                      on the picture, and tags pinned to the thing itself
+                      (components/create/media/MediaEditor.tsx). The two
+                      buttons beside it are its narrow cases — how a picture
+                      sits in the feed's frame — so it leads them. */}
+                  {previewItem.type === "image" && (
+                    <TouchableOpacity
+                      onPress={() => setEditingMediaId(previewItem.id)}
+                      activeOpacity={0.85}
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 6,
+                        paddingHorizontal: 14,
+                        paddingVertical: 10,
+                        borderRadius: 22,
+                        borderCurve: "continuous",
+                        backgroundColor: "#EDC06D",
+                      }}
+                    >
+                      <Sparkles size={16} color="#0A0A0A" />
+                      <Text
+                        style={{
+                          color: "#0A0A0A",
+                          fontWeight: "700",
+                          fontSize: 13,
+                        }}
+                      >
+                        {mediaEdits[previewItem.id] ? "Edited" : "Edit picture"}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
                 {mediaAspectMode !== "mixed" &&
                   previewItem.type === "image" && (
@@ -1182,6 +1382,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
             }}
           >
             {/* Media */}
+            <TutorialAnchor id="post.media" radius={16} style={{ flex: 1 }}>
             <TouchableOpacity
               onPress={() => setShowMediaSourceModal(true)}
               activeOpacity={0.8}
@@ -1245,11 +1446,12 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                 Media
               </Text>
             </TouchableOpacity>
+            </TutorialAnchor>
 
             {/* Products */}
+            <TutorialAnchor id="post.tag" radius={16} style={{ flex: 1 }}>
             <TouchableOpacity
               onPress={() => {
-                loadUserProducts();
                 setShowProductPicker(true);
               }}
               activeOpacity={0.8}
@@ -1315,6 +1517,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                 Products
               </Text>
             </TouchableOpacity>
+            </TutorialAnchor>
 
             {/* Tag People */}
             <TouchableOpacity
@@ -1663,11 +1866,13 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                           color: "#094569",
                           marginTop: 2,
                         }}
+                        numberOfLines={1}
                       >
-                        Nu.{" "}
-                        {(
-                          product.current_price ?? product.price
-                        ).toLocaleString()}
+                        {/* A service is quoted, not listed — it shows whose
+                            it is instead of a price. */}
+                        {taggedItemPrice(product) ??
+                          product.owner_name ??
+                          "Service"}
                       </Text>
                     </View>
                     <TouchableOpacity
@@ -1692,7 +1897,6 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                 {taggedProducts.length < 5 && (
                   <TouchableOpacity
                     onPress={() => {
-                      loadUserProducts();
                       setShowProductPicker(true);
                     }}
                     activeOpacity={0.8}
@@ -1870,7 +2074,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
           onPress={() => setShowMediaSourceModal(false)}
         />
         <View
-          style={{ borderTopLeftRadius: 24, borderTopRightRadius: 24, borderCurve: "continuous" }} className="bg-white pb-10">
+          style={{ borderTopLeftRadius: MODAL_RADIUS, borderTopRightRadius: MODAL_RADIUS, borderCurve: "continuous" }} className="bg-white pb-10">
           <View className="w-10 h-1 bg-gray-300 rounded-full self-center mt-3 mb-4" />
           <Text className="text-lg font-bold text-center text-gray-900 mb-4">
             Add Media
@@ -1920,7 +2124,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
       <Modal visible={isScanningMedia} transparent animationType="fade">
         <View className="flex-1 items-center justify-center bg-black/40">
           <View
-            style={{ borderRadius: 16, borderCurve: "continuous" }} className="bg-white px-6 py-5 items-center">
+            style={{ borderRadius: MODAL_RADIUS, borderCurve: "continuous" }} className="bg-white px-6 py-5 items-center">
             <CircularLoader size="large" color="#094569" />
             <Text className="mt-3 text-base font-semibold text-gray-900">
               Checking image…
@@ -1939,46 +2143,77 @@ export default function CreatePost({ onClose }: CreatePostProps) {
         presentationStyle="pageSheet"
         onRequestClose={() => setShowProductPicker(false)}
       >
-        <View className="flex-1 bg-white">
-          <View className="h-14" />
+        <View className="flex-1 bg-white" style={{ paddingTop: sheetTopInset }}>
           {/* Header */}
           <View className="flex-row items-center justify-between px-4 py-3 border-b border-gray-100">
             <TouchableOpacity onPress={() => setShowProductPicker(false)}>
               <ArrowLeft size={22} color="#111" />
             </TouchableOpacity>
             <Text className="text-lg font-bold text-gray-900">
-              Tag Products
+              Tag products & services
             </Text>
             <TouchableOpacity onPress={() => setShowProductPicker(false)}>
               <Text className="text-sm font-semibold text-primary">Done</Text>
             </TouchableOpacity>
           </View>
 
-          {loadingProducts ? (
+          {/* Anything in the app is taggable now, so the picker is a search
+              rather than a list of your own things. */}
+          <View className="px-4 pt-3 pb-1">
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                backgroundColor: "#F5F5F5",
+                borderRadius: 999,
+                borderCurve: "continuous",
+                paddingHorizontal: 14,
+                height: 42,
+              }}
+            >
+              <Search size={16} color="#9CA3AF" />
+              <TextInput
+                value={productQuery}
+                onChangeText={setProductQuery}
+                placeholder="Search products and services"
+                placeholderTextColor="#9CA3AF"
+                style={{ flex: 1, marginLeft: 8, fontSize: 15, color: "#111827" }}
+              />
+              {productQuery.length > 0 && (
+                <TouchableOpacity onPress={() => setProductQuery("")} hitSlop={10}>
+                  <X size={15} color="#9CA3AF" />
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+
+          {loadingProducts && taggableItems.length === 0 ? (
             <View className="flex-1 items-center justify-center">
               <CircularLoader size="small" color="#094569" />
-              <Text className="text-sm text-gray-400 mt-2">
-                Loading your products...
-              </Text>
             </View>
-          ) : userProducts.length === 0 ? (
+          ) : taggableItems.length === 0 ? (
             <View className="flex-1 items-center justify-center px-8">
               <ShoppingBag size={48} color="#D1D5DB" />
               <Text className="text-base font-semibold text-gray-400 mt-3 text-center">
-                No products yet
+                {productQuery.trim()
+                  ? "Nothing matches that"
+                  : "Nothing to tag yet"}
               </Text>
               <Text className="text-sm text-gray-400 mt-1 text-center">
-                Add products to your profile first, then you can tag them in
-                your posts.
+                {productQuery.trim()
+                  ? "Try the seller's name, or a shorter word."
+                  : "Products and services listed in the app show up here."}
               </Text>
             </View>
           ) : (
             <FlatList
-              data={userProducts}
-              keyExtractor={(item) => item.id}
+              data={taggableItems}
+              keyExtractor={(item) => `${item.kind}-${item.id}`}
+              keyboardShouldPersistTaps="handled"
               contentContainerStyle={{ padding: 16 }}
               renderItem={({ item }) => {
                 const isSelected = taggedProducts.some((p) => p.id === item.id);
+                const price = item.currentPrice ?? item.price;
                 return (
                   <TouchableOpacity
                     onPress={() => toggleProduct(item)}
@@ -1989,10 +2224,10 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                     }`}
                     activeOpacity={0.7}
                   >
-                    {item.images?.[0] ? (
+                    {item.image ? (
                       <Image
                         style={{ borderRadius: 12 }}
-                        source={{ uri: item.images[0] }}
+                        source={{ uri: item.image }}
                         className="w-14 h-14 bg-gray-100"
                         resizeMode="cover"
                       />
@@ -2009,15 +2244,26 @@ export default function CreatePost({ onClose }: CreatePostProps) {
                       >
                         {item.name}
                       </Text>
-                      <Text className="text-xs text-primary font-bold mt-0.5">
-                        Nu.{" "}
-                        {(item.current_price ?? item.price).toLocaleString()}
-                        {item.is_currently_active && (
-                          <Text className="text-gray-400 line-through font-normal">
-                            {"  "}Nu. {item.price.toLocaleString()}
-                          </Text>
-                        )}
-                      </Text>
+                      {/* Whose it is, always — you are tagging other
+                          people's things now, and the row has to say whose
+                          before it is chosen, not after. */}
+                      {item.subtitle ? (
+                        <Text className="text-xs text-gray-400 mt-0.5" numberOfLines={1}>
+                          {item.subtitle}
+                        </Text>
+                      ) : null}
+                      {typeof price === "number" ? (
+                        <Text className="text-xs text-primary font-bold mt-0.5">
+                          Nu. {price.toLocaleString()}
+                          {item.discountActive && typeof item.price === "number" && (
+                            <Text className="text-gray-400 line-through font-normal">
+                              {"  "}Nu. {item.price.toLocaleString()}
+                            </Text>
+                          )}
+                        </Text>
+                      ) : (
+                        <Text className="text-xs text-gray-400 mt-0.5">Service</Text>
+                      )}
                     </View>
                     <View
                       className={`w-6 h-6 rounded-full border-2 items-center justify-center ${
@@ -2043,8 +2289,7 @@ export default function CreatePost({ onClose }: CreatePostProps) {
         presentationStyle="pageSheet"
         onRequestClose={() => setShowAccountPicker(false)}
       >
-        <View className="flex-1 bg-white">
-          <View className="h-14" />
+        <View className="flex-1 bg-white" style={{ paddingTop: sheetTopInset }}>
           {/* Header */}
           <View className="flex-row items-center justify-between px-4 py-3 border-b border-gray-100">
             <TouchableOpacity onPress={() => setShowAccountPicker(false)}>
@@ -2469,6 +2714,92 @@ export default function CreatePost({ onClose }: CreatePostProps) {
           setReframeMediaId(null);
           setReframeAspectOverride(null);
         }}
+      />
+
+      {/* The picture editor. It is handed the **original** file, never the
+          rendered one, so reopening it continues the same edit rather than
+          stacking a second generation of JPEG on top of the first. */}
+      {editingMediaId && (() => {
+        const item = postMedia.find((m) => m.id === editingMediaId);
+        if (!item) return null;
+        const held = mediaEdits[item.id];
+        return (
+          <MediaEditor
+            visible
+            uri={held?.original ?? item.uri}
+            edit={held?.edit}
+            onCancel={() => setEditingMediaId(null)}
+            onDone={(result: EditorResult) => {
+              const original = held?.original ?? item.uri;
+              setMediaEdits((prev) => ({
+                ...prev,
+                [item.id]: { original, edit: result.edit },
+              }));
+              setPostMedia((prev) =>
+                prev.map((m) =>
+                  m.id === item.id
+                    ? {
+                        ...m,
+                        uri: result.uri,
+                        // The rendered file has the crop's shape, not the
+                        // original's, and the feed measures posts by these.
+                        width: undefined,
+                        height: undefined,
+                      }
+                    : m,
+                ),
+              );
+              // Tags pinned on the picture join the post's own tagged
+              // products, carrying where they were pinned — the feed draws
+              // them there, so they are data rather than paint.
+              const index = postMedia.findIndex((m) => m.id === item.id);
+              setTaggedProducts((prev) => {
+                const withoutThisImage = prev.filter(
+                  (p) => p.pin?.image !== index,
+                );
+                const pinned = result.edit.pins.map((pin) => {
+                  const existing = prev.find((p) => p.id === pin.refId);
+                  return {
+                    ...(existing ?? { id: pin.refId, name: pin.label }),
+                    pin: { image: index, x: pin.x, y: pin.y, side: pin.side },
+                  };
+                });
+                // A product pinned twice is still one product on the post.
+                const seen = new Set(pinned.map((p) => p.id));
+                return [
+                  ...withoutThisImage.filter((p) => !seen.has(p.id)),
+                  ...pinned,
+                ];
+              });
+              setEditingMediaId(null);
+            }}
+          />
+        );
+      })()}
+
+      {/* The two surfaces this composer can hand a draft over to. Both are
+          mounted here rather than routed to: the draft is in this
+          component's state, and a push would leave it behind. */}
+      {showMarketplaceForm && (
+        <MarketplacePostOverlay
+          onClose={() => setShowMarketplaceForm(false)}
+          initialCategory={sellingIntent?.marketplaceKind ?? "second_hand"}
+          initialTitle={draftTitle}
+          initialDescription={postText.trim()}
+        />
+      )}
+      {showProductForm && !!userId && (
+        <CreateProductModal
+          isVisible={showProductForm}
+          onClose={() => setShowProductForm(false)}
+          userId={userId}
+          initialName={draftTitle}
+          initialDescription={postText.trim()}
+        />
+      )}
+      <VerifyToSellNotice
+        visible={showVerifyNotice}
+        onClose={() => setShowVerifyNotice(false)}
       />
 
       <PopupMessage

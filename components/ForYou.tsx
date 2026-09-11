@@ -16,8 +16,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-
-export const CARD_ESTIMATED_SIZE = 196;
 export const CARD_LIST_HEIGHT = 255;
 
 // ─── Skeleton card ────────────────────────────────────────────────────────────

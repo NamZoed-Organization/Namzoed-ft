@@ -57,34 +57,6 @@ export const ContentWarning: React.FC<ContentWarningProps> = ({
   );
 };
 
-/**
- * Badge to indicate content rating on post cards
- */
-export const ContentRatingBadge: React.FC<{ contentRating?: ContentRating }> = ({
-  contentRating = 'general',
-}) => {
-  if (contentRating === 'general') {
-    return null;
-  }
-
-  const badgeStyles = {
-    sensitive: { bg: '#fff3bf', text: '#b89500' },
-    '18_plus': { bg: '#f8d7da', text: '#721c24' },
-    review_required: { bg: '#e7e7ff', text: '#4c4c7f' },
-  } as const;
-
-  const style = badgeStyles[contentRating];
-  const label = getContentRatingLabel(contentRating);
-
-  return (
-    <View style={[styles.badge, { backgroundColor: style.bg }]}>
-      <Text style={[styles.badgeText, { color: style.text }]}>
-        {label}
-      </Text>
-    </View>
-  );
-};
-
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',

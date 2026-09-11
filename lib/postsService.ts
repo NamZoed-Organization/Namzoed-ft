@@ -1,6 +1,9 @@
 import { getFollowerIdsOf } from '@/lib/followService';
+import type { TaggedProduct } from "@/types/post";
 import type { PostMediaDisplay } from '@/lib/postMediaDisplay';
 import { notifyNewPost } from '@/services/notificationService';
+import { recordTrendingSignals } from '@/lib/trendingService';
+import { extractHashtags } from '@/utils/hashtags';
 import type { ContentRating, ModerationStatus } from '@/types/post';
 import { canViewContent, classifyPostContent } from './contentClassifier';
 import { supabase } from './supabase';
@@ -40,7 +43,7 @@ export interface Post {
   comments: number;
   shares: number;
   media_display?: PostMediaDisplay | null;
-  tagged_products?: Array<{ id: string; name: string; price: number; image?: string; current_price?: number; is_currently_active?: boolean; discount_percent?: number }>;
+  tagged_products?: TaggedProduct[];
   tagged_accounts?: Array<{ id: string; name: string; avatar_url?: string | null }>;
   location_name?: string | null;
   location_lat?: number | null;
@@ -65,42 +68,6 @@ export interface PostWithUser extends Post {
     avatar_url?: string | null;
   };
 }
-
-// Fetch posts with pagination and user profile data
-export const fetchPosts = async (page: number = 0, pageSize: number = 10) => {
-  const from = page * pageSize;
-  const to = from + pageSize - 1;
-
-  const { data, error, count } = await supabase
-    .from('posts')
-    .select(`
-      *,
-      profiles:user_id (
-        name,
-        email,
-        phone,
-        avatar_url
-      ),
-      post_likes (
-        id
-      )
-    `, { count: 'exact' })
-    .order('created_at', { ascending: false })
-    .range(from, to);
-
-  if (error) {
-    console.error('Error fetching posts:', error);
-    throw error;
-  }
-
-  // Map posts to include actual like count from post_likes
-  const postsWithLikeCounts = (data || []).map((post: any) => ({
-    ...post,
-    likes: post.post_likes?.length || 0,
-  })) as PostWithUser[];
-
-  return { posts: postsWithLikeCounts, totalCount: count || 0 };
-};
 
 // Cursor-based fetch for infinite scroll (no count query, O(1) pagination)
 export const fetchPostsCursor = async (
@@ -332,7 +299,7 @@ export const createPost = async (postData: {
   images: string[];
   userId: string;
   mediaDisplay?: PostMediaDisplay;
-  tagged_products?: Array<{ id: string; name: string; price: number; image?: string; current_price?: number; is_currently_active?: boolean; discount_percent?: number }>;
+  tagged_products?: TaggedProduct[];
   tagged_accounts?: Array<{ id: string; name: string; avatar_url?: string | null }>;
   locationName?: string;
   locationLat?: number;
@@ -396,6 +363,18 @@ export const createPost = async (postData: {
     throw error;
   }
 
+  // Fire-and-forget: every hashtag in the caption is a trending signal, and
+  // publishing one weighs double a search for it — writing about a topic
+  // says more about it being alive than looking it up does. See
+  // supabase/migrations/20260905120000_create_trending_signals.sql.
+  if (data?.id && data?.moderation_status === 'approved') {
+    recordTrendingSignals(
+      extractHashtags(postData.content),
+      'hashtag_post',
+      postData.userId,
+    ).catch(() => {});
+  }
+
   // Fire-and-forget: generate BlurHash placeholders for progressive image
   // loading. The post is usable immediately; hashes appear on next fetch.
   if (data?.id && Array.isArray(postData.images) && postData.images.length > 0) {
@@ -431,19 +410,6 @@ export const deletePost = async (postId: string) => {
 
   if (error) {
     console.error('Error deleting post:', error);
-    throw error;
-  }
-};
-
-// Update likes count
-export const updateLikes = async (postId: string, newLikesCount: number) => {
-  const { error } = await supabase
-    .from('posts')
-    .update({ likes: newLikesCount })
-    .eq('id', postId);
-
-  if (error) {
-    console.error('Error updating likes:', error);
     throw error;
   }
 };
@@ -508,115 +474,4 @@ export const uploadVideo = async (videoUri: string): Promise<string> => {
 export const uploadVideos = async (videoUris: string[]): Promise<string[]> => {
   const uploadPromises = videoUris.map(uri => uploadVideo(uri));
   return await Promise.all(uploadPromises);
-};
-
-/**
- * Update moderation status and notes for a post
- * Typically called by admin/moderator functions
- */
-export const updatePostModerationStatus = async (
-  postId: string,
-  moderationStatus: ModerationStatus,
-  moderationNotes?: string
-) => {
-  const updatePayload: Record<string, unknown> = {
-    moderation_status: moderationStatus,
-    moderation_reviewed_at: new Date().toISOString(),
-  };
-
-  if (moderationNotes) {
-    updatePayload.moderation_notes = moderationNotes;
-  }
-
-  const { error } = await supabase
-    .from('posts')
-    .update(updatePayload)
-    .eq('id', postId);
-
-  if (error) {
-    console.error('Error updating post moderation status:', error);
-    throw error;
-  }
-};
-
-/**
- * Flag a post for review by moderators
- */
-export const flagPostForReview = async (postId: string, reason: string) => {
-  const { error } = await supabase
-    .from('posts')
-    .update({
-      is_flagged_for_review: true,
-      moderation_notes: reason,
-    })
-    .eq('id', postId);
-
-  if (error) {
-    console.error('Error flagging post for review:', error);
-    throw error;
-  }
-};
-
-/**
- * Fetch posts pending moderation review
- */
-export const fetchModerationQueue = async (limit: number = 50) => {
-  const { data, error } = await supabase
-    .from('posts')
-    .select(`
-      *,
-      profiles:user_id (
-        name,
-        email,
-        avatar_url
-      )
-    `)
-    .or('moderation_status.eq.pending_review,is_flagged_for_review.eq.true')
-    .order('created_at', { ascending: true })
-    .limit(limit);
-
-  if (error) {
-    console.error('Error fetching moderation queue:', error);
-    throw error;
-  }
-
-  return data || [];
-};
-
-/**
- * Get user's age from profile if available
- */
-export const getUserAge = async (userId: string): Promise<number | null> => {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('birth_date, age_verified')
-    .eq('id', userId)
-    .maybeSingle();
-
-  if (error || !data?.birth_date) return null;
-
-  const birthDate = new Date(data.birth_date);
-  const today = new Date();
-  let age = today.getFullYear() - birthDate.getFullYear();
-  const monthDiff = today.getMonth() - birthDate.getMonth();
-  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-    age--;
-  }
-
-  return age;
-};
-
-/**
- * Filter posts for a user based on their age and content rating
- * Removes posts the user shouldn't see
- */
-export const filterPostsByUserAge = (
-  posts: PostWithUser[],
-  userAge?: number | null,
-  isAgeVerified?: boolean
-): PostWithUser[] => {
-  return posts.filter(post => {
-    const contentRating = (post as any).content_rating || 'general';
-    return canViewContent(contentRating, userAge, isAgeVerified);
-  });
 };

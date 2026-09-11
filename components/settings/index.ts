@@ -1,5 +1,15 @@
+export { default as AboutNamzoed } from "./AboutNamzoed";
+export { default as AccountSettings } from "./AccountSettings";
+export { default as DeviceManagement } from "./DeviceManagement";
+export { default as GeneralSettings } from "./GeneralSettings";
+export { default as NotificationSettings } from "./NotificationSettings";
+export { default as PrivacySettings } from "./PrivacySettings";
+export { default as SupportSettings } from "./SupportSettings";
 export { default as AboutApp } from "./AboutApp";
 export { default as EditBio } from "./EditBio";
+export { default as EditBirthday } from "./EditBirthday";
+export { default as EditLocation } from "./EditLocation";
+export { default as EditName } from "./EditName";
 export { default as EditProfile } from "./EditProfile";
 export { default as EditWorkProfile } from "./EditWorkProfile";
 export { default as AppearanceManager } from "./AppearanceManager";

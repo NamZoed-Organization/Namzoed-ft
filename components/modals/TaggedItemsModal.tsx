@@ -1,4 +1,6 @@
+import { MODAL_RADIUS } from '@/constants/theme';
 import { TaggedAccount, TaggedProduct } from '@/types/post';
+import { taggedItemPrice } from '@/utils/price';
 import { useAppRouter } from '@/utils/navigation';
 import { ShoppingBag, User, X } from 'lucide-react-native';
 import React, { useState } from 'react';
@@ -32,9 +34,15 @@ export default function TaggedItemsModal({
     hasProducts ? 'products' : 'accounts'
   );
 
-  const handleProductPress = (productId: string) => {
+  // A tagged item is a product or a service, and they live on different
+  // screens — see TaggedProduct.kind.
+  const handleProductPress = (product: TaggedProduct) => {
     onClose();
-    router.push(`/(users)/product/${productId}` as any);
+    router.push(
+      product.kind === "service"
+        ? (`/(users)/servicedetail/${product.id}` as any)
+        : (`/(users)/product/${product.id}` as any),
+    );
   };
 
   const handleAccountPress = (accountId: string) => {
@@ -57,8 +65,8 @@ export default function TaggedItemsModal({
       <View
         style={{
           backgroundColor: 'white',
-          borderTopLeftRadius: 24,
-          borderTopRightRadius: 24,
+          borderTopLeftRadius: MODAL_RADIUS,
+          borderTopRightRadius: MODAL_RADIUS,
           borderCurve: "continuous",
           paddingBottom: 40,
           maxHeight: '60%',
@@ -177,7 +185,7 @@ export default function TaggedItemsModal({
               {products.map((product) => (
                 <TouchableOpacity
                   key={product.id}
-                  onPress={() => handleProductPress(product.id)}
+                  onPress={() => handleProductPress(product)}
                   style={{
                     flexDirection: 'row',
                     alignItems: 'center',
@@ -216,10 +224,17 @@ export default function TaggedItemsModal({
                     <Text style={{ fontSize: 14, fontWeight: '600', color: '#111' }} numberOfLines={1}>
                       {product.name}
                     </Text>
-                    <Text style={{ fontSize: 13, fontWeight: '700', color: '#094569', marginTop: 2 }}>
-                      Nu. {(product.current_price ?? product.price).toLocaleString()}
-                    </Text>
-                    {product.is_currently_active && product.discount_percent ? (
+                    {/* A service is quoted, not listed — see taggedItemPrice. */}
+                    {taggedItemPrice(product) ? (
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: '#094569', marginTop: 2 }}>
+                        {taggedItemPrice(product)}
+                      </Text>
+                    ) : product.owner_name ? (
+                      <Text style={{ fontSize: 13, color: '#9CA3AF', marginTop: 2 }} numberOfLines={1}>
+                        {product.owner_name}
+                      </Text>
+                    ) : null}
+                    {product.is_currently_active && product.discount_percent && product.price ? (
                       <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
                         <Text style={{ fontSize: 11, color: '#9CA3AF', textDecorationLine: 'line-through' }}>
                           Nu. {product.price.toLocaleString()}

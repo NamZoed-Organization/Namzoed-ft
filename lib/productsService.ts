@@ -36,6 +36,30 @@ export interface Product {
   // (see supabase/migrations/20260826120000_create_product_reviews.sql).
   average_rating?: number;
   review_count?: number;
+  // Shrunk toward the site mean so one 5-star review can't outrank 4.8 over
+  // a thousand — a generated column, so it can never drift from the two
+  // above. Prefer it for RANKING and sorting; show average_rating as the
+  // number, because "4.09" on a product with a single 5-star review is
+  // correct maths and a confusing thing to print.
+  bayesian_rating?: number;
+
+  // ── Catalog foundation (20260905140000_catalog_foundation.sql) ────────
+  // All optional and all null on products created before it. Nothing in the
+  // app is required to read them, and `category` above remains the slug
+  // every existing screen uses.
+  /** Set alongside `category` by trigger/backfill; null where the slug
+   *  didn't match a known category. */
+  category_id?: string | null;
+  store_id?: string | null;
+  /** Category-specific attributes, shaped by that category's schema. */
+  attributes?: Record<string, unknown>;
+  brand?: string | null;
+  gtin?: string | null;
+  condition?: "new" | "used" | "refurbished";
+  /** Existing products are 'active'; the draft flow applies to new ones. */
+  status?: "draft" | "pending_review" | "active" | "rejected" | "archived";
+  country_of_origin?: string | null;
+  canonical_product_id?: string | null;
 }
 
 export interface ProductWithUser extends Product {
@@ -131,46 +155,6 @@ export const fetchUserProducts = async (
   return data || [];
 };
 
-// Fetch products by category
-// Uses products_with_discounts view for real-time discount calculations
-export const fetchProductsByCategory = async (
-  category: string,
-  filter?: string | null,
-  page: number = 0,
-  pageSize: number = 20
-) => {
-  const from = page * pageSize;
-  const to = from + pageSize - 1;
-
-  let query = supabase
-    .from('products_with_discounts')  // ← Query the view for real-time discount status
-    .select(`
-      *,
-      profiles:user_id (
-        name,
-        email,
-        phone,
-        avatar_url
-      )
-    `, { count: 'exact' })
-    .eq('category', category)
-    .order('created_at', { ascending: false })
-    .range(from, to);
-
-  if (filter) {
-    query = query.contains('tags', [filter]);
-  }
-
-  const { data, error, count } = await query;
-
-  if (error) {
-    console.error('Error fetching products by category:', error);
-    throw error;
-  }
-
-  return { products: (data || []) as ProductWithUser[], totalCount: count || 0 };
-};
-
 // Fetches the full candidate pool for one feed-randomization session (see
 // lib/feedRanking.ts) for a given category — no pagination, ranking is done
 // client-side over the whole pool, then sliced. Mirrors
@@ -245,19 +229,6 @@ export const createProduct = async (productData: {
   }
 
   return data;
-};
-
-// Delete a product
-export const deleteProduct = async (productId: string) => {
-  const { error } = await supabase
-    .from('products')
-    .delete()
-    .eq('id', productId);
-
-  if (error) {
-    console.error('Error deleting product:', error);
-    throw error;
-  }
 };
 
 // Update a product

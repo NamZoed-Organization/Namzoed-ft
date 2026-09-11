@@ -127,11 +127,12 @@ const KNOWN_NOTIFICATION_TYPES = new Set([
   "post_traction",
   "weekly_engagement",
   "product_reviewed",
+  "setlog_prompt",
 ]);
 
 // Also covers product_reviewed — same "reference thumbnail" treatment, just
 // for a product listing instead of a post.
-const POST_CONTEXT_TYPES = new Set(["post_liked", "post_commented", "new_post", "post_traction", "product_reviewed"]);
+const POST_CONTEXT_TYPES = new Set(["post_liked", "post_commented", "new_post", "post_traction", "product_reviewed", "comment_mention"]);
 
 function hasKnownIcon(type: string): boolean {
   return KNOWN_NOTIFICATION_TYPES.has(type);
@@ -161,6 +162,14 @@ function TypeIcon({ type }: { type: string }) {
       return <Ionicons name="bar-chart" size={size} color={color} />;
     case "product_reviewed":
       return <Ionicons name="star" size={size} color={color} />;
+    case "qr_connect_request":
+      return <Ionicons name="qr-code" size={size} color={color} />;
+    case "qr_connect_accepted":
+      return <Ionicons name="people" size={size} color={color} />;
+    case "setlog_prompt":
+      return <Ionicons name="videocam" size={size} color={color} />;
+    case "comment_mention":
+      return <Ionicons name="at" size={size} color={color} />;
     default:
       return null;
   }
@@ -188,6 +197,14 @@ function typeIconBg(type: string): string {
       return "#6366f1"; // indigo
     case "product_reviewed":
       return "#eab308"; // gold
+    case "qr_connect_request":
+      return "#0369A1"; // action blue
+    case "qr_connect_accepted":
+      return "#094569"; // brand
+    case "setlog_prompt":
+      return "#094569"; // brand
+    case "comment_mention":
+      return "#f59e0b"; // amber, as comments are
     default:
       return "#6b7280";
   }
@@ -393,6 +410,18 @@ export default function NotificationsScreen() {
           router.push(`/(users)/profile/${n.actor_id}` as any);
           break;
 
+        case "qr_connect_request":
+          // The point of the notification is the Confirm button, which
+          // lives on Add Friends — not on the requester's profile.
+          router.push("/(users)/add-friends" as any);
+          break;
+
+        case "qr_connect_accepted":
+          // Nothing left to do; the interesting thing is the person you're
+          // now following.
+          router.push(`/(users)/profile/${n.actor_id}` as any);
+          break;
+
         case "post_liked":
         case "post_commented":
           // Go directly to the post that was liked / commented on
@@ -444,6 +473,23 @@ export default function NotificationsScreen() {
           } else {
             router.push("/(users)/profile" as any);
           }
+          break;
+
+        case "comment_mention":
+          // Straight to the post the comment is on — the mention is only
+          // findable in its own thread.
+          if (n.reference_id) {
+            router.push(`/(users)/post/${n.reference_id}` as any);
+          } else {
+            router.push(`/(users)/profile/${n.actor_id}` as any);
+          }
+          break;
+
+        case "setlog_prompt":
+          // Straight to the camera, which is the whole point of the prompt.
+          // Landing on the tab would mean one more tap to do the thing the
+          // notification just asked for.
+          router.push("/(users)/setlog/capture" as any);
           break;
 
         case "weekly_engagement":

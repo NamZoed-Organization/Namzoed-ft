@@ -22,6 +22,25 @@ import { Image, Platform, StyleSheet, Text, TouchableOpacity, View } from "react
 /** Extra height added on top of the natural aspect ratio, for a taller card — matches PostGridCard. */
 const EXTRA_IMAGE_HEIGHT = 18;
 
+/**
+ * The frame every product and marketplace card is drawn in.
+ *
+ * A post carries its own media ratio (§ The waterfall) because the photo is
+ * the post; a listing does not — nothing stores the dimensions of a product
+ * photo, so the card has to pick a frame. It has to be *one* frame: the
+ * Shopping tab drew products square while the Marketplace tab drew listings
+ * at 4:3, and the two grids sit one tab apart showing the same kind of
+ * thing, so the same photo changed shape as you moved between them. Saved
+ * items and History, which mix both in one waterfall, showed the drift in a
+ * single screenful.
+ *
+ * Square is the value they agree on: it is what the larger of the two
+ * surfaces already used, it crops a portrait photo far less brutally than
+ * 4:3, and it sits between a post's portrait and landscape framings so a
+ * mixed grid reads evenly.
+ */
+export const LISTING_CARD_RATIO = 1;
+
 /** Height (in px) a card should render at for a given column width, given a raw width/height ratio. */
 export function gridCardHeight(ratio: number, columnWidth: number): number {
   return columnWidth / clampMediaRatio(ratio) + EXTRA_IMAGE_HEIGHT;
@@ -60,6 +79,17 @@ export interface GridCardProps {
   footerRight?: React.ReactNode;
   /** Small overlay badge in the image's top-right corner (video icon by default when isVideo). */
   badge?: React.ReactNode;
+  /**
+   * Between the title and the author row — where a post puts its tagged
+   * product (`TaggedProductStrip`).
+   *
+   * A slot rather than a `taggedProducts` prop, because this card is
+   * content-agnostic on purpose: it draws products, listings and services
+   * as well as posts, and a prop naming one of them would be the first
+   * crack in that. Hidden while the card is deferred, like everything else
+   * that costs a fetch.
+   */
+  belowTitle?: React.ReactNode;
   /** rect is the tapped thumbnail's own on-screen box, for hero-transition callers. */
   onPress: (id: string, rect: GridCardSourceRect) => void;
   /** When provided, enables hold-to-report — long-pressing the card shows a
@@ -91,6 +121,7 @@ function GridCard({
   subtitle,
   footerRight,
   badge,
+  belowTitle,
   onPress,
   onReport,
   deferred,
@@ -211,6 +242,8 @@ function GridCard({
             {title}
           </Text>
         ) : null}
+
+        {!deferred && belowTitle}
 
         {!deferred && (showAvatarRow || footerRight) && (
           <View style={{ flexDirection: "row", alignItems: "center", marginTop: 9 }}>

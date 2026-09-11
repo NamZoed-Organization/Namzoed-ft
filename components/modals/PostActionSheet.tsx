@@ -1,3 +1,4 @@
+import { MODAL_RADIUS } from '@/constants/theme';
 import * as Haptics from 'expo-haptics';
 import { AlertCircle, Trash2 } from 'lucide-react-native';
 import React from 'react';
@@ -40,7 +41,7 @@ export default function PostActionSheet({
   return (
     <ActionSheetModal visible={visible} onClose={onClose} embedded={embedded}>
       <View
-        style={{ borderTopLeftRadius: 24, borderTopRightRadius: 24, borderCurve: "continuous" }} className="bg-white">
+        style={{ borderTopLeftRadius: MODAL_RADIUS, borderTopRightRadius: MODAL_RADIUS, borderCurve: "continuous" }} className="bg-white">
         <View className="p-4 border-b border-gray-200">
           <Text className="text-lg font-semibold text-center">
             {isOwnPost ? 'Post Options' : 'Report Post'}

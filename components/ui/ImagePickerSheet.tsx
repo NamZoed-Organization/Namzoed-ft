@@ -1,3 +1,4 @@
+import { MODAL_RADIUS } from '@/constants/theme';
 import { Camera, Image as ImageIcon, X } from 'lucide-react-native';
 import React from 'react';
 import {
@@ -137,8 +138,8 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: '#fff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: MODAL_RADIUS,
+    borderTopRightRadius: MODAL_RADIUS,
     borderCurve: "continuous",
     paddingBottom: 32,
     paddingTop: 8,

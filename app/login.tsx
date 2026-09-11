@@ -1,25 +1,29 @@
+import {
+  AuthButton,
+  AuthDivider,
+  AuthField,
+  AuthFooterLink,
+  AuthHeading,
+  AuthScreen,
+  AuthSecondaryButton,
+} from "@/components/auth/AuthChrome";
+import { Eye, EyeOff, Lock, Mail, Phone, X } from "lucide-react-native";
+import DialogCard from "@/components/ui/DialogCard";
 import DateOfBirthPrompt from "@/components/modals/DateOfBirthPrompt";
-import FormInput from "@/components/ui/FormInput";
-import CircularLoader from "@/components/ui/CircularLoader";
+import { waitForIosModalDismiss } from "@/utils/modal";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { useUser } from "@/contexts/UserContext";
 import { supabase } from "@/lib/supabase";
-import { clamp, useResponsive } from "@/utils/responsive";
+import { generatedAvatarFor, isPlaceholderAvatar } from "@/lib/dicebear";
 import { isMongooseUser } from "@/utils/roleCheck";
-import { Ionicons, MaterialIcons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Linking from "expo-linking";
 import { useAppRouter } from "@/utils/navigation";
-import { Link } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import React, { useState } from "react";
 import {
-    Image,
-    Keyboard,
-    KeyboardAvoidingView,
-    Modal,
     Platform,
-    Pressable,
     Text,
     TouchableOpacity,
     View,
@@ -74,24 +78,9 @@ export default function Login() {
     setPopup({visible: true, type, title, message});
     setTimeout(() => setPopup(p => ({...p, visible: false})), 2500);
   };
-  const { ms, vs, wp } = useResponsive();
-  const screenPaddingX = clamp(wp(10), 20, 44);
-  const headerBottomSpacing = clamp(vs(32), 24, 40);
-  const titleSize = clamp(ms(36), 30, 42);
-  const logoSize = clamp(ms(112), 88, 132);
-  const fieldGap = clamp(vs(12), 10, 16);
-  const loginButtonPaddingY = clamp(vs(20), 14, 22);
-  const loginButtonMarginY = clamp(vs(40), 24, 48);
-  const buttonRadius = clamp(ms(10), 8, 14);
-  const buttonLabelSize = clamp(ms(18), 16, 20);
-  const helperTextSize = clamp(ms(14), 12, 16);
-  const oauthButtonPaddingY = clamp(vs(16), 12, 18);
-  const oauthRadius = clamp(ms(12), 10, 16);
-  const oauthTextSize = clamp(ms(16), 14, 18);
-  const iconSize = clamp(ms(20), 18, 24);
-  const modalPaddingX = clamp(wp(6), 16, 30);
-  const modalCardPadding = clamp(ms(20), 16, 26);
-  const modalTitleSize = clamp(ms(22), 18, 26);
+  // The auth chrome and the dialog carry their own spacing and type now
+  // (§ Auth screens, § Dialogs), so the eighteen scaled constants this
+  // screen used to size itself with are all gone.
 
   const isValidEmail = (input: string) => {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input);
@@ -129,6 +118,11 @@ export default function Login() {
     ) {
       setPendingUserData(userData);
       setPendingResolvedEmail(resolvedEmail);
+      // The OAuth phone prompt is a native modal, and this one is presented
+      // the moment that closes — on iOS a modal presented into another's
+      // dismissal simply never appears, which left Google users with no way
+      // to give a date of birth at all.
+      await waitForIosModalDismiss();
       setShowDobPrompt(true);
       return;
     }
@@ -177,8 +171,32 @@ export default function Login() {
 
     if (!existingProfile?.name && providerName)
       profilePayload.name = providerName;
-    if (!existingProfile?.avatar_url && providerAvatar)
-      profilePayload.avatar_url = providerAvatar;
+
+    // Google hands over its own monogram for an account with no photo, and
+    // that is the placeholder this app is replacing, not a picture worth
+    // importing (§ Generated avatars). So a provider picture is taken only
+    // when it is a real one, and anything else — including a placeholder an
+    // older build already imported — is replaced with a generated avatar
+    // seeded on the account id. A photo we cannot prove is a placeholder is
+    // left alone: the picker is two taps away, and guessing the other way
+    // would delete somebody's actual face.
+    const usableProviderAvatar =
+      providerAvatar && !isPlaceholderAvatar(providerAvatar)
+        ? providerAvatar
+        : null;
+    const existingAvatarIsReal =
+      !!existingProfile?.avatar_url &&
+      !isPlaceholderAvatar(existingProfile.avatar_url);
+
+    if (!existingAvatarIsReal) {
+      if (usableProviderAvatar) {
+        profilePayload.avatar_url = usableProviderAvatar;
+        profilePayload.avatar_style = null;
+        profilePayload.avatar_animation = "none";
+      } else if (!existingProfile?.avatar_style) {
+        Object.assign(profilePayload, generatedAvatarFor(authUser.id));
+      }
+    }
 
     if (!existingProfile) {
       profilePayload.created_at = new Date().toISOString();
@@ -192,7 +210,8 @@ export default function Login() {
       (!!profilePayload.name &&
         profilePayload.name !== existingProfile?.name) ||
       (!!profilePayload.avatar_url &&
-        profilePayload.avatar_url !== existingProfile?.avatar_url);
+        profilePayload.avatar_url !== existingProfile?.avatar_url) ||
+      profilePayload.avatar_style !== undefined;
 
     if (hasUsefulUpdates) {
       const { error: upsertError } = await supabase
@@ -400,375 +419,214 @@ export default function Login() {
     }
   };
 
+  /** Saving the number the OAuth account did not carry. */
+  const savePhonePrompt = async () => {
+    const normalizedPhone = normalizeBhutanPhone(phonePromptValue);
+    if (!isValidBhutanesePhone(phonePromptValue)) {
+      showPopup(
+        "error",
+        "Check that number",
+        "A Bhutan number is 17 or 77 followed by six digits, with or without +975.",
+      );
+      return;
+    }
+    if (!pendingUserData?.id) return;
+
+    try {
+      setPhonePromptLoading(true);
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          phone: normalizedPhone,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", pendingUserData.id);
+
+      if (error) {
+        showPopup("error", "Couldn't save", error.message || "That number didn't save.");
+        return;
+      }
+
+      const updatedUser = { ...pendingUserData, phone: normalizedPhone };
+      await AsyncStorage.setItem(
+        `oauth_phone_prompt_done_${pendingUserData.id}`,
+        "true",
+      );
+      setShowPhonePrompt(false);
+      setPendingUserData(null);
+      await completeLogin(updatedUser, pendingResolvedEmail);
+    } finally {
+      setPhonePromptLoading(false);
+    }
+  };
+
+  /** Going on without one. Remembered, so it is asked once and not again. */
+  const skipPhonePrompt = async () => {
+    if (phonePromptLoading) return;
+    if (pendingUserData?.id) {
+      await AsyncStorage.setItem(
+        `oauth_phone_prompt_done_${pendingUserData.id}`,
+        "true",
+      );
+    }
+    setShowPhonePrompt(false);
+    if (pendingUserData) {
+      // completeLogin manages pendingUserData itself (it may re-show a
+      // mandatory date-of-birth prompt), so don't clear it here.
+      await completeLogin(pendingUserData, pendingResolvedEmail);
+    }
+  };
+
   return (
-    <Pressable onPress={Keyboard.dismiss} style={{ flex: 1 }}>
-      <View className="flex-1">
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-          className="flex-1 bg-background"
-        >
-          <View
-            className="flex-1 justify-center"
-            style={{ paddingHorizontal: screenPaddingX }}
-          >
-            <View
-              className="flex-row justify-between items-center"
-              style={{ marginBottom: headerBottomSpacing }}
-            >
-              <View>
-                <Text
-                  className="text-primary/90 font-mbold"
-                  style={{ fontSize: titleSize }}
-                >
-                  Welcome
-                </Text>
-                <Text
-                  className="text-secondary/90 font-mbold"
-                  style={{ fontSize: titleSize }}
-                >
-                  Back!
-                </Text>
-              </View>
-              <Image
-                source={require("../assets/images/logo.png")}
-                style={{ width: logoSize, height: logoSize }}
-                resizeMode="contain"
-              />
-            </View>
-
-            <View className="flex-2" style={{ rowGap: fieldGap }}>
-              <View className="mb-4">
-                <FormInput
-                  value={identifier}
-                  onChangeText={setIdentifier}
-                  placeholder="Email or phone"
-                  keyboardType={isIdentifierEmail ? "email-address" : "default"}
-                  autoCapitalize="none"
-                  leftIcon={
-                    isIdentifierEmail ? (
-                      <MaterialIcons name="email" size={iconSize} color="#6B7280" />
-                    ) : (
-                      <Ionicons name="call" size={iconSize} color="#6B7280" />
-                    )
-                  }
-                  rightAccessory={
-                    identifier.length > 0 ? (
-                      <Pressable onPress={handleClearIdentifier}>
-                        <Ionicons
-                          name="close-circle"
-                          size={iconSize}
-                          color="#9CA3AF"
-                        />
-                      </Pressable>
-                    ) : undefined
-                  }
-                />
-              </View>
-
-              <View className="mb-2">
-                <FormInput
-                  value={password}
-                  onChangeText={setPassword}
-                  placeholder="Password"
-                  secureTextEntry={!showPassword}
-                  leftIcon={
-                    <Ionicons
-                      name="lock-closed"
-                      size={iconSize}
-                      color="#6B7280"
-                    />
-                  }
-                  rightAccessory={
-                    <Pressable onPress={() => setShowPassword(!showPassword)}>
-                      <Ionicons
-                        name={showPassword ? "eye" : "eye-off"}
-                        size={iconSize}
-                        color="#6B7280"
-                      />
-                    </Pressable>
-                  }
-                />
-              </View>
-            </View>
-
-            <Text
-              className="text-right font-regular"
-              style={{ fontSize: helperTextSize, marginBottom: clamp(vs(24), 18, 30) }}
-            >
-              <Link href="/forgot" className="text-black font-regular">
-                Forgot Password?
-              </Link>
-            </Text>
-
-            <TouchableOpacity
-              disabled={
-                !identifier.trim() ||
-                password.length === 0 ||
-                !isIdentifierValid ||
-                loading
-              }
-              onPress={handleLogin}
-              className={`items-center ${
-                identifier.trim() &&
-                password.length > 0 &&
-                isIdentifierValid &&
-                !loading
-                  ? "bg-primary"
-                  : "bg-primary/50"
-              }`}
-              style={{
-                paddingVertical: loginButtonPaddingY,
-                borderRadius: buttonRadius,
-                borderCurve: "continuous",
-                marginVertical: loginButtonMarginY,
-              }}
-            >
-              {loading ? (
-                <CircularLoader color="#EDC06D" />
-              ) : (
-                <Text
-                  className="text-secondary text-center font-semibold"
-                  style={{ fontSize: buttonLabelSize }}
-                >
-                  Login
-                </Text>
-              )}
-            </TouchableOpacity>
-
-            <Text
-              className="text-center font-regular text-gray-500"
-              style={{ fontSize: helperTextSize, marginBottom: clamp(vs(8), 6, 12) }}
-            >
-              - or continue with -
-            </Text>
-
-            <TouchableOpacity
-              disabled={!!oauthLoading}
-              onPress={() => handleOAuthLogin("google")}
-              className="bg-white border border-gray-200 mb-3 flex-row items-center justify-center"
-              style={{
-                paddingVertical: oauthButtonPaddingY,
-                borderRadius: oauthRadius,
-                borderCurve: "continuous",
-                shadowColor: "#000",
-                shadowOffset: { width: 1, height: 1 },
-                shadowOpacity: 0.1,
-                shadowRadius: 1,
-                elevation: 1,
-              }}
-            >
-              {oauthLoading === "google" ? (
-                <CircularLoader color="#094569" />
-              ) : (
-                <>
-                  <GoogleIcon size={clamp(ms(18), 16, 22)} />
-                  <Text
-                    className="text-gray-900 text-center font-msemibold ml-2"
-                    style={{ fontSize: oauthTextSize }}
-                  >
-                    Continue with Google
-                  </Text>
-                </>
-              )}
-            </TouchableOpacity>
-
-            {Platform.OS === "ios" && (
-              <TouchableOpacity
-                disabled={!!oauthLoading}
-                onPress={() => handleOAuthLogin("apple")}
-                className="bg-black mb-4 flex-row items-center justify-center"
-                style={{
-                  paddingVertical: oauthButtonPaddingY,
-                  borderRadius: oauthRadius,
-                  borderCurve: "continuous",
-                }}
-              >
-                {oauthLoading === "apple" ? (
-                  <CircularLoader color="white" />
-                ) : (
-                  <>
-                    <Ionicons
-                      name="logo-apple"
-                      size={clamp(ms(18), 16, 22)}
-                      color="white"
-                    />
-                    <Text
-                      className="text-white text-center font-msemibold ml-2"
-                      style={{ fontSize: oauthTextSize }}
-                    >
-                      Continue with Apple
-                    </Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            )}
-
-            <Text
-              className="text-center text-gray-500 font-regular"
-              style={{ fontSize: helperTextSize }}
-            >
-              Create an account{" "}
-              <Link href="/signup" className="text-black font-medium underline">
-                Sign up
-              </Link>
-            </Text>
-
+    <>
+      <AuthScreen
+        footer={
+          <>
+            <AuthFooterLink
+              prompt="No account yet?"
+              action="Sign up"
+              onPress={() => router.push("/signup")}
+            />
+            {/* Quieter than the sign-up line, because it is the way past
+                the screen rather than through it. */}
             <TouchableOpacity
               onPress={() => router.replace("/(users)/(tabs)")}
-              className="mt-3"
+              activeOpacity={0.7}
+              style={{ paddingVertical: 6 }}
             >
-              <Text
-                className="text-center text-gray-400 font-mmedium underline"
-                style={{ fontSize: helperTextSize }}
-              >
-                Browse as Guest
+              <Text style={{ fontSize: 14, color: "#9CA3AF", textAlign: "center" }}>
+                Browse as a guest
               </Text>
             </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
+          </>
+        }
+      >
+        <AuthHeading
+          title="Welcome back"
+          subtitle="Sign in to pick up where you left off."
+        />
 
-        <Modal
-          visible={showPhonePrompt}
-          transparent
-          animationType="fade"
-          onRequestClose={() => {}}
-        >
-          <View
-            className="flex-1 bg-black/45 justify-center"
-            style={{ paddingHorizontal: modalPaddingX }}
-          >
-            <View
-              className="bg-white"
-              style={{ padding: modalCardPadding, borderRadius: 16, borderCurve: "continuous" }}
-            >
-              <Text
-                className="font-mbold text-gray-900 mb-2"
-                style={{ fontSize: modalTitleSize }}
-              >
-                Add Phone Number
-              </Text>
-              <Text className="text-sm text-gray-600 mb-4">
-                First-time sign-in: add your Bhutan number for a better
-                experience. You can skip if you do not have one or prefer not to
-                share.
-              </Text>
+        <View style={{ gap: 12 }}>
+          <AuthField
+            value={identifier}
+            onChangeText={setIdentifier}
+            placeholder="Email or phone"
+            keyboardType={isIdentifierEmail ? "email-address" : "default"}
+            autoCapitalize="none"
+            autoCorrect={false}
+            icon={
+              isIdentifierEmail ? (
+                <Mail size={19} color="#9CA3AF" strokeWidth={1.8} />
+              ) : (
+                <Phone size={19} color="#9CA3AF" strokeWidth={1.8} />
+              )
+            }
+            accessory={
+              identifier.length > 0 ? (
+                <TouchableOpacity onPress={handleClearIdentifier} hitSlop={8}>
+                  <X size={18} color="#9CA3AF" strokeWidth={2} />
+                </TouchableOpacity>
+              ) : undefined
+            }
+          />
 
-              <FormInput
-                value={phonePromptValue}
-                onChangeText={setPhonePromptValue}
-                placeholder="Bhutan phone"
-                keyboardType="phone-pad"
-                leftIcon={<Ionicons name="call" size={iconSize} color="#6B7280" />}
-              />
-
+          <AuthField
+            value={password}
+            onChangeText={setPassword}
+            placeholder="Password"
+            secureTextEntry={!showPassword}
+            autoCapitalize="none"
+            icon={<Lock size={19} color="#9CA3AF" strokeWidth={1.8} />}
+            accessory={
               <TouchableOpacity
-                disabled={phonePromptLoading}
-                onPress={async () => {
-                  const normalizedPhone =
-                    normalizeBhutanPhone(phonePromptValue);
-                  if (!isValidBhutanesePhone(phonePromptValue)) {
-                    showPopup("error", "Invalid Phone", "Please enter a valid Bhutan phone (17/77 + 8 digits), with or without +975.");
-                    return;
-                  }
-
-                  if (!pendingUserData?.id) return;
-
-                  try {
-                    setPhonePromptLoading(true);
-                    const { error } = await supabase
-                      .from("profiles")
-                      .update({
-                        phone: normalizedPhone,
-                        updated_at: new Date().toISOString(),
-                      })
-                      .eq("id", pendingUserData.id);
-
-                    if (error) {
-                      showPopup("error", "Save Failed", error.message || "Failed to save phone number");
-                      return;
-                    }
-
-                    const updatedUser = {
-                      ...pendingUserData,
-                      phone: normalizedPhone,
-                    };
-                    await AsyncStorage.setItem(
-                      `oauth_phone_prompt_done_${pendingUserData.id}`,
-                      "true",
-                    );
-                    setShowPhonePrompt(false);
-                    setPendingUserData(null);
-                    await completeLogin(updatedUser, pendingResolvedEmail);
-                  } finally {
-                    setPhonePromptLoading(false);
-                  }
-                }}
-                className={`mt-4 py-3 rounded-xl items-center ${
-                  phonePromptLoading ? "bg-gray-300" : "bg-primary"
-                }`}
+                onPress={() => setShowPassword(!showPassword)}
+                hitSlop={8}
               >
-                {phonePromptLoading ? (
-                  <CircularLoader color="#fff" />
+                {showPassword ? (
+                  <EyeOff size={19} color="#9CA3AF" strokeWidth={1.8} />
                 ) : (
-                  <Text className="text-white font-msemibold">Save Number</Text>
+                  <Eye size={19} color="#9CA3AF" strokeWidth={1.8} />
                 )}
               </TouchableOpacity>
+            }
+          />
+        </View>
 
-              <View className="flex-row mt-3 gap-2">
-                <TouchableOpacity
-                  style={{ borderRadius: 12, borderCurve: "continuous" }}
-                  className="flex-1 py-3 bg-gray-100 items-center"
-                  onPress={async () => {
-                    if (pendingUserData?.id) {
-                      await AsyncStorage.setItem(
-                        `oauth_phone_prompt_done_${pendingUserData.id}`,
-                        "true",
-                      );
-                    }
-                    setShowPhonePrompt(false);
-                    if (pendingUserData) {
-                      // completeLogin manages pendingUserData itself (it may
-                      // re-show a mandatory date-of-birth prompt), so don't
-                      // clear it here.
-                      await completeLogin(
-                        pendingUserData,
-                        pendingResolvedEmail,
-                      );
-                    }
-                  }}
-                >
-                  <Text className="text-gray-700 font-msemibold">Decline</Text>
-                </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => router.push("/forgot")}
+          activeOpacity={0.7}
+          style={{ alignSelf: "flex-end", paddingVertical: 12 }}
+        >
+          <Text style={{ fontSize: 14.5, fontWeight: "600", color: "#0369A1" }}>
+            Forgot password?
+          </Text>
+        </TouchableOpacity>
 
-                <TouchableOpacity
-                  className="flex-1 py-3 rounded-xl bg-gray-100 items-center"
-                  onPress={async () => {
-                    if (pendingUserData?.id) {
-                      await AsyncStorage.setItem(
-                        `oauth_phone_prompt_done_${pendingUserData.id}`,
-                        "true",
-                      );
-                    }
-                    setShowPhonePrompt(false);
-                    if (pendingUserData) {
-                      // completeLogin manages pendingUserData itself (it may
-                      // re-show a mandatory date-of-birth prompt), so don't
-                      // clear it here.
-                      await completeLogin(
-                        pendingUserData,
-                        pendingResolvedEmail,
-                      );
-                    }
-                  }}
-                >
-                  <Text className="text-gray-700 font-msemibold">
-                    No Bhutan Number
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
+        <AuthButton
+          label="Sign in"
+          onPress={handleLogin}
+          loading={loading}
+          disabled={
+            !identifier.trim() || password.length === 0 || !isIdentifierValid
+          }
+        />
+
+        <AuthDivider />
+
+        <View style={{ gap: 10 }}>
+          <AuthSecondaryButton
+            label="Continue with Google"
+            icon={<GoogleIcon size={18} />}
+            onPress={() => handleOAuthLogin("google")}
+            disabled={!!oauthLoading}
+            loading={oauthLoading === "google"}
+          />
+          {Platform.OS === "ios" && (
+            <AuthSecondaryButton
+              dark
+              label="Continue with Apple"
+              icon={<Ionicons name="logo-apple" size={18} color="#fff" />}
+              onPress={() => handleOAuthLogin("apple")}
+              disabled={!!oauthLoading}
+              loading={oauthLoading === "apple"}
+            />
+          )}
+        </View>
+      </AuthScreen>
+
+        {/* Two ways of saying the same "no" — Decline and "No Bhutan
+            Number" — were two grey buttons doing one job, next to a third
+            that was the actual answer. One skip, one save. */}
+        <DialogCard
+          visible={showPhonePrompt}
+          title="Add your phone number"
+          message="A Bhutan number makes you easier to reach about orders and deliveries. You can add it later in Settings."
+          icon={<Phone size={22} color="#094569" strokeWidth={1.9} />}
+          actions={[
+            {
+              label: "Not now",
+              style: "cancel",
+              onPress: skipPhonePrompt,
+            },
+            {
+              label: "Save",
+              loading: phonePromptLoading,
+              onPress: phonePromptLoading ? undefined : savePhonePrompt,
+            },
+          ]}
+        >
+          <View style={{ marginTop: 16 }}>
+            <AuthField
+              value={phonePromptValue}
+              onChangeText={setPhonePromptValue}
+              placeholder="17123456"
+              keyboardType="phone-pad"
+              maxLength={8}
+              icon={<Phone size={19} color="#9CA3AF" strokeWidth={1.8} />}
+              style={{ backgroundColor: "#F5F5F5" }}
+            />
           </View>
-        </Modal>
+        </DialogCard>
 
         {/* Optional date-of-birth prompt for existing users without one */}
         {pendingUserData?.id && (
@@ -776,7 +634,13 @@ export default function Login() {
             visible={showDobPrompt}
             userId={pendingUserData.id}
             onSaved={async (birthDate) => {
-              const updatedUser = { ...pendingUserData, birth_date: birthDate };
+              // The prompt writes age_verified alongside the date, so keep
+              // the cached user object in step with the row.
+              const updatedUser = {
+                ...pendingUserData,
+                birth_date: birthDate,
+                age_verified: true,
+              };
               setShowDobPrompt(false);
               setPendingUserData(null);
               await completeLogin(updatedUser, pendingResolvedEmail);
@@ -788,6 +652,18 @@ export default function Login() {
               };
               setShowDobPrompt(false);
               setPendingUserData(null);
+              // Persisted, not just carried on this session's user object —
+              // otherwise the next login refetches the profile, finds no
+              // flag, and asks again.
+              supabase
+                .from("profiles")
+                .update({ dob_prompt_skipped: true })
+                .eq("id", updatedUser.id)
+                .then(({ error }) => {
+                  if (error) {
+                    console.error("Failed to record DOB prompt skip:", error);
+                  }
+                });
               await completeLogin(updatedUser, pendingResolvedEmail);
             }}
           />
@@ -801,7 +677,6 @@ export default function Login() {
         message={popup.message}
         onHide={() => setPopup(p => ({ ...p, visible: false }))}
       />
-      </View>
-    </Pressable>
+    </>
   );
 }

@@ -1,5 +1,6 @@
-import { notifyPostCommented } from '@/services/notificationService';
-import { Post } from './postsService';
+import { notifyMentioned, notifyPostCommented } from '@/services/notificationService';
+import { extractMentionIds, plainMentionText } from '@/utils/mentions';
+import { PostWithUser } from './postsService';
 import { supabase } from './supabase';
 
 export type CommentMediaType = 'image' | 'video' | 'audio';
@@ -244,6 +245,33 @@ export const getPostCommentCount = async (postId: string): Promise<number> => {
 
 // Add a comment to a post. `media` allows an image/video/voice attachment;
 // text is optional as long as media is present (or vice versa).
+/**
+ * Tell everyone named in a comment, and nobody twice.
+ *
+ * Fire-and-forget: a mention that fails to notify is a smaller problem than
+ * a comment that fails to post, so this never blocks the write or surfaces
+ * an error to the writer.
+ *
+ * `skipUserId` is whoever is already being told about this comment through
+ * another notification — the post's owner, or the owner of the comment
+ * being replied to.
+ */
+const notifyMentionsIn = (
+  text: string,
+  actorUserId: string,
+  postId: string,
+  skipUserId: string | null,
+  isReply: boolean,
+): void => {
+  const preview = plainMentionText(text.trim());
+  for (const mentionedId of extractMentionIds(text)) {
+    if (mentionedId === actorUserId || mentionedId === skipUserId) continue;
+    notifyMentioned(mentionedId, actorUserId, postId, preview, isReply).catch(
+      (e) => console.warn('[CommentsService] mention notification failed:', e),
+    );
+  }
+};
+
 export const addPostComment = async (
   postId: string,
   userId: string,
@@ -283,9 +311,13 @@ export const addPostComment = async (
             post.user_id,
             userId,
             postId,
-            text.trim() || mediaPreviewText(media),
+            plainMentionText(text.trim()) || mediaPreviewText(media),
           ).catch((e) => console.warn('[CommentsService] comment notification failed:', e));
         }
+        // Anyone named in it, except the post owner — they are already
+        // being told about this exact comment, and two notifications for
+        // one sentence is the app talking over itself.
+        notifyMentionsIn(text, userId, postId, post?.user_id ?? null, false);
       });
 
     // Step 3: Fetch the commenter's profile
@@ -352,9 +384,10 @@ export const addPostCommentWithGallery = async (
             post.user_id,
             userId,
             postId,
-            text.trim() || galleryPreviewText(mediaItems),
+            plainMentionText(text.trim()) || galleryPreviewText(mediaItems),
           ).catch((e) => console.warn('[CommentsService] comment notification failed:', e));
         }
+        notifyMentionsIn(text, userId, postId, post?.user_id ?? null, false);
       });
 
     const { data: profile } = await supabase
@@ -526,7 +559,14 @@ export const addReply = async (
 
     // Notify the comment owner if not self
     if (commentOwnerId && commentOwnerId !== userId) {
-      notifyPostCommented(commentOwnerId, userId, postId, text.trim(), true).catch(() => {});
+      notifyPostCommented(
+        commentOwnerId,
+        userId,
+        postId,
+        plainMentionText(text.trim()),
+        true,
+      ).catch(() => {});
+      notifyMentionsIn(text, userId, postId, commentOwnerId, true);
     }
 
     const { data: profile } = await supabase
@@ -579,7 +619,14 @@ export const addReplyWithGallery = async (
     const mediaItems = await insertCommentMedia(data.id, 'reply_id', media);
 
     if (commentOwnerId && commentOwnerId !== userId) {
-      notifyPostCommented(commentOwnerId, userId, postId, text.trim(), true).catch(() => {});
+      notifyPostCommented(
+        commentOwnerId,
+        userId,
+        postId,
+        plainMentionText(text.trim()),
+        true,
+      ).catch(() => {});
+      notifyMentionsIn(text, userId, postId, commentOwnerId, true);
     }
 
     const { data: profile } = await supabase
@@ -648,7 +695,7 @@ export const toggleReplyLike = async (
 
 // Get all posts a user has commented on, most recently commented first (one
 // entry per post, deduped) — feeds the "Comments" tab on their own profile.
-export const getUserCommentedPosts = async (userId: string): Promise<Post[]> => {
+export const getUserCommentedPosts = async (userId: string): Promise<PostWithUser[]> => {
   if (!userId) return [];
   try {
     const { data, error } = await supabase
@@ -670,7 +717,7 @@ export const getUserCommentedPosts = async (userId: string): Promise<Post[]> => 
 
     const { data: posts, error: postsError } = await supabase
       .from('posts')
-      .select('*, post_likes ( id )')
+      .select('*, profiles:user_id ( name, avatar_url ), post_likes ( id )')
       .in('id', orderedPostIds);
 
     if (postsError || !posts) return [];
@@ -680,7 +727,7 @@ export const getUserCommentedPosts = async (userId: string): Promise<Post[]> => 
     );
     return orderedPostIds
       .map((id) => postMap.get(id))
-      .filter((p): p is Post => p != null);
+      .filter((p): p is PostWithUser => p != null);
   } catch (error) {
     console.error('Error in getUserCommentedPosts:', error);
     return [];

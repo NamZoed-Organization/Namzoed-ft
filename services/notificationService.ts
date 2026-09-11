@@ -267,6 +267,68 @@ export async function notifyNewFollower(
 }
 
 /**
+ * Someone scanned your QR code and confirmed — you have to confirm too
+ * before either of you follows the other, so this is the prompt to go and
+ * do that (lib/qrConnectService.ts).
+ */
+export async function notifyQrConnectRequest(
+  recipientUserId: string,
+  requesterUserId: string,
+): Promise<void> {
+  if (recipientUserId === requesterUserId) return;
+  const actor = await resolveProfile(requesterUserId);
+  const body = `${actor.name} scanned your code — confirm to follow each other`;
+
+  await createNotification({
+    userId: recipientUserId,
+    type: "qr_connect_request",
+    actorId: requesterUserId,
+    title: "Connect request",
+    body,
+  });
+
+  sendPushToUsers({
+    recipientIds: [recipientUserId],
+    heading: "Connect request",
+    content: body,
+    type: "qr_connect_request",
+    data: { actor_id: requesterUserId },
+    actorAvatarUrl: actor.avatar_url,
+  }).catch(() => {});
+}
+
+/**
+ * The handshake completed. Sent to the *other* side of it — whoever didn't
+ * press the button that closed it — since they're the one who has been
+ * waiting to hear back.
+ */
+export async function notifyQrConnectAccepted(
+  waitingUserId: string,
+  confirmingUserId: string,
+): Promise<void> {
+  if (waitingUserId === confirmingUserId) return;
+  const actor = await resolveProfile(confirmingUserId);
+  const body = `You and ${actor.name} now follow each other`;
+
+  await createNotification({
+    userId: waitingUserId,
+    type: "qr_connect_accepted",
+    actorId: confirmingUserId,
+    title: "Connected",
+    body,
+  });
+
+  sendPushToUsers({
+    recipientIds: [waitingUserId],
+    heading: "Connected",
+    content: body,
+    type: "qr_connect_accepted",
+    data: { actor_id: confirmingUserId },
+    actorAvatarUrl: actor.avatar_url,
+  }).catch(() => {});
+}
+
+/**
  * Handles the "X liked your post" logic with aggregation.
  *
  * - If there's an existing unread `post_liked` notification for the same post
@@ -387,6 +449,49 @@ export async function notifyPostCommented(
     content: body,
     type: "post_commented",
     data: { actor_id: commenterUserId, reference_id: postId },
+    actorAvatarUrl: actor.avatar_url,
+  }).catch(() => {});
+}
+
+/**
+ * Somebody was named in a comment.
+ *
+ * Sent per person, not per comment: being mentioned is about you, and a
+ * digest of "three people were mentioned" is a notification for nobody.
+ *
+ * The post owner is left out by the caller when they are already getting a
+ * `post_commented` for the same comment — two notifications for one
+ * sentence is the app talking over itself.
+ */
+export async function notifyMentioned(
+  mentionedUserId: string,
+  actorUserId: string,
+  postId: string,
+  commentText: string,
+  isReply = false,
+): Promise<void> {
+  if (mentionedUserId === actorUserId) return; // writing your own name is not news
+
+  const actor = await resolveProfile(actorUserId);
+  const preview =
+    commentText.length > 60 ? `${commentText.slice(0, 57)}...` : commentText;
+  const body = `${actor.name} mentioned you in a ${isReply ? "reply" : "comment"}: “${preview}”`;
+
+  await createNotification({
+    userId: mentionedUserId,
+    type: "comment_mention",
+    actorId: actorUserId,
+    referenceId: postId,
+    title: "Mentioned you",
+    body,
+  });
+
+  sendPushToUsers({
+    recipientIds: [mentionedUserId],
+    heading: "Mentioned you",
+    content: body,
+    type: "comment_mention",
+    data: { actor_id: actorUserId, reference_id: postId },
     actorAvatarUrl: actor.avatar_url,
   }).catch(() => {});
 }
@@ -634,37 +739,6 @@ export async function notifyFollowerMilestone(
     content: body,
     type: "follower_milestone",
     data: { milestone },
-    actorAvatarUrl: null,
-  }).catch(() => {});
-}
-
-/**
- * Notify a post owner that their post is gaining traction.
- * Called from the daily edge function for posts with ≥10 views in first 24h.
- */
-export async function notifyPostTraction(
-  postOwnerId: string,
-  postId: string,
-  viewCount: number,
-): Promise<void> {
-  const title = "Your post is gaining momentum!";
-  const body = `Your post has been viewed ${viewCount} times in its first 24 hours.`;
-
-  await createNotification({
-    userId: postOwnerId,
-    type: "post_traction",
-    actorId: postOwnerId,
-    referenceId: postId,
-    title,
-    body,
-  });
-
-  sendPushToUsers({
-    recipientIds: [postOwnerId],
-    heading: title,
-    content: body,
-    type: "post_traction",
-    data: { reference_id: postId, view_count: viewCount },
     actorAvatarUrl: null,
   }).catch(() => {});
 }

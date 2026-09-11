@@ -4,7 +4,7 @@ import HamburgerMenu from "@/components/modals/HamburgerMenu";
 import TabBarButton from "@/components/ui/TabBarButton";
 import { useUnreadMessages } from "@/contexts/UnreadMessagesContext";
 import { useUser } from "@/contexts/UserContext";
-import { useTrendingSubcategories } from "@/hooks/useTrendingSubcategories";
+import { useTrendingTopics } from "@/hooks/useTrendingTopics";
 import { clamp, useResponsive } from "@/utils/responsive";
 import { useAppRouter } from "@/utils/navigation";
 import { useFocusEffect } from "@react-navigation/native";
@@ -176,11 +176,21 @@ function AnimatedBadge({
 
 export default function TopNavbar({
   centerContent,
+  search,
 }: {
   /** Optional content centered between the hamburger and the icon group
    *  (e.g. the Home screen's Explore/Following tabs). Hidden while the
    *  search field is expanding to avoid overlapping it. */
   centerContent?: React.ReactNode;
+  /** Point the bar's search field at something narrower than the whole app.
+   *  A screen whose search means something specific — services and their
+   *  providers, a category within them — says so here instead of drawing a
+   *  second search bar of its own underneath this one. Two search fields in
+   *  one screen is two answers to "where does typing go", and the top one
+   *  wins by position whichever was meant. The scoped field is a plain
+   *  labelled field: the rotating trending placeholder belongs to the
+   *  search that can actually return those trends. */
+  search?: { placeholder: string; onPress: () => void };
 }) {
   const router = useAppRouter();
   const pathname = usePathname();
@@ -199,12 +209,10 @@ export default function TopNavbar({
   const [rightWidth, setRightWidth] = useState(0);
   // Trending topics for the expanded search bar's rotating placeholder —
   // same shared source the Categories tab and Search screen already use.
-  const { trending } = useTrendingSubcategories();
+  const { trending } = useTrendingTopics();
   const trendingLabels = React.useMemo(
     () =>
-      trending.map(
-        (t) => t.subcategoryName.charAt(0).toUpperCase() + t.subcategoryName.slice(1),
-      ),
+      trending.map((t) => t.term.charAt(0).toUpperCase() + t.term.slice(1)),
     [trending],
   );
   const { ms, vs, wp } = useResponsive();
@@ -259,8 +267,11 @@ export default function TopNavbar({
   // keyboard stays up continuously through the transition).
   const openSearch = useCallback(() => {
     setSearchOpen(true);
-    setTimeout(() => router.push("/search" as any), 200);
-  }, [router]);
+    setTimeout(() => {
+      if (search) search.onPress();
+      else router.push("/search" as any);
+    }, 200);
+  }, [router, search]);
 
   // Screens without centerContent (Shopping/Marketplace/Services — no
   // Explore/Following-style tabs) would otherwise leave a dead gap between
@@ -310,7 +321,7 @@ export default function TopNavbar({
 
         {!hasCenterTabs && (
           <TabBarButton
-            onPress={() => router.push("/search" as any)}
+            onPress={() => (search ? search.onPress() : router.push("/search" as any))}
             android_ripple={null}
             style={{
               flex: 1,
@@ -321,7 +332,7 @@ export default function TopNavbar({
               style={{
                 flexDirection: "row",
                 alignItems: "center",
-                justifyContent: "space-between",
+                justifyContent: search ? "flex-start" : "space-between",
                 backgroundColor: "#fff",
                 borderRadius: 999,
                 borderCurve: "continuous",
@@ -329,10 +340,24 @@ export default function TopNavbar({
                 height: contentHeight * 0.82,
               }}
             >
-              <View style={{ flex: 1, marginRight: 8 }}>
-                <RotatingSearchPlaceholder items={trendingLabels} />
-              </View>
-              <Text style={{ fontSize: 14, color: "#9CA3AF" }}>Search</Text>
+              {search ? (
+                <>
+                  <Search size={16} color="#9CA3AF" strokeWidth={1.8} />
+                  <Text
+                    style={{ marginLeft: 8, fontSize: 14, color: "#9CA3AF", flex: 1 }}
+                    numberOfLines={1}
+                  >
+                    {search.placeholder}
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <View style={{ flex: 1, marginRight: 8 }}>
+                    <RotatingSearchPlaceholder items={trendingLabels} />
+                  </View>
+                  <Text style={{ fontSize: 14, color: "#9CA3AF" }}>Search</Text>
+                </>
+              )}
             </View>
           </TabBarButton>
         )}

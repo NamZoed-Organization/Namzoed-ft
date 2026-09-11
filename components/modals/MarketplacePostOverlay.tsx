@@ -1,6 +1,12 @@
+import TutorialAnchor from "@/components/tutorial/TutorialAnchor";
+import { useTutorial } from "@/contexts/TutorialContext";
+import { TUTORIAL_SCREENS } from "@/lib/tutorialTours";
+import { MODAL_RADIUS } from "@/constants/theme";
 import ImagePickerSheet from "@/components/ui/ImagePickerSheet";
 import CircularLoader from "@/components/ui/CircularLoader";
 import PopupMessage from "@/components/ui/PopupMessage";
+import PriceSanityNote from "@/components/ui/PriceSanityNote";
+import { usePriceSanity } from "@/hooks/usePriceSanity";
 import { useDzongkhag } from "@/contexts/DzongkhagContext";
 import { useUser } from "@/contexts/UserContext";
 import { dzongkhagCenters } from "@/data/dzongkhag";
@@ -39,6 +45,12 @@ import ImageCropperOverlay from "./ImageCropperOverlay";
 interface MarketplacePostOverlayProps {
   onClose: () => void;
   onCategorySelect?: (category: string) => void;
+  /** Opened from a post draft the composer thought was a listing — the
+   *  words are already written, and retyping them is the reason people
+   *  abandon the move (see components/post/SellingIntentSuggestion.tsx). */
+  initialCategory?: Exclude<Category, null>;
+  initialTitle?: string;
+  initialDescription?: string;
 }
 
 type Category = "rent" | "swap" | "second_hand" | "free" | "job_vacancy" | null;
@@ -54,14 +66,19 @@ const CATEGORY_LABELS = {
 export default function MarketplacePostOverlay({
   onClose,
   onCategorySelect,
+  initialCategory,
+  initialTitle,
+  initialDescription,
 }: MarketplacePostOverlayProps) {
-  const [selectedCategory, setSelectedCategory] = useState<Category>(null);
+  const [selectedCategory, setSelectedCategory] = useState<Category>(
+    initialCategory ?? null,
+  );
   const { currentUser } = useUser();
   const { name: userDzongkhag } = useDzongkhag();
 
   // Form fields
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
+  const [title, setTitle] = useState(initialTitle ?? "");
+  const [description, setDescription] = useState(initialDescription ?? "");
   const [price, setPrice] = useState("");
   const [dzongkhag, setDzongkhag] = useState("");
   const [tags, setTags] = useState("");
@@ -72,6 +89,14 @@ export default function MarketplacePostOverlay({
   const [jobDescription, setJobDescription] = useState("");
   const [jobRequirements, setJobRequirements] = useState("");
   const [jobResponsibilities, setJobResponsibilities] = useState("");
+
+  // Mounted only while it is open, so arriving is simply mounting. The
+  // tour says the one thing the form cannot: this is for one-off things,
+  // and the shop is for stock you keep (lib/tutorialTours.ts).
+  const { arrive } = useTutorial();
+  useEffect(() => {
+    arrive(TUTORIAL_SCREENS.CREATE_MARKETPLACE);
+  }, [arrive]);
 
   // Prefill location from context
   useEffect(() => {
@@ -295,6 +320,23 @@ export default function MarketplacePostOverlay({
     return null;
   };
 
+  // A listing's type changes what its number even means: rent is monthly,
+  // a vacancy is a salary, and free/swap has no price to be wrong about.
+  const priceSanity = usePriceSanity({
+    text: `${title} ${description} ${jobDescription} ${tags}`,
+    price: Number(price),
+    context:
+      selectedCategory === "rent"
+        ? "rent"
+        : selectedCategory === "job_vacancy"
+          ? "salary"
+          : "sale",
+    enabled:
+      selectedCategory === "rent" ||
+      selectedCategory === "second_hand" ||
+      selectedCategory === "job_vacancy",
+  });
+
   const handleSubmit = async () => {
     const error = validateForm();
     if (error) {
@@ -388,7 +430,7 @@ export default function MarketplacePostOverlay({
         {/* --- MAIN SHEET --- */}
         <Animated.View
           className="bg-white overflow-hidden shadow-xl w-full h-[90%]"
-          style={{ transform: [{ translateY: panY }], borderTopLeftRadius: 24, borderTopRightRadius: 24, borderCurve: "continuous" }}
+          style={{ transform: [{ translateY: panY }], borderTopLeftRadius: MODAL_RADIUS, borderTopRightRadius: MODAL_RADIUS, borderCurve: "continuous" }}
         >
           {/* --- DRAG BAR AREA (ALWAYS ON TOP) --- */}
           <View
@@ -650,11 +692,12 @@ export default function MarketplacePostOverlay({
                         keyboardType="numeric"
                         className="bg-white border border-gray-200 px-4 py-3 text-base font-regular"
                       />
+                      <PriceSanityNote check={priceSanity.check} />
                     </View>
                   )}
 
                   {/* Dzongkhag Dropdown (Optional) */}
-                  <View className="mb-4">
+                  <TutorialAnchor id="marketplace.details" radius={8} style={{ marginBottom: 16 }}>
                     <Text className="text-sm font-msemibold text-gray-900 mb-2">
                       Location (Dzongkhag){" "}
                       <Text className="text-gray-400 text-xs">(Optional)</Text>
@@ -676,7 +719,7 @@ export default function MarketplacePostOverlay({
                         ))}
                       </Picker>
                     </View>
-                  </View>
+                  </TutorialAnchor>
 
                   {/* Tags Field */}
                   <View className="mb-4">
@@ -697,7 +740,7 @@ export default function MarketplacePostOverlay({
                   </View>
 
                   {/* Images Section */}
-                  <View className="mb-4">
+                  <TutorialAnchor id="marketplace.photos" radius={8} style={{ marginBottom: 16 }}>
                     <Text className="text-sm font-msemibold text-gray-900 mb-2">
                       Images <Text className="text-red-500">*</Text> (Up to 5)
                     </Text>
@@ -739,11 +782,11 @@ export default function MarketplacePostOverlay({
                         </TouchableOpacity>
                       )}
                     </View>
-                  </View>
+                  </TutorialAnchor>
 
                   {/* Submit Button */}
                   <TouchableOpacity
-                    onPress={handleSubmit}
+                    onPress={() => priceSanity.guard(handleSubmit)}
                     disabled={isSubmitting}
                     className={`mt-4 py-4 rounded-lg items-center justify-center ${
                       isSubmitting ? "bg-gray-400" : "bg-primary"
@@ -770,6 +813,10 @@ export default function MarketplacePostOverlay({
           onCameraPress={openCamera}
           onGalleryPress={openGallery}
         />
+
+        {/* Asked once on submit when the price is still out of range —
+            never a refusal (hooks/usePriceSanity.tsx). */}
+        {priceSanity.dialog}
 
         {/* Success/Error/Warning Popups */}
         <PopupMessage

@@ -1,10 +1,15 @@
 import { HomeIcon, ShoppingIcon } from "@/components/icons/index";
-import CreateOptionsSheet from "@/components/modals/CreateOptionsSheet";
+import LiquidCreateMenu, {
+  type CreateOptionKey,
+} from "@/components/create/LiquidCreateMenu";
 import FloatingTabBar from "@/components/ui/FloatingTabBar";
 import CircularLoader from "@/components/ui/CircularLoader";
 import TabBarButton from "@/components/ui/TabBarButton";
 import { TabBarScrollProvider } from "@/contexts/TabBarScrollContext";
 import { useUser } from "@/contexts/UserContext";
+import { useTutorial } from "@/contexts/TutorialContext";
+import TutorialAnchor from "@/components/tutorial/TutorialAnchor";
+import { TUTORIAL_SCREENS } from "@/lib/tutorialTours";
 import { Actions, Elements, Features, Screens, trackInteraction } from "@/lib/analyticsService";
 import { clamp, useResponsive } from "@/utils/responsive";
 import { isMongooseUser } from "@/utils/roleCheck";
@@ -13,7 +18,7 @@ import * as Haptics from "expo-haptics";
 import { Tabs, usePathname, useRouter } from "expo-router";
 import { Plus } from "lucide-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Modal, Text, View } from "react-native";
+import { Modal, StatusBar, Text, View } from "react-native";
 
 const PATHNAME_TO_SCREEN: Record<string, string> = {
   "/": Screens.HOME,
@@ -27,7 +32,20 @@ export default function UsersTabsLayout() {
   const pathname = usePathname();
   const router = useRouter();
   const { currentUser, isLoading: userLoading } = useUser();
+  const { arrive, notify } = useTutorial();
   const prevPathnameRef = useRef<string | null>(null);
+
+  /**
+   * The plus tour starts the first time somebody lands on the tabs at all.
+   *
+   * It is taught here rather than on the home screen because the thing it
+   * teaches — the "+" — belongs to this bar, not to whatever is above it,
+   * and the bar is on screen from the first frame.
+   */
+  useEffect(() => {
+    if (userLoading || !currentUser) return;
+    arrive(TUTORIAL_SCREENS.HOME);
+  }, [arrive, currentUser, userLoading]);
 
   useEffect(() => {
     if (userLoading) return;
@@ -137,22 +155,50 @@ export default function UsersTabsLayout() {
     }
   }, [showLive, LiveScrollScreenComponent, liveScreenLoading]);
 
-  const openCreateMenu = useCallback(() => setCreateMenuOpen(true), []);
-  const handleSelectPost = useCallback(() => {
-    setCreateMenuOpen(false);
-    setShowCreatePost(true);
-  }, []);
-  const handleSelectStory = useCallback(() => {
-    setCreateMenuOpen(false);
-    setShowStoryComposer(true);
-  }, []);
-  const handleSelectLive = useCallback(() => {
-    setCreateMenuOpen(false);
-    setShowLive(true);
-  }, []);
+  const openCreateMenu = useCallback(() => {
+    setCreateMenuOpen(true);
+    // The step about the plus ends here — when the plus was actually
+    // pressed, not when a Next was.
+    notify("create.menu-opened");
+  }, [notify]);
+
+  // The menu closes itself — it runs the liquid back into the button before
+  // calling this, so nothing here touches createMenuOpen.
+  const handleCreateSelect = useCallback(
+    (key: CreateOptionKey) => {
+      switch (key) {
+        case "post":
+          setShowCreatePost(true);
+          return;
+        case "story":
+          setShowStoryComposer(true);
+          return;
+        case "product":
+          // Not the bare form: the screen that holds everything you have
+          // listed, opened on the half you actually sell on
+          // (app/(users)/listings.tsx). Putting something up and finding
+          // what you put up are the same job, and the form alone left you
+          // nowhere afterwards.
+          router.push("/(users)/listings" as any);
+          return;
+        case "setlog":
+          router.push("/(users)/setlog/capture" as any);
+          return;
+      }
+    },
+    [router],
+  );
 
   return (
     <View className="flex-1 bg-background">
+      {/* Screens pushed on top of these tabs (profile, marketplace/product
+          detail, etc.) set their own light-content bar and stay mounted
+          underneath when navigated away from — RN's StatusBar merges props
+          from every mounted instance rather than strictly by pop order, so
+          without this the floating-tab screens can keep showing white/light
+          icons even after returning to them. Re-assert dark-content here,
+          same fix as the settings screen's EditBio sub-page. */}
+      <StatusBar barStyle="dark-content" />
       <TabBarScrollProvider>
       <Tabs
         initialRouteName="index"
@@ -219,8 +265,10 @@ export default function UsersTabsLayout() {
           options={{
             title: "Feed",
             tabBarButton: renderTabBarButton,
-            tabBarIcon: ({ focused }) => (
-              <View
+            tabBarIcon: () => (
+              <TutorialAnchor
+                id="create.plus"
+                radius={plusCircleSize / 2}
                 style={{
                   width: plusCircleSize,
                   height: plusCircleSize,
@@ -232,7 +280,7 @@ export default function UsersTabsLayout() {
                 }}
               >
                 <Plus size={plusIconSize} stroke="#0A0A0A" strokeWidth={2} />
-              </View>
+              </TutorialAnchor>
             ),
           }}
         />
@@ -269,12 +317,12 @@ export default function UsersTabsLayout() {
       </Tabs>
       </TabBarScrollProvider>
 
-      <CreateOptionsSheet
+      {/* The "+" does not open a sheet — it becomes the four things it can
+          make (components/create/LiquidCreateMenu.tsx). */}
+      <LiquidCreateMenu
         visible={createMenuOpen}
         onClose={() => setCreateMenuOpen(false)}
-        onSelectPost={handleSelectPost}
-        onSelectStory={handleSelectStory}
-        onSelectLive={handleSelectLive}
+        onSelect={handleCreateSelect}
       />
 
       <Modal

@@ -21,13 +21,15 @@
  */
 
 import ContextDrop, { ContextDropTarget } from "@/components/ContextDrop";
+import { beginNavHandoff } from "@/utils/navHandoff";
 import FeedPost from "@/components/FeedPost";
 import CircularLoader from "@/components/ui/CircularLoader";
 import { useUser } from "@/contexts/UserContext";
-import { parseMediaDisplay } from "@/lib/postMediaDisplay";
-import { fetchPostById, PostWithUser } from "@/lib/postsService";
-import { trackPostView } from "@/lib/viewTrackingService";
+import { toPostData } from "@/lib/postData";
 import { PostData } from "@/types/post";
+import { fetchPostById } from "@/lib/postsService";
+import { recordView } from "@/lib/historyService";
+import { trackPostView } from "@/lib/viewTrackingService";
 import { useAppRouter } from "@/utils/navigation";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { MessageCircle } from "lucide-react-native";
@@ -60,31 +62,6 @@ const POST_SCREEN_OPTIONS = {
   contentStyle: { backgroundColor: "transparent" },
 };
 
-function toPostData(post: PostWithUser): PostData {
-  const username =
-    post.profiles?.name ||
-    post.profiles?.email?.split("@")[0] ||
-    "Unknown User";
-  return {
-    id: post.id,
-    userId: post.user_id,
-    username,
-    profilePic: post.profiles?.avatar_url || undefined,
-    content: post.content,
-    images: post.images,
-    blurHashes: (post as any).blur_hashes ?? undefined,
-    date: new Date(post.created_at),
-    likes: post.likes,
-    comments: post.comments,
-    shares: post.shares,
-    mediaDisplay: parseMediaDisplay((post as any).media_display),
-    locationName: (post as any).location_name ?? undefined,
-    tagged_products: (post as any).tagged_products ?? undefined,
-    tagged_accounts: (post as any).tagged_accounts ?? undefined,
-    view_count: (post as any).view_count ?? 0,
-  };
-}
-
 export default function PostDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useAppRouter();
@@ -105,6 +82,7 @@ export default function PostDetailScreen() {
           // Track view (fire-and-forget, skips self-views)
           if (currentUser?.id && currentUser.id !== raw.user_id) {
             trackPostView(raw.id, currentUser.id, raw.user_id).catch(() => {});
+            recordView("post", raw.id, currentUser.id, raw.user_id);
           }
         } else {
           setError(true);
@@ -118,14 +96,24 @@ export default function PostDetailScreen() {
     if (!post) return;
     const authorId = post.userId;
     if (currentUser?.id === authorId) return;
+    // The chat screen is a heavy mount and the stack does not animate, so
+    // without this the drop lands on a screen that just sits there — see
+    // utils/navHandoff.ts. Chat itself ends it once it is really open.
+    beginNavHandoff();
+    // Same fields as the share sheet — see PostDetailOverlay's own drop.
     router.push({
       pathname: "/(users)/chat/[id]",
       params: {
         id: String(authorId),
         context_product_id: String(post.id),
-        context_product_title: post.content || "Shared post",
+        context_product_title: `${post.username || "User"}'s post`,
         context_product_image: post.images?.[0] || "",
         context_source: "post",
+        context_caption: post.content || "",
+        context_date: post.date ? post.date.toISOString() : "",
+        context_location: post.locationName || "",
+        context_username: post.username || "",
+        context_verified: post.isVerified ? "true" : "",
       },
     } as any);
   }, [post, currentUser?.id, router]);

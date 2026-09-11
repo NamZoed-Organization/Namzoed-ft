@@ -1,3 +1,6 @@
+import { MODAL_RADIUS } from "@/constants/theme";
+import PriceSanityNote from "@/components/ui/PriceSanityNote";
+import { usePriceSanity } from "@/hooks/usePriceSanity";
 import ImageCropOverlay from "@/components/modals/ImageCropOverlay";
 import ImagePickerSheet from "@/components/ui/ImagePickerSheet";
 import CircularLoader from "@/components/ui/CircularLoader";
@@ -200,6 +203,22 @@ export default function EditMarketplaceModal({
     setNewImages(newImages.filter((_, i) => i !== index));
   };
 
+  // The type decides what the number means, exactly as on the create form.
+  const priceSanity = usePriceSanity({
+    text: `${title} ${description} ${tags}`,
+    price: parseFloat(price),
+    context:
+      selectedType === "rent"
+        ? "rent"
+        : selectedType === "job_vacancy"
+          ? "salary"
+          : "sale",
+    enabled:
+      selectedType === "rent" ||
+      selectedType === "second_hand" ||
+      selectedType === "job_vacancy",
+  });
+
   const handleUpdate = async () => {
     // Validation
     if (!title || !selectedType) {
@@ -309,7 +328,7 @@ export default function EditMarketplaceModal({
         >
           <View className="flex-1 bg-black/50 justify-end">
             <View
-              style={{ borderTopLeftRadius: 24, borderTopRightRadius: 24, borderCurve: "continuous" }} className="bg-white h-[90%] w-full overflow-hidden">
+              style={{ borderTopLeftRadius: MODAL_RADIUS, borderTopRightRadius: MODAL_RADIUS, borderCurve: "continuous" }} className="bg-white h-[90%] w-full overflow-hidden">
               {/* Premium Header with BlurView */}
               <BlurView
                 intensity={90}
@@ -499,6 +518,7 @@ export default function EditMarketplaceModal({
                               : 1, borderRadius: 12, borderCurve: "continuous" }}
                       />
                     </View>
+                    <PriceSanityNote check={priceSanity.check} />
                     {(selectedType === "swap" || selectedType === "free") && (
                       <Text className="text-xs text-gray-500 mt-1">
                         Price is not required for {selectedType} items
@@ -653,7 +673,7 @@ export default function EditMarketplaceModal({
               >
                 <View className="p-5">
                   <TouchableOpacity
-                    onPress={handleUpdate}
+                    onPress={() => priceSanity.guard(handleUpdate)}
                     disabled={loading}
                     className={`w-full py-4 rounded-[24px] flex-row justify-center items-center shadow-lg ${
                       loading ? "bg-gray-300" : "bg-primary"
@@ -674,6 +694,7 @@ export default function EditMarketplaceModal({
         </KeyboardAvoidingView>
 
         {/* Success/Error Popups */}
+        {priceSanity.dialog}
         <PopupMessage
           visible={showSuccess}
           type="success"

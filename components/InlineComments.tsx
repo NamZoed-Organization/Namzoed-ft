@@ -13,6 +13,10 @@
  */
 
 import { useUser } from "@/contexts/UserContext";
+import MentionSuggestions from "@/components/comments/MentionSuggestions";
+import MentionText from "@/components/ui/MentionText";
+import { useMentionComposer } from "@/hooks/useMentionComposer";
+import { type MentionCandidate } from "@/lib/mentionService";
 import CommentActionSheet from "@/components/modals/CommentActionSheet";
 import CommentMediaGallery from "@/components/comments/CommentMediaGallery";
 import CommentMediaMessage from "@/components/comments/CommentMediaMessage";
@@ -187,7 +191,20 @@ function InlineComments(
     commentOwnerId: string;
     name: string;
   } | null>(null);
-  const [text, setText] = useState("");
+  // The composer's text and its `@` handling both live in the hook, shared
+  // with CommentsModal — a post's comments are this component when the post
+  // is open and that one from the feed, and mentions working in only one of
+  // them is exactly the bug this fixes. See hooks/useMentionComposer.ts.
+  const {
+    text,
+    reset,
+    toStorage,
+    activeMention,
+    candidates: mentionCandidates,
+    loading: mentionLoading,
+    pickMention: applyPickedMention,
+    inputProps: mentionInputProps,
+  } = useMentionComposer({ userId });
   const [loading, setLoading] = useState(true);
   const [posting, setPosting] = useState(false);
   // Reply/Delete or Reply/Report action sheet — shared by comment and reply
@@ -286,6 +303,11 @@ function InlineComments(
     };
   }, []);
 
+  const pickMention = (candidate: MentionCandidate) => {
+    applyPickedMention(candidate);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  };
+
   const handlePost = async () => {
     const hasMedia = pendingMedia.length > 0;
     const hasPendingUploads = pendingMedia.some((m) => m.uploading);
@@ -296,12 +318,16 @@ function InlineComments(
       .filter((m) => m.uploadedUrl)
       .map((m) => ({ url: m.uploadedUrl!, type: m.type, duration: m.duration }));
 
+    // The field shows names; the comment stores `@[Name](id)` — see
+    // hooks/useMentionComposer.ts.
+    const body = toStorage();
+
     if (replyTarget) {
       const reply = hasMedia
         ? await addReplyWithGallery(
             replyTarget.commentId,
             userId,
-            text,
+            body,
             postOwnerId,
             replyTarget.commentOwnerId,
             postId,
@@ -310,7 +336,7 @@ function InlineComments(
         : await addReply(
             replyTarget.commentId,
             userId,
-            text,
+            body,
             postOwnerId,
             replyTarget.commentOwnerId,
             postId,
@@ -334,8 +360,8 @@ function InlineComments(
       setReplyTarget(null);
     } else {
       const comment = hasMedia
-        ? await addPostCommentWithGallery(postId, userId, text, media)
-        : await addPostComment(postId, userId, text);
+        ? await addPostCommentWithGallery(postId, userId, body, media)
+        : await addPostComment(postId, userId, body);
       if (comment) {
         void playSound("comment");
         setComments((prev) => [...prev, comment]);
@@ -343,7 +369,7 @@ function InlineComments(
         closeComposer();
       }
     }
-    setText("");
+    reset();
     animateMediaLayout();
     setPendingMedia([]);
     setPosting(false);
@@ -609,7 +635,7 @@ function InlineComments(
           </View>
           {!!reply.text && (
             <Text style={{ fontSize: 15, color: "#374151", marginTop: 2, lineHeight: 21 }}>
-              {reply.text}
+              <MentionText text={reply.text} />
             </Text>
           )}
           {reply.media_url && reply.media_type && (
@@ -700,7 +726,7 @@ function InlineComments(
             </View>
             {!!item.text && (
               <Text style={{ fontSize: 15, color: "#374151", marginTop: 2, lineHeight: 21 }}>
-                {item.text}
+                <MentionText text={item.text} />
               </Text>
             )}
             {item.media_url && item.media_type && (
@@ -837,6 +863,17 @@ function InlineComments(
               row in place, no separate modal, keyboard stays up. */}
           <PendingMediaStrip items={pendingMedia} onRemove={removePendingMedia} />
 
+          {/* Directly above the composer, so the name being chosen and the
+              sentence it lands in are one glance apart — the same list, in
+              the same place, as the feed's comment sheet. */}
+          {activeMention && (
+            <MentionSuggestions
+              candidates={mentionCandidates}
+              loading={mentionLoading}
+              onSelect={pickMention}
+            />
+          )}
+
           <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 8 }}>
             {composerInputKind === "text" && (
               <CommentMediaPicker
@@ -884,8 +921,7 @@ function InlineComments(
               <>
                 <TextInput
                   ref={inputRef}
-                  value={text}
-                  onChangeText={setText}
+                  {...mentionInputProps}
                   placeholder={replyTarget ? `Reply to ${replyTarget.name}…` : "Add a comment…"}
                   placeholderTextColor="#9CA3AF"
                   multiline

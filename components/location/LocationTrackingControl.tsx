@@ -1,3 +1,4 @@
+import { MODAL_RADIUS } from "@/constants/theme";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { supabase } from "@/lib/supabase";
 import { Ionicons } from "@expo/vector-icons";
@@ -341,7 +342,7 @@ export default function LocationTrackingControl({
       >
         <View className="flex-1 bg-black/50 justify-end">
           <View
-            style={{ borderTopLeftRadius: 24, borderTopRightRadius: 24, borderCurve: "continuous" }} className="bg-white p-6">
+            style={{ borderTopLeftRadius: MODAL_RADIUS, borderTopRightRadius: MODAL_RADIUS, borderCurve: "continuous" }} className="bg-white p-6">
             {/* Header */}
             <View className="flex-row justify-between items-center mb-6">
               <View className="flex-1">

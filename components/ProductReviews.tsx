@@ -20,19 +20,25 @@ import ReviewMediaPicker, { PendingReviewMedia } from "@/components/ReviewMediaP
 import ReviewVoiceRecorder, { RecordedReviewVoice } from "@/components/ReviewVoiceRecorder";
 import { useUser } from "@/contexts/UserContext";
 import ActionSheetModal from "@/components/ui/ActionSheetModal";
+import StarPicker from "@/components/ui/StarPicker";
 import CircularLoader from "@/components/ui/CircularLoader";
 import {
   deleteProductReview,
   fetchProductReviews,
   ProductReview,
   upsertProductReview,
+  fetchRatingDistribution,
+  fetchMyHelpfulVotes,
+  toggleReviewHelpful,
+  type RatingBucket,
 } from "@/lib/productReviewsService";
+import { RATING_GOLD } from "@/components/ui/StarRating";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { BlurView } from "expo-blur";
 import { Image } from "expo-image";
-import { MoreHorizontal, Pencil, Send, Star, Trash2, X } from "lucide-react-native";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import { BadgeCheck, MoreHorizontal, Pencil, Send, Star, ThumbsUp, Trash2, X } from "lucide-react-native";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Keyboard,
@@ -57,7 +63,9 @@ const animateMediaLayout = () =>
   LayoutAnimation.configureNext(LayoutAnimation.create(220, "easeInEaseOut", "opacity"));
 
 const PRIMARY = "#094569";
-const GOLD = "#FBBF24";
+// The app's one star gold, shared with StarRating/StarPicker — this block
+// used to carry its own, which is how two surfaces end up with two golds.
+const GOLD = RATING_GOLD;
 
 function fmt(dateStr: string): string {
   const diff = (Date.now() - new Date(dateStr).getTime()) / 1000;
@@ -121,58 +129,65 @@ function StarRow({ rating, size = 14, gap = 2 }: { rating: number; size?: number
   );
 }
 
-/** Tappable 1-5 star picker for the composer. */
-function StarPicker({ value, onChange, size = 34 }: { value: number; onChange: (n: number) => void; size?: number }) {
-  return (
-    <View style={{ flexDirection: "row", gap: 8, justifyContent: "center" }}>
-      {[1, 2, 3, 4, 5].map((n) => (
-        // Plain View + the raw responder API, not TouchableOpacity — with
-        // the text input below focused, TouchableOpacity's onPress AND
-        // onPressIn both still lost their first tap here to the keyboard's
-        // dismiss (something upstream — Modal/KeyboardAvoidingView/the
-        // gesture-handler root this whole app is wrapped in — was resolving
-        // the touch as a blur before Touchable's own JS-side responder
-        // negotiation got a turn). onStartShouldSetResponderCapture claims
-        // the responder in the CAPTURE phase, before any ancestor (or the
-        // keyboard-dismiss logic racing it) gets a chance to react, and
-        // onResponderGrant fires immediately once claimed — no negotiation
-        // delay, no dependency on keyboardShouldPersistTaps working.
-        <View
-          key={n}
-          hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
-          onStartShouldSetResponderCapture={() => true}
-          onStartShouldSetResponder={() => true}
-          onResponderGrant={() => {
-            void Haptics.selectionAsync();
-            onChange(n);
-          }}
-        >
-          <Star size={size} color={n <= value ? GOLD : "#D1D5DB"} fill={n <= value ? GOLD : "transparent"} />
-        </View>
-      ))}
-    </View>
-  );
-}
-
-/** Percentage bar per star count (5→1), used under the summary header. */
-function RatingDistribution({ reviews }: { reviews: ProductReview[] }) {
-  const total = reviews.length;
-  if (total === 0) return null;
-  const counts = [5, 4, 3, 2, 1].map((star) => reviews.filter((r) => Math.round(r.rating) === star).length);
+/**
+ * Star histogram, 5→1.
+ *
+ * Counted by the database (`product_rating_distribution`), not by reducing
+ * over the loaded `reviews` array — that array is one page, so a client-side
+ * count is quietly wrong for any product with more reviews than fit in it.
+ *
+ * Each bar is a filter. Baymard's finding is that shoppers rely on the
+ * distribution more than on individual reviews, and that of the sites which
+ * show one, 39% don't let you tap it — which is most of its value missing.
+ */
+function RatingDistribution({
+  buckets,
+  selected,
+  onSelect,
+}: {
+  buckets: RatingBucket[];
+  selected: number | null;
+  onSelect: (star: number | null) => void;
+}) {
+  if (!buckets.length) return null;
 
   return (
     <View style={{ marginTop: 10, gap: 5 }}>
-      {[5, 4, 3, 2, 1].map((star, i) => {
-        const pct = total > 0 ? (counts[i] / total) * 100 : 0;
+      {buckets.map((bucket) => {
+        const isSelected = selected === bucket.rating;
         return (
-          <View key={star} style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <Text style={{ fontSize: 11, color: "#6B7280", width: 10 }}>{star}</Text>
+          <TouchableOpacity
+            key={bucket.rating}
+            activeOpacity={0.7}
+            // Tapping the selected bar clears the filter, so the way out is
+            // the same gesture as the way in.
+            onPress={() => onSelect(isSelected ? null : bucket.rating)}
+            disabled={bucket.count === 0}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 8,
+              opacity: bucket.count === 0 ? 0.45 : 1,
+            }}
+          >
+            <Text style={{ fontSize: 11, color: isSelected ? "#111" : "#6B7280", width: 10, fontWeight: isSelected ? "700" : "400" }}>
+              {bucket.rating}
+            </Text>
             <Star size={10} color={GOLD} fill={GOLD} />
             <View style={{ flex: 1, height: 5, borderRadius: 3, backgroundColor: "#F3F4F6", overflow: "hidden" }}>
-              <View style={{ width: `${pct}%`, height: "100%", backgroundColor: GOLD, borderRadius: 3 }} />
+              <View
+                style={{
+                  width: `${Math.round(bucket.share * 100)}%`,
+                  height: "100%",
+                  backgroundColor: isSelected ? PRIMARY : GOLD,
+                  borderRadius: 3,
+                }}
+              />
             </View>
-            <Text style={{ fontSize: 11, color: "#9CA3AF", width: 22, textAlign: "right" }}>{counts[i]}</Text>
-          </View>
+            <Text style={{ fontSize: 11, color: "#9CA3AF", width: 22, textAlign: "right" }}>
+              {bucket.count}
+            </Text>
+          </TouchableOpacity>
         );
       })}
     </View>
@@ -233,6 +248,11 @@ export interface ProductReviewsProps {
   averageRating?: number;
   reviewCount?: number;
   onReviewCountChange?: (count: number) => void;
+  /** Fired after a review is successfully saved. The screen above owns the
+   *  seller-rating prompt that follows, because the seller block and the
+   *  reviews list are two views of the same business and only one of them
+   *  should be able to open that sheet. */
+  onReviewSubmitted?: () => void;
 }
 
 export default function ProductReviews({
@@ -241,6 +261,7 @@ export default function ProductReviews({
   averageRating: initialAverage = 0,
   reviewCount: initialCount = 0,
   onReviewCountChange,
+  onReviewSubmitted,
 }: ProductReviewsProps) {
   const { currentUser } = useUser();
   const userId = currentUser?.id ?? "";
@@ -253,6 +274,17 @@ export default function ProductReviews({
   const [draftRating, setDraftRating] = useState(0);
   const [draftText, setDraftText] = useState("");
   const [actionSheetReview, setActionSheetReview] = useState<ProductReview | null>(null);
+  // Counted by the database rather than derived from `reviews`, which is one
+  // page — see RatingDistribution.
+  const [distribution, setDistribution] = useState<RatingBucket[]>([]);
+  const [starFilter, setStarFilter] = useState<number | null>(null);
+  // Which reviews this user has already found helpful. A Set rather than a
+  // flag per review because the votes are fetched in one query for the whole
+  // page, not one per row.
+  const [myHelpful, setMyHelpful] = useState<Set<string>>(new Set());
+  // Optimistic deltas, so the count moves on tap instead of after the round
+  // trip. Merged over the server's number, never replacing it.
+  const [helpfulDelta, setHelpfulDelta] = useState<Record<string, number>>({});
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   // Mirrors InlineComments' own composer mode toggle (text vs hold-to-talk
   // voice) — the review composer now uses the exact same bar shape.
@@ -274,10 +306,65 @@ export default function ProductReviews({
   const load = useCallback(async () => {
     if (!productId) return;
     setLoading(true);
-    const data = await fetchProductReviews(productId);
+    // Fired together: the histogram is its own query and doesn't depend on
+    // the review page, so waiting for one before starting the other would
+    // just be slower.
+    const [data, buckets] = await Promise.all([
+      fetchProductReviews(productId),
+      fetchRatingDistribution(productId),
+    ]);
     setReviews(data);
+    setDistribution(buckets);
+    setHelpfulDelta({});
+    setMyHelpful(
+      userId ? await fetchMyHelpfulVotes(data.map((r) => r.id), userId) : new Set(),
+    );
     setLoading(false);
-  }, [productId]);
+  }, [productId, userId]);
+
+  const handleToggleHelpful = useCallback(
+    async (reviewId: string) => {
+      if (!userId) return;
+      Haptics.selectionAsync();
+      const wasHelpful = myHelpful.has(reviewId);
+
+      // Optimistic: flip the mark and nudge the count now, roll back only if
+      // the write actually fails.
+      setMyHelpful((prev) => {
+        const next = new Set(prev);
+        if (wasHelpful) next.delete(reviewId);
+        else next.add(reviewId);
+        return next;
+      });
+      setHelpfulDelta((prev) => ({
+        ...prev,
+        [reviewId]: (prev[reviewId] ?? 0) + (wasHelpful ? -1 : 1),
+      }));
+
+      const result = await toggleReviewHelpful(reviewId, userId);
+      if (result === null) {
+        setMyHelpful((prev) => {
+          const next = new Set(prev);
+          if (wasHelpful) next.add(reviewId);
+          else next.delete(reviewId);
+          return next;
+        });
+        setHelpfulDelta((prev) => ({
+          ...prev,
+          [reviewId]: (prev[reviewId] ?? 0) + (wasHelpful ? 1 : -1),
+        }));
+      }
+    },
+    [userId, myHelpful],
+  );
+
+  // The filter is applied here rather than re-queried: the histogram already
+  // says how many of each star exist, so filtering the loaded page keeps the
+  // interaction instant and honest about what it is showing.
+  const visibleReviews = useMemo(
+    () => (starFilter == null ? reviews : reviews.filter((r) => Math.round(r.rating) === starFilter)),
+    [reviews, starFilter],
+  );
 
   useEffect(() => {
     load();
@@ -372,6 +459,10 @@ export default function ProductReviews({
       });
       onReviewCountChange?.(reviews.some((r) => r.user_id === userId) ? reviews.length : reviews.length + 1);
       closeComposer();
+      // After the item, the seller. Asked here rather than on its own screen
+      // because this is the one moment the buyer is already thinking about
+      // the transaction — see UI_STANDARD § Ratings, reviews and sellers.
+      onReviewSubmitted?.();
     }
     setPosting(false);
   };
@@ -390,6 +481,13 @@ export default function ProductReviews({
   const renderReview = (item: ProductReview) => {
     const isOwn = item.user_id === userId;
     const authorName = item.user?.name ?? "User";
+    const marked = myHelpful.has(item.id);
+    // Server count plus this session's un-round-tripped taps, floored at 0 so
+    // an optimistic un-vote can't render -1.
+    const helpfulCount = Math.max(
+      0,
+      (item.helpful_count ?? 0) + (helpfulDelta[item.id] ?? 0),
+    );
 
     return (
       <View key={item.id} style={{ flexDirection: "row", paddingVertical: 14 }}>
@@ -403,8 +501,21 @@ export default function ProductReviews({
               </View>
             )}
           </View>
-          <View style={{ marginTop: 4 }}>
+          <View style={{ marginTop: 4, flexDirection: "row", alignItems: "center", gap: 8 }}>
             <StarRow rating={item.rating} size={13} />
+            {/* Disclosed, not implied: the EU Omnibus Directive requires
+                saying whether a review is verified as coming from an actual
+                purchaser, and the FTC rule turns on the same distinction.
+                Nothing writes orders yet, so this is false everywhere until
+                it isn't — which is the honest state, not a missing feature. */}
+            {item.verified_purchase && (
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
+                <BadgeCheck size={12} color="#0369A1" />
+                <Text style={{ fontSize: 10, color: "#0369A1", fontWeight: "700" }}>
+                  Verified purchase
+                </Text>
+              </View>
+            )}
           </View>
           {!!item.text && (
             <Text style={{ fontSize: 15, color: "#374151", marginTop: 6, lineHeight: 21 }}>{item.text}</Text>
@@ -419,7 +530,35 @@ export default function ProductReviews({
               <CommentMediaMessage url={item.media_url} duration={item.media_duration} />
             </View>
           )}
-          <Text style={{ fontSize: 11, color: "#9CA3AF", marginTop: 6 }}>{fmt(item.created_at)}</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 14, marginTop: 6 }}>
+            <Text style={{ fontSize: 11, color: "#9CA3AF" }}>{fmt(item.created_at)}</Text>
+            {/* Not on your own review: marking yourself helpful is noise, and
+                every marketplace that allows it regrets it. */}
+            {!isOwn && !!userId && (
+              <TouchableOpacity
+                onPress={() => handleToggleHelpful(item.id)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                style={{ flexDirection: "row", alignItems: "center", gap: 4 }}
+                activeOpacity={0.7}
+              >
+                <ThumbsUp
+                  size={12}
+                  color={marked ? PRIMARY : "#9CA3AF"}
+                  fill={marked ? PRIMARY : "transparent"}
+                  strokeWidth={1.8}
+                />
+                <Text
+                  style={{
+                    fontSize: 11,
+                    color: marked ? PRIMARY : "#9CA3AF",
+                    fontWeight: marked ? "700" : "400",
+                  }}
+                >
+                  {helpfulCount > 0 ? `Helpful (${helpfulCount})` : "Helpful"}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
         {isOwn && (
           <TouchableOpacity
@@ -448,7 +587,24 @@ export default function ProductReviews({
         )}
       </View>
 
-      {reviews.length > 0 && <RatingDistribution reviews={reviews} />}
+      {distribution.some((b) => b.count > 0) && (
+        <RatingDistribution
+          buckets={distribution}
+          selected={starFilter}
+          onSelect={setStarFilter}
+        />
+      )}
+
+      {starFilter != null && (
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 10 }}>
+          <Text style={{ fontSize: 12, color: "#6B7280" }}>
+            Showing {starFilter}-star reviews
+          </Text>
+          <TouchableOpacity onPress={() => setStarFilter(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text style={{ fontSize: 12, color: PRIMARY, fontWeight: "600" }}>Show all</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Trigger row — mirrors InlineComments' own "Add a comment…" row. */}
       <TouchableOpacity
@@ -478,13 +634,26 @@ export default function ProductReviews({
         <View style={{ paddingVertical: 24, alignItems: "center" }}>
           <CircularLoader size="small" color={PRIMARY} />
         </View>
-      ) : reviews.length === 0 ? (
+      ) : visibleReviews.length === 0 ? (
         <View style={{ paddingVertical: 24, alignItems: "center" }}>
-          <Text style={{ fontSize: 14, color: "#9CA3AF" }}>No reviews yet</Text>
-          <Text style={{ fontSize: 12, color: "#D1D5DB", marginTop: 4 }}>Be the first to review this product</Text>
+          {starFilter != null ? (
+            // A filter that matches nothing on this page is a different
+            // situation from a product with no reviews, and saying "no
+            // reviews yet" here would be untrue.
+            <Text style={{ fontSize: 14, color: "#9CA3AF" }}>
+              No {starFilter}-star reviews on this page
+            </Text>
+          ) : (
+            <>
+              <Text style={{ fontSize: 14, color: "#9CA3AF" }}>No reviews yet</Text>
+              <Text style={{ fontSize: 12, color: "#D1D5DB", marginTop: 4 }}>
+                Be the first to review this product
+              </Text>
+            </>
+          )}
         </View>
       ) : (
-        reviews.map(renderReview)
+        visibleReviews.map(renderReview)
       )}
 
       {/* Composer — same backdrop-fade + slide-up-pill treatment as

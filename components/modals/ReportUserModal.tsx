@@ -1,20 +1,22 @@
-import { reportUser } from '@/lib/reportService';
-import PopupMessage from '@/components/ui/PopupMessage';
 import CircularLoader from '@/components/ui/CircularLoader';
-import { BlurView } from 'expo-blur';
+import PopupMessage from '@/components/ui/PopupMessage';
+import { MODAL_RADIUS } from '@/constants/theme';
+import { reportUser } from '@/lib/reportService';
 import * as Haptics from 'expo-haptics';
-import { AlertCircle, X } from 'lucide-react-native';
+import { Check, ChevronLeft } from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
     KeyboardAvoidingView,
     Modal,
+    Platform,
     ScrollView,
+    StatusBar,
     Text,
     TextInput,
     TouchableOpacity,
-    View
+    View,
 } from 'react-native';
-import Animated, { SlideInDown, SlideOutDown } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface ReportUserModalProps {
   visible: boolean;
@@ -25,38 +27,48 @@ interface ReportUserModalProps {
   onReportSuccess?: () => void;
 }
 
+// Sentence case, like every other option list in the app. The ids are what
+// reaches the database and are deliberately unchanged.
 const REPORT_REASONS = [
-  { id: 'inappropriate', label: 'Inappropriate Content' },
-  { id: 'scam', label: 'Scam or Fraud' },
+  { id: 'inappropriate', label: 'Inappropriate content' },
+  { id: 'scam', label: 'Scam or fraud' },
   { id: 'harassment', label: 'Harassment' },
-  { id: 'fake', label: 'Fake Account' },
-  { id: 'other', label: 'Other' }
+  { id: 'fake', label: 'Fake account' },
+  { id: 'other', label: 'Other' },
 ];
 
+const DETAILS_MAX_LENGTH = 500;
+
+// A form screen, not a dialog — it asks for a choice and a paragraph, which
+// is exactly what UI_STANDARD.md's form/multi-field rules describe. So it
+// gets the grey ground with white blocks on it, a three-part header whose
+// right-hand text action is the only way to submit, an inline block of
+// selectable rows for the reason (never chips), and an unbordered field with
+// its counter floating inside. What it replaced was a blurred white sheet
+// with red pills and a full-width red button at the bottom.
 export default function ReportUserModal({
   visible,
   onClose,
   targetUserId,
   targetUserName,
   currentUserId,
-  onReportSuccess
+  onReportSuccess,
 }: ReportUserModalProps) {
+  const insets = useSafeAreaInsets();
   const [selectedReason, setSelectedReason] = useState<string>('');
   const [details, setDetails] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [popup, setPopup] = useState<{ visible: boolean; type: 'warning' | 'error'; title: string; message: string }>({ visible: false, type: 'warning', title: '', message: '' });
+  const [popup, setPopup] = useState<{ visible: boolean; type: 'warning' | 'error'; title: string; message: string }>({
+    visible: false, type: 'warning', title: '', message: '',
+  });
   const [showSuccess, setShowSuccess] = useState(false);
 
-  const handleSubmit = async () => {
-    if (!selectedReason) {
-      setPopup({ visible: true, type: 'warning', title: 'Select Reason', message: 'Please select a reason for reporting' });
-      return;
-    }
+  // Same rule as every other form here: the action is live only when there
+  // is something complete to send.
+  const canSubmit = !!selectedReason && details.trim().length > 0;
 
-    if (!details.trim()) {
-      setPopup({ visible: true, type: 'warning', title: 'Provide Details', message: 'Please provide additional details' });
-      return;
-    }
+  const handleSubmit = async () => {
+    if (!canSubmit || submitting) return;
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     setSubmitting(true);
@@ -65,19 +77,15 @@ export default function ReportUserModal({
       reporter_id: currentUserId,
       target_id: targetUserId,
       reason: selectedReason,
-      details: details.trim()
+      details: details.trim(),
     });
 
     setSubmitting(false);
 
     if (result.success) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
-      // Reset form
       setSelectedReason('');
       setDetails('');
-
-      // Show success popup
       setShowSuccess(true);
       setTimeout(() => {
         setShowSuccess(false);
@@ -85,7 +93,12 @@ export default function ReportUserModal({
         onReportSuccess?.();
       }, 2500);
     } else {
-      setPopup({ visible: true, type: 'error', title: 'Error', message: result.error || 'Failed to submit report' });
+      setPopup({
+        visible: true,
+        type: 'error',
+        title: 'Report Failed',
+        message: result.error || 'Failed to submit report. Please try again.',
+      });
     }
   };
 
@@ -101,116 +114,25 @@ export default function ReportUserModal({
   };
 
   return (
-    <>
     <Modal
       visible={visible}
-      transparent
-      animationType="none"
+      animationType="slide"
+      // Full-bleed to both edges — the grey ground has to reach the bottom of
+      // the screen, not stop at Android's navigation bar. The insets below
+      // are what keep the header and content clear.
       statusBarTranslucent
+      navigationBarTranslucent
       onRequestClose={handleClose}
     >
-      <View className="flex-1 bg-black/50 justify-end">
-        <Animated.View
-          entering={SlideInDown.springify()}
-          exiting={SlideOutDown}
-        >
-          <KeyboardAvoidingView
-            behavior="padding"
-          >
-            <BlurView
-              style={{ borderTopLeftRadius: 24, borderTopRightRadius: 24, borderCurve: "continuous" }} intensity={90} tint="light" className="overflow-hidden">
-              {/* Header */}
-              <View className="px-6 pt-6 pb-4 border-b border-gray-200">
-                <View className="flex-row items-center justify-between mb-2">
-                  <View className="flex-row items-center">
-                    <AlertCircle size={24} color="#EF4444" />
-                    <Text className="text-xl font-mbold text-gray-900 ml-2">
-                      Report User
-                    </Text>
-                  </View>
-                  <TouchableOpacity
-                    onPress={handleClose}
-                    className="w-10 h-10 items-center justify-center"
-                  >
-                    <X size={24} color="#6B7280" />
-                  </TouchableOpacity>
-                </View>
-                <Text className="text-sm font-regular text-gray-600">
-                  Report @{targetUserName} for violating community guidelines
-                </Text>
-              </View>
+      <View
+        className="flex-1 bg-gray-50"
+        style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
+      >
+        {/* The profile underneath sets light-content for its cover; RN
+            merges StatusBar props last-mounted-wins, so this screen has to
+            set its own or the icons stay invisible on the grey. */}
+        <StatusBar barStyle="dark-content" />
 
-              {/* Content */}
-              <ScrollView className="px-6 py-6 max-h-[500px]">
-                {/* Reason Selection */}
-                <Text className="text-base font-msemibold text-gray-900 mb-3">
-                  Select Reason
-                </Text>
-                <View className="flex-row flex-wrap gap-2 mb-6">
-                  {REPORT_REASONS.map((reason) => (
-                    <TouchableOpacity
-                      key={reason.id}
-                      onPress={() => handleReasonSelect(reason.id)}
-                      className={`px-4 py-2.5 rounded-full border ${
-                        selectedReason === reason.id
-                          ? 'bg-red-50 border-red-500'
-                          : 'bg-white border-gray-300'
-                      }`}
-                    >
-                      <Text
-                        className={`text-sm font-msemibold ${
-                          selectedReason === reason.id
-                            ? 'text-red-600'
-                            : 'text-gray-700'
-                        }`}
-                      >
-                        {reason.label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-
-                {/* Details Input */}
-                <Text className="text-base font-msemibold text-gray-900 mb-3">
-                  Additional Details
-                </Text>
-                <TextInput
-                  value={details}
-                  onChangeText={setDetails}
-                  placeholder="Please provide more information about this report..."
-                  placeholderTextColor="#9CA3AF"
-                  multiline
-                  numberOfLines={4}
-                  maxLength={500}
-                  className="bg-white border border-gray-300 p-4 text-gray-900 font-regular text-base min-h-[120px]"
-                  style={{ textAlignVertical: 'top', borderRadius: 16, borderCurve: "continuous" }}
-                />
-                <Text className="text-xs text-gray-500 mt-2 text-right">
-                  {details.length}/500
-                </Text>
-
-                {/* Submit Button */}
-                <TouchableOpacity
-                  onPress={handleSubmit}
-                  disabled={submitting || !selectedReason || !details.trim()}
-                  className={`mt-6 py-4 rounded-2xl ${
-                    submitting || !selectedReason || !details.trim()
-                      ? 'bg-gray-300'
-                      : 'bg-red-500'
-                  }`}
-                >
-                  {submitting ? (
-                    <CircularLoader color="#fff" />
-                  ) : (
-                    <Text className="text-white text-center font-mbold text-base">
-                      Submit Report
-                    </Text>
-                  )}
-                </TouchableOpacity>
-              </ScrollView>
-            </BlurView>
-          </KeyboardAvoidingView>
-        </Animated.View>
         <PopupMessage
           visible={popup.visible}
           type={popup.type}
@@ -218,23 +140,108 @@ export default function ReportUserModal({
           message={popup.message}
           onHide={() => setPopup(p => ({ ...p, visible: false }))}
         />
+        <PopupMessage
+          visible={showSuccess}
+          type="white"
+          title="Report Submitted"
+          message="Thanks for letting us know. We'll review this account soon."
+        />
+
+        {/* Header — chevron back, centred title, one text action. */}
+        <View className="flex-row items-center justify-between px-4 pb-4 pt-2">
+          <TouchableOpacity onPress={handleClose} className="py-1 -ml-1">
+            <ChevronLeft size={28} color="#374151" />
+          </TouchableOpacity>
+          <View
+            style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: 0, justifyContent: "center", alignItems: "center" }}
+            pointerEvents="none"
+          >
+            <Text className="text-xl font-medium text-gray-900">Report</Text>
+          </View>
+          <TouchableOpacity
+            onPress={handleSubmit}
+            disabled={!canSubmit || submitting}
+            className="py-1"
+          >
+            {submitting ? (
+              <CircularLoader color="#094569" size="small" />
+            ) : (
+              <Text
+                className="text-xl font-medium"
+                style={{ color: canSubmit ? "#0369A1" : "#93C5FD" }}
+              >
+                Submit
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <ScrollView
+            contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 10, paddingBottom: 24 }}
+            keyboardShouldPersistTaps="handled"
+          >
+            {/* Reason — a short list, so it renders inline as selectable
+                rows with a Check rather than opening a sheet. No label
+                above it; the rows say what they are. */}
+            <View
+              style={{ borderRadius: MODAL_RADIUS, borderCurve: "continuous", overflow: "hidden" }}
+              className="bg-white"
+            >
+              {REPORT_REASONS.map((reason, index) => (
+                <TouchableOpacity
+                  key={reason.id}
+                  onPress={() => handleReasonSelect(reason.id)}
+                  activeOpacity={0.7}
+                  className={`px-4 py-4 flex-row items-center ${index > 0 ? "border-t border-gray-100" : ""}`}
+                >
+                  <Text className="text-xl text-gray-900 flex-1">
+                    {reason.label}
+                  </Text>
+                  {selectedReason === reason.id && (
+                    <Check size={20} color="#0369A1" />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Details — no border, counter inside the field, and enough
+                bottom padding that the last line can't run under it. */}
+            <View style={{ position: "relative", marginTop: 12 }}>
+              <TextInput
+                value={details}
+                onChangeText={(text) => setDetails(text.slice(0, DETAILS_MAX_LENGTH))}
+                placeholder="What happened?"
+                placeholderTextColor="#9CA3AF"
+                multiline
+                maxLength={DETAILS_MAX_LENGTH}
+                className="bg-white px-4 py-3 text-xl text-gray-900"
+                style={{
+                  borderRadius: MODAL_RADIUS,
+                  borderCurve: "continuous",
+                  minHeight: 160,
+                  paddingBottom: 34,
+                  textAlignVertical: "top",
+                }}
+              />
+              <Text
+                className="text-xl text-gray-400"
+                style={{ position: "absolute", right: 12, bottom: 10 }}
+              >
+                {details.length}/{DETAILS_MAX_LENGTH}
+              </Text>
+            </View>
+
+            <Text className="text-base text-gray-400 mt-3 px-1">
+              Reports are anonymous — @{targetUserName} won&apos;t be told who
+              reported them. Our team reviews every report.
+            </Text>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </View>
     </Modal>
-
-    {/* Success Popup */}
-    <Modal
-      visible={showSuccess}
-      transparent={true}
-      animationType="none"
-      statusBarTranslucent={true}
-    >
-      <PopupMessage
-        visible={showSuccess}
-        type="white"
-        title="Report Submitted"
-        message="Thanks for letting us know. We'll review this user soon."
-      />
-    </Modal>
-    </>
   );
 }

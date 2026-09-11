@@ -88,7 +88,7 @@ export default function EditWorkProfile({ onClose, onSaved }: EditWorkProfilePro
         email_active: trimmedEmail ? emailActive : false,
         contact_active: trimmedContact ? contactActive : false,
       });
-      showPopup('success', 'Profile Updated', 'Work profile saved successfully.');
+      showPopup('success', 'Profile Updated', 'Business saved successfully.');
       onSaved?.();
       setTimeout(() => onClose?.(), 1500);
     } catch {

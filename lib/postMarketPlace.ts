@@ -20,6 +20,16 @@ export interface MarketplaceItem {
   boost_expires_at?: string | null;
 }
 
+/** Human label for a listing's type — the one place these strings live, so
+ *  the grid, the detail screen and the profile tab can't disagree. */
+export const MARKETPLACE_TYPE_LABEL: Record<MarketplaceItem["type"], string> = {
+  rent: "For rent",
+  swap: "Swap",
+  second_hand: "Second hand",
+  free: "Free",
+  job_vacancy: "Job vacancy",
+};
+
 export interface MarketplaceItemWithUser extends MarketplaceItem {
   profiles?: {
     name?: string;
@@ -50,34 +60,6 @@ export const fetchMarketplaceItems = async (page: number = 0, pageSize: number =
 
   if (error) {
     console.error('Error fetching marketplace items:', error);
-    throw error;
-  }
-
-  return { items: (data || []) as MarketplaceItemWithUser[], totalCount: count || 0 };
-};
-
-// Fetch marketplace items by type
-export const fetchMarketplaceByType = async (type: 'rent' | 'swap' | 'second_hand' | 'free' | 'job_vacancy', page: number = 0, pageSize: number = 10) => {
-  const from = page * pageSize;
-  const to = from + pageSize - 1;
-
-  const { data, error, count } = await supabase
-    .from('marketplace')
-    .select(`
-      *,
-      profiles:user_id (
-        name,
-        email,
-        phone,
-        avatar_url
-      )
-    `, { count: 'exact' })
-    .eq('type', type)
-    .order('created_at', { ascending: false })
-    .range(from, to);
-
-  if (error) {
-    console.error('Error fetching marketplace items by type:', error);
     throw error;
   }
 
@@ -209,19 +191,6 @@ export const updateMarketplaceItem = async (
   }
 
   return data;
-};
-
-// Delete marketplace item
-export const deleteMarketplaceItem = async (itemId: string) => {
-  const { error } = await supabase
-    .from('marketplace')
-    .delete()
-    .eq('id', itemId);
-
-  if (error) {
-    console.error('Error deleting marketplace item:', error);
-    throw error;
-  }
 };
 
 // Upload marketplace image

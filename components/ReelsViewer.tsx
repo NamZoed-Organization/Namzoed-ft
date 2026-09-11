@@ -1,7 +1,9 @@
 import CommentsModal from "@/components/modals/CommentsModal";
 import ShareComposerModal from "@/components/modals/ShareComposerModal";
+import HashtagText from "@/components/ui/HashtagText";
 import BottomNavBar from "@/components/ui/BottomNavBar";
 import { useUser } from "@/contexts/UserContext";
+import { recordView } from "@/lib/historyService";
 import { useBottomBarScroll } from "@/hooks/useBottomBarScroll";
 import { useAppRouter } from "@/utils/navigation";
 import { hasUserBookmarkedPost, togglePostBookmark } from "@/lib/bookmarkService";
@@ -64,6 +66,9 @@ interface ReelsViewerProps {
    *  collapses back to it on close, instead of just popping in/out. */
   sourceRect?: SourceRect | null;
 }
+
+/** How long a reel has to actually play before it counts as watched. */
+const WATCHED_SECONDS = 3;
 
 interface ReelItemProps {
   reel: VideoReel;
@@ -152,6 +157,7 @@ function ReelItem({
   // This reel's own scrub bar — local to this item (not lifted to the
   // viewer) so it scrolls away with the reel itself instead of staying
   // fixed on screen.
+  const watchedRef = useRef(false);
   const [scrubTime, setScrubTime] = useState(0);
   const [scrubDuration, setScrubDuration] = useState(0);
 
@@ -160,6 +166,13 @@ function ReelItem({
     const sub = player.addListener("timeUpdate", (payload: { currentTime: number }) => {
       setScrubTime(payload.currentTime);
       setScrubDuration(player.duration || 0);
+      // Watched, for the viewer's own History — position rather than wall
+      // time, so a stalled or paused reel doesn't count. Loops, so this only
+      // fires the first time round.
+      if (!watchedRef.current && payload.currentTime >= WATCHED_SECONDS) {
+        watchedRef.current = true;
+        recordView("video", reel.postId, currentUserId, reel.userId);
+      }
     });
     return () => sub.remove();
   }, [player, isActive]);
@@ -474,7 +487,8 @@ function ReelItem({
           </View>
           {reel.content ? (
             <Text style={styles.captionText} numberOfLines={2}>
-              {reel.content}
+              {/* Lighter blue than the feed's: this caption sits on video. */}
+              <HashtagText text={reel.content} hashtagStyle={{ color: "#7DD3FC" }} />
             </Text>
           ) : null}
         </TouchableOpacity>

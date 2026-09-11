@@ -1,24 +1,33 @@
-import * as Haptics from 'expo-haptics';
-import { AlertCircle, Trash2 } from 'lucide-react-native';
-import React from 'react';
-import {
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
-} from 'react-native';
+/**
+ * "Delete this post?"
+ *
+ * It is `DialogCard` (§ Dialogs) — it asks one question, so it is a dialog,
+ * and it used to be drawn as a bottom sheet: a bordered header with a red
+ * `AlertCircle` beside a 20pt title, an italic quote of the post in a grey
+ * box, a full-width red button with a `Trash2` inside it, and a "Cancel"
+ * under a hairline. A sheet slides up from the edge because it offers a list
+ * you can drag away; this offers two answers and waits for one.
+ *
+ * Red stays, because here the hue is the information (§ Dialogs) — it is
+ * carried by the action that does the destroying and by the icon, not by a
+ * border and a box as well.
+ */
+
+import DialogCard from "@/components/ui/DialogCard";
+import * as Haptics from "expo-haptics";
+import { Trash2 } from "lucide-react-native";
+import React from "react";
+import { Modal, Text, View } from "react-native";
 
 interface DeleteConfirmationModalProps {
   visible: boolean;
   onClose: () => void;
   onConfirm: () => void;
   postContent: string;
-  /** Render as a plain absolute-fill overlay instead of a native Modal — use
-   * when the caller is already presenting a full-screen Modal, since nesting
-   * a native Modal inside an open one is unreliable (status bar / safe area
-   * math gets miscalculated on iOS regardless of statusBarTranslucent). */
+  /** Skip the native `<Modal>` wrapper — set it when the caller already
+   * presents a full-screen modal (`ImageViewer` does), since nesting one
+   * native modal inside another is unreliable on iOS. Leave it off inside a
+   * feed card, where a bare overlay would be confined to the card. */
   embedded?: boolean;
 }
 
@@ -34,85 +43,62 @@ export default function DeleteConfirmationModal({
     onConfirm();
   };
 
-  const handleCancel = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    onClose();
-  };
+  const preview =
+    postContent.length > 50 ? `${postContent.slice(0, 50)}…` : postContent;
 
-  // Truncate post content for preview
-  const truncatedContent = postContent.length > 50
-    ? postContent.substring(0, 50) + '...'
-    : postContent;
-
-  const content = (
-    <Pressable
-      className="flex-1 bg-black/50 justify-end"
-      onPress={onClose}
-      activeOpacity={1}
+  const card = (
+    <DialogCard
+      visible={visible}
+      onDismiss={onClose}
+      title="Delete post"
+      message="This cannot be undone."
+      icon={<Trash2 size={22} color="#DC2626" strokeWidth={1.9} />}
+      actions={[
+        {
+          label: "Cancel",
+          style: "cancel",
+          onPress: () =>
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium),
+        },
+        { label: "Delete", style: "destructive", onPress: handleConfirm },
+      ]}
     >
-      <Pressable onPress={(e) => e.stopPropagation()}>
+      {/* Which post — the grey field shape, since the card is white. Not
+          italic: it is a quotation, and the quote marks say so. */}
+      {postContent ? (
         <View
-          style={{ borderTopLeftRadius: 24, borderTopRightRadius: 24, borderCurve: "continuous" }} className="bg-white">
-          {/* Header */}
-          <View className="p-6 border-b border-gray-200">
-            <View className="flex-row items-center mb-3">
-              <AlertCircle size={24} color="#EF4444" />
-              <Text className="text-xl font-semibold text-gray-900 ml-2">
-                Delete Post
-              </Text>
-            </View>
-            <Text className="text-sm text-gray-600 mb-2">
-              Are you sure you want to delete this post? This action cannot be undone.
-            </Text>
-            {postContent && (
-              <View
-                style={{ borderRadius: 8, borderCurve: "continuous" }} className="mt-3 p-3 bg-gray-50">
-                <Text className="text-sm text-gray-700 italic">
-                  "{truncatedContent}"
-                </Text>
-              </View>
-            )}
-          </View>
-
-          {/* Buttons */}
-          <View className="p-4">
-            <TouchableOpacity
-              style={{ borderRadius: 12, borderCurve: "continuous" }}
-              className="bg-red-500 py-4 px-4 flex-row items-center justify-center mb-3"
-              onPress={handleConfirm}
-            >
-              <Trash2 size={20} color="#FFFFFF" />
-              <Text className="ml-2 text-white font-semibold text-base">
-                Delete Post
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              className="py-4 px-4 flex-row items-center justify-center border-t border-gray-100"
-              onPress={handleCancel}
-            >
-              <Text className="text-base text-gray-600">Cancel</Text>
-            </TouchableOpacity>
-          </View>
+          style={{
+            backgroundColor: "#F5F5F5",
+            borderRadius: 12,
+            borderCurve: "continuous",
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+            marginTop: 14,
+          }}
+        >
+          <Text
+            numberOfLines={2}
+            style={{ fontSize: 14, lineHeight: 20, color: "#6B7280" }}
+          >
+            &ldquo;{preview}&rdquo;
+          </Text>
         </View>
-      </Pressable>
-    </Pressable>
+      ) : null}
+    </DialogCard>
   );
 
-  if (embedded) {
-    if (!visible) return null;
-    return <View style={[StyleSheet.absoluteFill, { zIndex: 100 }]}>{content}</View>;
-  }
+  if (embedded) return card;
 
   return (
     <Modal
       visible={visible}
       transparent
-      animationType="fade"
-      statusBarTranslucent={false}
+      animationType="none"
+      statusBarTranslucent
+      navigationBarTranslucent
       onRequestClose={onClose}
     >
-      {content}
+      {card}
     </Modal>
   );
 }

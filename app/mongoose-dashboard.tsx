@@ -1,3 +1,4 @@
+import { MODAL_RADIUS } from "@/constants/theme";
 import LocationTrackingControl from "@/components/location/LocationTrackingControl";
 import CircularLoader from "@/components/ui/CircularLoader";
 import MongooseWorkerNavBar, {
@@ -1464,8 +1465,8 @@ export default function MongooseDashboard() {
                   flex: 1,
                   backgroundColor: NZ.cream,
                   marginTop: 48,
-                  borderTopLeftRadius: 24,
-                  borderTopRightRadius: 24,
+                  borderTopLeftRadius: MODAL_RADIUS,
+                  borderTopRightRadius: MODAL_RADIUS,
                   borderCurve: "continuous",
                 }}
               >
@@ -1475,8 +1476,8 @@ export default function MongooseDashboard() {
                     borderBottomWidth: 1,
                     borderBottomColor: NZ.pearl,
                     padding: 16,
-                    borderTopLeftRadius: 24,
-                    borderTopRightRadius: 24,
+                    borderTopLeftRadius: MODAL_RADIUS,
+                    borderTopRightRadius: MODAL_RADIUS,
                     borderCurve: "continuous",
                   }}
                 >

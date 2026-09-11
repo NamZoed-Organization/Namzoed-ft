@@ -7,6 +7,7 @@
  * caption, and a small avatar/username + like-count footer.
  */
 
+import TaggedProductStrip from "@/components/post/TaggedProductStrip";
 import PostGridReportOverlay from "@/components/modals/PostGridReportOverlay";
 import ReportPostModal from "@/components/modals/ReportPostModal";
 import ProgressiveImage from "@/components/ui/ProgressiveImage";
@@ -268,6 +269,11 @@ function PostGridCard({ post, width, onPress, deferred, priority = "normal" }: P
             {post.content}
           </Text>
         ) : null}
+
+        {/* A post about something for sale says so in the grid, not only
+            once it is opened — the tag is only worth anything to the seller
+            if it is visible where people browse (§ Tagged products). */}
+        {!deferred && <TaggedProductStrip products={post.tagged_products} />}
 
         {!deferred && (
           <View

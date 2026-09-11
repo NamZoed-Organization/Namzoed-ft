@@ -164,19 +164,8 @@ export const serviceCategories: ServiceCategory[] = [
   },
 ];
 
-// Helper functions
-export const getServiceCategoryById = (
-  id: string,
-): ServiceCategory | undefined => {
-  return serviceCategories.find((category) => category.id === id);
-};
-
 export const getServiceCategoryBySlug = (
   slug: string,
 ): ServiceCategory | undefined => {
   return serviceCategories.find((category) => category.slug === slug);
-};
-
-export const getServiceCategoriesByIds = (ids: string[]): ServiceCategory[] => {
-  return serviceCategories.filter((category) => ids.includes(category.id));
 };

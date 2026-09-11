@@ -1,3 +1,4 @@
+import { MODAL_RADIUS } from "@/constants/theme";
 import TopNavbar from "@/components/ui/TopNavbar";
 import { useAppRouter } from "@/utils/navigation";
 import {
@@ -245,7 +246,7 @@ export default function GroundBookingsPage() {
       >
         <View className="flex-1 bg-black/40 items-center justify-center px-6">
           <View
-            style={{ borderRadius: 28, borderCurve: "continuous" }} className="w-full max-w-sm bg-white p-6">
+            style={{ borderRadius: MODAL_RADIUS, borderCurve: "continuous" }} className="w-full max-w-sm bg-white p-6">
             <Text className="text-xl font-mbold text-gray-900 mb-2">
               Add Ground Booking
             </Text>

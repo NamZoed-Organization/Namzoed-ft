@@ -1,13 +1,17 @@
 // lib/coverTheme.ts
 //
 // Per-user color identity for the profile cover: the header gradient, cover
-// gradient, and matte panel/button tint are all derived from a single hue —
-// either pulled from the user's cover photo (so the whole cover blends with
-// it) or, when there's no photo, a hue picked deterministically from a
-// curated list based on the user's id (stable across sessions, varied across
-// users). Saturation/lightness are always clamped to the same "dark matte
-// navy" formula regardless of hue, so every result stays legible and
-// tasteful instead of landing on something garish.
+// gradient, and matte panel/button tint are all derived from a single hue,
+// stored on the profile row as `cover_hue` — pulled from the user's cover
+// photo when they upload one (so the whole cover blends with it), and rolled
+// at random from the curated list below when there's no photo.
+// Saturation/lightness are always clamped to the same "dark matte navy"
+// formula regardless of hue, so every result stays legible and tasteful
+// instead of landing on something garish.
+//
+// Nothing here decides *when* a hue is assigned — lib/coverHue.ts extracts
+// it from a photo, and the profile screens persist it. This file is only the
+// color math.
 
 interface RGB {
   r: number;
@@ -82,8 +86,10 @@ export function extractHue(hex: string): number {
 
 // Spread around the wheel, not clustered — the fixed saturation/lightness
 // formula in buildCoverPalette keeps every one of these dark and matte, so
-// there's no need to hand-pick "safe" hues here.
-const FALLBACK_HUES = [200, 260, 160, 20, 320, 40, 280, 140];
+// there's no need to hand-pick "safe" hues here. Kept in sync with
+// random_cover_hue() in supabase/migrations/add_cover_hue_to_profiles.sql,
+// which is what actually assigns the hue for new signups.
+export const FALLBACK_HUES = [200, 260, 160, 20, 320, 40, 280, 140];
 
 function hashSeedToIndex(seed: string, len: number): number {
   let hash = 5381;
@@ -98,6 +104,21 @@ function hashSeedToIndex(seed: string, len: number): number {
  *  tasteful) hues. */
 export function getFallbackHue(seed: string): number {
   return FALLBACK_HUES[hashSeedToIndex(seed, FALLBACK_HUES.length)];
+}
+
+/** A fresh random hue from the curated list — used when a profile needs a
+ *  color assigned client-side (no cover photo, nothing stored yet, or the
+ *  cover photo was just removed). The result is meant to be persisted to
+ *  profiles.cover_hue, not recomputed per render. */
+export function getRandomHue(): number {
+  return FALLBACK_HUES[Math.floor(Math.random() * FALLBACK_HUES.length)];
+}
+
+/** Guards a hue read back from the database/cache — anything out of range
+ *  or non-numeric is treated as "not set". */
+export function normalizeHue(hue: unknown): number | null {
+  if (typeof hue !== "number" || !Number.isFinite(hue)) return null;
+  return ((hue % 360) + 360) % 360;
 }
 
 export interface CoverPalette {

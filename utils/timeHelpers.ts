@@ -64,27 +64,6 @@ export function getTimeUntilClosingSaleEnd(): number {
 }
 
 /**
- * Format seconds into human-readable countdown
- * @param seconds - Number of seconds
- * @returns Formatted string like "3h 45m 12s" or "45m 30s" or "30s"
- */
-export function formatCountdown(seconds: number): string {
-  if (seconds <= 0) return "0s";
-
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const secs = seconds % 60;
-
-  if (hours > 0) {
-    return `${hours}h ${minutes}m ${secs}s`;
-  } else if (minutes > 0) {
-    return `${minutes}m ${secs}s`;
-  } else {
-    return `${secs}s`;
-  }
-}
-
-/**
  * Format seconds into compact countdown (hours+minutes OR minutes+seconds)
  * @param seconds - Number of seconds
  * @returns Formatted string like "3h 45m" (if hours) or "45m 30s" (if no hours)

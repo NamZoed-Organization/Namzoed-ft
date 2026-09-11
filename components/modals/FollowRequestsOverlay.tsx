@@ -1,29 +1,57 @@
+/**
+ * FollowRequestsOverlay
+ *
+ * The Followers / Following list, opened from the counts on a profile.
+ *
+ * Rebuilt to UI_STANDARD.md. What it was: a blurred header with a 2xl
+ * left-aligned title, a subtitle, a sort pill and an X in a cluster on the
+ * right, two filled chip tabs, and every person in their own bordered white
+ * card floating on `#F8FAFC`. Six of those are things the standard names
+ * explicitly — the header is three parts with at most one text action, tabs
+ * are plain text with a short underline (and come from `ProfileTabRow`, not
+ * a second hand-rolled row), and a list of things is one white group on the
+ * grey, not a stack of cards.
+ *
+ * The "Follows you" pill is gone from your own Followers tab, where it said
+ * nothing: everyone in that list is there *because* they follow you. It
+ * survives everywhere it still carries information — see `showFollowsYou`.
+ */
+
+import ProfileTabRow from "@/components/profile/ProfileTabRow";
+import { SETTINGS_BACKGROUND } from "@/components/settings/SettingsChrome";
+import CircularLoader from "@/components/ui/CircularLoader";
+import PopupMessage from "@/components/ui/PopupMessage";
+import { useUser } from "@/contexts/UserContext";
+import {
+  fetchFollowers,
+  fetchFollowing,
+  followUser,
+  FollowUser,
+  unfollowUser,
+} from "@/lib/followService";
+import { useAppRouter } from "@/utils/navigation";
 import { FlashList } from "@shopify/flash-list";
-import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
-import { useAppRouter } from '@/utils/navigation';
-import { ArrowDownAZ, ArrowUpAZ, UserCheck, Users, X } from 'lucide-react-native';
-import CircularLoader from '@/components/ui/CircularLoader';
-import PopupMessage from '@/components/ui/PopupMessage';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronLeft, UserRound } from "lucide-react-native";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Image,
   Modal,
   RefreshControl,
+  StatusBar,
+  StyleSheet,
   Text,
   TouchableOpacity,
-  View
-} from 'react-native';
+  View,
+} from "react-native";
 import Animated, {
   FadeIn,
   SlideInLeft,
   SlideInRight,
   SlideOutLeft,
-  SlideOutRight
+  SlideOutRight,
 } from "react-native-reanimated";
-import { useUser } from "@/contexts/UserContext";
-import { fetchFollowers, fetchFollowing, followUser, FollowUser, unfollowUser } from '@/lib/followService';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 interface FollowRequestsOverlayProps {
   onClose: () => void;
@@ -32,16 +60,20 @@ interface FollowRequestsOverlayProps {
   initialTab?: TabType;
 }
 
-type TabType = 'followers' | 'following';
-type SortOrder = 'asc' | 'desc';
+type TabType = "followers" | "following";
+type SortOrder = "asc" | "desc";
+
+const AVATAR = 44;
+/** Separators inset to where the row's text starts (§ Separators). */
+const SEPARATOR_INSET = 16 + AVATAR + 12;
+const GROUP_RADIUS = 18;
 
 export default function FollowRequestsOverlay({
   onClose,
   userId,
   actorUserId,
-  initialTab = 'following',
+  initialTab = "following",
 }: FollowRequestsOverlayProps) {
-  // States
   const router = useAppRouter();
   const { currentUser } = useUser();
   const insets = useSafeAreaInsets();
@@ -49,21 +81,29 @@ export default function FollowRequestsOverlay({
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
   const [followers, setFollowers] = useState<FollowUser[]>([]);
   const [following, setFollowing] = useState<FollowUser[]>([]);
-  const [viewerFollowerIds, setViewerFollowerIds] = useState<Set<string>>(
-    new Set(),
-  );
+  const [viewerFollowerIds, setViewerFollowerIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
-  const [popup, setPopup] = useState<{visible: boolean; type: 'error'; title: string; message: string}>({visible: false, type: 'error', title: '', message: ''});
-  const showPopup = (title: string, message: string) => setPopup({visible: true, type: 'error', title, message});
-  const previousTab = useRef<TabType>('following');
+  const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
+  const [popup, setPopup] = useState<{
+    visible: boolean;
+    type: "error";
+    title: string;
+    message: string;
+  }>({ visible: false, type: "error", title: "", message: "" });
+  const showPopup = (title: string, message: string) =>
+    setPopup({ visible: true, type: "error", title, message });
+  const previousTab = useRef<TabType>("following");
+
+  /** Whose list this is. On your own Followers tab the "Follows you" pill is
+   *  a tautology — that is the definition of the tab — but on someone
+   *  else's it still means something: this person follows *you*, not them. */
+  const isOwnList = userId === resolvedActorUserId;
 
   useEffect(() => {
     loadData();
   }, [userId, resolvedActorUserId]);
 
-  // Reset when switching tabs
   const handleTabChange = (tab: TabType) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     previousTab.current = activeTab;
@@ -74,19 +114,19 @@ export default function FollowRequestsOverlay({
     try {
       if (!refreshing) setLoading(true);
 
-      // Fetch followers and following from Supabase (always desc, will sort locally)
+      // Always fetched desc and sorted locally, so toggling the order never
+      // costs a round trip.
       const [followersData, followingData, viewerFollowers] = await Promise.all([
-        fetchFollowers(userId, 'desc'),
-        fetchFollowing(userId, 'desc'),
-        fetchFollowers(resolvedActorUserId, 'desc'),
+        fetchFollowers(userId, "desc"),
+        fetchFollowing(userId, "desc"),
+        fetchFollowers(resolvedActorUserId, "desc"),
       ]);
 
       setFollowers(followersData);
       setFollowing(followingData);
       setViewerFollowerIds(new Set(viewerFollowers.map((u) => u.id)));
-
     } catch (error) {
-      console.error('Error loading follow data:', error);
+      console.error("Error loading follow data:", error);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -97,25 +137,23 @@ export default function FollowRequestsOverlay({
     try {
       const result = await followUser(resolvedActorUserId, user.id);
       if (result.success) {
-        // Update state based on active tab
-        if (activeTab === 'following') {
+        if (activeTab === "following") {
           // Clear isUnfollowed flag when re-following
-          setFollowing(prev =>
-            prev.map(u => u.id === user.id ? { ...u, isUnfollowed: false } : u)
+          setFollowing((prev) =>
+            prev.map((u) => (u.id === user.id ? { ...u, isUnfollowed: false } : u)),
           );
         } else {
-          // Update isFollowingBack status in Followers tab
-          setFollowers(prev =>
-            prev.map(u => u.id === user.id ? { ...u, isFollowingBack: true } : u)
+          setFollowers((prev) =>
+            prev.map((u) => (u.id === user.id ? { ...u, isFollowingBack: true } : u)),
           );
         }
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } else {
-        showPopup('Follow Failed', result.error || 'Could not follow this user. Try again.');
+        showPopup("Follow Failed", result.error || "Could not follow this user. Try again.");
       }
     } catch (error) {
-      console.error('Error following user:', error);
-      showPopup('Follow Failed', 'Could not follow this user. Try again.');
+      console.error("Error following user:", error);
+      showPopup("Follow Failed", "Could not follow this user. Try again.");
     }
   };
 
@@ -123,29 +161,30 @@ export default function FollowRequestsOverlay({
     try {
       const result = await unfollowUser(resolvedActorUserId, user.id);
       if (result.success) {
-        // Mark as unfollowed instead of removing (soft delete)
-        if (activeTab === 'following') {
-          setFollowing(prev =>
-            prev.map(u => u.id === user.id ? { ...u, isUnfollowed: true } : u)
+        // Marked rather than removed, so the row doesn't vanish out from
+        // under the finger that tapped it and can be undone in place.
+        if (activeTab === "following") {
+          setFollowing((prev) =>
+            prev.map((u) => (u.id === user.id ? { ...u, isUnfollowed: true } : u)),
           );
         } else {
-          setFollowers(prev =>
-            prev.map(u => u.id === user.id ? { ...u, isFollowingBack: false } : u)
+          setFollowers((prev) =>
+            prev.map((u) => (u.id === user.id ? { ...u, isFollowingBack: false } : u)),
           );
         }
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } else {
-        showPopup('Unfollow Failed', result.error || 'Could not unfollow this user. Try again.');
+        showPopup("Unfollow Failed", result.error || "Could not unfollow this user. Try again.");
       }
     } catch (error) {
-      console.error('Error unfollowing user:', error);
-      showPopup('Unfollow Failed', 'Could not unfollow this user. Try again.');
+      console.error("Error unfollowing user:", error);
+      showPopup("Unfollow Failed", "Could not unfollow this user. Try again.");
     }
   };
 
   const toggleSortOrder = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+    setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
   };
 
   const handleRefresh = useCallback(() => {
@@ -153,189 +192,243 @@ export default function FollowRequestsOverlay({
     loadData();
   }, []);
 
-  // Render user item
-  const renderUserItem = useCallback(({ item }: { item: FollowUser }) => {
-    const isFollowing = activeTab === 'following' ? !item.isUnfollowed : item.isFollowingBack;
-    const followsYou = viewerFollowerIds.has(item.id);
-    const canShowAction = activeTab === 'following' && item.id !== resolvedActorUserId;
-
-    return (
-      <View className={`mx-4 mb-3 ${item.isUnfollowed ? 'opacity-50' : ''}`}>
-        <TouchableOpacity
-          style={{ borderRadius: 16, borderCurve: "continuous" }}
-          className="flex-row items-center bg-white p-4 border border-gray-100"
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            router.push(`/(users)/profile/${item.id}`);
-          }}
-          activeOpacity={0.7}
-        >
-          {/* Avatar */}
-          <View className="w-12 h-12 rounded-full bg-gray-200 items-center justify-center overflow-hidden">
-            {item.avatar_url ? (
-              <Image
-                source={{ uri: item.avatar_url }}
-                className="w-12 h-12"
-                resizeMode="cover"
-              />
-            ) : (
-              <Text className="text-gray-400 font-mbold text-lg">
-                {item.name?.[0]?.toUpperCase() || '?'}
-              </Text>
-            )}
-          </View>
-
-          {/* User Info */}
-          <View className="flex-1 ml-3">
-            <Text className="text-gray-900 font-msemibold text-base">{item.name}</Text>
-            <View className="flex-row items-center mt-0.5">
-              {item.phone && (
-                <Text className="text-gray-500 font-regular text-sm">{item.phone}</Text>
-              )}
-              {followsYou && (
-                <View className="ml-2 px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20">
-                  <Text className="text-[10px] font-msemibold text-primary">
-                    Follows you
-                  </Text>
-                </View>
-              )}
-            </View>
-          </View>
-
-          {/* Action Button - Only show for Following tab */}
-          {canShowAction && (
-            <TouchableOpacity
-              onPress={(e) => {
-                e.stopPropagation();
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-                if (isFollowing) {
-                  handleUnfollow(item);
-                } else {
-                  handleFollow(item);
-                }
-              }}
-              className={`px-4 py-2 rounded-lg border ${
-                isFollowing
-                  ? 'bg-gray-50 border-gray-200'
-                  : 'bg-primary border-primary'
-              }`}
-            >
-              <Text className={`font-msemibold text-sm ${
-                isFollowing ? 'text-gray-700' : 'text-white'
-              }`}>
-                {item.isUnfollowed ? 'Unfollowed' : (isFollowing ? 'Following' : 'Follow')}
-              </Text>
-            </TouchableOpacity>
-          )}
-        </TouchableOpacity>
-      </View>
-    );
-  }, [activeTab, resolvedActorUserId, viewerFollowerIds]);
-
-  // Memoize and sort data for FlashList
   const currentListData = useMemo(() => {
-    const data = activeTab === 'followers' ? followers : following;
+    const data = activeTab === "followers" ? followers : following;
 
-    // Sort by created_at based on sortOrder
     return [...data].sort((a, b) => {
       const dateA = new Date(a.created_at || 0).getTime();
       const dateB = new Date(b.created_at || 0).getTime();
-
-      return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
+      return sortOrder === "asc" ? dateA - dateB : dateB - dateA;
     });
   }, [activeTab, followers, following, sortOrder]);
 
-  // Empty state component
+  const renderUserItem = useCallback(
+    ({ item, index }: { item: FollowUser; index: number }) => {
+      const isFollowing = activeTab === "following" ? !item.isUnfollowed : item.isFollowingBack;
+      // Not on your own Followers tab, where it restates the tab's title.
+      const showFollowsYou =
+        viewerFollowerIds.has(item.id) && !(activeTab === "followers" && isOwnList);
+      const canShowAction = activeTab === "following" && item.id !== resolvedActorUserId;
+
+      // One white group on the grey, not a card per person: only the ends
+      // are rounded, and every row but the first carries an inset hairline.
+      const first = index === 0;
+      const last = index === currentListData.length - 1;
+
+      return (
+        <View
+          style={{
+            marginHorizontal: 16,
+            backgroundColor: "#fff",
+            borderTopLeftRadius: first ? GROUP_RADIUS : 0,
+            borderTopRightRadius: first ? GROUP_RADIUS : 0,
+            borderBottomLeftRadius: last ? GROUP_RADIUS : 0,
+            borderBottomRightRadius: last ? GROUP_RADIUS : 0,
+            borderCurve: "continuous",
+            overflow: "hidden",
+          }}
+        >
+          {!first && (
+            <View
+              style={{
+                height: StyleSheet.hairlineWidth,
+                backgroundColor: "#f0f0f0",
+                marginLeft: SEPARATOR_INSET,
+              }}
+            />
+          )}
+          <TouchableOpacity
+            className="flex-row items-center px-4 py-3"
+            // Dimmed while unfollowed, so the row reads as "changed, tap to
+            // undo" rather than silently staying put.
+            style={{ opacity: item.isUnfollowed ? 0.5 : 1 }}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              router.push(`/(users)/profile/${item.id}`);
+            }}
+            activeOpacity={0.7}
+          >
+            <View
+              style={{
+                width: AVATAR,
+                height: AVATAR,
+                borderRadius: AVATAR / 2,
+                borderCurve: "continuous",
+                backgroundColor: item.avatar_url ? "#E5E7EB" : "#F5F5F5",
+                alignItems: "center",
+                justifyContent: "center",
+                overflow: "hidden",
+              }}
+            >
+              {item.avatar_url ? (
+                <Image
+                  source={{ uri: item.avatar_url }}
+                  style={{ width: "100%", height: "100%" }}
+                  resizeMode="cover"
+                />
+              ) : (
+                <UserRound size={20} color="#9CA3AF" strokeWidth={1.8} />
+              )}
+            </View>
+
+            <View className="flex-1 ml-3">
+              <Text style={{ fontSize: 15.5, fontWeight: "600", color: "#111" }} numberOfLines={1}>
+                {item.name}
+              </Text>
+              {(!!item.phone || showFollowsYou) && (
+                <View className="flex-row items-center mt-0.5">
+                  {!!item.phone && (
+                    <Text style={{ fontSize: 15, color: "#9CA3AF" }} numberOfLines={1}>
+                      {item.phone}
+                    </Text>
+                  )}
+                  {showFollowsYou && (
+                    <View
+                      style={{
+                        marginLeft: item.phone ? 8 : 0,
+                        backgroundColor: "#F5F5F5",
+                        borderRadius: 999,
+                        paddingHorizontal: 10,
+                        paddingVertical: 2,
+                      }}
+                    >
+                      <Text style={{ fontSize: 11, fontWeight: "600", color: "#6B7280" }}>
+                        Follows you
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              )}
+            </View>
+
+            {canShowAction && (
+              <TouchableOpacity
+                onPress={(e) => {
+                  e.stopPropagation();
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+                  if (isFollowing) {
+                    handleUnfollow(item);
+                  } else {
+                    handleFollow(item);
+                  }
+                }}
+                activeOpacity={0.8}
+                style={{
+                  marginLeft: 10,
+                  paddingHorizontal: 16,
+                  paddingVertical: 7,
+                  borderRadius: 999,
+                  borderCurve: "continuous",
+                  // A white button on a white row is invisible, so the
+                  // "already following" state carries the grey fill.
+                  backgroundColor: isFollowing ? "#F5F5F5" : "#0369A1",
+                }}
+              >
+                <Text
+                  style={{
+                    fontSize: 13,
+                    fontWeight: "600",
+                    color: isFollowing ? "#111" : "#fff",
+                  }}
+                >
+                  {isFollowing ? "Following" : "Follow"}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </TouchableOpacity>
+        </View>
+      );
+    },
+    [activeTab, resolvedActorUserId, viewerFollowerIds, isOwnList, currentListData.length, router],
+  );
+
   const renderEmptyState = () => {
-    const emptyMessages = {
+    const messages = {
       followers: {
-        title: 'No followers yet',
-        subtitle: 'People who follow you will appear here'
+        title: "No followers yet",
+        subtitle: "People who follow you will appear here",
       },
       following: {
-        title: 'Not following anyone',
-        subtitle: 'People you follow will appear here'
-      }
+        title: "Not following anyone",
+        subtitle: "People you follow will appear here",
+      },
     };
-
-    const message = emptyMessages[activeTab];
+    const message = messages[activeTab];
 
     return (
-      <View className="flex-1 items-center justify-center px-4 py-20">
-        <Text className="text-gray-500 text-base font-msemibold">{message.title}</Text>
-        <Text className="text-gray-400 text-sm font-regular mt-2 text-center">
+      <View className="flex-1 items-center justify-center px-8 py-20">
+        <Text style={{ fontSize: 15, color: "#9CA3AF" }}>{message.title}</Text>
+        <Text style={{ fontSize: 13, color: "#9CA3AF", marginTop: 6, textAlign: "center" }}>
           {message.subtitle}
         </Text>
       </View>
     );
   };
 
+  // Counts live on the tabs rather than in a header subtitle: they are the
+  // number for that list, and putting them anywhere else means reading two
+  // places to answer one question.
+  const tabs = useMemo(
+    () => [
+      { key: "following" as TabType, label: `${following.length} Following` },
+      { key: "followers" as TabType, label: `${followers.length} Followers` },
+    ],
+    [following.length, followers.length],
+  );
+
   return (
-    <View className="flex-1 bg-[#F8FAFC]" style={{ marginBottom: -insets.bottom, paddingBottom: insets.bottom }}>
-      {/* Premium Header with BlurView */}
-      <BlurView intensity={90} tint="light" className="pt-14 pb-2 z-10 border-b border-gray-200/50">
-        <View className="flex-row items-center justify-between px-6 mb-4">
-          <View className="flex-1">
-            <Text className="text-2xl font-mbold text-gray-900">
-              {activeTab === 'followers' ? 'Followers' : 'Following'}
-            </Text>
-            <Text className="text-gray-500 text-xs font-mregular">Manage your connections</Text>
-          </View>
-          <View className="flex-row items-center gap-x-2">
-            <TouchableOpacity
-              onPress={toggleSortOrder}
-              className="bg-white px-3 py-2 rounded-full shadow-sm border border-gray-100 flex-row items-center gap-x-1.5"
-            >
-              {sortOrder === 'asc' ? (
-                <ArrowUpAZ size={18} color="#1F2937" />
-              ) : (
-                <ArrowDownAZ size={18} color="#1F2937" />
-              )}
-              <Text className="text-xs font-msemibold text-gray-900">
-                {sortOrder === 'asc' ? 'Oldest' : 'Latest'}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={onClose}
-              className="bg-white p-2 rounded-full shadow-sm border border-gray-100"
-            >
-              <X size={20} color="#1F2937" />
-            </TouchableOpacity>
-          </View>
-        </View>
+    <View
+      className="flex-1"
+      style={{
+        backgroundColor: SETTINGS_BACKGROUND,
+        paddingTop: insets.top,
+        marginBottom: -insets.bottom,
+        paddingBottom: insets.bottom,
+      }}
+    >
+      {/* The profile underneath sets light-content for its cover gradient,
+          and RN merges StatusBar props last-mounted-wins. */}
+      <StatusBar barStyle="dark-content" />
 
-        {/* Custom Tab Bar */}
-        <View className="flex-row px-4 pb-2 gap-x-2">
-          {[
-            { id: 'following' as TabType, label: 'Following', icon: UserCheck, count: following.length },
-            { id: 'followers' as TabType, label: 'Followers', icon: Users, count: followers.length },
-          ].map((tab) => {
-            const Icon = tab.icon;
-            const isTabActive = activeTab === tab.id;
-            return (
-              <TouchableOpacity
-                key={tab.id}
-                onPress={() => handleTabChange(tab.id)}
-                className={`flex-1 flex-row items-center justify-center py-2.5 rounded-2xl border ${
-                  isTabActive ? 'bg-primary border-primary' : 'bg-white border-gray-200'
-                }`}
-              >
-                <Icon size={16} color={isTabActive ? '#fff' : '#6B7280'} />
-                <Text className={`ml-1.5 text-sm font-msemibold ${isTabActive ? 'text-white' : 'text-gray-700'}`}>
-                  {tab.label}
-                </Text>
-                <View className={`ml-1.5 px-1.5 py-0.5 rounded-full ${isTabActive ? 'bg-white/20' : 'bg-gray-100'}`}>
-                  <Text className={`text-xs font-mbold ${isTabActive ? 'text-white' : 'text-gray-600'}`}>
-                    {tab.count}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
+      {/* Three parts: chevron, centred title, one text action (§ Header). */}
+      <View className="flex-row items-center justify-between px-4 pb-3 pt-1">
+        <TouchableOpacity onPress={onClose} className="py-1 -ml-1">
+          <ChevronLeft size={28} color="#374151" />
+        </TouchableOpacity>
+        <View
+          style={{
+            position: "absolute",
+            top: 0,
+            bottom: 0,
+            left: 0,
+            right: 0,
+            justifyContent: "center",
+            alignItems: "center",
+          }}
+          pointerEvents="none"
+        >
+          <Text style={{ fontSize: 17, fontWeight: "600", color: "#111827" }}>Connections</Text>
         </View>
-      </BlurView>
+        {/* The label is the current order, and tapping it swaps — one text
+            action instead of an icon-and-label pill in a cluster with an X. */}
+        <TouchableOpacity onPress={toggleSortOrder} className="py-1">
+          <Text style={{ fontSize: 16, fontWeight: "600", color: "#0369A1" }}>
+            {sortOrder === "asc" ? "Oldest" : "Latest"}
+          </Text>
+        </TouchableOpacity>
+      </View>
 
-      {/* Content */}
+      {/* The row ends at its underline, so the gap to the list is added
+          here rather than baked into the shared component. */}
+      <View style={{ paddingBottom: 6 }}>
+        <ProfileTabRow
+          tabs={tabs}
+          activeKey={activeTab}
+          onChange={handleTabChange}
+          background={SETTINGS_BACKGROUND}
+        />
+      </View>
+
       {loading ? (
         <View className="flex-1 items-center justify-center">
           <CircularLoader size="large" color="#094569" />
@@ -344,16 +437,14 @@ export default function FollowRequestsOverlay({
         <Animated.View
           key={activeTab}
           entering={
-            previousTab.current === 'followers' && activeTab === 'following'
+            previousTab.current === "followers" && activeTab === "following"
               ? SlideInRight.duration(250)
-              : previousTab.current === 'following' && activeTab === 'followers'
-              ? SlideInLeft.duration(250)
-              : FadeIn.duration(250)
+              : previousTab.current === "following" && activeTab === "followers"
+                ? SlideInLeft.duration(250)
+                : FadeIn.duration(250)
           }
           exiting={
-            activeTab === 'followers'
-              ? SlideOutLeft.duration(250)
-              : SlideOutRight.duration(250)
+            activeTab === "followers" ? SlideOutLeft.duration(250) : SlideOutRight.duration(250)
           }
           className="flex-1"
         >
@@ -361,20 +452,23 @@ export default function FollowRequestsOverlay({
             data={currentListData}
             renderItem={renderUserItem}
             keyExtractor={(item) => item.id}
-            contentContainerStyle={{ paddingTop: 12, paddingBottom: 20 }}
+            contentContainerStyle={{ paddingTop: 12, paddingBottom: 24 }}
             refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={handleRefresh}
-                tintColor="#094569"
-              />
+              <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#094569" />
             }
             ListEmptyComponent={renderEmptyState}
           />
         </Animated.View>
       )}
+
       <Modal visible={popup.visible} transparent animationType="none" statusBarTranslucent>
-        <PopupMessage visible={popup.visible} type={popup.type} title={popup.title} message={popup.message} onHide={() => setPopup(p => ({...p, visible: false}))} />
+        <PopupMessage
+          visible={popup.visible}
+          type={popup.type}
+          title={popup.title}
+          message={popup.message}
+          onHide={() => setPopup((p) => ({ ...p, visible: false }))}
+        />
       </Modal>
     </View>
   );

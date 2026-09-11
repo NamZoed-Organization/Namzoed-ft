@@ -2,7 +2,7 @@ import PopupMessage from '@/components/ui/PopupMessage';
 import CircularLoader from '@/components/ui/CircularLoader';
 import { useUser } from '@/contexts/UserContext';
 import { updateUserProfile } from '@/lib/profileService';
-import { ArrowLeft } from 'lucide-react-native';
+import { ChevronLeft } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -53,7 +53,7 @@ export default function EditBio({ onClose }: EditBioProps) {
   };
 
   return (
-    <View className="flex-1 bg-white" style={{ paddingBottom: insets.bottom }}>
+    <View className="flex-1 bg-gray-50" style={{ paddingBottom: insets.bottom }}>
       <PopupMessage
         visible={popup.visible}
         type={popup.type}
@@ -62,43 +62,59 @@ export default function EditBio({ onClose }: EditBioProps) {
         onHide={() => setPopup(p => ({ ...p, visible: false }))}
       />
 
-      {/* Header */}
-      <View className="flex-row items-center px-4 pb-4 pt-2">
-        <TouchableOpacity onPress={onClose} className="mr-3 p-1">
-          <ArrowLeft size={24} color="#000" />
+      {/* Header — Cancel (grey) / title (centered) / Save (light blue,
+          darkens once there's content to save). */}
+      <View className="flex-row items-center justify-between px-4 pb-4 pt-2">
+        {/* A chevron, matching the Edit Profile hub these open from — the
+            row you came from is one level up, not a modal to cancel out
+            of. Save stays on the right. */}
+        <TouchableOpacity onPress={onClose} className="py-1 -ml-1">
+          <ChevronLeft size={28} color="#374151" />
         </TouchableOpacity>
-        <Text className="text-lg font-semibold text-gray-900">Edit Bio</Text>
+        <View
+          style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: 0, justifyContent: "center", alignItems: "center" }}
+          pointerEvents="none"
+        >
+          <Text className="text-xl font-medium text-gray-900">Edit Bio</Text>
+        </View>
+        <TouchableOpacity
+          onPress={handleSave}
+          disabled={loading || bio.trim().length === 0}
+          className="py-1"
+        >
+          {loading ? (
+            <CircularLoader color="#094569" size="small" />
+          ) : (
+            <Text
+              className="text-xl font-medium"
+              style={{ color: bio.trim().length > 0 ? "#0369A1" : "#93C5FD" }}
+            >
+              Save
+            </Text>
+          )}
+        </TouchableOpacity>
       </View>
 
       <View style={{ paddingHorizontal: 24, paddingTop: 10, flex: 1 }}>
-        <View className="flex-row items-center justify-between mb-2">
-          <Text className="text-sm font-msemibold text-gray-700">Bio</Text>
-          <Text className="text-xs text-gray-400">{bio.length}/{BIO_MAX_LENGTH}</Text>
+        <View style={{ position: "relative" }}>
+          <TextInput
+            style={{ borderRadius: 12, borderCurve: "continuous", minHeight: 160, textAlignVertical: "top" }}
+            className="bg-white px-4 py-3 text-xl text-gray-900"
+            placeholder="Tell people a bit about yourself"
+            placeholderTextColor="#9CA3AF"
+            value={bio}
+            onChangeText={(text) => setBio(text.slice(0, BIO_MAX_LENGTH))}
+            multiline
+            maxLength={BIO_MAX_LENGTH}
+            autoFocus
+          />
+          <Text
+            className="text-xl text-gray-400"
+            style={{ position: "absolute", right: 12, bottom: 10 }}
+          >
+            {bio.length}/{BIO_MAX_LENGTH}
+          </Text>
         </View>
-        <TextInput
-          style={{ borderRadius: 12, borderCurve: "continuous", minHeight: 160, textAlignVertical: "top" }}
-          className="bg-gray-50 px-4 py-3 text-base text-gray-900 border border-gray-200"
-          placeholder="Tell people a bit about yourself"
-          placeholderTextColor="#9CA3AF"
-          value={bio}
-          onChangeText={(text) => setBio(text.slice(0, BIO_MAX_LENGTH))}
-          multiline
-          maxLength={BIO_MAX_LENGTH}
-          autoFocus
-        />
-
-        <TouchableOpacity
-          style={{ borderRadius: 12, borderCurve: "continuous" }}
-          onPress={handleSave}
-          disabled={loading}
-          className="bg-primary py-4 items-center mt-6"
-        >
-          {loading ? (
-            <CircularLoader color="#fff" />
-          ) : (
-            <Text className="text-white font-semibold text-base">Save Bio</Text>
-          )}
-        </TouchableOpacity>
       </View>
     </View>
   );

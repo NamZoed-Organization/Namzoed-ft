@@ -11,11 +11,22 @@
 // ?userId=<their id> and every edit affordance (avatar/license upload, Add
 // Service/Product, business-name edit) disappears, leaving just their
 // business card, services, and products.
-import AddServicesModal from "@/components/modals/AddServicesModal";
-import CreateProductModal from "@/components/modals/CreateProductModal";
-import EditServicesModal from "@/components/modals/EditServicesModal";
+import { MODAL_RADIUS } from "@/constants/theme";
 import LicenseViewerOverlay from "@/components/modals/LicenseViewerOverlay";
 import ProfileImageViewer from "@/components/modals/ProfileImageViewer";
+import SellerCredibilityCard from "@/components/SellerCredibilityCard";
+import BusinessProfileHeader from "@/components/profile/BusinessProfileHeader";
+import ShareArcIcon from "@/components/icons/ShareArcIcon";
+import BusinessSearchModal from "@/components/profile/BusinessSearchModal";
+import ShareComposerModal from "@/components/modals/ShareComposerModal";
+import { GRID_BACKGROUND } from "@/components/MasonryGrid";
+import { businessTabs, type BusinessSection } from "@/lib/businessSections";
+import { serviceCategories } from "@/data/servicecategory";
+import ProfileTabRow from "@/components/profile/ProfileTabRow";
+import { useCoverPalette } from "@/hooks/useCoverPalette";
+import EditWorkProfile, { type WorkProfileForm } from "@/components/profile/EditWorkProfile";
+import ShopReviews from "@/components/profile/ShopReviews";
+import { businessDisplayName, businessKind, hasBusiness } from "@/lib/sellerService";
 import ServiceProviderSection from "@/components/profile/ServiceProviderSection";
 import CircularLoader from "@/components/ui/CircularLoader";
 import PopupMessage from "@/components/ui/PopupMessage";
@@ -29,12 +40,14 @@ import {
   deleteLicenseImage,
   ProviderServiceWithDetails,
   toggleServiceStatus,
+  getCategoryIdBySlug,
   updateServiceProviderLicense,
   updateServiceProviderProfile,
   uploadLicenseImage,
   uploadProviderAvatar,
 } from "@/lib/servicesService";
 import { useAppRouter } from "@/utils/navigation";
+import { presentSystemPicker, waitForIosModalDismiss } from "@/utils/modal";
 import { useIsFocused } from "@react-navigation/native";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
@@ -43,23 +56,22 @@ import * as ImagePicker from "expo-image-picker";
 import {
   Camera,
   ChevronLeft,
-  Eye,
+  Edit3,
+  MessageCircle,
+  Search,
+  Store,
   ImageIcon as ImageIconLucide,
   Plus,
   ShoppingBag,
   Trash2,
-  Upload,
   Verified,
   Wrench,
 } from "lucide-react-native";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
-  InteractionManager,
   Modal,
-  Platform,
   RefreshControl,
-  ScrollView,
   Text,
   TouchableOpacity,
   View,
@@ -71,8 +83,18 @@ import Animated, {
   FadeOutDown,
   SlideInDown,
   SlideOutDown,
+  Extrapolation,
+  interpolate,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+// How far the tab block is pulled up over the header, so its rounded top
+// corners land on the gradient rather than starting below it. Matches the
+// personal profile's own constant.
+const TAB_BAR_CORNER_OVERLAP = 20;
 
 export default function WorkProfileScreen() {
   const { currentUser } = useUser();
@@ -88,8 +110,10 @@ export default function WorkProfileScreen() {
 
   const {
     serviceProvider,
+    setServiceProvider,
     loadingServiceProvider,
     providerFormData,
+    setProviderFormData,
     providerImageUri,
     setProviderImageUri,
     licenseImageUrl,
@@ -101,16 +125,231 @@ export default function WorkProfileScreen() {
     loadingProviderServices,
   } = useServiceProvider(refreshKey, isOwnProfile ? undefined : targetUserId);
 
+
+
   // Products tagged to the work profile (is_work_listing) — shown here
   // regardless of viewer; only the owner gets the "Add Product" button.
+  // The work profile is a business page, not a shop page: a carpenter with
+  // no products and a grocery with no services should both feel at home on
+  // it, and neither should see an empty tab for the thing they don't do. So
+  // the tab set is derived from what this business actually has.
+  const [activeWorkTab, setActiveWorkTab] = useState<BusinessSection>("products");
   const [workProducts, setWorkProducts] = useState<Product[]>([]);
   const [loadingWorkProducts, setLoadingWorkProducts] = useState(false);
-  const [showAddProductModal, setShowAddProductModal] = useState(false);
+
+  /**
+   * A business that never filled in a page of its own borrows the person's.
+   *
+   * Plenty of sellers list products without ever naming a business — most
+   * small shops in Bhutan *are* the person, and "Business" over a blank
+   * circle is a worse answer than their own name and face. `service_providers`
+   * already joins the profile, so this costs nothing: it is a fallback for
+   * display only, and the editor still shows the fields as empty, because
+   * they are (a logo that looked set would have nothing to remove).
+   */
+  const ownerProfile = serviceProvider?.profiles ?? null;
+  const displayName = businessDisplayName(
+    serviceProvider?.name,
+    ownerProfile?.name,
+  );
+  const displayLogo =
+    providerImageUri ?? serviceProvider?.profile_url ?? ownerProfile?.avatar_url ?? null;
+
+  /**
+   * A business that has never been set up is sent to set it up.
+   *
+   * Every account carries a `service_providers` row from signup, so the
+   * row's existence means nothing. `hasBusiness` is the app's own answer to
+   * "is there a business here" and it is used rather than the name alone
+   * for the reason § The business profile gives: sellers who listed products
+   * before the work profile existed never named anything, and judging by the
+   * name would throw them into a setup form for a business they have been
+   * running for a year.
+   *
+   * Only your own, and only once every read has finished — redirecting on a
+   * loading state would bounce anybody whose connection was merely slow. A
+   * `replace`, so a back gesture out of the form leaves the flow instead of
+   * cycling between the two screens.
+   */
+  useEffect(() => {
+    if (!isOwnProfile) return;
+    if (loadingServiceProvider || loadingWorkProducts || loadingProviderServices) return;
+    const exists = hasBusiness({
+      providerName: serviceProvider?.name,
+      productCount: workProducts.length,
+      serviceCount: providerServices.length,
+    });
+    if (!exists) router.replace("/(users)/business/setup" as any);
+  }, [
+    isOwnProfile,
+    loadingProviderServices,
+    loadingServiceProvider,
+    loadingWorkProducts,
+    providerServices.length,
+    router,
+    serviceProvider?.name,
+    workProducts.length,
+  ]);
+  // The owner's editing form is behind the header's Edit button rather than
+  // always on screen: it repeats the logo, name and bio the header already
+  // shows, so leaving it open by default made the page read as the same
+  // block twice.
+  const [showBusinessEditor, setShowBusinessEditor] = useState(false);
+  const [savingBusinessField, setSavingBusinessField] = useState(false);
+  // Measured rather than hardcoded: a constant can't account for the status
+  // bar varying by device, which would leave a sliver of the tab row hidden
+  // under the fixed bar (or a gap below it) once pinned.
+  const [compactBarHeight, setCompactBarHeight] = useState(56);
+  const [showBusinessSearch, setShowBusinessSearch] = useState(false);
+  const [showShareComposer, setShowShareComposer] = useState(false);
+  // The same per-business colour the header uses, so the bar the tabs pin
+  // under is the same surface they scrolled up out of rather than a
+  // differently-coloured lid.
+  const { tintRgb } = useCoverPalette(serviceProvider?.id ?? targetUserId, null, null);
+
+  // The bar starts transparent over the header's own gradient and fills in
+  // as that gradient scrolls away, with the business avatar rising into it —
+  // the personal profile's behaviour. A permanently filled bar reads as a
+  // second, differently-coloured surface stacked on the header.
+  const barFill = useSharedValue(0);
+  const barFillStyle = useAnimatedStyle(() => ({ opacity: barFill.value }));
+  const workScrollHandler = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      barFill.value = Math.max(0, Math.min(1, event.contentOffset.y / 120));
+    },
+  });
+
+  // Everything in the bar is derived from that one value rather than swapped
+  // at a threshold. A boolean flip was what made this snap: two layouts
+  // exchanged in a single frame, with nothing in between. Widths and
+  // opacities interpolated from the same driver give the Edit pill somewhere
+  // to go and the search field something to grow from.
+  //
+  // Both measured once, because you cannot interpolate to "the rest of the
+  // row" without knowing how wide the row is.
+  const [searchTrackWidth, setSearchTrackWidth] = useState(0);
+  const [editPillWidth, setEditPillWidth] = useState(0);
+
+  const AVATAR_SLOT = 36; // 28pt avatar + its gap
+
+  const barAvatarSlotStyle = useAnimatedStyle(() => ({
+    width: interpolate(barFill.value, [0, 1], [0, AVATAR_SLOT], Extrapolation.CLAMP),
+    opacity: interpolate(barFill.value, [0.3, 1], [0, 1], Extrapolation.CLAMP),
+  }));
+
+  // Collapses to nothing rather than just fading: a pill that fades but keeps
+  // its width leaves a hole the search field can't grow into, which is most
+  // of why the old version felt stuck.
+  const editPillStyle = useAnimatedStyle(() => ({
+    width: interpolate(barFill.value, [0, 0.7], [editPillWidth, 0], Extrapolation.CLAMP),
+    opacity: interpolate(barFill.value, [0, 0.45], [1, 0], Extrapolation.CLAMP),
+    // It sits after the search control, so its gap is on the left.
+    marginLeft: interpolate(barFill.value, [0, 0.7], [8, 0], Extrapolation.CLAMP),
+  }));
+
+  const searchStyle = useAnimatedStyle(() => ({
+    width: interpolate(
+      barFill.value,
+      [0, 1],
+      [36, Math.max(36, searchTrackWidth - AVATAR_SLOT)],
+      Extrapolation.CLAMP,
+    ),
+    // Never squeezed: the pill beside it collapses to nothing, so there is
+    // always room for whatever this has grown to.
+    flexShrink: 0,
+  }));
+
+  // The label only exists once there is room for it; fading it in with the
+  // width would show it clipped mid-word.
+  const searchLabelStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(barFill.value, [0.55, 1], [0, 1], Extrapolation.CLAMP),
+  }));
+
+  // One field at a time, so a failed save can only ever lose one thing —
+  // which is the point of the hub shape (UI_STANDARD.md § Hub screens).
+  // Its own handler rather than a field on the form: the type is a foreign
+  // key chosen from a list, not free text, and changing it reshapes the page.
+  const handleSaveBusinessType = useCallback(
+    async (slug: string) => {
+      if (!currentUser?.id) return;
+      try {
+        const categoryId = await getCategoryIdBySlug(slug);
+        await updateServiceProviderProfile(currentUser.id, { category_id: categoryId });
+        const chosen = serviceCategories.find((c) => c.slug === slug);
+        setServiceProvider((prev: any) =>
+          prev
+            ? {
+                ...prev,
+                category_id: categoryId,
+                service_categories: chosen
+                  ? { id: categoryId, name: chosen.name, slug: chosen.slug }
+                  : prev.service_categories,
+              }
+            : prev,
+        );
+      } catch (error) {
+        console.error("Failed to set business type:", error);
+        showErrorPopup("Could not save the business type.", "Save Failed");
+      }
+    },
+    [currentUser?.id],
+  );
+
+  const handleSaveBusinessField = useCallback(
+    async (patch: Partial<WorkProfileForm>) => {
+      if (!currentUser?.id) return;
+      setSavingBusinessField(true);
+      try {
+        // The form's names and the column names differ; map here rather than
+        // renaming either, since both are load-bearing elsewhere.
+        const columns: Record<string, unknown> = {};
+        if (patch.businessName !== undefined) columns.name = patch.businessName;
+        if (patch.bio !== undefined) columns.master_bio = patch.bio;
+        if (patch.email !== undefined) columns.email = patch.email;
+        if (patch.contact !== undefined) columns.contact = patch.contact;
+        if (patch.emailActive !== undefined) columns.email_active = patch.emailActive;
+        if (patch.contactActive !== undefined) columns.contact_active = patch.contactActive;
+
+        await updateServiceProviderProfile(currentUser.id, columns);
+        setProviderFormData((prev: any) => ({ ...prev, ...patch }));
+        setServiceProvider((prev: any) => (prev ? { ...prev, ...columns } : prev));
+      } catch (error) {
+        console.error("Failed to save business field:", error);
+        showErrorPopup("Could not save that. Please try again.", "Save Failed");
+      } finally {
+        setSavingBusinessField(false);
+      }
+    },
+    [currentUser?.id],
+  );
+
+  // Decided by what kind of business this is, not by what it happens to have
+  // listed (see lib/businessSections.ts). Deriving from presence worked for
+  // visitors but never for the owner, who was always shown both content tabs
+  // so they had somewhere to add the first item — exactly wrong for a taxi
+  // driver, who will never have products.
+  const workTabs = useMemo(
+    () => businessTabs(serviceProvider?.service_categories?.slug),
+    [serviceProvider?.service_categories?.slug],
+  );
+
+  // Keep the selection valid: a visitor who lands on a business with no
+  // products would otherwise be looking at a tab that isn't in the row.
+  useEffect(() => {
+    if (!workTabs.some((t) => t.key === activeWorkTab)) {
+      setActiveWorkTab(workTabs[0].key);
+    }
+  }, [workTabs, activeWorkTab]);
   useEffect(() => {
     if (!targetUserId) return;
     let cancelled = false;
     setLoadingWorkProducts(true);
-    fetchUserProducts(targetUserId, { isWorkListing: true })
+    // Every product, not just those flagged is_work_listing. The work
+    // profile IS the shop now, so the split that flag encoded — some
+    // products here, some on the personal profile — no longer exists: the
+    // personal profile shows marketplace listings instead. The flag stays on
+    // the column for older rows rather than being migrated away.
+    fetchUserProducts(targetUserId)
       .then((products) => {
         if (!cancelled) setWorkProducts(products as Product[]);
       })
@@ -128,16 +367,11 @@ export default function WorkProfileScreen() {
     "camera" | "gallery" | null
   >(null);
   const [showProviderAvatarMenu, setShowProviderAvatarMenu] = useState(false);
-  const [showAddServiceModal, setShowAddServiceModal] = useState(false);
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
   const [isServiceSelectionMode, setIsServiceSelectionMode] = useState(false);
-  const [serviceToEdit, setServiceToEdit] =
-    useState<ProviderServiceWithDetails | null>(null);
-  const [showEditServiceModal, setShowEditServiceModal] = useState(false);
   const [showProviderWorkImageViewer, setShowProviderWorkImageViewer] =
     useState(false);
   const [showLicenseViewer, setShowLicenseViewer] = useState(false);
-  const [showLicenseMenu, setShowLicenseMenu] = useState(false);
   const [uploadingLicense, setUploadingLicense] = useState(false);
 
   const [showSuccess, setShowSuccess] = useState(false);
@@ -167,7 +401,6 @@ export default function WorkProfileScreen() {
         setShowProviderAvatarMenu(false);
         setShowProviderWorkImageViewer(false);
         setShowLicenseViewer(false);
-        setShowLicenseMenu(false);
       };
     }, []),
   );
@@ -187,14 +420,6 @@ export default function WorkProfileScreen() {
       return false;
     }
     return true;
-  };
-
-  const waitForIosModalDismiss = async () => {
-    if (Platform.OS !== "ios") return;
-    await new Promise<void>((resolve) => {
-      InteractionManager.runAfterInteractions(() => resolve());
-    });
-    await new Promise<void>((resolve) => setTimeout(resolve, 120));
   };
 
   const handleEditProviderProfile = () => setShowProviderImagePicker(true);
@@ -330,11 +555,6 @@ export default function WorkProfileScreen() {
     );
   };
 
-  const handleEditService = (service: ProviderServiceWithDetails) => {
-    Haptics.impactAsync(ImpactFeedbackStyle.Heavy);
-    setServiceToEdit(service);
-    setShowEditServiceModal(true);
-  };
 
   const handleServiceLongPress = (serviceId: string) => {
     if (!isServiceSelectionMode) {
@@ -409,11 +629,17 @@ export default function WorkProfileScreen() {
         return;
       }
 
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ["images"],
-        allowsEditing: false,
-        quality: 1.0,
-      });
+      // Through presentSystemPicker: this is reached from the Business
+      // license page inside the Edit business modal, and UIKit drops a
+      // picker presented while one of ours is still settling — the same
+      // hang the profile photo had (see utils/modal.ts).
+      const result = await presentSystemPicker(() =>
+        ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ["images"],
+          allowsEditing: false,
+          quality: 1.0,
+        }),
+      );
 
       if (!result.canceled && result.assets[0]) {
         const imageUri = result.assets[0].uri;
@@ -533,7 +759,6 @@ export default function WorkProfileScreen() {
   };
 
   const handleRemoveLicense = () => {
-    setShowLicenseMenu(false);
     Alert.alert(
       "Remove License",
       'Are you sure you want to remove your license document? This will reset your verification status to "not verified".',
@@ -582,22 +807,167 @@ export default function WorkProfileScreen() {
 
   return (
     <View className="flex-1 bg-white" pointerEvents={isFocused ? "auto" : "none"}>
+
+      {/* Fixed bar. Transparent over the header's own gradient at rest and
+          filling in as that gradient scrolls away, with the business avatar
+          rising into it — the personal profile's behaviour. A permanently
+          filled bar reads as a second, differently-coloured surface stacked
+          on the header rather than the same one continuing. */}
       <View
-        style={{ paddingTop: insets.top }}
-        className="bg-white border-b border-gray-100"
+        onLayout={(e) => setCompactBarHeight(e.nativeEvent.layout.height)}
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 20,
+          elevation: 20,
+          paddingTop: insets.top,
+        }}
+        pointerEvents="box-none"
       >
-        <View className="flex-row items-center justify-between px-4 py-3">
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            {
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: `rgba(${tintRgb.r},${tintRgb.g},${tintRgb.b},0.98)`,
+            },
+            barFillStyle,
+          ]}
+        />
+
+        <View className="flex-row items-center px-4 py-3 gap-2">
           <TouchableOpacity
             onPress={() => router.back()}
-            className="w-9 h-9 items-center justify-center"
+            className="w-9 h-9 items-center justify-center -ml-2"
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <ChevronLeft size={24} color="#111" />
+            <ChevronLeft size={24} color="#fff" />
           </TouchableOpacity>
-          <Text className="text-lg font-mbold text-gray-900" numberOfLines={1}>
-            {isOwnProfile ? "Work Profile" : serviceProvider?.name || "Work Profile"}
-          </Text>
-          <View className="w-9 h-9" />
+
+          {/* Avatar, Edit pill and search share one flexible track. Nothing
+              here mounts or unmounts on scroll — the widths simply move, so
+              there is no frame where the layout jumps. */}
+          <View
+            className="flex-1 flex-row items-center"
+            onLayout={(e) => setSearchTrackWidth(e.nativeEvent.layout.width)}
+          >
+            {/* Left-aligned, unlike the personal profile's centred mini
+                avatar: a business is identified by its logo and name
+                together, and centring the logo puts it where a title
+                belongs. */}
+            <Animated.View
+              style={[{ overflow: "hidden" }, barAvatarSlotStyle]}
+              pointerEvents="none"
+            >
+              <View className="w-7 h-7 rounded-full bg-white/20 overflow-hidden items-center justify-center">
+                {displayLogo ? (
+                  <ProgressiveImage
+                    uri={displayLogo}
+                    style={{ width: "100%", height: "100%" }}
+                    showProgress={false}
+                  />
+                ) : (
+                  <Store size={14} color="#fff" strokeWidth={1.8} />
+                )}
+              </View>
+            </Animated.View>
+
+            <View className="flex-1" />
+
+            {/* Grows out of the icon into the width the pill vacates
+                beside it. */}
+            <Animated.View style={[{ overflow: "hidden" }, searchStyle]}>
+              <TouchableOpacity
+                onPress={() => setShowBusinessSearch(true)}
+                activeOpacity={0.7}
+                style={{ borderRadius: 999, borderCurve: "continuous" }}
+                className="flex-row items-center gap-2 px-2.5 h-9 bg-white/15"
+              >
+                <Search size={16} color="rgba(255,255,255,0.85)" />
+                <Animated.Text
+                  numberOfLines={1}
+                  style={searchLabelStyle}
+                  className="text-xs text-white/70"
+                >
+                  Search in Business
+                </Animated.Text>
+              </TouchableOpacity>
+            </Animated.View>
+
+            {/* The personal profile's own Edit pill, to the letter — same
+                icon, size, padding and fill, so the two profiles offer the
+                same affordance in the same shape.
+
+                The animated width is only applied ONCE the pill has been
+                measured. Applying it from the start is circular: the width
+                interpolates from editPillWidth, which is 0 until the button
+                inside lays out — and it can't lay out inside a wrapper that
+                is already 0 wide, so it stayed invisible forever. */}
+            {isOwnProfile && (
+              <Animated.View
+                style={[
+                  editPillWidth > 0 ? { overflow: "hidden" } : null,
+                  editPillWidth > 0 ? editPillStyle : null,
+                ]}
+              >
+                <TouchableOpacity
+                  onLayout={(e) => {
+                    // Measured at its natural width before the collapse ever
+                    // runs, so there is a real number to interpolate from.
+                    const w = e.nativeEvent.layout.width;
+                    if (w > 0 && editPillWidth === 0) setEditPillWidth(w);
+                  }}
+                  style={{
+                    borderRadius: 999,
+                    borderCurve: "continuous",
+                    // Pinned to its measured width once known. Without this
+                    // the button reflows as the wrapper narrows — the label
+                    // squeezing and wrapping instead of being cleanly clipped
+                    // — which is what made the collapse look like distortion
+                    // rather than motion.
+                    ...(editPillWidth > 0 ? { width: editPillWidth } : null),
+                  }}
+                  onPress={() => setShowBusinessEditor(true)}
+                  className="flex-row items-center gap-1 px-3 py-1.5 bg-white/15 border border-white/30"
+                >
+                  <Edit3 size={13} strokeWidth={1.8} color="#fff" />
+                  <Text className="text-xs font-semibold text-white" numberOfLines={1}>
+                    Edit Business
+                  </Text>
+                </TouchableOpacity>
+              </Animated.View>
+            )}
+          </View>
+
+          {!isOwnProfile && (
+            <TouchableOpacity
+              onPress={() =>
+                targetUserId &&
+                router.push({
+                  pathname: "/(users)/chat/[id]",
+                  params: { id: String(targetUserId) },
+                } as any)
+              }
+              className="w-9 h-9 items-center justify-center"
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <MessageCircle size={20} color="#fff" />
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity
+            onPress={() => setShowShareComposer(true)}
+            className="w-9 h-9 items-center justify-center -mr-2"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <ShareArcIcon size={20} color="#fff" />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -606,10 +976,15 @@ export default function WorkProfileScreen() {
           <CircularLoader size="large" color="#094569" />
         </View>
       ) : (
-        <ScrollView
+        <Animated.ScrollView
+          onScroll={workScrollHandler}
+          scrollEventThrottle={16}
           style={{ flex: 1 }}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 40 }}
+          // Pins direct child index 1 — the tab row wrapper below. Index 0
+          // is the header block above it; index 2 onward is the content.
+          stickyHeaderIndices={[1]}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -619,98 +994,114 @@ export default function WorkProfileScreen() {
             />
           }
         >
-          {isOwnProfile ? (
-            <ServiceProviderSection
-              loadingServiceProvider={false}
-              isEditingProvider={false}
-              providerImageUri={providerImageUri}
-              verificationStatus={verificationStatus}
-              providerFormData={providerFormData}
-              licenseImageUrl={licenseImageUrl}
-              uploadingLicense={uploadingLicense}
-              providerServices={providerServices}
-              loadingProviderServices={loadingProviderServices}
-              isServiceSelectionMode={isServiceSelectionMode}
-              selectedServiceIds={selectedServiceIds}
-              onEditWork={() =>
-                router.push({
-                  pathname: "/settings",
-                  params: { modal: "editWorkProfile" },
-                } as any)
-              }
-              onShowProviderAvatarMenu={() => {
-                Haptics.impactAsync(ImpactFeedbackStyle.Medium);
-                setShowProviderAvatarMenu(true);
-              }}
-              onViewProviderImage={() => {
-                Haptics.impactAsync(ImpactFeedbackStyle.Medium);
-                setShowProviderWorkImageViewer(true);
-              }}
-              onEditProviderProfile={() => {
-                Haptics.impactAsync(ImpactFeedbackStyle.Medium);
-                handleEditProviderProfile();
-              }}
-              onUploadLicense={handleUploadLicense}
-              onShowLicenseMenu={() => {
-                Haptics.impactAsync(ImpactFeedbackStyle.Medium);
-                setShowLicenseMenu(true);
-              }}
-              onServiceLongPress={handleServiceLongPress}
-              onToggleServiceSelection={toggleServiceSelection}
-              onToggleStatus={handleToggleStatus}
-              onEditService={handleEditService}
-              onNavigateToService={(serviceId) =>
-                router.push(`/(users)/servicedetail/${serviceId}` as any)
-              }
-              onAddService={() => setShowAddServiceModal(true)}
-            />
-          ) : (
-            <View className="px-4 pt-6">
-              {/* Read-only business card — no edit/upload affordances */}
-              <View
-                style={{ borderRadius: 16, borderCurve: "continuous" }}
-                className="bg-white p-5 mb-6 shadow-sm border border-gray-100 flex-row items-start"
-              >
-                <View className="flex-1 pr-4">
-                  <View className="flex-row items-center gap-1.5 mb-0.5 flex-wrap">
-                    <Text
-                      className="text-lg font-mbold text-gray-900 flex-shrink"
-                      numberOfLines={2}
-                    >
-                      {serviceProvider?.name || "Business"}
-                    </Text>
-                    {verificationStatus === "verified" && (
-                      <View className="flex-row items-center bg-blue-50 border border-[#094569] rounded-full px-2 py-0.5 gap-1">
-                        <Verified size={11} color="#094569" />
-                        <Text className="text-[10px] font-msemibold text-[#094569] leading-none">
-                          Verified
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                  {serviceProvider?.master_bio ? (
-                    <Text className="text-sm font-regular text-gray-500" numberOfLines={4}>
-                      {serviceProvider.master_bio}
-                    </Text>
-                  ) : null}
-                </View>
-                <View className="w-[86px] h-[86px] rounded-full bg-gray-200 overflow-hidden items-center justify-center border-2 border-gray-100">
-                  {providerImageUri ? (
-                    <ProgressiveImage
-                      uri={providerImageUri}
-                      style={{ width: "100%", height: "100%" }}
-                      showProgress={false}
-                      priority="high"
-                    />
-                  ) : (
-                    <Wrench size={34} strokeWidth={1.5} color="#9ca3af" />
-                  )}
-                </View>
-              </View>
+          <View>
+          {/* Mirrors the personal profile's header so the two read as one app —
+              cover gradient behind the whole block, logo over it, identity to the
+              right — plus the credibility strip a personal profile never has. */}
+          <BusinessProfileHeader
+            providerId={serviceProvider?.id}
+            seedId={serviceProvider?.id ?? targetUserId}
+            name={displayName}
+            bio={serviceProvider?.master_bio}
+            logoUrl={displayLogo}
+            // No location yet: service_providers has no dzongkhag column, and a
+            // business address is a different thing from the owner's district
+            // anyway — worth its own column rather than borrowing the profile's.
+            dzongkhag={null}
+            // The business's own type, not the first service's — a salon
+            // that also fixes a chair is still a salon.
+            trade={serviceProvider?.service_categories?.name}
+            verification={(verificationStatus as any) ?? "not_verified"}
+            productCount={workProducts.length}
+            serviceCount={providerServices.length}
+            isOwnProfile={isOwnProfile}
+            topInset={compactBarHeight + 8}
+          />
 
-              {/* Services — read-only grid (owner mode gets this same list
-                  inside ServiceProviderSection above, with edit controls) */}
-              <Text className="text-lg font-mbold text-gray-900 mb-3">Services</Text>
+          {/* The shop's own reputation, above its products — a buyer sizing
+              up a storefront asks who they'd be buying from before browsing
+              what's on the shelf. Renders nothing for an unverified work
+              profile, which by definition isn't a shop. */}
+          {targetUserId ? (
+            <View className="px-4 mt-2 mb-3">
+              <SellerCredibilityCard ownerId={targetUserId} hideWhenUnverified />
+            </View>
+          ) : null}
+          </View>
+
+          {/* The pinned child. `stickyHeaderIndices` below pins whatever
+              sits at index 1, and it pins flush to the ScrollView's own top
+              edge — true y=0, under the status bar. The compact bar is a
+              separate overlay outside the scroller, so the tab row has to
+              land at its height instead: the invisible spacer occupies
+              exactly that, and the equal negative marginTop cancels it out
+              in normal flow. Unstuck it renders as if neither existed; once
+              pinned the cancellation no longer applies to what's inside, so
+              the spacer sits behind the bar and the tabs start where it
+              ends. Same trick as the personal profile. */}
+          <View
+            style={{
+              // The extra TAB_BAR_CORNER_OVERLAP is pulled up OVER the header
+              // above, so the tab block's rounded top corners sit on the
+              // gradient rather than starting below it — the personal
+              // profile's own treatment, and what was missing here.
+              marginTop: -(compactBarHeight + TAB_BAR_CORNER_OVERLAP),
+              zIndex: 10,
+              elevation: 10,
+            }}
+          >
+            <View
+              pointerEvents="none"
+              style={{ height: compactBarHeight + TAB_BAR_CORNER_OVERLAP }}
+            />
+            <View style={{ marginTop: -TAB_BAR_CORNER_OVERLAP }}>
+              {/* Fills the band the corners curve away from, in the header's
+                  own tint, so no sliver of what's behind shows through the
+                  seam. */}
+              <View
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: TAB_BAR_CORNER_OVERLAP,
+                  backgroundColor: `rgba(${tintRgb.r},${tintRgb.g},${tintRgb.b},0.95)`,
+                }}
+              />
+              <View
+                style={{
+                  borderTopLeftRadius: 12,
+                  borderTopRightRadius: 12,
+                  borderCurve: "continuous",
+                  // Clips the tab row's edge fades to the curve instead of
+                  // letting them overflow past it as square patches.
+                  overflow: "hidden",
+                }}
+                className="bg-white border-b border-gray-100"
+              >
+                <ProfileTabRow
+                  tabs={workTabs}
+                  activeKey={activeWorkTab}
+                  onChange={setActiveWorkTab}
+                />
+              </View>
+            </View>
+          </View>
+
+          {/* One page for everyone now. The owner's add/edit controls moved
+              into EditWorkProfile behind the header's Edit button — a
+              visitor shouldn't share a screen with them, and the business
+              page is the shop front. */}
+          {/* Tab content sits on the grid ground, not white: the cards and
+              rows inside it are the content, and the standard's rule is
+              content on white, screens on grey — a white panel behind white
+              cards makes them disappear. */}
+          <View style={{ backgroundColor: GRID_BACKGROUND, minHeight: 320 }}>
+          {activeWorkTab === "services" ? (
+            <View className="px-4 pt-4">
+              {/* No business card here any more — the header above already
+                  is one, and repeating it made the page read as the same
+                  block twice. */}
               <View className="flex-row flex-wrap mb-6">
                 {loadingProviderServices ? (
                   <CircularLoader size="large" color="#059669" />
@@ -749,21 +1140,44 @@ export default function WorkProfileScreen() {
                 )}
               </View>
             </View>
-          )}
+          ) : null}
 
-          {/* Products — tagged to this work profile (is_work_listing), shown
-              regardless of viewer; only the owner can add one. */}
+          {activeWorkTab === "reviews" && serviceProvider?.id ? (
+            <ShopReviews
+              providerId={serviceProvider.id}
+              kind={businessKind(workProducts.length > 0, providerServices.length > 0)}
+              ownerUserId={targetUserId}
+              // The rolled-up product number leads to the products it came
+              // from, rather than being a figure with nothing behind it.
+              onOpenProducts={
+                workTabs.some((t) => t.key === "products" || t.key === "menu")
+                  ? () =>
+                      setActiveWorkTab(
+                        workTabs.some((t) => t.key === "menu") ? "menu" : "products",
+                      )
+                  : undefined
+              }
+            />
+          ) : null}
+
+          {activeWorkTab === "products" && (
           <View className="px-4 mt-2">
             <View className="flex-row items-center justify-between mb-3">
               <Text className="text-lg font-mbold text-gray-900">Products</Text>
               {isOwnProfile && (
+                // The catalogue screen, not a bare form: adding a product
+                // and managing the ones already there are the same job, and
+                // this tab is a shop window rather than a place to work
+                // (app/(users)/listings.tsx).
                 <TouchableOpacity
-                  onPress={() => setShowAddProductModal(true)}
+                  onPress={() =>
+                    router.push("/(users)/listings?section=products" as any)
+                  }
                   style={{ borderRadius: 999, borderCurve: "continuous" }}
                   className="flex-row items-center bg-primary px-3 py-1.5"
                 >
                   <Plus size={14} color="white" style={{ marginRight: 4 }} />
-                  <Text className="text-white text-xs font-semibold">Add Product</Text>
+                  <Text className="text-white text-xs font-semibold">Manage</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -802,24 +1216,94 @@ export default function WorkProfileScreen() {
                   </View>
                 ))
               ) : (
-                <Text className="text-sm text-gray-400 px-1">
-                  {isOwnProfile ? "No work products yet" : "No products yet"}
-                </Text>
+                isOwnProfile ? (
+                  <TouchableOpacity
+                    onPress={() =>
+                      router.push("/(users)/listings?section=products" as any)
+                    }
+                    className="px-1 py-2"
+                  >
+                    <Text className="text-sm text-gray-400">
+                      No products listed yet —{" "}
+                      <Text className="text-primary font-msemibold">
+                        add the first one
+                      </Text>
+                    </Text>
+                  </TouchableOpacity>
+                ) : (
+                  <Text className="text-sm text-gray-400 px-1">
+                    No products yet
+                  </Text>
+                )
               )}
             </View>
           </View>
-        </ScrollView>
+          )}
+          </View>
+        </Animated.ScrollView>
       )}
 
-      {isOwnProfile && currentUser?.id && (
-        <CreateProductModal
-          isVisible={showAddProductModal}
-          onClose={() => {
-            setShowAddProductModal(false);
-            setRefreshKey((prev) => prev + 1);
+      {targetUserId && (
+        <ShareComposerModal
+          visible={showShareComposer}
+          onClose={() => setShowShareComposer(false)}
+          heading="Share business"
+          sharePayload={{
+            // The same name the page shows — a share that said "Business"
+            // while the page said the owner's name would read as a
+            // different place.
+            title: displayName,
+            message: `Check out ${displayName} on Namzoed`,
+            url: `https://namzoed.com/business/${targetUserId}`,
           }}
-          userId={currentUser.id}
-          isWorkListing
+        />
+      )}
+
+      <BusinessSearchModal
+        visible={showBusinessSearch}
+        onClose={() => setShowBusinessSearch(false)}
+        businessName={displayName}
+        products={workProducts}
+        services={providerServices}
+        onOpenProduct={(id) => {
+          setShowBusinessSearch(false);
+          router.push(`/(users)/product/${id}` as any);
+        }}
+        onOpenService={(id) => {
+          setShowBusinessSearch(false);
+          router.push(`/(users)/servicedetail/${id}` as any);
+        }}
+      />
+
+      {isOwnProfile && (
+        <EditWorkProfile
+          visible={showBusinessEditor}
+          form={providerFormData as WorkProfileForm}
+          logoUrl={providerImageUri ?? serviceProvider?.profile_url ?? null}
+          verificationStatus={(verificationStatus as any) ?? "not_verified"}
+          saving={savingBusinessField}
+          onClose={() => setShowBusinessEditor(false)}
+          onChangeLogo={() => {
+            Haptics.impactAsync(ImpactFeedbackStyle.Medium);
+            setShowProviderAvatarMenu(true);
+          }}
+          onSaveField={handleSaveBusinessField}
+          licenseUrl={licenseImageUrl}
+          uploadingLicense={uploadingLicense}
+          onViewLicense={handleViewLicense}
+          onUploadLicense={handleUploadLicense}
+          onRemoveLicense={handleRemoveLicense}
+          businessType={serviceProvider?.service_categories?.name ?? null}
+          businessTypeSlug={serviceProvider?.service_categories?.slug ?? null}
+          onSaveBusinessType={handleSaveBusinessType}
+          services={providerServices.map((service) => ({
+            id: service.id,
+            name: service.name,
+            status: service.status,
+          }))}
+          // Adding and editing happen on pages that slide within the editor
+          // itself, so this only has to hear that the list changed.
+          onServicesChanged={() => setRefreshKey((prev) => prev + 1)}
         />
       )}
 
@@ -880,13 +1364,13 @@ export default function WorkProfileScreen() {
             <View
               style={{
                 backgroundColor: "white",
-                borderTopLeftRadius: 24,
-                borderTopRightRadius: 24,
+                borderTopLeftRadius: MODAL_RADIUS,
+                borderTopRightRadius: MODAL_RADIUS,
                 borderCurve: "continuous",
               }}
             >
               <View
-                style={{ borderTopLeftRadius: 24, borderTopRightRadius: 24, borderCurve: "continuous" }} className="w-full items-center pt-5 pb-4 bg-white">
+                style={{ borderTopLeftRadius: MODAL_RADIUS, borderTopRightRadius: MODAL_RADIUS, borderCurve: "continuous" }} className="w-full items-center pt-5 pb-4 bg-white">
                 <View className="w-12 h-1.5 bg-gray-300 rounded-full" />
               </View>
 
@@ -970,13 +1454,13 @@ export default function WorkProfileScreen() {
               exiting={SlideOutDown}
               style={{
                 backgroundColor: "white",
-                borderTopLeftRadius: 24,
-                borderTopRightRadius: 24,
+                borderTopLeftRadius: MODAL_RADIUS,
+                borderTopRightRadius: MODAL_RADIUS,
                 borderCurve: "continuous",
               }}
             >
               <View
-                style={{ borderTopLeftRadius: 24, borderTopRightRadius: 24, borderCurve: "continuous" }} className="w-full items-center pt-5 pb-4 bg-white">
+                style={{ borderTopLeftRadius: MODAL_RADIUS, borderTopRightRadius: MODAL_RADIUS, borderCurve: "continuous" }} className="w-full items-center pt-5 pb-4 bg-white">
                 <View className="w-12 h-1.5 bg-gray-300 rounded-full" />
               </View>
 
@@ -1041,32 +1525,7 @@ export default function WorkProfileScreen() {
         />
       )}
 
-      <AddServicesModal
-        isVisible={showAddServiceModal}
-        onClose={() => setShowAddServiceModal(false)}
-        userId={currentUser?.id || ""}
-        onSuccess={() => {
-          setShowAddServiceModal(false);
-          setRefreshKey((prev) => prev + 1);
-        }}
-      />
 
-      {showEditServiceModal && serviceToEdit && (
-        <EditServicesModal
-          isVisible={showEditServiceModal}
-          onClose={() => {
-            setShowEditServiceModal(false);
-            setServiceToEdit(null);
-          }}
-          service={serviceToEdit}
-          userId={currentUser?.id || ""}
-          onSuccess={() => {
-            setShowEditServiceModal(false);
-            setServiceToEdit(null);
-            setRefreshKey((prev) => prev + 1);
-          }}
-        />
-      )}
 
       {showLicenseViewer && licenseImageUrl && (
         <LicenseViewerOverlay
@@ -1074,118 +1533,6 @@ export default function WorkProfileScreen() {
           licenseUrl={licenseImageUrl}
           onClose={() => setShowLicenseViewer(false)}
         />
-      )}
-
-      {/* LICENSE ACTION MENU MODAL */}
-      {showLicenseMenu && (
-        <Modal
-          transparent
-          statusBarTranslucent
-          animationType="none"
-          visible={showLicenseMenu}
-          onRequestClose={() => setShowLicenseMenu(false)}
-        >
-          <View className="flex-1 justify-end">
-            <Animated.View entering={FadeIn} exiting={FadeOut}>
-              <TouchableOpacity
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  backgroundColor: "rgba(0,0,0,0.5)",
-                }}
-                activeOpacity={1}
-                onPress={() => setShowLicenseMenu(false)}
-              />
-            </Animated.View>
-
-            <Animated.View
-              entering={SlideInDown.springify()}
-              exiting={SlideOutDown}
-              style={{
-                backgroundColor: "white",
-                borderTopLeftRadius: 24,
-                borderTopRightRadius: 24,
-                borderCurve: "continuous",
-              }}
-            >
-              <View
-                style={{ borderTopLeftRadius: 24, borderTopRightRadius: 24, borderCurve: "continuous" }} className="w-full items-center pt-5 pb-4 bg-white">
-                <View className="w-12 h-1.5 bg-gray-300 rounded-full" />
-              </View>
-
-              <View className="px-6 pb-6">
-                <Text className="text-xl font-mbold text-gray-900 mb-6 text-center">
-                  License Options
-                </Text>
-
-                <TouchableOpacity
-                  style={{ borderRadius: 12, borderCurve: "continuous" }}
-                  onPress={() => {
-                    setShowLicenseMenu(false);
-                    setTimeout(() => handleViewLicense(), 300);
-                  }}
-                  className="flex-row items-center bg-gray-50 px-4 py-4 mb-3"
-                >
-                  <Eye size={24} className="text-gray-700 mr-4" />
-                  <View>
-                    <Text className="text-base font-msemibold text-gray-900">
-                      View License
-                    </Text>
-                    <Text className="text-sm font-regular text-gray-500">
-                      See your uploaded license document
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={{ borderRadius: 12, borderCurve: "continuous" }}
-                  onPress={() => {
-                    setShowLicenseMenu(false);
-                    setTimeout(() => handleUploadLicense(), 300);
-                  }}
-                  className="flex-row items-center bg-gray-50 px-4 py-4 mb-3"
-                >
-                  <Upload size={24} className="text-gray-700 mr-4" />
-                  <View>
-                    <Text className="text-base font-msemibold text-gray-900">
-                      Replace License
-                    </Text>
-                    <Text className="text-sm font-regular text-gray-500">
-                      Upload a new license document
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={{ borderRadius: 12, borderCurve: "continuous" }}
-                  onPress={handleRemoveLicense}
-                  className="flex-row items-center bg-red-50 px-4 py-4 mb-6"
-                >
-                  <Trash2 size={24} className="text-red-600 mr-4" />
-                  <View>
-                    <Text className="text-base font-msemibold text-red-600">
-                      Remove License
-                    </Text>
-                    <Text className="text-sm font-regular text-red-400">
-                      Delete license and reset verification
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={{ borderRadius: 12, borderCurve: "continuous" }}
-                  className="bg-gray-100 py-4 items-center"
-                  onPress={() => setShowLicenseMenu(false)}
-                >
-                  <Text className="text-gray-600 font-msemibold">Cancel</Text>
-                </TouchableOpacity>
-              </View>
-            </Animated.View>
-          </View>
-        </Modal>
       )}
 
       <PopupMessage

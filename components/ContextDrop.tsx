@@ -96,7 +96,7 @@ const EDGE_ZONE = 24;
 // Past this fraction of screen width, shrinking (and the dome's own growth
 // — see shrinkProgress below) freezes, and "context drop mode" (Y-draggable,
 // drop target interactive) begins.
-const CONTEXT_DROP_THRESHOLD = WINDOW_WIDTH * 0.3;
+export const CONTEXT_DROP_THRESHOLD = WINDOW_WIDTH * 0.3;
 // Past this fraction (or fast enough — see DISMISS_COMMIT_VELOCITY),
 // releasing off-target commits a normal dismiss rather than snapping back.
 // Checked only at release, never mid-drag: a fast flick should commit once
@@ -145,7 +145,11 @@ const VERTICAL_FAIL_DY = 15;
 // Content shrinks in from BOTH edges while dragging (not just the bottom) —
 // makes the dragged content read as a single controllable object rather
 // than a full-bleed screen with an overlay bolted onto it.
-const TOP_SHRINK = 40;
+/** Exported so a parent handing a hero transition off from this drag can
+ *  line its own layer up with where the content actually sits — see
+ *  PostDetailOverlay's heroStyle. */
+export const CONTENT_TOP_SHRINK = 40;
+const TOP_SHRINK = CONTENT_TOP_SHRINK;
 const BOTTOM_SHRINK = 110;
 const DRAG_CORNER_RADIUS = 18;
 
@@ -197,9 +201,18 @@ interface ContextDropProps {
    * component has no idea what that backdrop even is, so it can't do that
    * fade itself). */
   dragX?: SharedValue<number>;
+  /** Same, for the vertical drag — which only moves once past the 30%
+   * threshold. A parent animating a layer of its own out of this drag needs
+   * both axes to line up with the content it's replacing. */
+  dragY?: SharedValue<number>;
+  /** Fired once per gesture, the moment the drag crosses into context-drop
+   * mode and the dome appears. Exists for the tutorial, which has to know
+   * that the gesture was actually performed rather than merely described —
+   * a step that advances on a Next teaches nothing about a gesture. */
+  onReveal?: () => void;
 }
 
-export default function ContextDrop({ enabled, onDismiss, target, children, dragX: externalDragX }: ContextDropProps) {
+export default function ContextDrop({ enabled, onDismiss, target, children, dragX: externalDragX, dragY: externalDragY, onReveal }: ContextDropProps) {
   const insets = useSafeAreaInsets();
 
   // Read through refs inside the gesture worklets (built fresh every render,
@@ -211,13 +224,17 @@ export default function ContextDrop({ enabled, onDismiss, target, children, drag
   targetRef.current = target;
   const onDismissRef = useRef(onDismiss);
   onDismissRef.current = onDismiss;
+  const onRevealRef = useRef(onReveal);
+  onRevealRef.current = onReveal;
+  const fireReveal = useCallback(() => onRevealRef.current?.(), []);
 
   const internalDragX = useSharedValue(0);
   const dragX = externalDragX ?? internalDragX;
   // Only moves once past the 30% threshold ("context drop mode") — before
   // that the content only tracks X, per the request that it not also drift
   // vertically during a plain edge-swipe.
-  const dragY = useSharedValue(0);
+  const internalDragY = useSharedValue(0);
+  const dragY = externalDragY ?? internalDragY;
   // Eases the dome up slightly when armed (hovering, about to drop) — a
   // separate value from the dome's own shrinkProgress-driven entrance since
   // this one animates back and forth repeatedly within a single gesture as
@@ -311,6 +328,7 @@ export default function ContextDrop({ enabled, onDismiss, target, children, drag
         domeVisibility.value = 1;
         dragYBase.value = e.translationY;
         runOnJS(triggerMediumHaptic)();
+        runOnJS(fireReveal)();
       } else if (!pastThreshold && inContextMode.value) {
         // Dragged back below the threshold mid-gesture — turns
         // interactivity off; the dome itself keeps tracking dragX (it just

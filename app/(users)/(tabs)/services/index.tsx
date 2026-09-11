@@ -1,356 +1,304 @@
+/**
+ * The Services tab: the services themselves, in the grid the other three
+ * tabs use.
+ *
+ * It used to be a *directory* — one white group of rows, each a category you
+ * tapped through to reach anything real. That was the right answer to the
+ * question it was asked (nineteen long names, no pictures, and tiles that
+ * truncated them all), but it was the wrong question: Home, Shopping and
+ * Marketplace all open onto **content**, and this one opened onto a table of
+ * contents. Four tabs on one bar, three of which show you things and one of
+ * which shows you a menu, is the inconsistency worth fixing.
+ *
+ * So the categories became what they are on Marketplace — a filter row above
+ * the grid — and the grid shows what people actually came for: a provider's
+ * service, its photograph, and whose it is. Nothing is lost from the
+ * directory that mattered: every category is still one tap away, and the
+ * long names now sit in a scrolling row where they have the width to be read
+ * rather than in a tile that cut them in half.
+ *
+ * Bookings stay their own group. A ground or a room is booked by the slot
+ * rather than by contacting somebody, so they are two rows above the grid on
+ * "All" — not two more filters, which would make them look like kinds of
+ * service they are not.
+ */
+
+import GridCard, { gridCardHeight, LISTING_CARD_RATIO, type GridCardSourceRect } from "@/components/GridCard";
+import ServiceDetailOverlay from "@/components/ServiceDetailOverlay";
+import MasonryGrid from "@/components/MasonryGrid";
+import CategoryFilterRow from "@/components/ui/CategoryFilterRow";
+import GridSkeleton from "@/components/ui/GridSkeleton";
+import PullToRefresh from "@/components/ui/PullToRefresh";
 import TopNavbar from "@/components/ui/TopNavbar";
-import { useUser } from "@/contexts/UserContext";
 import { useTabBarScroll } from "@/contexts/TabBarScrollContext";
 import { serviceCategories } from "@/data/servicecategory";
 import { useScreenAnalytics } from "@/hooks/useAnalytics";
+import { useViewableContent } from "@/hooks/useViewableContent";
 import { Screens } from "@/lib/analyticsService";
+import { CACHE_SEED_LIMIT, readCache, writeCache } from "@/lib/queryCache";
+import {
+  fetchAllProviderServices,
+  type ProviderServiceWithDetails,
+} from "@/lib/servicesService";
 import { useAppRouter } from "@/utils/navigation";
 import { Href } from "expo-router";
-import {
-    BedDouble,
-    Briefcase,
-    Building,
-    Car,
-    Coffee,
-    Gamepad2,
-    Goal,
-    GraduationCap,
-    Grid3x3,
-    Home,
-    Landmark,
-    Package,
-    Palette,
-    PawPrint,
-    Plane,
-    Search,
-    ShoppingBasket,
-    Sparkles,
-    Tent,
-    Utensils,
-    Wrench,
-} from "lucide-react-native";
-import React, { useMemo } from "react";
-import {
-    Dimensions,
-    FlatList,
-    Text,
-    TouchableOpacity,
-    View,
-} from "react-native";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { ScrollView, Text, View } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const CACHE_KEY = "services:pool";
+/** One session, the whole pool — the same shape Marketplace uses, and for
+ *  the same reason: switching a filter must not cost a round trip. */
+const POOL_SIZE = 200;
+
+/** "All" plus every category, in the data file's own order. */
+const FILTERS = [
+  { key: "all", label: "All" },
+  ...serviceCategories.map((c) => ({ key: c.slug, label: c.name })),
+];
 
 export default function ServiceScreen() {
-  const router = useAppRouter();
   const insets = useSafeAreaInsets();
-  const { currentUser } = useUser();
-  const { trackTap, trackFeature } = useScreenAnalytics(Screens.SERVICES);
+  const router = useAppRouter();
   const { onTabBarScroll } = useTabBarScroll();
+  const { trackTap, trackFeature } = useScreenAnalytics(Screens.SERVICES);
 
-  const { numColumns, itemSize, gap } = useMemo(() => {
-    const horizontalPadding = 32;
-    let cols = SCREEN_WIDTH < 340 ? 3 : 4;
-    if (SCREEN_WIDTH > 768) cols = 5;
+  const [active, setActive] = useState("all");
+  const [services, setServices] = useState<ProviderServiceWithDetails[]>([]);
+  const [loading, setLoading] = useState(true);
 
-    const gapSize = 10;
-    const availableWidth = SCREEN_WIDTH - horizontalPadding;
-    const totalGapSpace = gapSize * (cols - 1);
-    const size = (availableWidth - totalGapSpace) / cols;
+  // Cache first, network second — the grid paints from the last session's
+  // pool instead of a full-page skeleton (lib/queryCache.ts).
+  const load = useCallback(async (showLoader: boolean) => {
+    try {
+      const cached = await readCache<ProviderServiceWithDetails[]>(CACHE_KEY);
+      if (cached?.data?.length) {
+        setServices(cached.data);
+        setLoading(false);
+      } else if (showLoader) {
+        setLoading(true);
+      }
 
-    return {
-      numColumns: cols,
-      itemSize: Math.floor(size),
-      gap: gapSize,
-    };
+      const fetched = await fetchAllProviderServices(0, POOL_SIZE);
+      // Only what is actually live: a paused service in the grid is a tap
+      // into a screen that says it is unavailable.
+      const live = fetched.filter((s) => s.status !== false);
+      setServices(live);
+      writeCache(CACHE_KEY, live.slice(0, CACHE_SEED_LIMIT));
+    } catch (e) {
+      console.error("[services] load failed", e);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
+  useEffect(() => {
+    load(true);
+  }, [load]);
 
-  const BETA_USER = "77737314";
-  const showBetaBookings =
-    String(currentUser?.id ?? "") === BETA_USER ||
-    String(currentUser?.phone_number ?? "").replace(/\D/g, "").endsWith(BETA_USER) ||
-    String(currentUser?.phone ?? "").replace(/\D/g, "").endsWith(BETA_USER) ||
-    String(currentUser?.username ?? "") === BETA_USER;
+  /** Safe View, age and verification apply here too — a service listing is
+   *  photographs somebody uploaded (`lib/safeContent.ts`). */
+  const { filter: filterViewable } = useViewableContent();
+  const shown = useMemo(() => {
+    const viewable = filterViewable<ProviderServiceWithDetails>(
+      services,
+      (s) => s.service_providers?.user_id,
+    );
+    return active === "all"
+      ? viewable
+      : viewable.filter((s) => s.service_categories?.slug === active);
+  }, [active, filterViewable, services]);
 
-  const handleCategoryPress = (category: any) => {
-    trackTap("service_card", "category_select", { category: category.slug });
-    router.push(`/services/${category.slug}` as Href);
+  const changeFilter = (slug: string) => {
+    if (slug === active) return;
+    trackFeature("filter_apply", "filter_button", "tap", { category: slug });
+    setActive(slug);
   };
 
-  const handleGamesPress = () => {
-    trackTap("service_card", "category_select", { category: "ground-bookings" });
-    router.push(`/services/ground-bookings/ground-booking` as Href);
-  };
+  /**
+   * A tile grows into the service screen rather than pushing to it — the
+   * same treatment a product tile gets, including the left-edge swipe back
+   * and the drop-on-the-dome that messages the provider.
+   */
+  const [openService_, setOpenService] = useState<{
+    service: ProviderServiceWithDetails;
+    rect: GridCardSourceRect;
+  } | null>(null);
 
-  const handleHotelsPress = () => {
-    trackTap("service_card", "category_select", { category: "room-booking" });
-    router.push(`/services/room-booking/room-booking` as Href);
-  };
+  const openService = useCallback(
+    (id: string, rect: GridCardSourceRect) => {
+      trackTap("service_card", "service_view", { service_id: id });
+      const service = services.find((s) => s.id === id);
+      if (service) setOpenService({ service, rect });
+      // Not in the pool (a stale tap after a refresh) — the route still
+      // works, and is a better answer than nothing happening.
+      else router.push(`/(users)/servicedetail/${id}` as Href);
+    },
+    [router, services, trackTap],
+  );
 
-  const getIconComponent = (iconName: string, size: number, color: string) => {
-    const iconMap: Record<string, any> = {
-      car: Car,
-      utensils: Utensils,
-      coffee: Coffee,
-      building: Building,
-      tent: Tent,
-      "shopping-basket": ShoppingBasket,
-      gamepad: Gamepad2,
-      ground: Goal,
-      room: BedDouble,
-      "paw-print": PawPrint,
-      home: Home,
-      package: Package,
-      briefcase: Briefcase,
-      "graduation-cap": GraduationCap,
-      palette: Palette,
-      sparkles: Sparkles,
-      wrench: Wrench,
-      plane: Plane,
-      grid: Grid3x3,
-      landmark: Landmark,
-    };
-    const IconComponent = iconMap[iconName] || Home;
-    return <IconComponent size={size} color={color} />;
-  };
+  // Swipe between filters, the same gesture the Marketplace grid has.
+  const swipe = Gesture.Pan()
+    .runOnJS(true)
+    .activeOffsetX([-20, 20])
+    .failOffsetY([-15, 15])
+    .onEnd((e) => {
+      const idx = FILTERS.findIndex((f) => f.key === active);
+      if (e.translationX < -50 && idx < FILTERS.length - 1) {
+        changeFilter(FILTERS[idx + 1].key);
+      } else if (e.translationX > 50 && idx > 0) {
+        changeFilter(FILTERS[idx - 1].key);
+      }
+    });
 
-  const renderCategoryItem = ({ item }: { item: any }) => {
-    const iconBox = Math.floor(itemSize * 0.75);
-    const iconSize = Math.floor(itemSize * 0.32);
-
+  const renderCard = (
+    service: ProviderServiceWithDetails,
+    columnWidth: number,
+    deferred: boolean,
+    priority: "low" | "normal" | "high",
+  ) => {
+    const provider = service.service_providers;
+    const providerName =
+      provider?.name || (provider as any)?.profiles?.name || "Provider";
     return (
-      <View
-        style={{
-          width: itemSize,
-          marginBottom: 14,
-          alignItems: "center",
-        }}
-      >
-        <TouchableOpacity
-          style={{
-            width: iconBox,
-            height: iconBox,
-            backgroundColor: "#094569",
-            borderRadius: 14,
-            borderCurve: "continuous",
-            alignItems: "center",
-            justifyContent: "center",
-            marginBottom: 6,
-          }}
-          onPress={() => handleCategoryPress(item)}
-          activeOpacity={0.7}
-        >
-          {getIconComponent(item.icon, iconSize, "#FFFFFF")}
-        </TouchableOpacity>
-
-        <Text
-          style={{
-            fontSize: 10,
-            fontWeight: "700",
-            color: "#111827",
-            textAlign: "center",
-            paddingHorizontal: 2,
-            lineHeight: 13,
-          }}
-          numberOfLines={2}
-        >
-          {item.name}
-        </Text>
-      </View>
+      <GridCard
+        id={service.id}
+        width={columnWidth}
+        ratio={LISTING_CARD_RATIO}
+        imageUri={service.images?.[0]}
+        title={service.name}
+        subtitle={providerName}
+        avatarUri={(provider as any)?.profile_url ?? (provider as any)?.profiles?.avatar_url}
+        avatarLabel={providerName}
+        deferred={deferred}
+        priority={priority}
+        // A service has no price (§ Tagged products) — what belongs in that
+        // corner is which kind of service it is, which is the thing being
+        // filtered on.
+        footerRight={
+          service.service_categories?.name ? (
+            <Text
+              style={{ fontSize: 12, color: "#9CA3AF", maxWidth: 96 }}
+              numberOfLines={1}
+            >
+              {service.service_categories.name}
+            </Text>
+          ) : undefined
+        }
+        onPress={openService}
+      />
     );
   };
 
   return (
-    <View className="flex-1 bg-background">
-      <TopNavbar />
+    <GestureDetector gesture={swipe}>
+      <View className="flex-1 bg-gray-50">
+        {/* Fixed — TopNavbar never scrolls away, and the one search on this
+            screen is its (§ Header). */}
+        <View className="bg-gray-50">
+          <TopNavbar
+            search={{
+              placeholder: "Search services, providers",
+              onPress: () => router.push("/(users)/services/search" as Href),
+            }}
+          />
+        </View>
 
-      <FlatList
-        data={serviceCategories}
-        renderItem={renderCategoryItem}
-        keyExtractor={(item) => item.id}
-        numColumns={numColumns}
-        key={numColumns}
-        showsVerticalScrollIndicator={false}
-        onScroll={onTabBarScroll}
-        scrollEventThrottle={16}
-        ListHeaderComponent={
-          <View>
-            {/* Compact title */}
-            <View style={{ marginTop: 10, marginBottom: 10, paddingHorizontal: 2 }}>
-              <Text
-                style={{
-                  fontSize: 20,
-                  fontWeight: "800",
-                  color: "#094569",
-                  letterSpacing: -0.3,
+        <PullToRefresh onRefresh={() => load(false)}>
+          {({ indicator, scrollEnabled, onScroll }) => (
+            <>
+              {indicator}
+              <ScrollView
+                className="flex-1"
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ paddingBottom: 72 + insets.bottom }}
+                onScroll={(e) => {
+                  onScroll(e);
+                  onTabBarScroll(e);
                 }}
+                scrollEventThrottle={16}
+                scrollEnabled={scrollEnabled}
+                bounces={false}
+                overScrollMode="never"
               >
-                Services
-              </Text>
-              <Text
-                style={{
-                  fontSize: 11,
-                  color: "#6B7280",
-                  marginTop: 1,
-                }}
-              >
-                Professional help at your fingertips
-              </Text>
-            </View>
+                {/* The same row Shopping has, from the same component: a
+                    scroll of plain-text filters with a chevron that drops
+                    the whole list over it. Twenty categories do not fit on
+                    a phone's width, and a row you can only reach the end of
+                    by flicking is a list with a hidden half.
 
-            {/* Compact search trigger */}
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={() => router.push("/(users)/services/search" as any)}
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                backgroundColor: "#F1F5F9",
-                borderRadius: 10,
-                borderCurve: "continuous",
-                paddingHorizontal: 12,
-                paddingVertical: 8,
-                marginBottom: 14,
-              }}
-            >
-              <Search size={14} color="#94A3B8" />
-              <Text
-                style={{
-                  marginLeft: 8,
-                  fontSize: 12.5,
-                  color: "#94A3B8",
-                }}
-              >
-                Search services, providers...
-              </Text>
-            </TouchableOpacity>
+                    The two bookings live in that drawer under their own
+                    heading rather than as a white block above the grid.
+                    They were a separate button because they are not
+                    filters — a ground or a room is booked by the slot, so
+                    tapping one leaves the screen instead of narrowing it —
+                    but that is a reason to label them, not to put them
+                    somewhere else entirely. */}
+                <CategoryFilterRow
+                  items={FILTERS}
+                  active={active}
+                  onSelect={changeFilter}
+                  drawerTitle="All services"
+                  links={[
+                    {
+                      key: "ground-bookings",
+                      label: "Grounds",
+                      onPress: () => {
+                        trackTap("service_card", "category_select", {
+                          category: "ground-bookings",
+                        });
+                        router.push("/services/ground-bookings/ground-booking" as Href);
+                      },
+                    },
+                    {
+                      key: "room-booking",
+                      label: "Rooms",
+                      onPress: () => {
+                        trackTap("service_card", "category_select", {
+                          category: "room-booking",
+                        });
+                        router.push("/services/room-booking/room-booking" as Href);
+                      },
+                    },
+                  ]}
+                />
 
-            {/* Beta bookings - compact */}
-            {showBetaBookings && (
-              <View style={{ flexDirection: "row", gap: 10, marginBottom: 14 }}>
-                <TouchableOpacity
-                  onPress={handleGamesPress}
-                  activeOpacity={0.8}
-                  style={{
-                    flex: 1,
-                    flexDirection: "row",
-                    alignItems: "center",
-                    borderRadius: 10,
-                    borderCurve: "continuous",
-                    borderWidth: 1,
-                    borderColor: "#094569",
-                    paddingHorizontal: 10,
-                    paddingVertical: 8,
-                  }}
-                >
-                  <View
-                    style={{
-                      width: 30,
-                      height: 30,
-                      borderRadius: 9,
-                      borderCurve: "continuous",
-                      borderWidth: 1.2,
-                      borderColor: "#094569",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      marginRight: 8,
-                    }}
-                  >
-                    {getIconComponent("ground", 16, "#094569")}
+                {loading && services.length === 0 ? (
+                  <View className="px-3 pt-1">
+                    <GridSkeleton rows={3} imageHeight={140} />
                   </View>
-                  <Text
-                    style={{
-                      fontSize: 12,
-                      fontWeight: "600",
-                      color: "#111827",
-                      flex: 1,
-                    }}
-                    numberOfLines={1}
-                  >
-                    Ground Bookings
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={handleHotelsPress}
-                  activeOpacity={0.8}
-                  style={{
-                    flex: 1,
-                    flexDirection: "row",
-                    alignItems: "center",
-                    borderRadius: 10,
-                    borderCurve: "continuous",
-                    borderWidth: 1,
-                    borderColor: "#094569",
-                    paddingHorizontal: 10,
-                    paddingVertical: 8,
-                  }}
-                >
-                  <View
-                    style={{
-                      width: 30,
-                      height: 30,
-                      borderRadius: 9,
-                      borderCurve: "continuous",
-                      borderWidth: 1.2,
-                      borderColor: "#094569",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      marginRight: 8,
-                    }}
-                  >
-                    {getIconComponent("room", 16, "#094569")}
+                ) : (
+                  <View className="pb-6">
+                    <MasonryGrid
+                      items={shown}
+                      loading={false}
+                      keyExtractor={(service) => service.id}
+                      getHeight={(_service, columnWidth) =>
+                        gridCardHeight(LISTING_CARD_RATIO, columnWidth)
+                      }
+                      emptyText={
+                        active === "all"
+                          ? "No services yet — the first ones will turn up here."
+                          : "Nothing in this category yet. Try another."
+                      }
+                      renderCard={renderCard}
+                    />
                   </View>
-                  <Text
-                    style={{
-                      fontSize: 12,
-                      fontWeight: "600",
-                      color: "#111827",
-                      flex: 1,
-                    }}
-                    numberOfLines={1}
-                  >
-                    Room Booking
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
+                )}
 
-            {/* Section divider */}
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                marginBottom: 10,
-              }}
-            >
-              <View style={{ flex: 1, height: 1, backgroundColor: "#E5E7EB" }} />
-              <Text
-                style={{
-                  marginHorizontal: 10,
-                  fontSize: 10,
-                  fontWeight: "700",
-                  color: "#6B7280",
-                  letterSpacing: 0.5,
-                }}
-              >
-                ALL SERVICES
-              </Text>
-              <View style={{ flex: 1, height: 1, backgroundColor: "#E5E7EB" }} />
-            </View>
-          </View>
-        }
-        contentContainerStyle={{
-          paddingHorizontal: 16,
-          paddingBottom: 72 + insets.bottom,
-        }}
-        columnWrapperStyle={{
-          gap: gap,
-          justifyContent: "flex-start",
-        }}
-      />
-
-    </View>
+                <View className="h-20" />
+              </ScrollView>
+            </>
+          )}
+        </PullToRefresh>
+        <ServiceDetailOverlay
+          visible={!!openService_}
+          service={openService_?.service ?? null}
+          sourceRect={openService_?.rect ?? null}
+          onClose={() => setOpenService(null)}
+        />
+      </View>
+    </GestureDetector>
   );
 }

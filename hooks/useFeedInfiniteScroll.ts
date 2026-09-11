@@ -1,7 +1,7 @@
 import { useRankedFeed } from "@/hooks/useRankedFeed";
 import { parseMediaDisplay } from "@/lib/postMediaDisplay";
 import { fetchAllPostsForRanking, PostWithUser } from "@/lib/postsService";
-import { readCache, writeCache } from "@/lib/queryCache";
+import { CACHE_SEED_LIMIT, readCache, writeCache } from "@/lib/queryCache";
 import { supabase } from "@/lib/supabase";
 import { PostData } from "@/types/post";
 import { useCallback, useMemo, useState } from "react";
@@ -81,7 +81,15 @@ export function useFeedInfiniteScroll(): UseFeedInfiniteScrollResult {
     const userIds = [...new Set(fetched.map((p) => p.user_id))];
     const verified = await fetchVerifiedIds(userIds);
     setVerifiedIds(verified);
-    writeCache<FeedCachePayload>(FEED_CACHE_KEY, { raw: fetched, verified: [...verified] });
+    // Only the head of the pool is persisted. The cache exists to paint the
+    // first screenful instantly, not to reproduce the whole ranking
+    // offline — by the time anyone scrolls past it, this fetch has already
+    // replaced it. Caching every post would also be the one entry big
+    // enough to evict every other screen's cache (lib/queryCache.ts).
+    writeCache<FeedCachePayload>(FEED_CACHE_KEY, {
+      raw: fetched.slice(0, CACHE_SEED_LIMIT),
+      verified: [...verified],
+    });
     return fetched;
   }, []);
 

@@ -7,6 +7,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import InAppChatBanner from "@/components/chat/InAppChatBanner";
 import InAppNotificationBanner from "@/components/notifications/InAppNotificationBanner";
 import OneSignalBootstrap from "@/components/notifications/OneSignalBootstrap";
+import NavHandoffOverlay from "@/components/ui/NavHandoffOverlay";
 import { UnreadMessagesProvider } from "@/contexts/UnreadMessagesContext";
 import { useAppUpdateCheck } from "@/hooks/useAppUpdateCheck";
 import { useColorScheme } from "@/hooks/useColorScheme";
@@ -19,10 +20,12 @@ import {
 import { useFonts } from "expo-font";
 import * as Linking from "expo-linking";
 import { Stack, useRouter } from "expo-router";
-import { setVideoCacheSizeAsync } from "expo-video";
+import { pruneQueryCache } from "@/lib/queryCache";
+import { applyStorageLimits } from "@/lib/storageManager";
+import { pruneMediaCache } from "@/lib/setlogMediaCache";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect, useRef } from "react";
-import { Platform, StatusBar, View } from "react-native";
+import { InteractionManager, Platform, StatusBar, View } from "react-native";
 import FlashMessage from "react-native-flash-message";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "../global.css";
@@ -33,6 +36,10 @@ import { SafetyProvider } from "@/contexts/SafetyContext";
 import { DzongkhagProvider } from "@/contexts/DzongkhagContext";
 import { LiveSessionProvider } from "@/contexts/LiveSessionProvider";
 import { NotificationsProvider } from "@/contexts/NotificationsContext";
+import { ProfilePreviewProvider } from "@/contexts/ProfilePreviewContext";
+import { ProductPeekProvider } from "@/contexts/ProductPeekContext";
+import { TutorialProvider } from "@/contexts/TutorialContext";
+import TutorialOverlay from "@/components/tutorial/TutorialOverlay";
 import { UserProvider } from "@/contexts/UserContext";
 import { NetworkProvider } from "@/contexts/NetworkContext";
 import { VideoCacheProvider } from "@/contexts/VideoCacheContext";
@@ -74,10 +81,30 @@ export default function RootLayout() {
     }
   }, [fontsLoaded, fontError]);
 
-  // Bound the persistent on-disk video cache (default is 1GB). Used by players
-  // created with `{ uri, useCaching: true }` so reels/feed clips aren't re-downloaded.
+  // Bound both media caches to whatever Settings › Storage says, defaults
+  // included. The video one was already capped here; the *image* cache was
+  // not capped at all — expo-image defaults to unlimited, which in a mostly
+  // -pictures app means it grows until iOS decides the phone is full, and iOS
+  // only trims caches under real pressure. Re-applied every launch because
+  // `Image.configureCache` configures this process, not the device
+  // (lib/storageManager.ts).
   useEffect(() => {
-    setVideoCacheSizeAsync(512 * 1024 * 1024).catch(() => {});
+    applyStorageLimits().catch(() => {});
+  }, []);
+
+  // Housekeeping for the query cache: drop anything a week old, then evict
+  // back under budget. Once, at startup, off the interaction thread —
+  // AsyncStorage on Android is one SQLite table with a ~6MB ceiling, and a
+  // cache that only grows starts losing writes silently long before anyone
+  // notices (lib/queryCache.ts).
+  useEffect(() => {
+    const task = InteractionManager.runAfterInteractions(() => {
+      pruneQueryCache().catch(() => {});
+      // The same sweep for the clips the export editors download — that
+      // folder is disposable by design, so anything a week old goes.
+      pruneMediaCache().catch(() => {});
+    });
+    return () => task.cancel();
   }, []);
 
   useEffect(() => {
@@ -126,6 +153,15 @@ export default function RootLayout() {
             return `/(users)/servicedetail/${id}`;
           case "profile":
             return `/(users)/profile/${id}`;
+          // A Namzoed QR code (namzoed://add/<namzoed_id>). `id` here is a
+          // namzoed_id, not a UUID, so it can't route straight to a
+          // profile — Add Friends resolves it and asks for the same
+          // confirmation the scanner does.
+          case "add":
+            return {
+              pathname: "/(users)/add-friends",
+              params: { connect: id },
+            };
           case "chat": {
             const params: Record<string, string> = { id };
             if (query.context_product_id) params.context_product_id = query.context_product_id;
@@ -193,6 +229,16 @@ export default function RootLayout() {
                 <VideoPlaybackProvider>
                   <VideoCacheProvider>
                     <LiveSessionProvider>
+                    {/* Only coordinates one-open-at-a-time; the preview itself
+                        expands inside each avatar, not here. */}
+                    <ProfilePreviewProvider>
+                    {/* The tours are taught on the real screens, so the
+                        engine has to sit above the navigator and outside
+                        every screen — see components/tutorial/. */}
+                    <TutorialProvider>
+                    {/* A tagged product previews in one sheet wherever the
+                        tag is — see contexts/ProductPeekContext.tsx. */}
+                    <ProductPeekProvider>
                       {shouldMountOneSignalBootstrap ? <OneSignalBootstrap /> : null}
                     <View className="flex-1 bg-background">
                         <Stack
@@ -205,6 +251,15 @@ export default function RootLayout() {
                             animation: "none",
                           }}
                         />
+                        {/* The wait between a push and the screen it
+                            pushes to — see utils/navHandoff.ts. Above the
+                            Stack and outside every screen, because the one
+                            that starts the wait is usually gone before it
+                            ends. */}
+                        <NavHandoffOverlay />
+                        {/* Above the screens, below the banners: a tip must
+                            not cover a message arriving. */}
+                        <TutorialOverlay />
                         <InAppChatBanner />
                         <InAppNotificationBanner />
                         <AppUpdateGate
@@ -212,16 +267,12 @@ export default function RootLayout() {
                           message={appUpdate.message}
                         />
                         <WhatsNewGate updateStatus={appUpdate.status} />
-                        {/* Transparent status bar with dark icons on Android;
-                            iOS continues to follow the current appearance. */}
+                        {/* Transparent status bar with dark icons on both
+                            platforms — the app has no real dark-mode theme,
+                            so tab screens are always light-background and
+                            need dark icons regardless of OS appearance. */}
                         <StatusBar
-                          barStyle={
-                            Platform.OS === "android"
-                              ? "dark-content"
-                              : colorScheme === "dark"
-                                ? "light-content"
-                                : "dark-content"
-                          }
+                          barStyle="dark-content"
                           translucent={Platform.OS === "android"}
                           backgroundColor="transparent"
                         />
@@ -232,6 +283,9 @@ export default function RootLayout() {
                           )}
                         />
                       </View>
+                    </ProductPeekProvider>
+                    </TutorialProvider>
+                    </ProfilePreviewProvider>
                     </LiveSessionProvider>
                   </VideoCacheProvider>
                 </VideoPlaybackProvider>
