@@ -308,12 +308,16 @@ function LivePage({
         .select("viewer_count")
         .eq("id", stream.id)
         .single()
-        .then(({ data }) => {
+        // A Supabase query resolves with `{ data, error }` rather than
+        // rejecting, so the failure is handled here — there was never a
+        // rejection for the `.catch` this replaces to catch, which is also
+        // why the builder is a PromiseLike with no `.catch` to call.
+        .then(({ data, error }) => {
+          if (error) return;
           if (data && typeof data.viewer_count === "number") {
             setViewerCount(data.viewer_count);
           }
-        })
-        .catch(() => {});
+        });
     }, 500);
     return () => clearTimeout(timer);
   }, [stream.id, isActive, showChat]);
@@ -746,7 +750,7 @@ function LivePage({
                   elevation: 10,
                 }}
               >
-                <Text style={{ color: "white", fontWeight: "600", fontSize: 13 }}>You're a Speaker</Text>
+                <Text style={{ color: "white", fontWeight: "600", fontSize: 13 }}>You&apos;re a Speaker</Text>
               </View>
             )}
           </View>

@@ -74,7 +74,21 @@ the status bar, between sections, and below the last item. A band of a different
 shade where the content runs out is the most common way this gets broken. When a
 screen is hosted inside a shared wrapper, that wrapper needs the same colour;
 `app/(users)/settings/index.tsx`'s `SUB_PAGE_BACKGROUNDS` map is how a sub-page
-declares its own.
+declares its own — it feeds both the container behind the status bar and the
+`SubPageLayer` that pays the bottom inset, so a wrong entry shows as a band at
+*both* ends.
+
+**That map lists every sub-page, white ones included, and `renderModalContent`
+switches over `SubPageName = keyof typeof SUB_PAGE_BACKGROUNDS`.** It used to be
+a partial map with `?? "#fff"` behind it, which is the failure this whole
+section describes, made invisible: a screen built correctly on the settings grey
+rendered between two white bands because nobody remembered a second file, and
+the person who wrote the screen could not see anything wrong with it (Storage
+was one). A default is the wrong shape for this — being on white has to be a
+decision somebody wrote down, not what happens when you forget. A `case` for a
+name with no entry now fails to compile. **Never reintroduce a fallback colour
+here**; add the entry. The same map validates `?modal=`, so an unknown name in
+the URL opens the settings list rather than a blank level with no way back.
 
 ### Corners
 
@@ -101,6 +115,32 @@ settings list did and why it read as a toy.
 **No emoji in native UI** — labels, badges, pills, buttons, headers, empty
 states, alerts. Emoji belong only in user-authored text: chat messages and
 comments.
+
+The rule is absolute, and it reaches further than the obvious places:
+
+- **Not in console output either.** It is not UI, but a codebase where half
+  the logs open with a red cross and half don't is one more thing that is
+  inconsistent for no reason.
+- **Not in notification copy.** `"📷 Photo"` as a comment preview is a
+  push notification, which is the operating system's chrome and the one place
+  a stray character is least in your control.
+- **An emoji that carries meaning becomes a lucide icon, not a deletion.** A
+  package and a shopping bag for the two Mongoose roles, a moon on the night
+  sale, a lock on a tier nobody has reached. The mongoose itself is the one
+  that simply goes: § The mascot keeps it to teaching and waiting, so it has
+  no business in a sheet header.
+- **An emoji that only decorates simply goes.** "🔥 Flash Deals" is
+  "Flash Deals"; a section title is already a section title.
+- **Two exceptions, and they are the rule restated.** The chat reaction row
+  is emoji by definition — replacing those with icons removes the feature
+  rather than tidying it — and so is the GIF/sticker picker. Both are chat.
+- **An emoji inside stored content is a data format, not a label.** A shared
+  location was sent as `"📍 My Location: <url>"` and six places read it
+  back out by matching that string, so every such message already in the
+  database carries the pin. New messages are sent without it and the needle
+  narrowed to `"My Location:"` — a substring of the old prefix, so history
+  keeps working. Change what you emit; never change what you match, until
+  nothing old can still match it.
 
 ### The mascot
 
@@ -552,6 +592,24 @@ screen shows.
 - **"All" is a face too, and it leads.** A text chip beside a row of avatars
   reads as a different kind of control from the things it sits with; at the
   same size, first in the same row, it is plainly one of the choices.
+- **On Explore, the Following tab is a face only while it has news.** If
+  somebody you follow has posted something you have not opened, the tab is
+  their picture with the red dot; the moment you are caught up it is the
+  word "Following" again (`components/ui/HomeSectionTabs.tsx`). It used to
+  wear a face the entire time you were on Explore, dot or not, which spent
+  the loudest element in the header on "the Following tab still exists" — **a
+  picture that is always there is furniture**, and by the time it has
+  something to say nobody is looking at it. The face has to be able to be
+  absent for its presence to mean anything.
+- **The face and the dot are the same person.** The avatar is the most
+  recent creator *with something unseen* (`latest` in
+  `hooks/useFollowedCreators.ts`), not the most recent creator outright.
+  Taking whoever posted last regardless could show a face you had already
+  caught up with and hang somebody else's dot on it — the picture saying one
+  person and the badge meaning another. It also means the face is null
+  exactly when there is no news, which is what turns the tab back into a
+  word. Following is always the word while it is the active tab, where the
+  row of faces below does this properly.
 - **The ring is selection, the dot is news**, and they never share a colour —
   brand blue for "this is what you are looking at", the app's red for "this
   person has posted". One avatar can carry both without either being
@@ -768,8 +826,26 @@ Every profile carries a code, and scanning one is how two people who are
 standing together follow each other. `app/(users)/add-friends.tsx` (the
 code, reached from "+ Add Friends" in the drawer) and
 `app/(users)/qr-scanner.tsx` (the camera, reached from the profile's top
-bar) are the two ends of it.
+bar and from **Scan** in the drawer's bottom action row) are the two ends of
+it.
 
+- **Drawer cards group by errand, not one row per card.** The hamburger
+  drawer (`components/modals/HamburgerMenu.tsx`) renders `MENU_GROUPS` as
+  white 18pt cards, rows inside a card separated by a hairline. Norbu Wallet
+  sits with Mongoose delivery (spending) and Manage Listings with Business
+  (selling), because a column of single-row cards is just a list wearing
+  extra chrome — the card boundary stops meaning anything when every item
+  gets its own. A new entry joins the card whose errand it shares, and only
+  earns a card of its own when it shares one with nothing else.
+- **The camera has two doors and one screen.** The profile's top-bar
+  `ScanLine` button and **Scan** in the hamburger drawer's bottom row (beside
+  Help center and Settings, same 52pt circle) both `router.push` plain
+  `/qr-scanner`. Scanning is a thing you do standing next to somebody with
+  their code out, and making that trip start on your own profile is a
+  detour — the drawer is already reachable from wherever you are. Two entry
+  points are only worth it because they land on the identical screen with no
+  mode flag between them; a "scan" that behaved differently depending on
+  which button opened it would be two features wearing one name.
 - **A scan is never a follow.** The camera fires the moment a code crosses
   the frame, including one you only happened to point at, so the write sits
   behind a tap on a sheet that shows you whose face you are about to be
@@ -779,6 +855,13 @@ bar) are the two ends of it.
   (`accept_qr_connect_request`). Following the scanned person at step one is
   the obvious shortcut and it turns a glance at a code into a unilateral
   follow with nothing to undo it.
+- **The `NamZoed ID:` line on your own profile is the door to your code.**
+  It carries a `QrCode` glyph, so the tap opens `/add-friends` — the screen
+  that draws the code — not the OS share sheet it used to fire. An icon that
+  names one thing and does another is the worst kind of affordance: people
+  learn the row is unreliable and stop pressing it. Sharing the link is still
+  the arrow in the header beside it, and Add Friends carries its own Share
+  button, so nothing was lost by giving the glyph what it advertises.
 - **The code carries the NamZoed ID, not the UUID.** That id is already
   printed under the person's name on their own profile, so the code
   discloses nothing that isn't on screen anyway — and it keeps the payload
@@ -1106,6 +1189,38 @@ full card in the bubble once it is sent.
   the question that page cannot answer, so the details screen queries the
   pair's messages directly. Wildcards in the term are escaped — a search for
   "50%" that matches everything is worse than no search.
+- **A search result goes to the message.** Tapping one used to
+  `router.push` the chat route with no message reference at all, so every hit
+  did the same thing: opened a *second* copy of the conversation on top of
+  details, which loaded the newest page and sat at the bottom. The results
+  were decorative — you could find a message and then not go to it, and the
+  back stack read chat → details → chat. It now hands the id to the
+  conversation already on the stack (`lib/chatFocus.ts`) and goes **back**
+  into it, pages backwards until that message is loaded, scrolls it to the
+  middle and tints it for a couple of seconds. **The mark is not optional**:
+  landing in the middle of an old conversation with nothing indicating which
+  line matched is barely better than landing at the bottom.
+- **A handoff that rides a `router.back()` is module state, not a route
+  param.** Details is pushed *from* the chat, so the conversation is already
+  mounted with its history and scroll position; pushing a duplicate to carry
+  a parameter is what created the bug above. The slot holds one request and
+  is emptied by whoever takes it, so it cannot replay on an unrelated
+  re-focus, and it is keyed by partner so it cannot fire in the wrong
+  conversation.
+- **Media is every picture in the conversation, both directions, and chat
+  has no `video_url`.** The media query selected and filtered on
+  `messages.video_url`, a column that has never existed: PostgREST answered
+  the whole query 42703, the throw landed in the screen's catch, and the tab
+  said "No images or videos" to everyone about every conversation. It read
+  like a filter bug — "it must only be showing theirs" — and was a dead
+  query. A chat message keeps its first picture in `image_url` and all of
+  them in `image_urls`, video included, told apart by extension with the same
+  `isVideoUrl` the bubbles use. **A tab whose emptiness is indistinguishable
+  from a failed query has to prove it ran**; this one had been empty since it
+  shipped and nobody could tell.
+- **One message of four pictures is four tiles**, so the tile id carries the
+  index — keying on the message id alone renders one and silently drops
+  three, the same shape of bug as the links rule below.
 - **Media is a contact sheet**: three across at a 2pt gutter, no captions.
   The job is recognising a photo you already remember. Cards with titles
   would fit a third as many on a screen and answer nothing extra. Tapping one
@@ -3128,6 +3243,25 @@ above, plus:
   with the same `Check` (see EditBirthday).
 - Explanatory copy goes *below* the control it explains, `text-base
   text-gray-400 mt-3 px-1`, never as a label above it.
+- **A rule the screen can check as you type is shown as an `AuthHint`, not as
+  a popup after you press.** `components/settings/ChangePassword.tsx` is the
+  reference: three white password fields on the grey (no labels — the
+  placeholder is the name, a `Lock` at `#9CA3AF`/1.8 leading, the eye as the
+  trailing accessory), then `AuthHint` ticks for "at least 6 characters",
+  "both new passwords match" and "different from your current one". Save is
+  live only when all three are green, so the disabled action and the ticks
+  are the same statement said twice on purpose — one says *that* you cannot
+  continue, the others say *why*. It previously enforced every rule on press
+  and answered with an error popup, which is the screen telling you at the
+  end what it knew at the second keystroke. Importing `AuthHint` from
+  `components/auth/AuthChrome.tsx` is deliberate: `app/reset-password.tsx` is
+  the same moment on the auth side, and two screens that pick a password
+  twice should not disagree about how a requirement looks.
+- **Settings chrome, not auth chrome, for a password screen inside Settings.**
+  Change Password wears the § Form screens header — chevron, centred title,
+  Save as header text — not § Auth screens' full-width filled button. That
+  departure is licensed only for screens with no header and exactly one thing
+  to do, and a settings sub-page is neither.
 
 ---
 
@@ -3167,6 +3301,257 @@ and hierarchy from weight and size alone.
   stack already does; presented as a modal of its own (sign-up's terms link),
   wrap them in `SafeAreaView edges={["top"]}` over the same grey, so the
   ground runs behind the status bar rather than stopping at it.
+- **A horizontal strip inside the home feed is a `ScrollView` with
+  `removeClippedSubviews={false}`, never a nested `FlatList`.** The home
+  screen's vertical list runs with `removeClippedSubviews` on, which detaches
+  a nested horizontal list's children while the row itself stays laid out —
+  the strip keeps its full height and draws nothing. It is the worst class of
+  visual bug to chase: no error, no failed request, the data present and the
+  component correct, just a white band where the content is. `Banner.tsx` sat
+  like that above the feed; the ForYou and closing-sale rows had already been
+  moved to plain `ScrollView`s with the flag explicitly off, so the fix was to
+  finish the job. Virtualising a strip whose entire data set is what one
+  screen shows was never buying anything.
+- **A slot that reserves height paints something while it waits.** The banner
+  carries a neutral `#EFEFEF` ground under the image and drops any banner
+  whose image fails, so the space reads as loading or is not there at all —
+  never as a blank white box the size of content. A reserved slot showing the
+  page's own background is indistinguishable from a bug, including to whoever
+  wrote it.
+- **A setting that changes nothing is worse than no setting.** Appearance
+  offered four badge-tier gradient "chat bubble styles" with a live preview
+  of each, gated by which badge you owned. None of them did anything: the
+  chat screen destructured `bubbleSkin` from the appearance context and
+  never read it, because the gradient bubble rendering had been taken out of
+  the message list and the control was left behind. The user-visible result
+  is the worst available — you make a choice, the app saves it, nothing
+  changes, and the honest conclusion to draw is that you were ignored. The
+  section is gone, along with `bubbleSkin` in `AppearanceContext` and the
+  dead read in the chat screen. **A control ships after the thing it
+  controls, never before**; if a feature is removed, its setting goes in the
+  same change.
+- **One selection mark, and colour is not it.** The badge list marked the
+  active row with a coloured border, a tinted card background, *and* a
+  filled "ACTIVE" pill in the tier's accent — three signals in a colour that
+  also means something else (the tier), on a row that already shows the
+  badge. It is the `Check` in `#0369A1` now, the same one EditBirthday,
+  Tutorials and every other list under Settings uses. § Icons rules out
+  colour as a marker and a badge list is where that earns its keep: the hue
+  belongs to the badge, so spending it on state leaves you hunting for which
+  row is on.
+- **A placeholder screen is a bug with a nice icon.** Community Guidelines
+  and Help articles both shipped as a centred glyph over "…will be displayed
+  here", under a hand-rolled header (`ArrowLeft`, left-aligned title, a
+  bottom border) that matched nothing else under Settings. Two costs, and the
+  second is the expensive one: the screen is empty, *and* it is a second
+  chrome nobody will remember to keep in step. A screen with no content yet
+  still wears `SettingsScreen`/`LegalScreen` and says what it will hold.
+  No screen under Settings is in this shape any more; the last one was
+  `SellerPolicy.tsx`.
+- **A marketplace has rules for both sides of the counter.** Legal carried a
+  Seller Policy and nothing for buyers, which reads as a platform that
+  polices one party and leaves the other to find out. `BuyerPolicy.tsx` and
+  `SellerPolicy.tsx` are written in parallel — payment is section 5 in both,
+  "when it goes wrong" section 7 in both — so the same transaction can be
+  read from either side and the two cannot quietly drift into contradicting
+  each other. Both stop where the Terms stop: NamZoed is not a party to the
+  sale and holds nobody's money, so neither document promises a refund, an
+  escrow or an arbitration there is no mechanism for. **Say what the app
+  cannot do plainly and early** — the Buyer Policy's first section is exactly
+  that, because a buyer who knows there is no escrow behaves differently at
+  the moment it matters, and a document that lets them assume otherwise has
+  done them harm. Where a rule is a community rule applied to selling, both
+  point at the Guidelines instead of restating it; two documents wording the
+  same rule differently is worse than one of them being shorter.
+- **Community Guidelines is a legal document, so it is built like one.** It
+  uses the `LegalDocument.tsx` kit — numbered sections, one icon colour, the
+  lede on the grey, "Last updated … · Version …" at the foot — because it is
+  the third document reached from the same lists and arriving somewhere that
+  looks unrelated is how people lose the thread. Every section maps to a
+  mechanism that exists (the report sheets and their reasons, the composer's
+  content ratings, listings, reviews, live, Mongoose); a rule with nothing
+  behind it teaches people the list is decoration and they stop reading it.
+- **Help articles are questions, and they open in place.** A row reading
+  "Listings" tells you nothing about whether your question is behind it;
+  "Why can nobody see my listing?" is either yours or it isn't, and you know
+  at a glance. Answers expand inside the card (220ms `easeInEaseOut`, the
+  same ease `ProductReviews`/`InlineComments` use, chevron rotating 180°) —
+  a three-line answer given its own pushed screen charges a navigation to
+  read it and another to check the next one. **One open at a time**: a column
+  of everything expanded is the wall of text the screen exists to avoid. The
+  whole screen is one `ARTICLES` array, so a new article is an entry — no
+  component, no route, no case in the settings switch. An answer that grows
+  past a screenful stops being an article and becomes a `LegalDocument`.
+- **A sub-page that moves onto the settings grey must update its entry in
+  `SUB_PAGE_BACKGROUNDS`** (`app/(users)/settings/index.tsx`), or the bands
+  above and below it stay the colour it used to be. Converting a placeholder
+  to settings chrome is always two edits — see § Grounds for why that map is
+  exhaustive rather than defaulted.
+- **A shortcut into Settings opens the hub its Settings row opens, not a page
+  inside it.** `?modal=<name>` (`app/(users)/settings/index.tsx`) seeds the
+  sub-page stack with a single level, and closing it leaves Settings
+  altogether rather than revealing a list the user never browsed to — so
+  landing a level too deep strands them with no way to reach the siblings.
+  The drawer's **Help center** passes `modal=support`
+  (`components/settings/SupportSettings.tsx`, titled "Help Center", with Help
+  articles / How Namzoed works / Contact us / Send feedback), which is exactly
+  what the Settings list's own Help Center row pushes; it passed
+  `modal=helpCenter`, the articles page one level inside that, and the same
+  button in two places showed two different screens. **A shortcut's target is
+  whatever `onPress` the equivalent Settings row calls `handleNavigation`
+  with — copy that string, don't pick the one whose name matches the label.**
+
+---
+
+## Setlog's day header
+
+- **Export, settings and join are icons above the day, not rows below the
+  feed.** They were a white group of labelled rows at the foot of the list,
+  which put the two most occasional things in Setlog — a settings screen, and
+  a code you are given once — at the bottom of a feed you have to scroll past
+  everything to reach, drawn with the visual weight of content. They are
+  chrome for the day above them, so they sit with it
+  (`FeedActions` in `components/setlog/SetlogFeed.tsx`).
+- **The export icon is a `Film`, not a share arrow.** That screen makes a
+  reel and a collage of the day; the OS share sheet is one tap further on,
+  inside it. An arrow there promises the share menu and delivers an editor.
+- **Icon-only is a real cost, and it is only payable by a short, fixed set.**
+  A glyph with no label is learnable, not self-explanatory; three of them,
+  always in the same order, always in the same place, is learnable in one
+  use. A growing or reordering set is not, and this is where "just add
+  another icon" stops being free. **Every icon-only control carries an
+  `accessibilityLabel`** — dropping the visible label is a visual decision and
+  must not become an unusable screen for anyone reading it aloud, so the
+  label that left the screen is the one the reader hears.
+- White circles on the feed's grey, matching the cards' relationship to the
+  same ground — chrome that belongs to the surface rather than a toolbar
+  floating over it.
+
+---
+
+## The day collage
+
+`components/setlog/DayCollage.tsx` for the picture, `lib/collageLayout.ts`
+for the arrangement, `app/(users)/setlog/collage.tsx` for the editor.
+
+- **The reel is stitched on the phone, by the platform's own encoder.**
+  `modules/setlog-stitcher` — AVFoundation (`AVMutableComposition` +
+  `AVAssetExportSession`) on iOS, Media3 Transformer (`Composition` +
+  `EditedMediaItemSequence`) on Android. It replaced a Node worker running
+  ffmpeg, which meant a host, a service-role key, a queue, and no reel at all
+  until somebody deployed one. The usual React Native shortcut — ffmpeg-kit —
+  was retired in January 2025 and its binaries pulled, so the real choice was
+  a server or the platform APIs, and both platforms have one built for
+  exactly this job and hardware accelerated besides. It is now faster than
+  the thing it replaced, and it works on a plane.
+- **The reel fills the frame too**, and by the same reasoning as the collage:
+  `max` instead of `min` on the fit ratio on iOS, `LAYOUT_SCALE_TO_FIT_WITH_CROP`
+  on Android. Aspect is never distorted; the overflow is cropped from the
+  centre and simply not drawn. Letterboxing every portrait clip into a
+  portrait frame made the background most of the picture. The background
+  colour still exists for the gap between panes and the occasional sliver —
+  it is a ground, not a mat.
+- **Two native implementations answer to one JS contract, and anything only
+  one of them can do is clamped in that contract.** Multi-pane composition is
+  written on iOS and not on Android, so `stitchReel` pins `split` to 1 for
+  both and the editor offers one layout — a reel that arrives three-up on one
+  phone and one-up on the other is worse than one that is the same
+  everywhere. The clamp lives in the single place both platforms pass
+  through, never in one of them.
+- **A `require`d asset is not a file.** The watermark is resolved through
+  `expo-asset` to a `file://` URI before it is handed over: in a release
+  build a bundled image lives inside the app package, and neither encoder can
+  open a bundle reference.
+- **Code that can only run in an environment you do not have still has to be
+  runnable in the one you do.** The ffmpeg worker shipped having never once
+  executed, and it did not work: its filter graph joined the stream labels
+  into the comma-separated chain (`[0:v],scale=…,…,[p0]`), and a comma beside
+  a label declares an empty filter, so ffmpeg rejected every graph with
+  `No such filter: ''`. `render-worker/build-segment.test.js` runs the real
+  encoder over generated clips in ten seconds on a laptop, with no Supabase,
+  no queue and no host. The same rule applies to the native module: the iOS
+  composition typechecks against the real SDK without a device, and the parts
+  that cannot be checked that way are the parts to be sceptical of.
+- **The export fills the frame, and the crop that costs is measured, shared
+  and capped.** This reverses the rule that stood here — "nothing is cropped,
+  ever" — and the reversal was asked for after seeing it: holding the block
+  inside a 22pt margin with a 40pt caption band under it and centring the
+  remainder meant a collage arrived as a small picture in a large field of
+  background. Filling a fixed frame with photographs of whatever shape the
+  phone was held in **cannot** be done without losing some of them; that is
+  geometry. What the layout owes is to lose as little as possible:
+  - the arrangement is chosen to need the least stretch (§ coverage score);
+  - stretching the block to the frame's height multiplies every row by the
+    same factor, so **every cell is cropped by exactly the same proportion**
+    — no photo takes the hit for the others;
+  - past `MAX_CROP` it stops and leaves an even band instead.
+  `MAX_CROP` is 2.0 because it was measured, not chosen: across realistic
+  aspect mixes the ceiling buys 44% edge-to-edge at 1.25, 79% at 1.5, 91% at
+  1.8 and 98% at 2.0, and the curve flattens there — beyond it you buy 2%
+  more bleed by allowing a photo nobody would recognise. **A constant that
+  trades one good thing against another is a measurement, and the table
+  belongs next to it** (`lib/collageLayout.ts`).
+- **What the original grid did is still wrong**, and this is not a return to
+  it: nine square cells on `cover` cropped every photo to a square
+  regardless, which is a fixed shape imposed on the day. The crop here is
+  whatever is left after the arrangement has done its best, it is the same
+  for every photo, and it is bounded.
+- **The caption goes over the photographs, never in a band of its own.** Date,
+  count and mark sit on a short bottom scrim; a solid strip would be the
+  margin coming back under a different name. The type carries its own shadow
+  rather than depending on a light or dark ground, the same trade `ClipStamp`
+  makes over a clip.
+- **Square corners and no outer margin at full bleed.** A rounded corner at
+  the frame's edge leaves a wedge of background in each corner of the
+  exported file, which reads as a mistake rather than as a radius. The gap
+  between cells stays as a thin rule of background — with no margin left, it
+  is the only thing separating one photo from the next.
+- **The photos decide the shape, not a grid.** Rows are contiguous runs in
+  the order the photos were taken; everything in a row shares a height, and
+  that height is whatever makes the row exactly as wide as the block
+  (`h = (W − gaps) / Σ aspect`). **Order is never rearranged** — reading
+  order is chronological order, which is the only reason a day is worth
+  exporting as one picture, and masonry columns (shortest-first) would
+  scatter the morning through the afternoon.
+- **Pick the row count by coverage, not by nearest height.** A set of row
+  breaks fixes the block's *proportions*, so each candidate is a candidate
+  shape and the best one is whichever is closest to the frame's — scored as
+  `min(h, H) / max(h, H)`. Scoring by "whose height is nearest" instead
+  looks equivalent and is not: a block slightly too tall scales down and
+  still covers most of the frame, while one far too short cannot be scaled up
+  without overrunning the sides. That mistake laid six portrait photos out as
+  one thin strip covering 36% of a landscape canvas where two rows cover 67%.
+- **Two frames, portrait 4:5 and landscape 3:2.** Portrait is the tallest a
+  feed post can be before the platform crops it for you, which is the whole
+  point of choosing it; landscape is the photographic shape, for a day that
+  was mostly wide. Same layout at two proportions, not two designs.
+- **Whatever is left over is an even mat, not a gap at the bottom** — the
+  block is centred both ways. A generous mat is what a framed print looks
+  like, and it is the honest price of not cutting anything; the alternative
+  is a crop.
+- **Measure before laying out.** The editor asks `Image.getSize` for every
+  file once it is on disk and renders only then. Assuming square and
+  correcting on load would reflow the collage under the recorder's hands, and
+  a photo drawn at the wrong ratio is the one thing this is supposed to make
+  impossible. A file that will not report its size is treated as square, and
+  ratios outside 0.4–2.6 are clamped — those are measurement failures, and
+  one loose in a row squashes every photo beside it.
+- **The `ViewShot` must carry the collage's exact size.** `captureRef`
+  captures the view's own laid-out frame, and a `ViewShot` with no size is a
+  flex child like any other: nested in the scaled preview box it was
+  stretched to `PREVIEW_W` (~361pt) while `DayCollage` inside it drew at its
+  real 540, so the exported file came out 1083×2025 instead of 1620×2025 and
+  everything past 67% of the width was cut off. It went unnoticed for as long
+  as the collage was a square 3-column grid, because losing the right-hand
+  column just looked like the grid; two photos in a row cut one of them in
+  half. **Anything captured at a size other than the size it is previewed at
+  states its own width and height**, on the `ViewShot` and on every parent
+  between it and the transform. A `__DEV__` check compares the captured
+  file's aspect to the frame's and warns, because the failure is silent
+  otherwise and looks like a design decision.
+- **No columns/rows stepper.** There is no grid to set any more, so the
+  editor offers the two things still open: the shape, and how much of the day
+  goes in. What is left out is said plainly, never dropped silently.
 
 ---
 
@@ -3183,6 +3568,17 @@ not by the seller, so the only other way to see those screens is to edit
 `verification_status` by hand in Postgres.
 `components/dev/AddFriendsPreview.tsx` is the third: every state of the
 QR flow needs two accounts and a second phone to reach otherwise.
+`components/dev/CollagePreview.tsx` is another: what decides a collage's
+arrangement is the mix of aspect ratios in a day, and the awkward mixes —
+six portraits in a landscape frame, one panorama among squares, a single
+tall photo — take a day of shooting to produce and would never be made on
+purpose. Its cells are empty wells at their true shapes rather than stock
+photographs, because a fixture that pasted images into cells would crop them
+to the cell and hide the one bug the screen exists to catch.
+`components/dev/AppearancePreview.tsx` is another: which early-access
+badges you own is set by a backfill against named accounts, so on any
+normal test account Appearance has exactly one state — the empty one — and
+"none", "one" and "all four" are three different screens.
 `components/dev/MessagesListPreview.tsx` is the fourth, and covers the
 conversation row — an unread count, an unsent draft, a muted thread and a
 name long enough to collide with the timestamp are all things you cannot

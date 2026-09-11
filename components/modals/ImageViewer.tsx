@@ -228,12 +228,20 @@ const MediaItem = ({
     });
   }, [imgProgress, ringOpacity, unmountRing]);
 
-  const player = isVideo
-    ? useVideoPlayer({ uri, useCaching: true }, (p) => { p.loop = true; p.muted = false; })
-    : null;
+  // Always called, with a null source on an image: React counts hooks by
+  // order, so one behind a condition changes the count between an image and
+  // a video and takes the whole viewer down with "rendered fewer hooks than
+  // expected". `VideoSource` is nullable precisely for this.
+  const player = useVideoPlayer(
+    isVideo ? { uri, useCaching: true } : null,
+    (p) => {
+      p.loop = true;
+      p.muted = false;
+    },
+  );
 
   useEffect(() => {
-    if (!isVideo || !player) return;
+    if (!isVideo) return;
     const sub = player.addListener('statusChange', (payload) => {
       if (payload.status === 'readyToPlay') setVideoLoading(false);
     });
@@ -241,7 +249,7 @@ const MediaItem = ({
   }, [player, isVideo]);
 
   useEffect(() => {
-    if (isVideo && player) {
+    if (isVideo) {
       if (isActive) player.play();
       else player.pause();
     }
@@ -256,7 +264,7 @@ const MediaItem = ({
               <CircularLoader size="large" color="white" />
             </View>
           )}
-          {player && (
+          {isVideo && (
             <VideoView player={player} style={{ width: '100%', height: '100%' }} nativeControls contentFit="contain" />
           )}
         </View>

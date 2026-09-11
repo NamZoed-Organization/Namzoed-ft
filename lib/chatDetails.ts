@@ -11,6 +11,7 @@
  * order.
  */
 
+import { isVideoUrl } from "./postsService";
 import { supabase } from "./supabase";
 
 /** The wrappers a message body can carry. Defined here because two screens
@@ -101,6 +102,25 @@ const gifUrl = (content?: string | null): string | null => {
   }
 };
 
+/**
+ * Everything with a picture in it, both directions.
+ *
+ * Two things were wrong here and they compounded. It selected and filtered
+ * on `messages.video_url`, **a column that does not exist** — chat has never
+ * had one. PostgREST answered the whole query with 42703, the throw landed
+ * in the screen's catch, and the tab said "No images or videos" to everyone,
+ * about every conversation, whoever had sent them. It read as a filter bug
+ * ("it must only show theirs") and was a dead query.
+ *
+ * And it only ever looked at `image_url`. A chat message carries its first
+ * picture there and *all* of them in `image_urls`
+ * (supabase/migrations/add_chat_image_groups.sql), so once the query ran,
+ * sending four pictures would still have produced one tile.
+ *
+ * Video is not a column either: chat sends video through the same fields and
+ * it is told apart by the file extension, exactly as the message bubbles do
+ * it (`isVideoUrl`). One rule for what a URL is, in one place.
+ */
 export const fetchChatMedia = async (
   me: string,
   them: string,
@@ -108,9 +128,11 @@ export const fetchChatMedia = async (
 ): Promise<ChatMediaItem[]> => {
   const { data, error } = await supabase
     .from("messages")
-    .select("id, sender_id, image_url, video_url, message_type, content, created_at")
+    .select("id, sender_id, image_url, image_urls, message_type, content, created_at")
     .or(pairFilter(me, them))
-    .or("image_url.not.is.null,video_url.not.is.null,message_type.in.(gif,sticker)")
+    // Two chained .or() calls are AND-ed by PostgREST — the pair, and then
+    // the kind — which is the intended reading and is what it does.
+    .or("image_url.not.is.null,image_urls.not.is.null,message_type.in.(gif,sticker)")
     .order(ORDER.column, { ascending: ORDER.ascending })
     .limit(limit);
   if (error) throw error;
@@ -120,14 +142,31 @@ export const fetchChatMedia = async (
     const mine = String((row as any).sender_id) === String(me);
     const createdAt = String((row as any).created_at);
     const id = String((row as any).id);
-    if ((row as any).image_url) {
-      items.push({ id, url: (row as any).image_url, kind: "image", createdAt, mine });
-    } else if ((row as any).video_url) {
-      items.push({ id, url: (row as any).video_url, kind: "video", createdAt, mine });
-    } else {
-      const url = gifUrl((row as any).content);
-      if (url) items.push({ id, url, kind: "gif", createdAt, mine });
+
+    // Every picture in the message, oldest rows included: they predate
+    // `image_urls` and carry only the single `image_url`.
+    const urls: string[] = Array.isArray((row as any).image_urls)
+      ? (row as any).image_urls.filter(Boolean)
+      : [];
+    const all = urls.length > 0 ? urls : [(row as any).image_url].filter(Boolean);
+
+    if (all.length > 0) {
+      all.forEach((url: string, i: number) => {
+        items.push({
+          // One message of four pictures is four tiles, so the id has to
+          // distinguish them or the grid renders one and drops three.
+          id: all.length > 1 ? `${id}-${i}` : id,
+          url,
+          kind: isVideoUrl(url) ? "video" : "image",
+          createdAt,
+          mine,
+        });
+      });
+      continue;
     }
+
+    const url = gifUrl((row as any).content);
+    if (url) items.push({ id, url, kind: "gif", createdAt, mine });
   }
   return items;
 };

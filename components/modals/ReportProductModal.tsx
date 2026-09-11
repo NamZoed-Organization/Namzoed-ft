@@ -139,7 +139,7 @@ export default function ReportProductModal({
                   </TouchableOpacity>
                 </View>
                 <Text className="text-sm font-regular text-gray-600">
-                  Report "{productName}" for violating marketplace guidelines
+                  Report &quot;{productName}&quot; for violating marketplace guidelines
                 </Text>
               </View>
 

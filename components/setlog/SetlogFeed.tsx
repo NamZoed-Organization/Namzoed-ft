@@ -19,7 +19,6 @@
 
 import ClipStamp, { OVER_MEDIA } from "@/components/setlog/ClipStamp";
 import Mascot from "@/components/ui/Mascot";
-import { CONVERSATION_GROUP_RADIUS } from "@/components/messages/ConversationRow";
 import { MODAL_RADIUS } from "@/constants/theme";
 import {
   CAPTURE_MODES,
@@ -29,16 +28,15 @@ import {
 import { useVideoPlayer, VideoView } from "expo-video";
 import {
   ChevronDown,
-  ChevronRight,
+  Film,
   KeyRound,
   Play,
   Plus,
-  Share2,
   SlidersHorizontal,
   UserRound,
 } from "lucide-react-native";
 import React from "react";
-import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Image, Text, TouchableOpacity, View } from "react-native";
 
 export const SETLOG_GROUP_INSET = 16;
 /** Landscape, because that is the frame this camera records by default. */
@@ -102,11 +100,23 @@ export function FeedDayLabel({
 }
 
 /**
- * The three occasional things, in one white group under the cards
- * (§ Groups and rows). Three separate cards stacked is the "card per item"
- * shape § People lists rules out, and these are rows, not items.
+ * Export, settings and join — three icons above the day, not three rows
+ * below the cards.
+ *
+ * They were a white group of labelled rows at the foot of the list, which
+ * put the two most occasional things in Setlog (a settings screen, and a
+ * code you are given once) at the bottom of a feed you have to scroll past
+ * everything to reach, in the visual weight of content. They are chrome for
+ * the day above them, so they sit with it.
+ *
+ * **Icon-only, and that costs something.** A glyph with no label is
+ * learnable but not self-explanatory, which is only acceptable for a short,
+ * stable set that never moves — three, always in this order, always here.
+ * Every one carries an `accessibilityLabel`, because "unlabelled" is a
+ * visual decision and must not become an unusable one for anybody reading
+ * the screen aloud.
  */
-export function FeedFooter({
+export function FeedActions({
   exportLabel,
   onExport,
   onSettings,
@@ -118,36 +128,35 @@ export function FeedFooter({
   onSettings: () => void;
   onJoin: () => void;
 }) {
-  const rows: {
+  const actions: {
     key: string;
-    icon: React.ReactNode;
+    Icon: typeof Film;
     label: string;
-    secondary: string;
     onPress: () => void;
   }[] = [
     ...(exportLabel
       ? [
           {
             key: "export",
-            icon: <Share2 size={20} color="#9CA3AF" strokeWidth={1.8} />,
-            label: `Export ${exportLabel.toLowerCase()}`,
-            secondary: "The reel, and a collage of the photos",
+            // A reel and a collage, not a share sheet: the export screen
+            // makes a film of the day, and the arrow was promising the OS
+            // share menu one tap earlier than it arrives.
+            Icon: Film,
+            label: `Export ${exportLabel.toLowerCase()} — the reel, and a collage of the photos`,
             onPress: onExport,
           },
         ]
       : []),
     {
       key: "settings",
-      icon: <SlidersHorizontal size={20} color="#9CA3AF" strokeWidth={1.8} />,
-      label: "Setlog settings",
-      secondary: "Hourly prompt, and what the camera opens on",
+      Icon: SlidersHorizontal,
+      label: "Setlog settings — hourly prompt, and what the camera opens on",
       onPress: onSettings,
     },
     {
       key: "join",
-      icon: <KeyRound size={20} color="#9CA3AF" strokeWidth={1.8} />,
-      label: "Join with a code",
-      secondary: "Six characters, from a friend",
+      Icon: KeyRound,
+      label: "Join a log with a code",
       onPress: onJoin,
     },
   ];
@@ -155,60 +164,34 @@ export function FeedFooter({
   return (
     <View
       style={{
-        backgroundColor: "#fff",
-        borderRadius: CONVERSATION_GROUP_RADIUS,
-        borderCurve: "continuous",
-        overflow: "hidden",
-        marginHorizontal: SETLOG_GROUP_INSET,
-        marginTop: 14,
+        flexDirection: "row",
+        justifyContent: "center",
+        gap: 10,
+        paddingTop: 2,
+        paddingBottom: 12,
       }}
     >
-      {rows.map((row, i) => (
+      {actions.map(({ key, Icon, label, onPress }) => (
         <TouchableOpacity
-          key={row.key}
+          key={key}
           activeOpacity={0.7}
-          onPress={row.onPress}
+          onPress={onPress}
+          accessibilityRole="button"
+          accessibilityLabel={label}
+          // White on the feed's grey, the same relationship the cards below
+          // have to it — so these read as part of the same surface rather
+          // than as a floating toolbar.
           style={{
-            flexDirection: "row",
+            width: 38,
+            height: 38,
+            borderRadius: 19,
+            borderCurve: "continuous",
+            backgroundColor: "#fff",
             alignItems: "center",
-            paddingHorizontal: 16,
-            paddingVertical: 12,
+            justifyContent: "center",
           }}
         >
-          {i > 0 && (
-            <View
-              style={{
-                position: "absolute",
-                top: 0,
-                left: 16 + 44 + 12,
-                right: 0,
-                height: StyleSheet.hairlineWidth,
-                backgroundColor: "#f0f0f0",
-              }}
-            />
-          )}
-          <View
-            style={{
-              width: 44,
-              height: 44,
-              borderRadius: 22,
-              borderCurve: "continuous",
-              backgroundColor: "#F5F5F5",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            {row.icon}
-          </View>
-          <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text style={{ fontSize: 15.5, fontWeight: "600", color: "#111" }}>
-              {row.label}
-            </Text>
-            <Text style={{ fontSize: 15, color: "#9CA3AF", marginTop: 1 }}>
-              {row.secondary}
-            </Text>
-          </View>
-          <ChevronRight size={18} color="#C7C7CC" />
+          <Icon size={18} color="#111827" strokeWidth={1.8} />
         </TouchableOpacity>
       ))}
     </View>

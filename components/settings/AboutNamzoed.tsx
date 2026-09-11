@@ -74,6 +74,10 @@ export default function AboutNamzoed({ onClose, onNavigate }: AboutNamzoedProps)
           onPress={() => onNavigate?.("termsOfService")}
         />
         <SettingsRow
+          label="Buyer policy"
+          onPress={() => onNavigate?.("buyerPolicy")}
+        />
+        <SettingsRow
           label="Seller policy"
           onPress={() => onNavigate?.("sellerPolicy")}
         />

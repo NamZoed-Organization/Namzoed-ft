@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { Image } from "expo-image";
-import { MapPin, Verified } from "lucide-react-native";
+import { MapPin, Moon, Verified } from "lucide-react-native";
 import React from "react";
 import { Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
@@ -71,7 +71,9 @@ const HomeCard = React.memo(function HomeCard({
                   : styles.regularDiscountBadge,
               ]}
             >
-              {isClosingSale && <Text style={styles.discountEmoji}>🌙</Text>}
+              {isClosingSale && (
+                <Moon size={12} color="white" strokeWidth={2} style={styles.discountIcon} />
+              )}
               <Text style={styles.discountText}>-{discountPercent}%</Text>
             </View>
           )}
@@ -186,9 +188,8 @@ const styles = StyleSheet.create({
   regularDiscountBadge: {
     backgroundColor: "#10B981",
   },
-  discountEmoji: {
-    fontSize: 12,
-    color: "white",
+  discountIcon: {
+    marginRight: 2,
   },
   discountText: {
     fontSize: 12,

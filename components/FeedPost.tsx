@@ -958,6 +958,10 @@ const MediaCarousel = React.memo(
     );
   },
 );
+// An arrow inside `React.memo` has no inferred name, so it shows up as
+// `Anonymous` in the profiler and in React DevTools — which is where you go
+// when a feed is dropping frames.
+MediaCarousel.displayName = "MediaCarousel";
 
 const HEADER_HEIGHT = 56;
 const HEART_BTN_X = 26;
@@ -1117,6 +1121,7 @@ const MiniAvatarRow = React.memo(({ users, totalLikes, onPress }: MiniAvatarRowP
     </TouchableOpacity>
   );
 });
+MiniAvatarRow.displayName = "MiniAvatarRow";
 
 function FeedPost({ post, isVisible = true, isAuthorLive: isAuthorLiveProp, onBack, onNavigateAway }: FeedPostProps) {
   const insets = useSafeAreaInsets();

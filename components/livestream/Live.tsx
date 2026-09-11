@@ -2035,6 +2035,23 @@ const HostCallContainer: React.FC<HostCallContainerProps> = ({
   const [showCoHostEndedModal, setShowCoHostEndedModal] = useState(false);
   const hadLiveHostRef = useRef(false);
 
+  // `ensureCameraPermission` below called `showPopup` and this component had
+  // no such thing — the other two containers in this file each declare their
+  // own pair, and this one was written against theirs. A denied camera
+  // permission was therefore a crash, on the one path that exists to explain
+  // a denied camera permission.
+  const [popup, setPopup] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+    type: "success" | "error" | "warning" | "white";
+  }>({ visible: false, title: "", message: "", type: "white" });
+  const showPopup = (
+    title: string,
+    message: string,
+    type: "success" | "error" | "warning" | "white" = "white",
+  ) => setPopup({ visible: true, title, message, type });
+
   const ensureCameraPermission = useCallback(async () => {
     const { status, canAskAgain } = await Camera.requestCameraPermissionsAsync();
     if (status === "granted") return true;
@@ -2094,7 +2111,7 @@ const HostCallContainer: React.FC<HostCallContainerProps> = ({
 
     const sub = call.state.backstage$.subscribe((bg) => {
       const live = !bg;
-      console.log('[HostStream] backstage$:', bg, '→ isLive:', live);
+      console.log('[HostStream] backstage$:', bg, 'isLive:', live);
       setIsLive(live);
       if (live) {
         hadLiveHostRef.current = true;
@@ -3172,6 +3189,16 @@ const HostCallContainer: React.FC<HostCallContainerProps> = ({
             </TouchableOpacity>
           </View>
         </View>
+      </Modal>
+
+      <Modal visible={popup.visible} transparent animationType="none" statusBarTranslucent>
+        <PopupMessage
+          visible={popup.visible}
+          type={popup.type}
+          title={popup.title}
+          message={popup.message}
+          onHide={() => setPopup((p) => ({ ...p, visible: false }))}
+        />
       </Modal>
     </KeyboardAvoidingView>
   );

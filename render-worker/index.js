@@ -29,6 +29,20 @@ const BUCKET = "setlog-clips";
 const POLL_MS = Number(process.env.POLL_INTERVAL_MS || 3000);
 
 /** Stories/Reels. Every pane is fitted into a slice of this. */
+/**
+ * The font drawtext uses for the clock and title.
+ *
+ * Named explicitly rather than left to fontconfig's idea of "Sans". The
+ * Dockerfile installs `fonts-dejavu-core`, so this path exists in the image;
+ * anywhere else, set `SETLOG_FONT`. Left implicit, drawtext resolves a
+ * default through fontconfig, and on a slim base with no fonts that fails at
+ * render time with "Cannot find a valid font" — a deploy-only failure on the
+ * one code path that cannot be tried on a laptop.
+ */
+const FONT_FILE =
+  process.env.SETLOG_FONT ||
+  "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf";
+
 const OUT_W = 1080;
 const OUT_H = 1920;
 /** A group holds the frame for as long as its longest clip, and never less
@@ -112,30 +126,33 @@ const buildSegment = async (clips, params, workDir, index) => {
     const stamp = [];
     if (params.stamp) {
       // Centred on the pane, the same place the camera put it.
+      const font = FONT_FILE ? `fontfile=${FONT_FILE}:` : "";
       stamp.push(
-        `drawtext=text='${escapeText(clockOf(clip.at))}':fontcolor=white:fontsize=${Math.round(paneH * 0.11)}:x=(w-text_w)/2:y=(h-text_h)/2-${Math.round(paneH * 0.03)}:shadowcolor=black@0.45:shadowx=2:shadowy=2`,
+        `drawtext=${font}text='${escapeText(clockOf(clip.at))}':fontcolor=white:fontsize=${Math.round(paneH * 0.11)}:x=(w-text_w)/2:y=(h-text_h)/2-${Math.round(paneH * 0.03)}:shadowcolor=black@0.45:shadowx=2:shadowy=2`,
       );
       if (clip.title) {
         stamp.push(
-          `drawtext=text='${escapeText(clip.title)}':fontcolor=white:fontsize=${Math.round(paneH * 0.055)}:x=(w-text_w)/2:y=(h-text_h)/2+${Math.round(paneH * 0.06)}:shadowcolor=black@0.45:shadowx=2:shadowy=2`,
+          `drawtext=${font}text='${escapeText(clip.title)}':fontcolor=white:fontsize=${Math.round(paneH * 0.055)}:x=(w-text_w)/2:y=(h-text_h)/2+${Math.round(paneH * 0.06)}:shadowcolor=black@0.45:shadowx=2:shadowy=2`,
         );
       }
     }
 
-    filters.push(
-      [
-        `[${i}:v]`,
-        `scale=${OUT_W}:${paneH}:force_original_aspect_ratio=decrease`,
-        `pad=${OUT_W}:${paneH}:(ow-iw)/2:(oh-ih)/2:color=${bg}`,
-        "setsar=1",
-        `fps=30`,
-        `tpad=stop_mode=clone:stop_duration=${seconds}`,
-        `trim=duration=${seconds}`,
-        "setpts=PTS-STARTPTS",
-        ...stamp,
-        `[${label}]`,
-      ].join(","),
-    );
+    // The labels are NOT part of the comma-joined chain. `[0:v]` and `[p0]`
+    // attach directly to the first and last filter — a comma beside a label
+    // declares an empty filter, and ffmpeg rejects the whole graph with
+    // "No such filter: ''". Every segment of every job died there, so the
+    // renderer had never once produced a file.
+    const chain = [
+      `scale=${OUT_W}:${paneH}:force_original_aspect_ratio=decrease`,
+      `pad=${OUT_W}:${paneH}:(ow-iw)/2:(oh-ih)/2:color=${bg}`,
+      "setsar=1",
+      `fps=30`,
+      `tpad=stop_mode=clone:stop_duration=${seconds}`,
+      `trim=duration=${seconds}`,
+      "setpts=PTS-STARTPTS",
+      ...stamp,
+    ].join(",");
+    filters.push(`[${i}:v]${chain}[${label}]`);
   });
 
   const stackIn = clips.map((_, i) => `[p${i}]`).join("");
@@ -179,6 +196,44 @@ const buildSegment = async (clips, params, workDir, index) => {
 
   await run("ffmpeg", args, { maxBuffer: 1024 * 1024 * 32 });
   return out;
+};
+
+/**
+ * Join the segments into one file.
+ *
+ * The concat **demuxer**, not the filter: every segment was just encoded
+ * here with identical settings, so they join without re-encoding — which is
+ * most of the reason a day finishes in seconds rather than minutes.
+ *
+ * Paths are written as `file '<path>'` and single quotes inside them are
+ * escaped the way the demuxer wants; a temp directory never contains one,
+ * but a list file that silently mis-parses is a failure with no useful
+ * error, so it is not left to luck.
+ */
+const concatSegments = async (segments, workDir) => {
+  const listFile = path.join(workDir, "segments.txt");
+  await fs.writeFile(
+    listFile,
+    segments
+      .map((s) => `file '${String(s).replace(/'/g, "'\\''")}'`)
+      .join("\n"),
+  );
+  const output = path.join(workDir, "reel.mp4");
+  await run(
+    "ffmpeg",
+    [
+      "-y",
+      "-f", "concat",
+      "-safe", "0",
+      "-i", listFile,
+      "-c", "copy",
+      // Playback can start before the whole file has arrived.
+      "-movflags", "+faststart",
+      output,
+    ],
+    { maxBuffer: 1024 * 1024 * 32 },
+  );
+  return output;
 };
 
 const renderJob = async (job) => {
@@ -225,27 +280,7 @@ const renderJob = async (job) => {
     // The demuxer, not the filter: every segment was just encoded here with
     // identical settings, so they concatenate without re-encoding — which
     // is most of the reason this finishes in seconds rather than minutes.
-    const listFile = path.join(workDir, "segments.txt");
-    await fs.writeFile(
-      listFile,
-      segments.map((s) => `file '${s}'`).join("\n"),
-    );
-
-    let output = path.join(workDir, "reel.mp4");
-    await run(
-      "ffmpeg",
-      [
-        "-y",
-        "-f", "concat",
-        "-safe", "0",
-        "-i", listFile,
-        "-c", "copy",
-        // Playback can start before the whole file has arrived.
-        "-movflags", "+faststart",
-        output,
-      ],
-      { maxBuffer: 1024 * 1024 * 32 },
-    );
+    let output = await concatSegments(segments, workDir);
 
     // ── watermark ──
     if (params.watermark) {
@@ -358,5 +393,14 @@ const loop = async () => {
   }
 };
 
-console.info("setlog render worker up");
-loop();
+// Started only when this file is the process, so the ffmpeg pipeline can be
+// exercised directly (`node build-segment.test.js`) without a Supabase
+// client, a queue, or a deploy. The stitching is the part that is hard to be
+// sure about and the part nobody can see until a worker is running
+// somewhere; being able to run it on a laptop is what makes it reviewable.
+if (require.main === module) {
+  console.info("setlog render worker up");
+  loop();
+}
+
+module.exports = { buildSegment, concatSegments, hexToFfmpeg, clockOf, escapeText };

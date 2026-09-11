@@ -14,6 +14,7 @@ import SingleLocationPicker, {
 import CircularLoader from "@/components/ui/CircularLoader";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { Ionicons } from "@expo/vector-icons";
+import { Package, ShoppingBag } from "lucide-react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { LIGHT_DATE_PICKER_PROPS } from "@/constants/datePicker";
 import * as Location from "expo-location";
@@ -267,7 +268,6 @@ export default function MongooseInitiatorModal({
                 </TouchableOpacity>
               )}
               <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
-                <Text style={{ fontSize: 20 }}>🦡</Text>
                 <Text
                   style={{
                     fontSize: 17,
@@ -364,7 +364,7 @@ export default function MongooseInitiatorModal({
                         marginRight: 14,
                       }}
                     >
-                      <Text style={{ fontSize: 26 }}>📦</Text>
+                      <Package size={26} color="#16a34a" strokeWidth={1.8} />
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text
@@ -374,7 +374,7 @@ export default function MongooseInitiatorModal({
                           color: "#111827",
                         }}
                       >
-                        I'm the Seller
+                        I&apos;m the Seller
                       </Text>
                       <Text
                         style={{
@@ -428,7 +428,7 @@ export default function MongooseInitiatorModal({
                         marginRight: 14,
                       }}
                     >
-                      <Text style={{ fontSize: 26 }}>🛍️</Text>
+                      <ShoppingBag size={26} color="#2563eb" strokeWidth={1.8} />
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text
@@ -438,7 +438,7 @@ export default function MongooseInitiatorModal({
                           color: "#111827",
                         }}
                       >
-                        I'm the Buyer
+                        I&apos;m the Buyer
                       </Text>
                       <Text
                         style={{
@@ -483,9 +483,11 @@ export default function MongooseInitiatorModal({
                       marginBottom: 16,
                     }}
                   >
-                    <Text style={{ fontSize: 15, marginRight: 6 }}>
-                      {role === "seller" ? "📦" : "🛍️"}
-                    </Text>
+                    {role === "seller" ? (
+                      <Package size={15} color="#16a34a" strokeWidth={1.8} style={{ marginRight: 6 }} />
+                    ) : (
+                      <ShoppingBag size={15} color="#2563eb" strokeWidth={1.8} style={{ marginRight: 6 }} />
+                    )}
                     <Text
                       style={{
                         fontSize: 13,
@@ -696,9 +698,11 @@ export default function MongooseInitiatorModal({
                         paddingVertical: 5,
                       }}
                     >
-                      <Text style={{ fontSize: 14, marginRight: 4 }}>
-                        {role === "seller" ? "📦" : "🛍️"}
-                      </Text>
+                      {role === "seller" ? (
+                        <Package size={14} color="#16a34a" strokeWidth={1.8} style={{ marginRight: 4 }} />
+                      ) : (
+                        <ShoppingBag size={14} color="#2563eb" strokeWidth={1.8} style={{ marginRight: 4 }} />
+                      )}
                       <Text
                         style={{
                           fontSize: 12,
@@ -861,7 +865,6 @@ export default function MongooseInitiatorModal({
                         >
                           Send Delivery Invite to {chatPartnerName}
                         </Text>
-                        <Text style={{ marginLeft: 6, fontSize: 18 }}>🦡</Text>
                       </>
                     )}
                   </Pressable>

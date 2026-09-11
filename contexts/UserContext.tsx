@@ -10,6 +10,15 @@ interface User {
   id?: string;
   username?: string;
   name?: string;
+  /**
+   * Only ever set by an OAuth provider's `user_metadata`, which `login.tsx`
+   * already normalises into `name` — so on a profile loaded from the
+   * `profiles` table this is undefined, and the several `name || full_name`
+   * fallbacks around the app are reading a field that is not a column.
+   * Declared rather than deleted because a row could still carry it, and a
+   * fallback that quietly does nothing is cheaper than one that throws.
+   */
+  full_name?: string | null;
   email?: string;
   phone?: string;
   password?: string;

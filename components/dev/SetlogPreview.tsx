@@ -20,7 +20,7 @@ import SquadLogs from "@/components/setlog/SquadLogs";
 import SetlogDayGrid from "@/components/setlog/SetlogDayGrid";
 import {
   FeedDayLabel,
-  FeedFooter,
+  FeedActions,
   SetlogClipCard,
   SetlogEmptyCard,
   SETLOG_GROUP_INSET,
@@ -428,6 +428,12 @@ export default function SetlogPreview({ visible, onClose }: SetlogPreviewProps) 
             />
           ) : (
             <>
+              <FeedActions
+                exportLabel={view === "empty" ? undefined : "Today"}
+                onExport={() => {}}
+                onSettings={() => {}}
+                onJoin={() => {}}
+              />
               <FeedDayLabel label="Today" onPress={() => {}} />
               {view === "empty" ? (
                 <SetlogEmptyCard
@@ -447,12 +453,6 @@ export default function SetlogPreview({ visible, onClose }: SetlogPreviewProps) 
                   />
                 ))
               )}
-              <FeedFooter
-                exportLabel={view === "empty" ? undefined : "Today"}
-                onExport={() => {}}
-                onSettings={() => {}}
-                onJoin={() => {}}
-              />
             </>
           )}
         </ScrollView>

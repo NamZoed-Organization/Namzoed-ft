@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { Platform, StyleSheet, View } from "react-native";
-import { Marker, type MarkerProps } from "react-native-maps";
+import { Marker, type MapMarkerProps } from "react-native-maps";
 
 export type MapPinPreset =
   | "pickup"
@@ -28,10 +28,10 @@ export type MapPinMarkerProps = {
   description?: string;
   size?: number;
   tracksViewChanges?: boolean;
-  onPress?: MarkerProps["onPress"];
+  onPress?: MapMarkerProps["onPress"];
   /** Android/Google Maps in modals often needs drag as well as map tap. */
   draggable?: boolean;
-  onDragEnd?: MarkerProps["onDragEnd"];
+  onDragEnd?: MapMarkerProps["onDragEnd"];
 };
 
 /**

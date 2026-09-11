@@ -166,9 +166,21 @@ export function useFollowedCreators() {
    *  is asking about. */
   const anyUnseen = useMemo(() => creators.some((c) => c.unseen), [creators]);
 
-  /** The face on the Following tab while you are on Explore: whoever posted
-   *  most recently, because that is what tapping it takes you to. */
-  const latest = creators[0] ?? null;
+  /**
+   * The face on the Following tab while you are on Explore.
+   *
+   * Whoever posted most recently **of the people you have something
+   * unopened from** — `creators` is already in recency order, so the first
+   * unseen one is that person. It used to be `creators[0]` outright, which
+   * could put up a face you had already caught up with and hang somebody
+   * else's dot on it: the picture said one person and the dot meant
+   * another. Null once everything is caught up, which is what turns the tab
+   * back into the word "Following".
+   */
+  const latest = useMemo(
+    () => creators.find((c) => c.unseen) ?? null,
+    [creators],
+  );
 
   return { creators, loading, refresh: load, markSeen, anyUnseen, latest };
 }

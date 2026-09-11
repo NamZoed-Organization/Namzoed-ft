@@ -1,4 +1,16 @@
 /**
+ * ⚠ NOT USED BY THE APP ANY MORE.
+ *
+ * The reel is stitched on the phone now — `modules/setlog-stitcher`,
+ * AVFoundation on iOS and Media3 Transformer on Android. Nothing imports
+ * this file; it and `render-worker/` are kept as the server-side path in
+ * case a future export outgrows a phone (a month, a year, someone else's
+ * day), not because anything still calls them. Delete both if that never
+ * happens — dead infrastructure that still compiles is an invitation to
+ * wire it back in by accident.
+ *
+ * ── what it was ──
+ *
  * Asking for a day to be stitched into one video.
  *
  * The phone cannot encode — so it writes down what it wants, and a worker

@@ -1,11 +1,18 @@
 /**
  * The collage editor.
  *
- * Full screen, on the day's photos, with the grid in the recorder's hands:
- * columns and rows, both steppers. A collage somebody is about to post has
- * a shape they want more than it has every photo they took — so rows can
- * cap it, and the screen says plainly how many are being left out rather
- * than dropping them quietly.
+ * Full screen, on the day's photos, with the shape in the recorder's hands:
+ * portrait or landscape, and how many of the day to include. There is no
+ * columns/rows stepper any more — the arrangement is derived from the
+ * photos' own proportions (`lib/collageLayout.ts`), so there is no grid to
+ * set. A collage somebody is about to post has a shape they want more than
+ * it has every photo they took, so the count can cap it, and the screen says
+ * plainly how many are being left out rather than dropping them quietly.
+ *
+ * **Every photo is measured before it is drawn.** The layout is built out of
+ * real aspect ratios, so the screen asks `Image.getSize` for each file the
+ * moment it is on disk and lays out only once it has them. Guessing square
+ * and correcting later would reflow the collage under the recorder's hands.
  *
  * **The clock and the title are on every cell, exactly as recorded.** They
  * are what the photo *was*, not decoration added at export time, so they
@@ -17,9 +24,8 @@
  */
 
 import DayCollage, {
-  COLLAGE_SIZE,
-  collageColumns,
-  collageHeight,
+  COLLAGE_FORMATS,
+  type CollageFormat,
 } from "@/components/setlog/DayCollage";
 import { SETTINGS_BACKGROUND } from "@/components/settings/SettingsChrome";
 import EdgeSwipeBack from "@/components/ui/EdgeSwipeBack";
@@ -55,6 +61,7 @@ import {
   // and TikTok's own guidelines forbid redrawing theirs anyway.
   Music2,
   Paintbrush,
+  RectangleVertical,
   Share2,
   SlidersHorizontal,
   Sticker,
@@ -66,6 +73,7 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
+  Image,
   ScrollView,
   StatusBar,
   Text,
@@ -76,7 +84,6 @@ import ViewShot, { captureRef } from "react-native-view-shot";
 const INSET = 16;
 const SCREEN_W = Dimensions.get("window").width;
 const PREVIEW_W = SCREEN_W - INSET * 2;
-const PREVIEW_SCALE = PREVIEW_W / COLLAGE_SIZE;
 
 /** The ground the grid sits on. Named rather than a swatch: a colour with
  *  a name is a choice somebody can repeat. */
@@ -96,8 +103,10 @@ export default function SetlogCollageScreen() {
   const [loading, setLoading] = useState(true);
   const [ready, setReady] = useState(0);
   const [saving, setSaving] = useState(false);
-  const [columns, setColumns] = useState(3);
-  const [rows, setRows] = useState(3);
+  const [format, setFormat] = useState<CollageFormat>("portrait");
+  /** How many of the day to include, newest-last. Null is all of them. */
+  const [limit, setLimit] = useState<number | null>(null);
+  const [aspects, setAspects] = useState<Record<string, number>>({});
   const [showOptions, setShowOptions] = useState(false);
   const [watermark, setWatermark] = useState(true);
   const [showStamp, setShowStamp] = useState(true);
@@ -137,10 +146,27 @@ export default function SetlogCollageScreen() {
         });
         if (!alive) return;
         setPhotos(local);
-        // Opens on the shape the day suggests, then it is the recorder's.
-        const suggested = collageColumns(local.length);
-        setColumns(suggested);
-        setRows(Math.max(1, Math.ceil(local.length / suggested)));
+        // Real proportions, before anything is laid out. Image.getSize on a
+        // file:// URI is a header read, so this is fast — and it is the
+        // difference between a collage of the photos and a collage of
+        // squares with the photos cropped into them.
+        const measured = await Promise.all(
+          local.map(
+            (clip) =>
+              new Promise<[string, number]>((resolve) => {
+                if (!clip.url) return resolve([clip.id, 1]);
+                Image.getSize(
+                  clip.url,
+                  (w, h) => resolve([clip.id, h > 0 ? w / h : 1]),
+                  // A photo that will not report its size still has to
+                  // appear; square is the least wrong assumption.
+                  () => resolve([clip.id, 1]),
+                );
+              }),
+          ),
+        );
+        if (!alive) return;
+        setAspects(Object.fromEntries(measured));
       } catch (e) {
         console.error("Error loading collage:", e);
         if (alive) setPhotos([]);
@@ -153,12 +179,15 @@ export default function SetlogCollageScreen() {
     };
   }, [day]);
 
-  const capacity = columns * rows;
-  const leftOut = Math.max(0, photos.length - capacity);
+  const shownPhotos = limit == null ? photos : photos.slice(0, limit);
+  const leftOut = photos.length - shownPhotos.length;
   const gridNote =
     leftOut > 0
-      ? `${capacity} of ${photos.length} fit — the last ${leftOut} ${leftOut === 1 ? "photo is" : "photos are"} left out.`
+      ? `${shownPhotos.length} of ${photos.length} included — the last ${leftOut} ${leftOut === 1 ? "photo is" : "photos are"} left out.`
       : null;
+
+  const frame = COLLAGE_FORMATS[format];
+  const previewScale = PREVIEW_W / frame.width;
 
   /**
    * Flatten the preview into a file.
@@ -179,6 +208,25 @@ export default function SetlogCollageScreen() {
       quality: 0.95,
       result: "tmpfile",
     });
+    if (__DEV__) {
+      // The capture silently took the preview box's width once already (see
+      // the ViewShot below), and a cut-off collage looks enough like a
+      // deliberate crop that it shipped. A file whose shape is not the
+      // frame's shape is always a bug, and this is the only moment anything
+      // can tell.
+      Image.getSize(
+        uri,
+        (w, h) => {
+          const want = frame.width / frame.height;
+          if (Math.abs(w / h - want) > 0.02) {
+            console.warn(
+              `[collage] exported ${w}×${h} (${(w / h).toFixed(3)}) but the ${format} frame is ${frame.width}×${frame.height} (${want.toFixed(3)}). Something in the capture tree is constraining the ViewShot.`,
+            );
+          }
+        },
+        () => {},
+      );
+    }
     let url: string | null = null;
     if (!needsLink) return { uri, url };
     try {
@@ -244,9 +292,9 @@ export default function SetlogCollageScreen() {
    * link, though: the composer uploads its own copy into the posts bucket, and
    * a link is only for handing a file to an app that cannot take one.
    *
-   * The dimensions come from the grid that was just laid out, so the composer
-   * frames the collage at its real shape instead of assuming a portrait
-   * picture and letterboxing a wide one.
+   * The dimensions are the chosen frame's, so the composer shows the collage
+   * at its real shape instead of assuming a portrait picture and
+   * letterboxing a wide one.
    */
   const onPostToNamzoed = () =>
     run(
@@ -254,8 +302,8 @@ export default function SetlogCollageScreen() {
         setComposerMedia({
           uri,
           type: "image",
-          width: COLLAGE_SIZE,
-          height: collageHeight(photos.length, columns, rows),
+          width: frame.width,
+          height: frame.height,
         });
       },
       "That collage didn't open in the composer.",
@@ -348,7 +396,7 @@ export default function SetlogCollageScreen() {
               style={{
                 marginHorizontal: INSET,
                 width: PREVIEW_W,
-                height: collageHeight(photos.length, columns, rows) * PREVIEW_SCALE,
+                height: frame.height * previewScale,
                 borderRadius: MODAL_RADIUS,
                 borderCurve: "continuous",
                 overflow: "hidden",
@@ -356,16 +404,35 @@ export default function SetlogCollageScreen() {
             >
               <View
                 style={{
-                  transform: [{ scale: PREVIEW_SCALE }],
+                  // Full size, then scaled. The width has to be stated here
+                  // too: this is the flex parent of the ViewShot below, and
+                  // without it the chain inherits the preview box's width.
+                  width: frame.width,
+                  height: frame.height,
+                  transform: [{ scale: previewScale }],
                   transformOrigin: "top left",
                 }}
               >
-                <ViewShot ref={collageRef}>
+                {/*
+                  **The ViewShot must be exactly the collage's size.**
+                  `captureRef` captures this view's own laid-out frame, and
+                  with no size of its own it was stretched to the preview
+                  box's width (PREVIEW_W, ~361pt) while DayCollage inside it
+                  drew at its real 540 — so the capture came out 361×675pt
+                  and everything past 67% of the width was simply cut off.
+                  On a square 3-column grid that lost the right-hand column
+                  and read as "the grid"; with two photos in a row it cut one
+                  of them in half, which is how it was finally spotted.
+                */}
+                <ViewShot
+                  ref={collageRef}
+                  style={{ width: frame.width, height: frame.height }}
+                >
                   <DayCollage
                     day={day}
-                    photos={photos}
-                    columns={columns}
-                    rows={rows}
+                    photos={shownPhotos}
+                    aspects={aspects}
+                    format={format}
                     background={background}
                     showStamp={showStamp}
                     watermark={watermark}
@@ -454,29 +521,37 @@ export default function SetlogCollageScreen() {
               },
               {
                 kind: "submenu",
-                key: "columns",
-                label: "Columns",
-                icon: <Grid3x3 size={17} color="#fff" strokeWidth={1.9} />,
-                value: String(columns),
-                selected: String(columns),
-                options: [1, 2, 3, 4].map((n) => ({
-                  value: String(n),
-                  label: `${n} across`,
+                key: "format",
+                label: "Shape",
+                icon: <RectangleVertical size={17} color="#fff" strokeWidth={1.9} />,
+                value: COLLAGE_FORMATS[format].label,
+                selected: format,
+                options: (
+                  Object.keys(COLLAGE_FORMATS) as CollageFormat[]
+                ).map((key) => ({
+                  value: key,
+                  label: `${COLLAGE_FORMATS[key].label} · ${COLLAGE_FORMATS[key].note}`,
                 })),
-                onSelect: (v) => setColumns(Number(v)),
+                onSelect: (v) => setFormat(v as CollageFormat),
               },
               {
+                // A count, not a grid: the arrangement follows from the
+                // photos, so the only thing left to decide is how much of
+                // the day goes in.
                 kind: "submenu",
-                key: "rows",
-                label: "Rows",
+                key: "limit",
+                label: "Include",
                 icon: <Grid3x3 size={17} color="#fff" strokeWidth={1.9} />,
-                value: String(rows),
-                selected: String(rows),
-                options: [1, 2, 3, 4, 5, 6].map((n) => ({
-                  value: String(n),
-                  label: `${n} down`,
-                })),
-                onSelect: (v) => setRows(Number(v)),
+                value:
+                  limit == null ? `All ${photos.length}` : `First ${limit}`,
+                selected: limit == null ? "all" : String(limit),
+                options: [
+                  { value: "all", label: `All ${photos.length}` },
+                  ...[3, 4, 6, 8, 12]
+                    .filter((n) => n < photos.length)
+                    .map((n) => ({ value: String(n), label: `First ${n}` })),
+                ],
+                onSelect: (v) => setLimit(v === "all" ? null : Number(v)),
               },
               {
                 kind: "submenu",

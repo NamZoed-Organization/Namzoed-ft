@@ -938,7 +938,7 @@ export default function HomeScreen() {
           }
           return (
             <ForYouSection
-              title="🔥 Flash Deals"
+              title="Flash Deals"
               items={d.discountedProducts}
               loading={d.loading}
               renderCard={d.renderFlashDealCard}

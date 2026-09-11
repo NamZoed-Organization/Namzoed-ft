@@ -3,13 +3,22 @@
 // users the viewer follows). Plain text buttons with a small underline
 // indicator on the active tab, RedNote-style.
 //
-// **While you are on Explore, Following is a face rather than a word.**
-// Whoever you follow posted most recently is shown there, with a red dot
-// when there is something you have not opened — a word cannot say "there is
-// something new from somebody you follow", and that is the only reason
-// anybody leaves Explore. It goes back to being the word once you are on
-// Following, where the row of faces below is doing that job properly and a
-// second face in the header would be the same information twice.
+// **Following becomes a face only while it has something to report.**
+// On Explore, if somebody you follow has posted something you have not
+// opened, the tab is their picture with a red dot — a word cannot say
+// "there is something new from somebody you follow", and that is the only
+// reason anybody leaves Explore. The moment you are caught up it goes back
+// to the word.
+//
+// It used to wear a face the whole time you were on Explore, dot or no dot,
+// which spent the loudest thing in the header on "yes, the Following tab
+// still exists". A picture that is always there is furniture: by the time
+// it has something to say nobody is looking at it any more. The face has to
+// be able to be absent for its presence to mean anything.
+//
+// It is also the word whenever Following is the active tab, where the row
+// of faces below is doing this job properly and a second face in the header
+// would be the same information twice.
 import ProgressiveImage from "@/components/ui/ProgressiveImage";
 import { UserRound } from "lucide-react-native";
 import React from "react";
@@ -27,10 +36,11 @@ const AVATAR = 26;
 export default function HomeSectionTabs({
   active,
   onChange,
-  /** Whoever you follow posted most recently — the face on the Following
-   *  tab while you are looking at Explore. */
+  /** The most recent person you have something unopened from — the face on
+   *  the Following tab while you are looking at Explore. */
   followingAvatarUrl,
-  /** Somebody you follow has posted something you have not opened. */
+  /** Somebody you follow has posted something you have not opened. This is
+   *  what decides face-or-word, not just whether the dot is drawn. */
   followingUnseen,
 }: {
   active: HomeSection;
@@ -42,7 +52,9 @@ export default function HomeSectionTabs({
     <View style={{ flexDirection: "row", alignItems: "center", columnGap: 24 }}>
       {SECTIONS.map(({ key, label }) => {
         const isActive = active === key;
-        const asFace = key === "following" && !isActive;
+        // A face only when there is news behind it, so the header is quiet
+        // when there is nothing to say.
+        const asFace = key === "following" && !isActive && !!followingUnseen;
 
         return (
           <TouchableOpacity
@@ -77,23 +89,24 @@ export default function HomeSectionTabs({
                       <UserRound size={14} color="#9CA3AF" strokeWidth={1.8} />
                     )}
                   </View>
-                  {/* Outside the avatar's clip, so the circle never cuts it. */}
-                  {followingUnseen && (
-                    <View
-                      style={{
-                        position: "absolute",
-                        top: -1,
-                        right: -1,
-                        width: 10,
-                        height: 10,
-                        borderRadius: 5,
-                        borderCurve: "continuous",
-                        backgroundColor: "#DC2626",
-                        borderWidth: 1.5,
-                        borderColor: "#fff",
-                      }}
-                    />
-                  )}
+                  {/* Unconditional: a face is only drawn when there is
+                      something unopened, so there is no such thing as a
+                      face without its dot any more. Outside the avatar's
+                      clip, so the circle never cuts it. */}
+                  <View
+                    style={{
+                      position: "absolute",
+                      top: -1,
+                      right: -1,
+                      width: 10,
+                      height: 10,
+                      borderRadius: 5,
+                      borderCurve: "continuous",
+                      backgroundColor: "#DC2626",
+                      borderWidth: 1.5,
+                      borderColor: "#fff",
+                    }}
+                  />
                 </View>
               ) : (
                 <Text

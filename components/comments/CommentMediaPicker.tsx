@@ -129,13 +129,13 @@ export default function CommentMediaPicker({
             const uploaded = await uploadOne(m, replyTarget, postId);
             onUploaded(m.id, uploaded);
           } catch (error) {
-            console.error("❌ Comment media upload failed:", error);
+            console.error("Comment media upload failed:", error);
             onFailed(m.id);
           }
         }),
       );
     } catch (error) {
-      console.error("❌ Comment media pick error:", error);
+      console.error("Comment media pick error:", error);
       showPopup("error", "Selection Error", "Could not load media. Please try again.");
     } finally {
       setIsPickerBusy(false);

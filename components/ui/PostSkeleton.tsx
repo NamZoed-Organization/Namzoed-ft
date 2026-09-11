@@ -1,5 +1,11 @@
 import React, { useEffect, useRef } from "react";
-import { View, Animated } from "react-native";
+import {
+  View,
+  Animated,
+  type DimensionValue,
+  type StyleProp,
+  type ViewStyle,
+} from "react-native";
 
 interface PostSkeletonProps {
   hasImages?: boolean;
@@ -30,14 +36,34 @@ export default function PostSkeleton({ hasImages = true, imageCount = 1 }: PostS
     return () => shimmerAnimation.stop();
   }, [shimmerOpacity]);
 
-  const SkeletonBox = ({ width, height, className }: { width?: string; height?: string; className?: string }) => (
+  /**
+   * Dimensions are numbers of points or `"NN%"` strings — `DimensionValue`.
+   * They were typed as plain `string` and every fixed width was passed as
+   * `"20"`, which is neither: React Native does not read a bare numeric
+   * string as points, so those boxes had no width at all. `style` is
+   * declared because four call sites below were already passing it.
+   */
+  const SkeletonBox = ({
+    width,
+    height,
+    className,
+    style,
+  }: {
+    width?: DimensionValue;
+    height?: number;
+    className?: string;
+    style?: StyleProp<ViewStyle>;
+  }) => (
     <Animated.View
-      className={`bg-gray-300 rounded ${className}`}
-      style={{
-        opacity: shimmerOpacity,
-        width: width || "100%",
-        height: height ? parseInt(height) : 16,
-      }}
+      className={`bg-gray-300 rounded ${className ?? ""}`}
+      style={[
+        {
+          opacity: shimmerOpacity,
+          width: width ?? "100%",
+          height: height ?? 16,
+        },
+        style,
+      ]}
     />
   );
 
@@ -48,7 +74,7 @@ export default function PostSkeleton({ hasImages = true, imageCount = 1 }: PostS
       return (
         <View
           style={{ borderRadius: 8, borderCurve: "continuous" }} className="mt-3 overflow-hidden">
-          <SkeletonBox height="256" className="w-full" />
+          <SkeletonBox height={256} className="w-full" />
         </View>
       );
     }
@@ -57,8 +83,8 @@ export default function PostSkeleton({ hasImages = true, imageCount = 1 }: PostS
       return (
         <View
           style={{ borderRadius: 8, borderCurve: "continuous" }} className="mt-3 flex-row gap-1 overflow-hidden">
-          <SkeletonBox height="192" className="flex-1" />
-          <SkeletonBox height="192" className="flex-1" />
+          <SkeletonBox height={192} className="flex-1" />
+          <SkeletonBox height={192} className="flex-1" />
         </View>
       );
     }
@@ -67,10 +93,10 @@ export default function PostSkeleton({ hasImages = true, imageCount = 1 }: PostS
     return (
       <View
         style={{ borderRadius: 8, borderCurve: "continuous" }} className="mt-3 gap-1 overflow-hidden">
-        <SkeletonBox height="192" className="w-full" />
+        <SkeletonBox height={192} className="w-full" />
         <View className="flex-row gap-1">
-          <SkeletonBox height="128" className="flex-1" />
-          <SkeletonBox height="128" className="flex-1" />
+          <SkeletonBox height={128} className="flex-1" />
+          <SkeletonBox height={128} className="flex-1" />
         </View>
       </View>
     );
@@ -82,25 +108,25 @@ export default function PostSkeleton({ hasImages = true, imageCount = 1 }: PostS
       <View className="flex-row items-center justify-between p-4">
         <View className="flex-row items-center flex-1">
           {/* Profile Picture Skeleton */}
-          <SkeletonBox width="40" height="40" className="rounded-full mr-3" />
+          <SkeletonBox width={40} height={40} className="rounded-full mr-3" />
           
           {/* User Info Skeleton */}
           <View className="flex-1">
-            <SkeletonBox width="120" height="16" className="mb-2" />
-            <SkeletonBox width="60" height="12" />
+            <SkeletonBox width={120} height={16} className="mb-2" />
+            <SkeletonBox width={60} height={12} />
           </View>
         </View>
         
         {/* Three Dots Menu Skeleton */}
         <SkeletonBox
-          style={{ borderRadius: 4, borderCurve: "continuous" }} width="20" height="20" />
+          style={{ borderRadius: 4, borderCurve: "continuous" }} width={20} height={20} />
       </View>
       
       {/* Post Content Skeleton */}
       <View className="px-4">
-        <SkeletonBox width="100%" height="16" className="mb-2" />
-        <SkeletonBox width="80%" height="16" className="mb-2" />
-        <SkeletonBox width="60%" height="16" />
+        <SkeletonBox width="100%" height={16} className="mb-2" />
+        <SkeletonBox width="80%" height={16} className="mb-2" />
+        <SkeletonBox width="60%" height={16} />
       </View>
       
       {/* Post Images Skeleton */}
@@ -115,18 +141,18 @@ export default function PostSkeleton({ hasImages = true, imageCount = 1 }: PostS
           <View className="flex-row items-center">
             <View className="flex-row items-center mr-6">
               <SkeletonBox
-                style={{ borderRadius: 4, borderCurve: "continuous" }} width="20" height="20" className="mr-1" />
-              <SkeletonBox width="20" height="16" />
+                style={{ borderRadius: 4, borderCurve: "continuous" }} width={20} height={20} className="mr-1" />
+              <SkeletonBox width={20} height={16} />
             </View>
             <SkeletonBox
-              style={{ borderRadius: 4, borderCurve: "continuous" }} width="20" height="20" />
+              style={{ borderRadius: 4, borderCurve: "continuous" }} width={20} height={20} />
           </View>
           
           {/* Right side - Message */}
           <View className="flex-row items-center">
             <SkeletonBox
-              style={{ borderRadius: 4, borderCurve: "continuous" }} width="20" height="20" className="mr-2" />
-            <SkeletonBox width="60" height="16" />
+              style={{ borderRadius: 4, borderCurve: "continuous" }} width={20} height={20} className="mr-2" />
+            <SkeletonBox width={60} height={16} />
           </View>
         </View>
       </View>

@@ -1,17 +1,16 @@
 /**
  * AppearanceContext
  *
- * Global store for the user's chosen chat-bubble skin.
- * Preferences are persisted to AsyncStorage and restored on startup.
+ * What the user has chosen about how chats look: one default background for
+ * every conversation, and per-conversation overrides. Persisted to
+ * AsyncStorage and restored on startup.
  *
- * Bubble skins are named after badge tiers — a user can only select a style
- * they own.  The actual gating is enforced in the settings UI; the context
- * simply stores and restores the current choice.
- *
- *   'founding' — gold gradient (Founding Member)
- *   'waitlist' — amber gradient (Pioneer)
- *   'tester'   — silver gradient (Beta Tester)
- *   'genesis'  — green gradient (Genesis)
+ * It also held `bubbleSkin` — four badge-tier gradient skins for message
+ * bubbles — which is gone. Nothing rendered it: the chat screen read the
+ * value and never used it, so the setting saved a choice that changed
+ * nothing on screen. The picker in Settings › Appearance went with it. The
+ * stored `@namzoed_bubble_skin` key is simply left where it is; a migration
+ * to delete a key nobody reads would be more code than ignoring it.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, {
@@ -22,16 +21,10 @@ import React, {
     useState,
 } from 'react';
 
-export type BubbleSkin = 'founding' | 'waitlist' | 'tester' | 'genesis';
-
-const KEY_BUBBLE = '@namzoed_bubble_skin';
 const KEY_GLOBAL_BG = '@namzoed_global_chat_bg';
 const KEY_LOCAL_BGS = '@namzoed_local_chat_bgs';
 
 interface AppearanceContextValue {
-  bubbleSkin:   BubbleSkin;
-  setBubbleSkin: (skin: BubbleSkin) => Promise<void>;
-  
   globalChatBg: string;
   setGlobalChatBg: (bgId: string) => Promise<void>;
   
@@ -40,9 +33,6 @@ interface AppearanceContextValue {
 }
 
 const AppearanceContext = createContext<AppearanceContextValue>({
-  bubbleSkin:   'founding',
-  setBubbleSkin: async () => {},
-  
   globalChatBg: 'default',
   setGlobalChatBg: async () => {},
   
@@ -51,7 +41,6 @@ const AppearanceContext = createContext<AppearanceContextValue>({
 });
 
 export function AppearanceProvider({ children }: { children: React.ReactNode }) {
-  const [bubbleSkin, setBubbleSkinState] = useState<BubbleSkin>('founding');
   const [globalChatBg, setGlobalChatBgState] = useState<string>('default');
   const [localChatBgs, setLocalChatBgsState] = useState<Record<string, string>>({});
   const [ready, setReady] = useState(false);
@@ -60,12 +49,10 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
   useEffect(() => {
     (async () => {
       try {
-        const [bub, gBg, lBgs] = await Promise.all([
-          AsyncStorage.getItem(KEY_BUBBLE),
+        const [gBg, lBgs] = await Promise.all([
           AsyncStorage.getItem(KEY_GLOBAL_BG),
           AsyncStorage.getItem(KEY_LOCAL_BGS),
         ]);
-        if (bub) setBubbleSkinState(bub as BubbleSkin);
         if (gBg) setGlobalChatBgState(gBg);
         if (lBgs) setLocalChatBgsState(JSON.parse(lBgs));
       } catch {
@@ -74,11 +61,6 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
         setReady(true);
       }
     })();
-  }, []);
-
-  const setBubbleSkin = useCallback(async (skin: BubbleSkin) => {
-    setBubbleSkinState(skin);
-    try { await AsyncStorage.setItem(KEY_BUBBLE, skin); } catch {}
   }, []);
 
   const setGlobalChatBg = useCallback(async (bgId: string) => {
@@ -100,7 +82,6 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
   }, []);
 
   const value = {
-    bubbleSkin, setBubbleSkin,
     globalChatBg, setGlobalChatBg,
     localChatBgs, setLocalChatBg,
   };

@@ -220,7 +220,7 @@ export default function BusinessProfilePreview({
                 >
                   <Text className="text-sm font-semibold text-white">History</Text>
                   <Text className="text-xs font-regular text-white/60 mt-0.5">
-                    Everything you've viewed
+                    Everything you&apos;ve viewed
                   </Text>
                 </View>
               </View>

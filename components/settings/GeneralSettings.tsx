@@ -27,10 +27,6 @@ export default function GeneralSettings({ onClose, onNavigate }: GeneralSettings
           description="Chat bubbles and backgrounds"
           onPress={() => onNavigate?.("appearance")}
         />
-        <SettingsRow
-          label="Language and region"
-          onPress={() => onNavigate?.("languageRegion")}
-        />
       </SettingsGroup>
 
       {/* Honest about where text size actually lives: Namzoed's text already

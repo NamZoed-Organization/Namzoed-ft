@@ -10,7 +10,9 @@ import { Href, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { Image } from "expo-image";
 import { ArrowUpDown, Shuffle, ChevronLeft, Verified } from "lucide-react-native";
 import React, { useEffect, useState, useMemo, useCallback } from "react";
-import { FlatList, Text, TouchableOpacity, View, BackHandler } from "react-native";
+import { FlatList, Text, TouchableOpacity, View, BackHandler,
+  type ViewStyle,
+} from "react-native";
 import * as Haptics from "expo-haptics";
 import { useUser } from "@/contexts/UserContext";
 
@@ -204,7 +206,8 @@ export default function ServiceDetailScreen() {
                          item.service_providers?.profile_url;
 
     // Prevent stretching when there's only one item
-    const cardStyle = displayedServices.length === 1 ? { maxWidth: '48%' } : {};
+    const cardStyle: ViewStyle =
+      displayedServices.length === 1 ? { maxWidth: '48%' } : {};
 
     return (
       <TouchableOpacity
@@ -304,7 +307,8 @@ export default function ServiceDetailScreen() {
     };
 
     // Prevent stretching when there's only one item
-    const cardStyle = displayedProviders.length === 1 ? { maxWidth: '48%' } : {};
+    const cardStyle: ViewStyle =
+      displayedProviders.length === 1 ? { maxWidth: '48%' } : {};
 
     return (
       <TouchableOpacity

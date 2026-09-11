@@ -348,7 +348,7 @@ export default function ForYou() {
 
       {discountedProducts.length > 0 && (
         <ForYouSection
-          title="🔥 Flash Deals"
+          title="Flash Deals"
           items={discountedProducts}
           renderCard={renderFlashDealCard}
           viewAllRoute="/(users)/categories"

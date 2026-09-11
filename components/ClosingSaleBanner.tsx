@@ -6,7 +6,7 @@ import {
   isClosingSaleActive,
 } from "@/utils/timeHelpers";
 import { LinearGradient } from "expo-linear-gradient";
-import { Info } from "lucide-react-native";
+import { Info, Moon } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
@@ -57,7 +57,7 @@ export default function ClosingSaleBanner({
       >
         <View style={styles.headerSection}>
           <View style={styles.contentRow}>
-            <Text style={styles.emoji}>🌙</Text>
+            <Moon size={28} color="#fff" strokeWidth={1.8} style={styles.icon} />
 
             <View style={styles.middleSection}>
               <Text style={styles.bannerTitle}>{displayText.title}</Text>
@@ -127,8 +127,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
-  emoji: {
-    fontSize: 28,
+  icon: {
+    marginRight: 2,
   },
   middleSection: {
     flex: 1,

@@ -1,4 +1,7 @@
-import { ContentRating, getContentRatingLabel, getContentWarningMessage } from '@/lib/contentClassifier';
+import { getContentRatingLabel, getContentWarningMessage } from '@/lib/contentClassifier';
+// The type lives in types/post, which is where contentClassifier gets it
+// from too — importing it through that module only worked by accident.
+import type { ContentRating } from '@/types/post';
 import { BlurView } from 'expo-blur';
 import { EyeOff } from 'lucide-react-native';
 import React, { useState } from 'react';

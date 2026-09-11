@@ -1,0 +1,39 @@
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+
+group = 'expo.modules.setlogstitcher'
+version = '1.0.0'
+
+def expoModulesCorePlugin = new File(
+  project(":expo-modules-core").projectDir.absolutePath,
+  "ExpoModulesCorePlugin.gradle"
+)
+apply from: expoModulesCorePlugin
+applyKotlinExpoModulesCorePlugin()
+useCoreDependencies()
+useExpoPublishing()
+
+android {
+  namespace "expo.modules.setlogstitcher"
+  defaultConfig {
+    minSdkVersion 24
+  }
+  compileSdk 35
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+  kotlinOptions {
+    jvmTarget = "17"
+  }
+}
+
+dependencies {
+  // Media3 Transformer is Android's own answer to "join these videos": the
+  // supported, hardware-accelerated path that replaced hand-rolled
+  // MediaCodec/MediaMuxer work, and the reason no ffmpeg binary ships here.
+  def media3 = "1.4.1"
+  implementation "androidx.media3:media3-transformer:$media3"
+  implementation "androidx.media3:media3-effect:$media3"
+  implementation "androidx.media3:media3-common:$media3"
+}

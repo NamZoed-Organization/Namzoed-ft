@@ -28,7 +28,7 @@ export default function AppVersion({ onClose }: AppVersionProps) {
           <Text className="text-xl font-bold text-gray-700 mt-4 mb-2">App Version</Text>
           <Text className="text-2xl font-bold text-primary mb-4">v{APP_VERSION}</Text>
           <Text className="text-gray-500 text-center mb-6">
-            You're currently on version {APP_VERSION}. Check the store for the latest updates.
+            You&apos;re currently on version {APP_VERSION}. Check the store for the latest updates.
           </Text>
 
           {Platform.OS !== 'web' && (

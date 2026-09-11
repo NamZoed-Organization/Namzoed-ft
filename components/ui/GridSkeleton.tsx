@@ -17,7 +17,7 @@
  */
 
 import React, { useEffect, useRef } from "react";
-import { Animated, View } from "react-native";
+import { Animated, View, type DimensionValue } from "react-native";
 
 interface GridSkeletonProps {
   /** Number of two-card rows to render. Use a small number (e.g. 1) for a
@@ -62,7 +62,9 @@ export default function GridSkeleton({
     height,
     className,
   }: {
-    width?: string | number;
+    // `DimensionValue`, not `string`: RN takes a number of points or a
+    // `"NN%"` string, and any other string is silently not a dimension.
+    width?: DimensionValue;
     height?: number;
     className?: string;
   }) => (

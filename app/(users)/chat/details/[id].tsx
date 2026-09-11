@@ -40,6 +40,7 @@ import {
   type ChatSearchHit,
   type ChatVoiceItem,
 } from "@/lib/chatDetails";
+import { requestMessageFocus } from "@/lib/chatFocus";
 import { blockUser, isUserBlocked, unblockUser } from "@/lib/blockService";
 import {
   isConversationMuted,
@@ -340,7 +341,17 @@ export default function ChatDetailsScreen() {
                     label={hit.mine ? "You" : partnerName}
                     description={hit.text}
                     value={shortDate(hit.createdAt)}
-                    onPress={() => router.push(`/(users)/chat/${partnerId}` as any)}
+                    // Back into the conversation already on the stack,
+                    // carrying which message to land on — not a second copy
+                    // of it opened at the bottom (lib/chatFocus.ts).
+                    onPress={() => {
+                      requestMessageFocus({
+                        partnerId: String(partnerId),
+                        messageId: hit.id,
+                        createdAt: hit.createdAt,
+                      });
+                      router.back();
+                    }}
                   />
                 ))}
               </SettingsGroup>

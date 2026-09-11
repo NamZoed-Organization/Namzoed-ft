@@ -14,6 +14,8 @@
 import CircularLoader from "@/components/ui/CircularLoader";
 import LoadingBar from "@/components/ui/LoadingBar";
 import AddFriendsPreview from "@/components/dev/AddFriendsPreview";
+import AppearancePreview from "@/components/dev/AppearancePreview";
+import CollagePreview from "@/components/dev/CollagePreview";
 import BusinessProfilePreview from "@/components/dev/BusinessProfilePreview";
 import StoragePreview from "@/components/dev/StoragePreview";
 import SellerRatingSheet from "@/components/SellerRatingSheet";
@@ -248,6 +250,8 @@ export default function DevComponents({ onClose }: Props) {
   const [showLiquidMenu, setShowLiquidMenu] = useState(false);
   const [showBusinessPreview, setShowBusinessPreview] = useState(false);
   const [showStoragePreview, setShowStoragePreview] = useState(false);
+  const [showAppearancePreview, setShowAppearancePreview] = useState(false);
+  const [showCollagePreview, setShowCollagePreview] = useState(false);
   // Two states worth seeing, because they are different sheets: a first
   // rating starts blank and says "Submit", an edit arrives filled in and says
   // "Update". Nothing here touches the database — see the sheet's `preview`.
@@ -754,6 +758,10 @@ export default function DevComponents({ onClose }: Props) {
             onPress={() => setShowStoragePreview(true)}
           />
           <TriggerButton
+            label="Appearance — badge states"
+            onPress={() => setShowAppearancePreview(true)}
+          />
+          <TriggerButton
             label="Rate a business — new"
             onPress={() => setRatingSheet("blank")}
           />
@@ -772,6 +780,10 @@ export default function DevComponents({ onClose }: Props) {
           <TriggerButton
             label="Messages list — row + list states"
             onPress={() => setShowMessagesPreview(true)}
+          />
+          <TriggerButton
+            label="Collage — aspect mixes"
+            onPress={() => setShowCollagePreview(true)}
           />
           <TriggerButton
             label="Setlog — logs + day grid"
@@ -908,6 +920,16 @@ export default function DevComponents({ onClose }: Props) {
                 }
               : null,
         }}
+      />
+
+      <CollagePreview
+        visible={showCollagePreview}
+        onClose={() => setShowCollagePreview(false)}
+      />
+
+      <AppearancePreview
+        visible={showAppearancePreview}
+        onClose={() => setShowAppearancePreview(false)}
       />
 
       <StoragePreview

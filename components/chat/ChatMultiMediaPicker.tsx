@@ -103,7 +103,7 @@ export default function ChatMultiMediaPicker({
         })),
       );
     } catch (error) {
-      console.error("❌ Media pick error:", error);
+      console.error("Media pick error:", error);
       showPopup("error", "Selection Error", "Could not load media. Please try again.");
     }
   };

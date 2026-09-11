@@ -22,6 +22,15 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 
+/** `LinearGradient` takes a tuple, not an array: at least two stops, and the
+ *  first two positions are required. */
+type GradientStops = readonly [string, string, ...string[]];
+
+/** The unselected card's ground. Named rather than repeated inline so the two
+ *  card shapes in this file cannot drift apart. */
+const FLAT_GREY: GradientStops = ["#F5F5F5", "#F5F5F5"];
+const FLAT_GREY_SOFT: GradientStops = ["#F5F5F5", "#FAFAFA"];
+
 interface ContentRatingSuggestionProps {
   /**
    * The suggestion from suggestContentRating()
@@ -82,7 +91,9 @@ const ContentRatingSuggestionComponent: React.FC<ContentRatingSuggestionProps> =
 
   const isOverride = selectedRating !== suggested;
 
-  const getConfidenceBg = (conf: string) => {
+  /** A gradient is at least two stops — `LinearGradient` types `colors` as a
+   *  tuple, so a plain `string[]` is not assignable to it. */
+  const getConfidenceBg = (conf: string): GradientStops => {
     switch (conf) {
       case "high":
         return ["#FF6B6B", "#FF8E72"];
@@ -95,7 +106,9 @@ const ContentRatingSuggestionComponent: React.FC<ContentRatingSuggestionProps> =
     }
   };
 
-  const getRatingGradient = (rating: ContentRating) => {
+  const getRatingGradient = (
+    rating: ContentRating,
+  ): { colors: GradientStops; icon: React.ComponentType<any> } => {
     switch (rating) {
       case "general":
         return { colors: ["#4CAF50", "#66BB6A"], icon: Shield };
@@ -131,7 +144,7 @@ const ContentRatingSuggestionComponent: React.FC<ContentRatingSuggestionProps> =
                 onPress={() => onRatingChange(rating)}
               >
                 <LinearGradient
-                  colors={isSelected ? colors : ["#F5F5F5", "#F5F5F5"]}
+                  colors={isSelected ? colors : FLAT_GREY}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={[
@@ -267,11 +280,7 @@ const ContentRatingSuggestionComponent: React.FC<ContentRatingSuggestionProps> =
                 style={styles.ratingButtonWrapper}
               >
                 <LinearGradient
-                  colors={
-                    isSelected
-                      ? colors
-                      : ["#F5F5F5", "#FAFAFA"]
-                  }
+                  colors={isSelected ? colors : FLAT_GREY_SOFT}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={[

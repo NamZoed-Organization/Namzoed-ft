@@ -148,7 +148,7 @@ export default function DeleteAccount({ onClose, onAccountDeleted }: DeleteAccou
 
           {/* Contact support note */}
           <Text className="text-xs text-gray-400 text-center mt-6 leading-4">
-            If you're having issues or need help, please contact our support team at namzoed.com/support before deleting your account.
+            If you&apos;re having issues or need help, please contact our support team at namzoed.com/support before deleting your account.
           </Text>
         </View>
       </ScrollView>

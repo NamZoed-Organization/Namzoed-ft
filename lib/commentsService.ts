@@ -75,9 +75,9 @@ export interface CommentReply {
 
 const mediaPreviewText = (media?: CommentMediaAttachment): string => {
   switch (media?.type) {
-    case 'image': return '📷 Photo';
-    case 'video': return '🎥 Video';
-    case 'audio': return '🎤 Voice message';
+    case 'image': return 'Photo';
+    case 'video': return 'Video';
+    case 'audio': return 'Voice message';
     default: return '';
   }
 };
@@ -85,7 +85,7 @@ const mediaPreviewText = (media?: CommentMediaAttachment): string => {
 const galleryPreviewText = (media: { type: CommentGalleryMediaType }[]): string => {
   if (media.length === 0) return '';
   const hasVideo = media.some((m) => m.type === 'video');
-  const label = hasVideo ? '🎥 Video' : '📷 Photo';
+  const label = hasVideo ? 'Video' : 'Photo';
   return media.length > 1 ? `${label} +${media.length - 1} more` : label;
 };
 

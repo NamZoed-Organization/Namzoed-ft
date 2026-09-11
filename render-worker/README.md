@@ -1,4 +1,16 @@
-# Setlog render worker
+# Setlog render worker  ⚠ no longer used by the app
+
+The app stitches reels on the phone now — `modules/setlog-stitcher`,
+AVFoundation on iOS and Media3 Transformer on Android. Nothing queues a job
+into `setlog_renders` any more, so this worker has nothing to claim.
+
+It is kept because the server path is the only one that scales past what a
+phone will do — a month or a year of clips, or rendering somebody else's day
+— and because it is now known to work (`npm test`). Delete this directory and
+`lib/setlogRender.ts` if that need never arrives.
+
+## What it was
+
 
 The one piece of Setlog that cannot run on the phone.
 
@@ -57,6 +69,20 @@ gcloud run deploy setlog-render-worker --source . --no-cpu-throttling \
 One small instance is enough. A day is typically ten to twenty two-second
 clips — a few seconds of CPU.
 
+## Checking the encoder without deploying anything
+
+```bash
+cd render-worker && npm install && npm test
+```
+
+Generates clips with ffmpeg, runs the real `buildSegment`/`concatSegments`
+at every split, and probes the result — no Supabase, no queue, no host. This
+is how the filter-graph bug below was found, and it takes about ten seconds.
+
+`drawtext` is skipped automatically when the local ffmpeg was built without
+libfreetype (Homebrew's usually is); the image installs a build that has it.
+Set `SETLOG_FONT` if your ffmpeg wants a different font path.
+
 ## Running it locally against the real project
 
 ```bash
@@ -67,6 +93,12 @@ SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=… node index.js
 
 Then ask for a reel from the app. This is the quickest way to see the
 pipeline work before committing to a host.
+
+## Environment (optional)
+
+| Variable | What it is |
+|---|---|
+| `SETLOG_FONT` | the `.ttf` drawtext uses. Defaults to the DejaVu path the image installs; only needs setting off-image. |
 
 ## Until it is deployed
 

@@ -19,11 +19,11 @@ import {
   EditWorkProfile,
   GeneralSettings,
   HelpCenter,
-  LanguageRegion,
   NotificationSettings,
   PrivacyPolicy,
   PrivacySettings,
   SavedPosts,
+  BuyerPolicy,
   SellerPolicy,
   SendFeedback,
   SupportSettings,
@@ -79,7 +79,7 @@ import {
 // profile header's Edit Profile / Appearance-badge taps) via ?modal=<name>.
 /** One level of the nested sub-page stack, with the value that slides it. */
 interface SubPage {
-  name: string;
+  name: SubPageName;
   anim: SharedValue<number>;
 }
 
@@ -90,12 +90,27 @@ const MENU_BACKGROUND = "#f5f5f5";
 /** The standard form screens' ground (UI_STANDARD.md) — bg-gray-50. */
 const FORM_BACKGROUND = "#F9FAFB";
 
-// Each sub-page's own ground, so the container behind it (which is what
-// shows through behind the status bar) paints the same color. Grouping the
-// two families under one flag was close enough to look right and wrong
-// enough to see: the settings areas are #f5f5f5, the form screens #F9FAFB,
-// and the strip above them was painted with the other one's grey.
-const SUB_PAGE_BACKGROUNDS: Record<string, string> = {
+/** A sub-page that has not been migrated to either chrome yet and still
+ *  paints its own white ground. */
+const PLAIN_BACKGROUND = "#fff";
+
+// Each sub-page's own ground, so the containers around it paint the same
+// colour — the one behind the status bar, and the SubPageLayer that pays the
+// bottom inset. Grouping the two grey families under one flag was close
+// enough to look right and wrong enough to see: the settings areas are
+// #f5f5f5, the form screens #F9FAFB, and the strip above them was painted
+// with the other one's grey.
+//
+// **Every sub-page is listed, white ones included, and that is the point.**
+// This used to be a partial map with `?? "#fff"` behind it, so a screen on
+// the settings chrome that nobody remembered to add here rendered grey
+// between two white bands — invisible to whoever wrote the screen, because
+// the screen itself was right. Storage was one. With the map exhaustive and
+// `renderModalContent` switching over `SubPageName`, a new `case` for a name
+// that is not a key here does not compile, and the fix is to come back and
+// say which ground it is on.
+const SUB_PAGE_BACKGROUNDS = {
+  // Settings areas and anything else on SettingsScreen's grey.
   account: MENU_BACKGROUND,
   deviceManagement: MENU_BACKGROUND,
   general: MENU_BACKGROUND,
@@ -103,21 +118,48 @@ const SUB_PAGE_BACKGROUNDS: Record<string, string> = {
   privacy: MENU_BACKGROUND,
   support: MENU_BACKGROUND,
   about: MENU_BACKGROUND,
-  // The legal documents now sit on the same grey as the settings lists, so
-  // the layer beneath them has to as well — otherwise a white strip shows
-  // behind the status bar and through the slide.
+  dataStorage: MENU_BACKGROUND,
+  helpCenter: MENU_BACKGROUND,
+  tutorials: MENU_BACKGROUND,
+  appearance: MENU_BACKGROUND,
+  // The legal documents sit on the same grey as the settings lists (they are
+  // built on SettingsScreen too), so the layer beneath them has to as well.
   privacyPolicy: MENU_BACKGROUND,
   termsOfService: MENU_BACKGROUND,
+  communityGuidelines: MENU_BACKGROUND,
+  sellerPolicy: MENU_BACKGROUND,
+  buyerPolicy: MENU_BACKGROUND,
+
+  // § Form screens' grey.
   editProfile: FORM_BACKGROUND,
   editBio: FORM_BACKGROUND,
   editName: FORM_BACKGROUND,
   editBirthday: FORM_BACKGROUND,
   editLocation: FORM_BACKGROUND,
-};
+  changePassword: FORM_BACKGROUND,
 
-/** Anything not listed above is a plain white sub-page. */
-const subPageBackground = (name: string | null | undefined) =>
-  (name != null ? SUB_PAGE_BACKGROUNDS[name] : undefined) ?? "#fff";
+  // Still on their own white ground with the pre-standard header — see
+  // § Screens still to migrate. White here is not a default they fell
+  // through to; it is what they actually paint, and these entries stop being
+  // right the moment one of them is migrated.
+  editWorkProfile: PLAIN_BACKGROUND,
+  savedPosts: PLAIN_BACKGROUND,
+  sendFeedback: PLAIN_BACKGROUND,
+  whatsNew: PLAIN_BACKGROUND,
+  appVersion: PLAIN_BACKGROUND,
+  deleteAccount: PLAIN_BACKGROUND,
+  aboutApp: PLAIN_BACKGROUND,
+  devComponents: PLAIN_BACKGROUND,
+} as const satisfies Record<string, string>;
+
+/** The name of every screen `?modal=` and `handleNavigation` can open. */
+type SubPageName = keyof typeof SUB_PAGE_BACKGROUNDS;
+
+const isSubPageName = (name: string | null | undefined): name is SubPageName =>
+  name != null && name in SUB_PAGE_BACKGROUNDS;
+
+const subPageBackground = (name: SubPageName | null | undefined) =>
+  name != null ? SUB_PAGE_BACKGROUNDS[name] : PLAIN_BACKGROUND;
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
@@ -137,8 +179,14 @@ export default function SettingsScreen() {
   //
   // makeMutable rather than useSharedValue: these are created in an event
   // handler when a page is pushed, which is not somewhere a hook can run.
+  // Validated, not trusted: ?modal= is a URL parameter, and an unknown name
+  // used to seed a level of the stack that rendered nothing — a blank page
+  // with no way back to the list, since the list is skipped whenever the
+  // screen opened straight onto a sub-page. An unrecognised one now opens
+  // the settings list instead.
+  const openTo = isSubPageName(initialModal) ? initialModal : null;
   const [modalStack, setModalStack] = useState<SubPage[]>(() =>
-    initialModal ? [{ name: initialModal, anim: makeMutable(0) }] : [],
+    openTo ? [{ name: openTo, anim: makeMutable(0) }] : [],
   );
   const [showWhatsNew, setShowWhatsNew] = useState(false);
   const { markSeen: markWhatsNewSeen } = useWhatsNew();
@@ -155,13 +203,13 @@ export default function SettingsScreen() {
   const activeModal = modalStack[modalStack.length - 1]?.name ?? null;
   // Arrived on a sub-page directly, rather than browsing to it from the
   // settings list — see the root list's own comment below.
-  const openedDirectlyToSubPage = !!initialModal && modalStack.length > 0;
+  const openedDirectlyToSubPage = !!openTo && modalStack.length > 0;
   // Back at the bottom of the stack means leaving Settings altogether, so
   // the route's own edge swipe should handle it — it reveals the screen
   // underneath, which an in-screen drag can't. Only levels above that get
   // the per-page drag.
   const routeOwnsBack =
-    modalStack.length === 0 || (modalStack.length === 1 && !!initialModal);
+    modalStack.length === 0 || (modalStack.length === 1 && !!openTo);
 
   // Worklet callbacks hop back to JS through these, so they have to be
   // stable functions rather than inline closures.
@@ -178,6 +226,10 @@ export default function SettingsScreen() {
   }, []);
 
   const handleNavigation = (modalName: string) => {
+    // The hubs type this prop as (modal: string) => void, so the name is
+    // checked here rather than by the compiler. Anything not in
+    // SUB_PAGE_BACKGROUNDS has no ground and no case to render it.
+    if (!isSubPageName(modalName)) return;
     if (isAnimating.current) return;
     if (activeModal === modalName) return;
     setAnimating(true);
@@ -194,7 +246,7 @@ export default function SettingsScreen() {
     // Arrived directly at a sub-page (e.g. "Edit Profile" from the profile
     // header) with nothing else on the stack — leave the screen entirely
     // instead of revealing the root settings list the user never browsed to.
-    if (modalStack.length === 1 && initialModal) {
+    if (modalStack.length === 1 && openTo) {
       router.back();
       return;
     }
@@ -218,7 +270,7 @@ export default function SettingsScreen() {
         if (finished) runOnJS(popStack)();
       },
     );
-  }, [modalStack, initialModal, router, screenWidth, setAnimating, clearAnimating, popStack]);
+  }, [modalStack, openTo, router, screenWidth, setAnimating, clearAnimating, popStack]);
 
   // Android hardware back: pop the nested sub-page first; otherwise fall
   // through to the default screen-back behaviour.
@@ -238,7 +290,10 @@ export default function SettingsScreen() {
     router.replace("/login");
   };
 
-  const renderModalContent = (name: string | null) => {
+  // Typed to the keys of SUB_PAGE_BACKGROUNDS: a `case` for a name that has
+  // not declared a ground is a compile error, which is the whole mechanism
+  // keeping a screen from shipping with mismatched bands again.
+  const renderModalContent = (name: SubPageName | null) => {
     switch (name) {
       case "editProfile":
         return (
@@ -270,6 +325,8 @@ export default function SettingsScreen() {
         return <PrivacyPolicy onClose={closeActiveModal} />;
       case "sellerPolicy":
         return <SellerPolicy onClose={closeActiveModal} />;
+      case "buyerPolicy":
+        return <BuyerPolicy onClose={closeActiveModal} />;
       case "termsOfService":
         return <TermsOfService onClose={closeActiveModal} />;
       case "communityGuidelines":
@@ -304,8 +361,6 @@ export default function SettingsScreen() {
         return <AppVersion onClose={closeActiveModal} />;
       case "dataStorage":
         return <DataStorage onClose={closeActiveModal} />;
-      case "languageRegion":
-        return <LanguageRegion onClose={closeActiveModal} />;
       case "helpCenter":
         return <HelpCenter onClose={closeActiveModal} />;
       case "deleteAccount":

@@ -2,7 +2,7 @@
 import AuthPromptModal from "@/components/modals/AuthPromptModal";
 import { useUser } from "@/contexts/UserContext";
 import { useAppRouter } from "@/utils/navigation";
-import { Bike, Briefcase, Headset, Leaf, Settings, Store, UserPlus, Wallet } from "lucide-react-native";
+import { Bike, Briefcase, Headset, Leaf, ScanLine, Settings, Store, UserPlus, Wallet } from "lucide-react-native";
 import React, { useState } from "react";
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import Animated, { Easing, FadeIn, FadeOut, SlideInLeft, SlideOutLeft } from "react-native-reanimated";
@@ -23,7 +23,8 @@ interface MenuItem {
     | "/profile/work"
     | "/add-friends"
     | "/listings"
-    | "/mongoose";
+    | "/mongoose"
+    | "/qr-scanner";
   params?: Record<string, string>;
 }
 
@@ -48,24 +49,42 @@ const MENU_GROUPS: MenuItem[][] = [
     // Saved tab, and a drawer entry to somewhere one tap away on a screen
     // people visit anyway is a second door nobody needed.
   ],
-  [{ icon: Wallet, label: "Norbu Wallet", pathname: "/norbu-wallet" }],
-  // Booking a delivery rider (app/(users)/mongoose.tsx). It was the second
-  // tab on the Messages screen until Setlog took that slot, and a feature
-  // with no entry point is a removed feature.
-  [{ icon: Bike, label: "Mongoose delivery", pathname: "/mongoose" }],
-  // Straight to the screen, not to the profile with a flag on it: it is a
-  // place now, and everything that lists something arrives at the same one.
-  [{ icon: Store, label: "Manage Listings", pathname: "/listings" }],
-  // Every profile already has an (initially empty) service_providers row —
-  // this is both how you set one up for the first time and how you manage
-  // it afterward. Replaces the old "Work" tab on the profile screen, which
-  // was dead space for anyone who'd never filled theirs in.
-  [{ icon: Briefcase, label: "Business", pathname: "/profile/work" }],
+  // Spending: the wallet money moves through, and booking a delivery rider
+  // (app/(users)/mongoose.tsx) — Mongoose was the second tab on the Messages
+  // screen until Setlog took that slot, and a feature with no entry point is
+  // a removed feature. One card each was five stacked tiles reading as five
+  // unrelated apps; these two belong to the same errand.
+  [
+    { icon: Wallet, label: "Norbu Wallet", pathname: "/norbu-wallet" },
+    { icon: Bike, label: "Mongoose delivery", pathname: "/mongoose" },
+  ],
+  // Selling: both halves of running something here. Listings goes straight
+  // to the screen, not to the profile with a flag on it — it is a place now,
+  // and everything that lists something arrives at the same one. Business
+  // edits the (initially empty) service_providers row every profile already
+  // has: both how you set one up and how you manage it afterward, replacing
+  // the old "Work" tab that was dead space for anyone who'd never filled
+  // theirs in.
+  [
+    { icon: Store, label: "Manage Listings", pathname: "/listings" },
+    { icon: Briefcase, label: "Business", pathname: "/profile/work" },
+  ],
   [{ icon: Leaf, label: "Community Guidelines", pathname: "/settings", params: { modal: "communityGuidelines" } }],
 ];
 
 const BOTTOM_ACTIONS: MenuItem[] = [
-  { icon: Headset, label: "Help center", pathname: "/settings", params: { modal: "helpCenter" } },
+  // Same door as the ScanLine button in the personal profile's top bar
+  // (app/(users)/qr-scanner.tsx) — one screen, reached from both. Standing
+  // next to someone with a code out is not a reason to go to your own
+  // profile first, and the drawer is already open from wherever you are.
+  { icon: ScanLine, label: "Scan", pathname: "/qr-scanner" },
+  // ?modal=support, not ?modal=helpCenter: "support" is the Help Center hub
+  // (components/settings/SupportSettings.tsx) that the Settings list's own
+  // "Help Center" row opens, with Help articles / How Namzoed works /
+  // Contact us / Send feedback on it. "helpCenter" is the articles page one
+  // level inside it, so the drawer used to land a level deeper than the same
+  // button in Settings and with no way to reach the rest.
+  { icon: Headset, label: "Help center", pathname: "/settings", params: { modal: "support" } },
   { icon: Settings, label: "Settings", pathname: "/settings" },
 ];
 

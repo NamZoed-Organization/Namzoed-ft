@@ -1825,9 +1825,14 @@ export default function ProfileScreen() {
                           </View>
                         )}
                       </View>
+                      {/* The id row wears a QR glyph, so it opens the code
+                          itself (app/(users)/add-friends.tsx) rather than the
+                          OS share sheet — the icon was promising a screen the
+                          tap didn't go to. Sharing a link is still the arrow
+                          in the header, one tap away either way. */}
                       {namzoedId && (
                         <TouchableOpacity
-                          onPress={handleShareProfile}
+                          onPress={() => router.push("/add-friends" as any)}
                           activeOpacity={0.7}
                           className={`flex-row items-center gap-1 ${currentUser.dzongkhag ? "mb-1" : ""}`}
                         >
@@ -2089,7 +2094,7 @@ export default function ProfileScreen() {
                         </Text>
                       </View>
                       <Text className="text-xs font-regular text-white/60 mt-0.5">
-                        Everything you've viewed
+                        Everything you&apos;ve viewed
                       </Text>
                     </TouchableOpacity>
                   </View>

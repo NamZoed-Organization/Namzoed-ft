@@ -72,6 +72,7 @@ import { Image as ExpoImage } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Location from "expo-location";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
+import { takeMessageFocus, type MessageFocusRequest } from "@/lib/chatFocus";
 import { AlertCircle, Ban, Bike, MoreVertical, Verified } from "lucide-react-native";
 
 import React, {
@@ -396,7 +397,7 @@ const getCopyableMessageText = (message: any): string => {
   const visibleText = parsed.text.trim();
   if (visibleText) return visibleText;
 
-  if (content.includes("📍 My Location:")) return content.trim();
+  if (content.includes("My Location:")) return content.trim();
 
   return "";
 };
@@ -864,6 +865,13 @@ export default function ChatScreen() {
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const oldestCursorRef = useRef<string | null>(null);
+  /** The message a search result asked to land on — marked for a moment so
+   *  the reader can see which one matched, then left alone. */
+  const [focusedMessageId, setFocusedMessageId] = useState<string | null>(null);
+  const [focusTick, setFocusTick] = useState(0);
+  const pendingFocusRef = useRef<MessageFocusRequest | null>(null);
+  const focusAttemptsRef = useRef(0);
+  const loadingMoreRef = useRef(false);
 
   const flatListRef = useRef<FlatList<any>>(null);
   const chatInputRef = useRef<TextInput>(null);
@@ -997,8 +1005,7 @@ export default function ChatScreen() {
   // Early-access badge types for gradient chat bubbles
   const [, setCurrentUserBadgeType] = useState<EarlyAccessBadgeType>(null);
   const [, setChatPartnerBadgeType] = useState<EarlyAccessBadgeType>(null);
-  const { bubbleSkin, globalChatBg, localChatBgs, setLocalChatBg } =
-    useAppearance();
+  const { globalChatBg, localChatBgs, setLocalChatBg } = useAppearance();
 
   const [showBgPicker, setShowBgPicker] = useState(false);
   const [showChatActionsMenu, setShowChatActionsMenu] = useState(false);
@@ -1350,7 +1357,7 @@ export default function ChatScreen() {
       if (m?.message_type === "audio" || m?.audio_url) return "audio";
       if (m?.message_type === "gif") return "gif";
       if (m?.message_type === "sticker") return "sticker";
-      if (m?.content?.includes?.("📍 My Location:")) return "location";
+      if (m?.content?.includes?.("My Location:")) return "location";
       return "text";
     };
 
@@ -1475,7 +1482,7 @@ export default function ChatScreen() {
     if (messageType === "audio" || message.audio_url) return "Voice message";
     if (messageType === "gif") return "GIF";
     if (messageType === "sticker") return "Sticker";
-    if (message.content?.includes?.("📍 My Location:")) return "Location";
+    if (message.content?.includes?.("My Location:")) return "Location";
     const parsed = parseMessageMetaContent(message.content);
     const text = parsed.text?.trim() || "Message";
     return text.length > 60 ? `${text.slice(0, 60)}...` : text;
@@ -1504,15 +1511,23 @@ export default function ChatScreen() {
     [],
   );
 
-  const loadMoreMessages = useCallback(async () => {
+  /**
+   * Guarded by a ref as well as by state, and returns how many rows it
+   * added. "Jump to a searched message" pages backwards in a loop, and
+   * between two awaits the `isLoadingMore` state has not re-rendered yet —
+   * so the state flag alone would either let every call through or, read
+   * from a fresh closure, block all of them.
+   */
+  const loadMoreMessages = useCallback(async (): Promise<number> => {
     if (
-      isLoadingMore ||
+      loadingMoreRef.current ||
       !hasMoreMessages ||
       !oldestCursorRef.current ||
       !effectiveCurrentUserUUID ||
       !chatPartnerId
     )
-      return;
+      return 0;
+    loadingMoreRef.current = true;
     setIsLoadingMore(true);
     try {
       const { data, error: loadErr } = await supabase
@@ -1529,15 +1544,76 @@ export default function ChatScreen() {
         oldestCursorRef.current = data[data.length - 1].created_at;
         setMessages((prev) => [...data.slice().reverse(), ...prev]);
         setHasMoreMessages(data.length === 50);
-      } else {
-        setHasMoreMessages(false);
+        return data.length;
       }
+      setHasMoreMessages(false);
+      return 0;
     } catch {
       // silent — pagination will retry on next scroll
+      return 0;
     } finally {
+      loadingMoreRef.current = false;
       setIsLoadingMore(false);
     }
-  }, [isLoadingMore, hasMoreMessages, effectiveCurrentUserUUID, chatPartnerId]);
+  }, [hasMoreMessages, effectiveCurrentUserUUID, chatPartnerId]);
+
+  /**
+   * Land on a message that search found.
+   *
+   * Two halves, because the message is often not loaded yet: page backwards
+   * until it is (bounded — a conversation is not worth 50 round trips, and
+   * failing quietly beats spinning), then scroll it to the middle of the
+   * screen and mark it briefly. Without the mark you arrive somewhere in the
+   * middle of an old conversation with no idea which line matched.
+   */
+  useEffect(() => {
+    const request = pendingFocusRef.current;
+    if (!request) return;
+
+    const index = reversedTimelineItems.findIndex(
+      (item: any) =>
+        item?.type === "message" &&
+        String(item?.message?.id) === request.messageId,
+    );
+
+    if (index >= 0) {
+      pendingFocusRef.current = null;
+      setFocusedMessageId(request.messageId);
+      // After the row exists to scroll to.
+      requestAnimationFrame(() => {
+        try {
+          flatListRef.current?.scrollToIndex({
+            index,
+            animated: true,
+            viewPosition: 0.5,
+          });
+        } catch {
+          // onScrollToIndexFailed picks it up.
+        }
+      });
+      const timer = setTimeout(() => setFocusedMessageId(null), 2600);
+      return () => clearTimeout(timer);
+    }
+
+    if (focusAttemptsRef.current >= 20 || !hasMoreMessages) {
+      pendingFocusRef.current = null;
+      return;
+    }
+    focusAttemptsRef.current += 1;
+    void loadMoreMessages();
+  }, [reversedTimelineItems, hasMoreMessages, loadMoreMessages, focusTick]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const request = takeMessageFocus(String(chatPartnerId ?? ""));
+      if (!request) return;
+      pendingFocusRef.current = request;
+      focusAttemptsRef.current = 0;
+      // The effect above runs off the timeline, which has not changed — this
+      // is what wakes it for a request that arrived between renders.
+      setFocusTick((tick) => tick + 1);
+    }, [chatPartnerId]),
+  );
 
   const startReplyToMessage = useCallback((message: any) => {
     if (!message || message.isOptimistic) return;
@@ -1702,11 +1778,11 @@ export default function ChatScreen() {
         }
 
         if (!userUUID) {
-          console.error("❌ No UUID found for user");
+          console.error("No UUID found for user");
           return;
         }
 
-        console.log("✅ User UUID:", userUUID.substring(0, 8));
+        console.log("User UUID:", userUUID.substring(0, 8));
         if (isSubscribed) setCurrentUserUUID(userUUID);
 
         const fetchLatestMessages = async () => {
@@ -1741,7 +1817,7 @@ export default function ChatScreen() {
           const { data: messagesData, error: messagesError } = await query;
 
           if (messagesError) {
-            console.error("❌ Error fetching messages:", messagesError);
+            console.error("Error fetching messages:", messagesError);
             console.error(
               "[Chat] Query was: sender_id/receiver_id =",
               userUUID,
@@ -1879,7 +1955,7 @@ export default function ChatScreen() {
 
               if (payload.eventType === "INSERT") {
                 console.log(
-                  "⚡ New message:",
+                  "New message:",
                   message.content?.substring(0, 30),
                 );
 
@@ -1923,7 +1999,7 @@ export default function ChatScreen() {
                   return filtered;
                 });
               } else if (payload.eventType === "UPDATE") {
-                console.log("🔄 Message updated:", message.id?.substring(0, 8));
+                console.log("Message updated:", message.id?.substring(0, 8));
 
                 setMessages((prev) =>
                   prev.map((m) =>
@@ -1965,7 +2041,7 @@ export default function ChatScreen() {
               } else if (payload.eventType === "DELETE") {
                 const deleteId = oldMessage?.id;
                 if (deleteId) {
-                  console.log("🗑️ Message deleted:", deleteId?.substring(0, 8));
+                  console.log("Message deleted:", deleteId?.substring(0, 8));
 
                   setMessages((prev) => prev.filter((m) => m.id !== deleteId));
                   setLocalMessages((prev) =>
@@ -1993,7 +2069,7 @@ export default function ChatScreen() {
                 messagesPollRef.current = null;
               }
             } else if (status === "CHANNEL_ERROR") {
-              console.error("❌ Chat subscription ERROR");
+              console.error("Chat subscription ERROR");
               if (!messagesPollRef.current) {
                 messagesPollRef.current = setInterval(() => {
                   if (!isSubscribed) return;
@@ -2001,7 +2077,7 @@ export default function ChatScreen() {
                 }, 3000);
               }
             } else if (status === "TIMED_OUT") {
-              console.error("⏱️ Chat subscription TIMED OUT");
+              console.error("Chat subscription TIMED OUT");
               if (!messagesPollRef.current) {
                 messagesPollRef.current = setInterval(() => {
                   if (!isSubscribed) return;
@@ -2011,7 +2087,7 @@ export default function ChatScreen() {
             }
           });
       } catch (error) {
-        console.error("❌ Setup error:", error);
+        console.error("Setup error:", error);
       }
     };
 
@@ -2366,7 +2442,7 @@ export default function ChatScreen() {
         messagePreview: caption || undefined,
       });
     } catch (e) {
-      console.error("❌ Attachment send failed", e);
+      console.error("Attachment send failed", e);
       setLocalMessages((prev) =>
         prev.map((m) =>
           m.id === optimisticId ? { ...m, localStatus: "failed" } : m,
@@ -2472,7 +2548,7 @@ export default function ChatScreen() {
           .single();
 
         if (error) {
-          console.error("❌ Send error:", error.message);
+          console.error("Send error:", error.message);
           setLocalMessages((prev) =>
             prev.map((m) =>
               m.id === optimisticId ? { ...m, localStatus: "failed" } : m,
@@ -2558,7 +2634,7 @@ export default function ChatScreen() {
           setLocalMessages((prev) => prev.filter((m) => m.id !== optimisticId));
         }, 2000);
       } catch (error) {
-        console.error("❌ Exception:", error);
+        console.error("Exception:", error);
         setLocalMessages((prev) =>
           prev.map((m) =>
             m.id === optimisticId ? { ...m, localStatus: "failed" } : m,
@@ -2676,7 +2752,7 @@ export default function ChatScreen() {
       return;
     setIsSharingLocation(true);
     try {
-      const locationMessage = `📍 My Location: https://maps.google.com/?q=${loc.latitude},${loc.longitude}`;
+      const locationMessage = `My Location: https://maps.google.com/?q=${loc.latitude},${loc.longitude}`;
 
       // Optimistic message
       const optimisticId = `temp-${Date.now()}-${Math.random()}`;
@@ -2706,7 +2782,7 @@ export default function ChatScreen() {
         .single();
 
       if (error) {
-        console.error("❌ Location send error:", error.message);
+        console.error("Location send error:", error.message);
         setLocalMessages((prev) => prev.filter((m) => m.id !== optimisticId));
         showPopup(
           "error",
@@ -2723,7 +2799,7 @@ export default function ChatScreen() {
         }, 1500);
       }
     } catch (err) {
-      console.error("❌ Location error:", err);
+      console.error("Location error:", err);
       showPopup(
         "error",
         "Share Failed",
@@ -2927,7 +3003,7 @@ export default function ChatScreen() {
           .single();
 
         if (error) {
-          console.error("❌ GIF/sticker send error:", error.message);
+          console.error("GIF/sticker send error:", error.message);
           setLocalMessages((prev) =>
             prev.map((m) =>
               m.id === optimisticId ? { ...m, localStatus: "failed" } : m,
@@ -2958,7 +3034,7 @@ export default function ChatScreen() {
           messagePreview: payload.type === "gif" ? "GIF" : "Sticker",
         });
       } catch (error) {
-        console.error("❌ GIF/sticker send exception:", error);
+        console.error("GIF/sticker send exception:", error);
         setLocalMessages((prev) =>
           prev.map((m) =>
             m.id === optimisticId ? { ...m, localStatus: "failed" } : m,
@@ -3187,7 +3263,7 @@ export default function ChatScreen() {
       const parsed = parseMessageMetaContent(message.content);
       const messagePreview =
         parsed.text?.trim() ||
-        (message.content?.includes?.("📍 My Location:")
+        (message.content?.includes?.("My Location:")
           ? "Location"
           : "Sent a message");
 
@@ -3325,7 +3401,7 @@ export default function ChatScreen() {
           ? replyCountByMessageId[String(message.id)] || 0
           : 0;
       const messageType = message.message_type || "text";
-      const isLocation = message.content?.includes("📍 My Location:");
+      const isLocation = message.content?.includes("My Location:");
       const isImage = messageType === "image" || message.image_url;
       const isAudio = messageType === "audio" || message.audio_url;
       const gifStickerPayload =
@@ -4090,14 +4166,37 @@ export default function ChatScreen() {
           </View>
         );
       }
-      return renderMessage(
+      const body = renderMessage(
         item.message,
         index,
         item.connectPrev,
         item.connectNext,
       );
+      // Arriving from a search result, the matched line is tinted for a
+      // couple of seconds. Wrapped here rather than threaded through
+      // renderMessage: every bubble kind gets it for free, and nothing about
+      // how a message draws itself has to know that search exists.
+      if (
+        focusedMessageId &&
+        String(item?.message?.id) === focusedMessageId
+      ) {
+        return (
+          <View
+            style={{
+              backgroundColor: "rgba(3,105,161,0.14)",
+              borderRadius: 14,
+              borderCurve: "continuous",
+              marginHorizontal: -6,
+              paddingHorizontal: 6,
+            }}
+          >
+            {body}
+          </View>
+        );
+      }
+      return body;
     },
-    [renderMessage],
+    [renderMessage, focusedMessageId],
   );
   const timelineKeyExtractor = useCallback((item: any) => item.id, []);
   const renderGestureScrollComponent = useCallback(
@@ -4743,6 +4842,15 @@ export default function ChatScreen() {
           ListEmptyComponent={emptyChatComponent}
           onEndReached={loadMoreMessages}
           onEndReachedThreshold={0.3}
+          // A jump lands on a row the list has not measured yet; it scrolls
+          // to the nearest offset it can and the effect's next pass puts it
+          // right once the row exists.
+          onScrollToIndexFailed={(info) => {
+            flatListRef.current?.scrollToOffset({
+              offset: info.averageItemLength * info.index,
+              animated: true,
+            });
+          }}
           ListFooterComponent={loadingMoreFooterComponent}
         />
 
@@ -5249,17 +5357,17 @@ export default function ChatScreen() {
               const isGif = selectedMessage.message_type === "gif";
               const isSticker = selectedMessage.message_type === "sticker";
               const isLoc =
-                selectedMessage.content?.includes?.("📍 My Location:");
+                selectedMessage.content?.includes?.("My Location:");
               const previewText = isImg
-                ? "📷  Photo"
+                ? "Photo"
                 : isAud
-                  ? "🎵  Voice message"
+                  ? "Voice message"
                   : isGif
                     ? "GIF"
                     : isSticker
                       ? "Sticker"
                       : isLoc
-                        ? "📍  Location"
+                        ? "Location"
                         : msgText;
               // Compute safe vertical position so the full card fits on screen
               const BUBBLE_H = 72;
@@ -5403,7 +5511,7 @@ export default function ChatScreen() {
                               .then(({ error: rxnErr }) => {
                                 if (rxnErr)
                                   console.warn(
-                                    "⚠️ Reaction save failed:",
+                                    "Reaction save failed:",
                                     rxnErr.message,
                                   );
                               });

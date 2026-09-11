@@ -299,7 +299,7 @@ export default function EditProductModal({
       const finalImages = [...existingImages, ...uploadedUrls];
 
       // Prepare discount fields
-      let discountStartTime = null;
+      let discountStartTime: string | undefined;
       let discountDuration = parseFloat(discountDurationHrs);
 
       if (isDiscountActive) {
@@ -522,7 +522,7 @@ export default function EditProductModal({
                       <View
                         style={{ borderRadius: 12, borderCurve: "continuous" }} className="bg-amber-100/50 border border-amber-300 p-3 mb-4">
                         <Text className="text-xs text-amber-700 leading-5">
-                          💡 Your discount will automatically activate from <Text className="font-semibold">8:00 PM to 10:00 PM today</Text>, regardless of when you turn it on. Perfect for clearing leftover food!
+                          Your discount will automatically activate from <Text className="font-semibold">8:00 PM to 10:00 PM today</Text>, regardless of when you turn it on. Perfect for clearing leftover food!
                         </Text>
                       </View>
 

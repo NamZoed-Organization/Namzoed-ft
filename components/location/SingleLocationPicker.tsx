@@ -180,7 +180,6 @@ export default function SingleLocationPicker({
               style={{ fontSize: 13, color: "#374151", lineHeight: 18 }}
               numberOfLines={2}
             >
-              📍{" "}
               {selected.address ??
                 `${selected.latitude.toFixed(5)}, ${selected.longitude.toFixed(5)}`}
             </Text>

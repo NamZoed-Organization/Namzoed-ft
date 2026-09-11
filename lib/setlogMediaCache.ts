@@ -25,15 +25,23 @@
  * hands back a `file://` where there is one and a signed URL where there is
  * not, so no caller has to know any of this.
  *
- * This module and `setlogService` import each other. That is deliberate and
- * safe: both references are inside functions, nothing is touched while
- * either module is initialising, and the alternative — threading a signer
- * through every caller — would put the choke point back in the callers,
- * which is where the local-first rule kept being forgotten.
+ * This module used to import `setlogService` for its signer while that
+ * module imported this one for the cache — a require cycle Metro allows and
+ * warns about. The signer is the only thing the two genuinely shared, so it
+ * now lives in `setlogSigning` and both import that instead. The clip type
+ * still comes from `setlogService`, as a type-only import that is erased at
+ * build time and leaves no require behind.
+ *
+ * Threading a signer through every caller would have removed the cycle too,
+ * and was the wrong fix: it puts the choke point back in the callers, which
+ * is where the local-first rule kept being forgotten.
  */
 
 import { Directory, File, Paths } from "expo-file-system";
-import { signClips, type SetlogClip } from "./setlogService";
+import { signClips } from "./setlogSigning";
+// Type-only, so it is erased at build time and no require survives it —
+// this is the import that used to close the cycle.
+import type { SetlogClip } from "./setlogService";
 
 const FOLDER = "setlog-media";
 

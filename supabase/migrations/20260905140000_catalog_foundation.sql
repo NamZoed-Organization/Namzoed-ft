@@ -1,3 +1,20 @@
+-- ⚠ ALREADY APPLIED — DO NOT RE-RUN THIS FILE.
+--
+-- An earlier form of this migration, built around a `stores` table, was
+-- applied to production on 2026-09-05. This file was then rewritten in place
+-- to key off `service_providers` (section 1 below) and committed on
+-- 2026-09-11, after the fact. Re-running it now fails with
+-- 42703 "column provider_id does not exist": `CREATE TABLE IF NOT EXISTS`
+-- silently skips the seller_ratings/seller_metrics that already exist with
+-- `store_id`, so the `provider_id` this file goes on to index is never
+-- created — and because the SQL editor runs the file as one transaction,
+-- the whole thing rolls back every time, including the products.provider_id
+-- it had already added.
+--
+-- The reconciliation lives in
+-- 20260911120000_catalog_provider_id_transition.sql. Run that instead.
+-- This file is kept as the record of the intended design.
+
 -- ─── Catalog foundation ─────────────────────────────────────────────────
 -- Stage 1 of the multi-vendor marketplace design (see the ecommerce product
 -- requirements doc): a real category tree, metadata-driven category

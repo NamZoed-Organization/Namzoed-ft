@@ -403,12 +403,6 @@ export default function PublicProfileScreen() {
     userProfile?.cover_hue,
   );
 
-  // Guard: If viewing own profile, redirect to the main profile tab
-  // MOVED AFTER all hooks to avoid hook order violations
-  if (currentUser?.id === id) {
-    return <Redirect href="/(users)/profile" />;
-  }
-
   // One loader for both mount and pull-to-refresh. Every request is fired
   // together and each one updates its own slice as it lands — the header no
   // longer waits on the product query, and the post grid no longer waits on
@@ -719,6 +713,16 @@ export default function PublicProfileScreen() {
     setViewerImageUri(imageUri);
     setShowProfileImageViewer(true);
   };
+
+  // Viewing your own profile from a public link lands on the tab that owns
+  // it. It sits here rather than higher up because a `return` above a hook
+  // is a hook that stops being called — React counts them by order, and the
+  // `useCallback` and `useEffect` below the old position were skipped on
+  // exactly the render where this fired, which is the "rendered fewer hooks
+  // than expected" crash.
+  if (currentUser?.id === id) {
+    return <Redirect href="/(users)/profile" />;
+  }
 
   // Only a profile that has finished loading and come back empty is a
   // missing user. While it's still in flight the screen renders normally —

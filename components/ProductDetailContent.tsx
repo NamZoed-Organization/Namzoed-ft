@@ -742,7 +742,7 @@ export default function ProductDetailContent({
                     </View>
 
                     <Text className="text-xs text-amber-500 mt-3 text-center">
-                      🌙 Grab it before it's gone!
+                      Grab it before it&apos;s gone!
                     </Text>
                   </View>
                 ) : (

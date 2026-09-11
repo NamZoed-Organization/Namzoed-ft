@@ -9,7 +9,7 @@ import {
 } from "@/lib/storiesService";
 import type { TaggedAccount, TaggedProduct } from "@/types/post";
 import { Image as ExpoImage } from "expo-image";
-import { X } from "lucide-react-native";
+import { ShoppingBag, User, X } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
 import {
   FlatList,
@@ -302,8 +302,15 @@ function StoryGroupPage({
             paddingVertical: 8,
           }}
         >
-          <Text style={{ color: "#fff", fontWeight: "600", fontSize: 13 }}>
-            {story.tagged_product_id ? "🛍  View Product" : "👤  View Profile"}
+          {story.tagged_product_id ? (
+            <ShoppingBag size={14} color="#fff" strokeWidth={1.8} />
+          ) : (
+            <User size={14} color="#fff" strokeWidth={1.8} />
+          )}
+          <Text
+            style={{ color: "#fff", fontWeight: "600", fontSize: 13, marginLeft: 6 }}
+          >
+            {story.tagged_product_id ? "View Product" : "View Profile"}
           </Text>
         </TouchableOpacity>
       )}

@@ -1,5 +1,6 @@
 import { MODAL_RADIUS } from "@/constants/theme";
 import MapPinMarker from "@/components/maps/MapPinMarker";
+import { MapPin } from "lucide-react-native";
 import CircularLoader from "@/components/ui/CircularLoader";
 import PopupMessage from "@/components/ui/PopupMessage";
 import { Ionicons } from "@expo/vector-icons";
@@ -176,9 +177,12 @@ export default function LocationMapPicker({
             {/* Instructions */}
             <View
               style={{ borderRadius: 8, borderCurve: "continuous" }} className="bg-blue-50 p-3 mb-2">
-              <Text className="text-sm text-blue-900 font-medium mb-1">
-                📍 How to mark locations:
-              </Text>
+              <View className="flex-row items-center mb-1">
+                <MapPin size={14} color="#1e3a8a" strokeWidth={1.8} />
+                <Text className="text-sm text-blue-900 font-medium ml-1.5">
+                  How to mark locations:
+                </Text>
+              </View>
               <Text className="text-xs text-blue-800">
                 1. Tap on the map to place <Text className="font-bold text-green-700">green pin</Text> (pickup location - seller)
               </Text>
@@ -344,9 +348,12 @@ export default function LocationMapPicker({
                 {pickupLocation && (
                   <View
                     style={{ borderRadius: 8, borderCurve: "continuous" }} className="bg-green-50 p-3">
-                    <Text className="text-xs font-semibold text-green-900 mb-1">
-                      🟢 PICKUP (Seller Location)
-                    </Text>
+                    <View className="flex-row items-center mb-1">
+                      <View className="w-2 h-2 rounded-full bg-green-600 mr-1.5" />
+                      <Text className="text-xs font-semibold text-green-900">
+                        PICKUP (Seller Location)
+                      </Text>
+                    </View>
                     <Text className="text-xs text-green-800 leading-4">
                       {pickupLocation.address || "Loading address..."}
                     </Text>
@@ -355,9 +362,12 @@ export default function LocationMapPicker({
                 {deliveryLocation && (
                   <View
                     style={{ borderRadius: 8, borderCurve: "continuous" }} className="bg-blue-50 p-3">
-                    <Text className="text-xs font-semibold text-blue-900 mb-1">
-                      🔵 DELIVERY (Buyer Location)
-                    </Text>
+                    <View className="flex-row items-center mb-1">
+                      <View className="w-2 h-2 rounded-full bg-blue-600 mr-1.5" />
+                      <Text className="text-xs font-semibold text-blue-900">
+                        DELIVERY (Buyer Location)
+                      </Text>
+                    </View>
                     <Text className="text-xs text-blue-800 leading-4">
                       {deliveryLocation.address || "Loading address..."}
                     </Text>

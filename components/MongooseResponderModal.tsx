@@ -17,6 +17,7 @@ import PopupMessage from "@/components/ui/PopupMessage";
 import { supabase } from "@/lib/supabase";
 import { sendSMS } from "@/services/smsService";
 import { Ionicons } from "@expo/vector-icons";
+import { Package, ShoppingBag } from "lucide-react-native";
 import * as Location from "expo-location";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -253,7 +254,10 @@ export default function MongooseResponderModal({
     }
   };
 
-  const myRoleEmoji = inviteData.responderRole === "seller" ? "📦" : "🛍️";
+  // Icons, not emoji (§ Icons): a package and a shopping bag say the same
+  // two roles and render at one weight and one colour with the rest of the
+  // sheet's chrome.
+  const MyRoleIcon = inviteData.responderRole === "seller" ? Package : ShoppingBag;
   const myRoleLabel =
     inviteData.responderRole === "seller"
       ? "Seller — Pickup Point"
@@ -263,7 +267,7 @@ export default function MongooseResponderModal({
   const myRoleBg =
     inviteData.responderRole === "seller" ? "#dcfce7" : "#dbeafe";
 
-  const theirRoleEmoji = inviteData.initiatorRole === "seller" ? "📦" : "🛍️";
+  const TheirRoleIcon = inviteData.initiatorRole === "seller" ? Package : ShoppingBag;
 
   const initiatorShortAddr = inviteData.initiatorAddress
     .split(",")
@@ -326,7 +330,6 @@ export default function MongooseResponderModal({
                 borderBottomColor: "#f3f4f6",
               }}
             >
-              <Text style={{ fontSize: 22, marginRight: 8 }}>🦡</Text>
               <View style={{ flex: 1 }}>
                 <Text
                   style={{
@@ -404,9 +407,12 @@ export default function MongooseResponderModal({
                 <View
                   style={{ flexDirection: "row", alignItems: "flex-start" }}
                 >
-                  <Text style={{ fontSize: 16, marginRight: 6, marginTop: 1 }}>
-                    {theirRoleEmoji}
-                  </Text>
+                  <TheirRoleIcon
+                    size={16}
+                    color="#374151"
+                    strokeWidth={1.8}
+                    style={{ marginRight: 6, marginTop: 2 }}
+                  />
                   <View style={{ flex: 1 }}>
                     <Text
                       style={{
@@ -430,7 +436,7 @@ export default function MongooseResponderModal({
                       }}
                       numberOfLines={2}
                     >
-                      📍 {initiatorShortAddr}
+                      {initiatorShortAddr}
                     </Text>
                   </View>
                 </View>
@@ -449,9 +455,12 @@ export default function MongooseResponderModal({
                   marginBottom: 16,
                 }}
               >
-                <Text style={{ fontSize: 22, marginRight: 10 }}>
-                  {myRoleEmoji}
-                </Text>
+                <MyRoleIcon
+                  size={22}
+                  color={myRoleColor}
+                  strokeWidth={1.8}
+                  style={{ marginRight: 10 }}
+                />
                 <View>
                   <Text
                     style={{

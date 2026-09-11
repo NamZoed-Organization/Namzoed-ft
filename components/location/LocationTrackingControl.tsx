@@ -214,7 +214,7 @@ export default function LocationTrackingControl({
       
       showPopup('white', 'Tracking On', `Your location is now being shared for ${bookingUserName}'s delivery.`);
     } catch (error) {
-      console.error('❌ Error starting location tracking:', error);
+      console.error('Error starting location tracking:', error);
       showPopup('error', 'Tracking Failed', `Could not start location tracking: ${error}`);
     }
   };
@@ -270,7 +270,7 @@ export default function LocationTrackingControl({
           .select();
 
         if (updateError) {
-          console.error('❌ Error updating location:', updateError);
+          console.error('Error updating location:', updateError);
           if (__DEV__) {
             console.warn('[mongoose_locations]', updateError.code, updateError.message);
           }
@@ -289,7 +289,7 @@ export default function LocationTrackingControl({
         .select();
 
       if (insertError) {
-        console.error('❌ Error inserting location:', insertError);
+        console.error('Error inserting location:', insertError);
         if (__DEV__) {
           console.warn('[mongoose_locations]', insertError.code, insertError.message);
         }
@@ -297,7 +297,7 @@ export default function LocationTrackingControl({
       }
       return true;
     } catch (error) {
-      console.error('❌ Error updating location in database:', error);
+      console.error('Error updating location in database:', error);
       return false;
     }
   };

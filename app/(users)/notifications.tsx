@@ -555,7 +555,7 @@ export default function NotificationsScreen() {
             No notifications yet
           </Text>
           <Text className="text-sm text-gray-300 mt-1 text-center">
-            When someone follows you, likes your post, or goes live — you'll
+            When someone follows you, likes your post, or goes live — you&apos;ll
             see it here.
           </Text>
         </View>

@@ -4,7 +4,7 @@ import MaskedView from "@react-native-masked-view/masked-view";
 import { useCallStateHooks } from "@stream-io/video-react-native-sdk";
 import { LinearGradient } from "expo-linear-gradient";
 import { useAppRouter } from "@/utils/navigation";
-import { ShoppingBag } from "lucide-react-native";
+import { ClipboardList, ShoppingBag } from "lucide-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
     Animated as RNAnimated,
@@ -404,7 +404,7 @@ export const LiveChat = ({
           >
             <View style={styles.guidelineRow}>
               <View style={styles.guidelineIcon}>
-                <Text style={styles.guidelineIconText}>📋</Text>
+                <ClipboardList size={13} color="#fff" strokeWidth={1.8} />
               </View>
               <Text style={styles.guidelineText}>{sysItem.text}</Text>
             </View>

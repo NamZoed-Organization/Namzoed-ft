@@ -20,21 +20,12 @@
  * offering a button that would have to lie.
  */
 
-import ClipStamp from "@/components/setlog/ClipStamp";
+import ClipStamp, { clipClock } from "@/components/setlog/ClipStamp";
 import { MODAL_RADIUS } from "@/constants/theme";
 import { getDayExport } from "@/lib/setlogExport";
-import {
-  downloadRender,
-  prefetchClips,
-  type LocalClip,
-} from "@/lib/setlogMediaCache";
-import {
-  findFinishedRender,
-  NO_WORKER_MESSAGE,
-  requestRender,
-  waitForRender,
-  type RenderParams,
-} from "@/lib/setlogRender";
+import { prefetchClips, type LocalClip } from "@/lib/setlogMediaCache";
+import { canStitch, stitchReel } from "@/modules/setlog-stitcher";
+import { Asset } from "expo-asset";
 import {
   saveToLibrary,
   shareFile,
@@ -85,7 +76,21 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const SPLITS = [1, 2, 3] as const;
+/**
+ * One at a time, for now.
+ *
+ * The preview has always been able to play two and three up, and the export
+ * never could — the render worker that was supposed to build it had never
+ * once succeeded. Now that the export is real, offering a layout the file
+ * would not come back in would be the preview lying about the result.
+ *
+ * The multi-pane composition is written on the iOS side already; Android's
+ * equivalent (Media3's multi-sequence compositor) is not, and a reel that
+ * arrives three-up on one phone and one-up on the other is worse than one
+ * that is the same everywhere. It goes back to [1, 2, 3] when both encoders
+ * do it and both have been run on a real device.
+ */
+const SPLITS = [1] as const;
 
 /** The ground behind the panes — the letterbox, in other words. Named
  *  rather than a swatch: a colour with a name is a choice somebody can
@@ -183,6 +188,31 @@ export default function SetlogReelScreen() {
   const day = dayParam ? String(dayParam) : localDay();
 
   const [clips, setClips] = useState<LocalClip[]>([]);
+  /**
+   * The logo as a real file the encoder can open.
+   *
+   * A `require`d image is a bundle reference, not a path — in a release
+   * build it lives inside the app package and neither AVFoundation nor
+   * Media3 can read it. `expo-asset` unpacks it to the filesystem once and
+   * hands back a `file://` URI, which is the only thing either encoder will
+   * take. Resolved up here rather than at export time so a watermarked share
+   * never waits on it.
+   */
+  const [logoUri, setLogoUri] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    Asset.fromModule(require("@/assets/images/logo.png"))
+      .downloadAsync()
+      .then((asset) => {
+        if (alive) setLogoUri(asset.localUri ?? asset.uri);
+      })
+      // A reel without its mark beats no reel.
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
   const [loading, setLoading] = useState(true);
   const [ready, setReady] = useState(0);
   const [split, setSplit] = useState<Split>(1);
@@ -246,59 +276,55 @@ export default function SetlogReelScreen() {
   }, [day]);
 
   /**
-   * Get a file for the reel, then do the thing that was asked with it.
+   * Stitched here, on this phone.
    *
-   * The phone cannot encode, so this asks the render worker
-   * (`render-worker/`) for one and waits on the job row. A reel already
-   * rendered with these exact settings is reused rather than built twice —
-   * the settings are what make it a different reel, not the tapping.
-   *
-   * The file is downloaded before it is handed on, because both the share
-   * sheet and the photo library want something local, not a URL that
-   * expires.
+   * This used to put a row in `setlog_renders` and wait for a worker with
+   * ffmpeg to pick it up, which meant a server, a service-role key, a queue,
+   * and — for as long as nobody had deployed one — no reel at all. It is
+   * now the platform's own encoder (`modules/setlog-stitcher`): AVFoundation
+   * on iOS, Media3 Transformer on Android, both hardware accelerated. No
+   * network, so it works on a plane, and there is nothing to download
+   * afterwards because the file was written here.
    */
-  const params: RenderParams = {
-    split,
-    sound: !muted,
-    watermark,
-    stamp: showStamp,
-    background,
-  };
-
   const withFile = async (
     what: (fileUri: string) => Promise<void>,
     verb: string,
   ) => {
     if (clips.length === 0 || rendering) return;
     setRendering(true);
-    setRenderNote("Preparing the reel…");
+    setRenderNote("Stitching the reel…");
     try {
-      let url = await findFinishedRender(day, params);
-      if (!url) {
-        const job = await requestRender(clips, params, day);
-        url = await waitForRender(job.id, (r) => {
-          setRenderNote(
-            r.status === "rendering"
-              ? `Rendering · ${r.progress}%`
-              : "Waiting for the renderer…",
-          );
-        });
-      }
+      const file = await stitchReel(
+        {
+          clips: clips.map((clip) => ({
+            // Every clip is already on this phone; the cache put it there
+            // when it was recorded.
+            uri: clip.url ?? "",
+            mediaType: clip.mediaType === "photo" ? "photo" : "video",
+            durationMs: clip.durationMs,
+            // Formatted here, in the phone's own 12/24-hour convention —
+            // the native side must not re-derive it and disagree.
+            clock: clipClock(clip.createdAt),
+            title: clip.title,
+          })),
+          sound: !muted,
+          stamp: showStamp,
+          watermark,
+          background,
+          watermarkUri: watermark ? logoUri : null,
+        },
+        (fraction) =>
+          setRenderNote(`Stitching · ${Math.round(fraction * 100)}%`),
+      );
 
-      setRenderNote("Almost there…");
-      const file = await downloadRender(url, `${day}-reel.mp4`);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       await waitForIosModalDismiss(250);
       await what(file);
     } catch (e: any) {
-      const noWorker = e?.message === NO_WORKER_MESSAGE;
       setPopup({
         visible: true,
         type: "warning",
-        // A missing renderer is not this export failing — it is a piece of
-        // the app that is not switched on yet, and saying "Couldn't share
-        // the reel" for it sends people looking for a fault in their day.
-        title: noWorker ? "The reel needs a renderer" : `Couldn't ${verb} the reel`,
+        title: `Couldn't ${verb} the reel`,
         message: e?.message || "Something went wrong building it.",
       });
     } finally {
@@ -308,6 +334,14 @@ export default function SetlogReelScreen() {
   };
 
   const caption = `${formatDay(day)} on Setlog`;
+
+  // Said up front rather than on tap: the stitcher is native, so a JS reload
+  // cannot add it to a binary built before it existed, and finding that out
+  // by pressing Share reads as the export failing rather than as this build
+  // being behind.
+  const buildNote = canStitch
+    ? null
+    : "This build doesn't include the stitcher yet — it's native, so it needs a new development build.";
 
   const onSave = () =>
     withFile(async (file) => {
@@ -478,6 +512,28 @@ export default function SetlogReelScreen() {
               spinner that says only "working" — a reel takes long enough
               that a percentage is the difference between waiting and
               wondering. */}
+          {!renderNote && buildNote && (
+            <View
+              style={{
+                position: "absolute",
+                left: 12,
+                right: 12,
+                bottom: 12,
+                borderRadius: MODAL_RADIUS,
+                borderCurve: "continuous",
+                backgroundColor: "rgba(17,24,39,0.82)",
+                paddingHorizontal: 14,
+                paddingVertical: 10,
+                zIndex: 20,
+              }}
+              pointerEvents="none"
+            >
+              <Text style={{ fontSize: 13, lineHeight: 18, color: "#fff" }}>
+                {buildNote}
+              </Text>
+            </View>
+          )}
+
           {renderNote && (
             <View
               style={{

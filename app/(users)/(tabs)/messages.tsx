@@ -22,7 +22,7 @@ import JoinLogSheet from "@/components/setlog/JoinLogSheet";
 import SlotPlayer from "@/components/setlog/SlotPlayer";
 import {
   FeedDayLabel,
-  FeedFooter,
+  FeedActions,
   SetlogClipCard,
   SetlogEmptyCard,
   SETLOG_GROUP_INSET,
@@ -772,7 +772,7 @@ export default function MessageScreen() {
     if (message.message_type === "gif") return isMine ? "You: GIF" : "GIF";
     if (message.message_type === "sticker")
       return isMine ? "You: Sticker" : "Sticker";
-    if (typeof content === "string" && content.includes("📍 My Location:")) {
+    if (typeof content === "string" && content.includes("My Location:")) {
       return "Location";
     }
     const preview = content || "No messages yet";
@@ -2032,12 +2032,32 @@ export default function MessageScreen() {
                   // sit above it is gone: the camera is in the nav now, and
                   // a screen with a camera button in its navigation does
                   // not need a second one in its list.
-                  <TutorialAnchor id="setlog.day" radius={10}>
-                    <FeedDayLabel
-                      label={feedDay ? formatDay(feedDay) : "All time"}
-                      onPress={() => setShowDaySheet(true)}
+                  //
+                  // Export/settings/join sit above the day rather than in a
+                  // group at the foot of the list: they are chrome for the
+                  // day, and at the bottom they were three labelled rows you
+                  // had to scroll the whole feed to reach.
+                  <>
+                    <FeedActions
+                      // A day with nothing in it has nothing to export.
+                      exportLabel={
+                        feedDay && setlogs.length > 0
+                          ? formatDay(feedDay)
+                          : undefined
+                      }
+                      onExport={() =>
+                        router.push(`/(users)/setlog/export?day=${feedDay}`)
+                      }
+                      onSettings={() => router.push("/(users)/setlog/settings")}
+                      onJoin={() => setShowJoinSheet(true)}
                     />
-                  </TutorialAnchor>
+                    <TutorialAnchor id="setlog.day" radius={10}>
+                      <FeedDayLabel
+                        label={feedDay ? formatDay(feedDay) : "All time"}
+                        onPress={() => setShowDaySheet(true)}
+                      />
+                    </TutorialAnchor>
+                  </>
                 }
                 renderItem={({ item }) => (
                   <SetlogClipCard
@@ -2077,21 +2097,6 @@ export default function MessageScreen() {
                   />
                 }
                 contentInset={{ bottom: 0 }}
-                ListFooterComponent={
-                  <FeedFooter
-                    // A day with nothing in it has nothing to export.
-                    exportLabel={
-                      feedDay && setlogs.length > 0
-                        ? formatDay(feedDay)
-                        : undefined
-                    }
-                    onExport={() =>
-                      router.push(`/(users)/setlog/export?day=${feedDay}`)
-                    }
-                    onSettings={() => router.push("/(users)/setlog/settings")}
-                    onJoin={() => setShowJoinSheet(true)}
-                  />
-                }
               />
               )}
               <SetlogNavBar

@@ -210,7 +210,6 @@ export default function ReportPostModal({
         <Pressable
           className="flex-1 bg-black/50 justify-end"
           onPress={handleClose}
-          activeOpacity={1}
         >
           <Pressable onPress={(e) => e.stopPropagation()}>
             <Animated.View
@@ -244,7 +243,7 @@ export default function ReportPostModal({
                   </TouchableOpacity>
                 </View>
                 <Text className="text-sm font-regular text-gray-600">
-                  Report this post: "{postContent}"
+                  Report this post: &quot;{postContent}&quot;
                 </Text>
               </View>
 
