@@ -647,9 +647,30 @@ heights vary. Uniform rows and fixed-height tiles are what this app is moving
 away from; if you're about to write a `FlatList` of full-width rows for
 browsable content, use the grid instead.
 
-Cards: image (or paused video first frame), up to three lines of title, then a
+Cards: image (or the video's poster frame), up to three lines of title, then a
 footer row — 20pt round avatar, author name, and trailing meta (price, count) on
 the right. Screens hosting a grid paint `GRID_BACKGROUND`.
+
+**A tile never downloads the original.** Grid media goes through
+`components/ui/GridThumbnail.tsx`, and nowhere else decides what a tile
+fetches. A photo is requested at the tile's width (`toSizedImageUrl` in
+`lib/imagePreview.ts` — fixed width steps so one download serves every grid,
+density capped at 2x, 1.5x on data saver). A video shows the poster `uploadVideo` stores beside
+it, never a mounted player. A phone photo is megabytes, the same photo at tile
+size is tens of kilobytes, and most people using this app pay for every one of
+them on mobile data. If the resized copy fails the original loads, and a video
+posted before posters existed shows its paused first frame until
+`scripts/backfill-video-posters.mjs` has run for it. The detail hero draws the
+same `GridThumbnail` at the tapped rect's width, so the morph starts from the
+bitmap already in memory rather than a fresh download.
+
+**No upload is the camera original.** Every image through
+`uploadFileToSupabase` is resized on the phone first (`lib/imageUpload.ts`):
+`photo` 1440px long edge for posts, listings, services, chat, comments,
+reviews and covers; `fullscreen` 1920px for stories; `avatar` 1080px;
+`document` 2048px for licences. Never upscaled, PNGs stay PNG, and a failed
+resize uploads the original rather than losing the post. A new upload path
+picks a preset — it does not get to skip this.
 
 **A post is sized by its own media; a product or a listing is sized by one
 shared frame.** A post carries a real ratio (`media_display`) because the
@@ -2949,6 +2970,14 @@ that control is *actually used*.
   session, AsyncStorage across restarts, stale-while-revalidate on top. The
   feed, marketplace, categories, profile, messages and Setlog all seed from
   it, which is why they open with content rather than a skeleton.
+- **A ranked grid keeps its order for the day.** `hooks/useRankedFeed.ts`:
+  the order is drawn once per person per Bhutan day (ids only, from the
+  `feed_order_*` functions), rows are fetched a page at a time as you scroll,
+  and pull-to-refresh adds what was posted since on top without moving
+  anything already there. Never reshuffle on open or on refresh — a new
+  order puts photos the phone doesn't have at the top of the screen, and
+  most people here pay for every one of them on mobile data. A reshuffle is
+  only ever an explicit control (the service category's Shuffle button).
 - **The cache is bounded, and that is not optional.** AsyncStorage on
   Android is one SQLite table with a ceiling around 6MB, and raising it
   needs a native rebuild — so a cache that only grows does not fail loudly,
@@ -2977,10 +3006,28 @@ that control is *actually used*.
   `applyStorageLimits()` re-applies them at every launch, because
   `Image.configureCache` configures the process rather than the device.
 - **Storage is a screen people can open, not a number they have to guess
-  at.** `components/settings/DataStorage.tsx` — the total, a stacked bar of
-  what it's made of, and a per-type clear. RedNote's own control is a single
-  Clear; Telegram's is clear-by-type plus hard caps. This takes the type
-  breakdown and the caps.
+  at.** `components/settings/DataStorage.tsx` (Settings › Data and storage)
+  — the total, a stacked bar of what it's made of, and a per-type clear.
+  RedNote's own control is a single Clear; Telegram's is clear-by-type plus
+  hard caps. This takes the type breakdown and the caps.
+- **Data saver is on by itself on mobile data.** `lib/dataSaver.ts`, the
+  first row of Data and storage: *On mobile data* (the default), *Always*,
+  *Never*. Default on, because the people it is for are the ones who will
+  never go looking for it. "Mobile data" is the phone's verdict — cellular,
+  or any connection the OS marks as metered, which is how a hotspot is
+  caught. The row's description says what it is doing on *this* connection
+  ("On now — you're on mobile data"), because a mode alone doesn't tell you.
+  While it is on:
+  - sized pictures are 1.5x at quality 60 instead of 2x at 70, read when the
+    URL is built so nothing already on screen downloads again;
+  - grids reveal half a screen ahead instead of one and a half;
+  - an inline feed video is its poster and the 64pt play button until tapped
+    (`components/post/VideoTapToPlay.tsx`). No player exists before the tap,
+    because creating one — even paused — starts the download. A video with
+    no poster shows black, never its first frame, for the same reason;
+  - Reels gives a player only to the reel on screen, not the list window.
+  The full-screen image viewer still loads the original: opening a picture
+  is asking for it.
 - **Caps, never "delete after a week."** Telegram offers both; age is the
   wrong axis in an app with Setlog in it, whose whole purpose is looking
   back — "oldest first" throws away precisely what the feature exists for.

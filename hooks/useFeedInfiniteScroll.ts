@@ -1,7 +1,13 @@
+import { useUser } from "@/contexts/UserContext";
 import { useRankedFeed } from "@/hooks/useRankedFeed";
+import { fetchFeedOrder } from "@/lib/feedSession";
 import { parseMediaDisplay } from "@/lib/postMediaDisplay";
-import { fetchAllPostsForRanking, PostWithUser } from "@/lib/postsService";
-import { CACHE_SEED_LIMIT, readCache, writeCache } from "@/lib/queryCache";
+import {
+  fetchPostRankingPool,
+  fetchPostsByIds,
+  fetchPostsCreatedSince,
+  PostWithUser,
+} from "@/lib/postsService";
 import { supabase } from "@/lib/supabase";
 import { PostData } from "@/types/post";
 import { useCallback, useMemo, useState } from "react";
@@ -9,14 +15,9 @@ import { useCallback, useMemo, useState } from "react";
 const PAGE_SIZE = 15;
 const BOOST_SLOT_COUNT = 2;
 
-// Cached full pool so the feed paints instantly on mount, then revalidates —
-// see lib/feedRanking.ts / hooks/useRankedFeed.ts for the session ordering
-// this pool feeds into.
-const FEED_CACHE_KEY = "feed:pool";
-interface FeedCachePayload {
-  raw: PostWithUser[];
-  verified: string[];
-}
+/** Verified is resolved when a page is fetched and stored on the row, so the
+ *  rows kept for the next open carry their badge with them. */
+type FeedPost = PostWithUser & { is_verified?: boolean };
 
 interface UseFeedInfiniteScrollResult {
   posts: PostData[];
@@ -29,7 +30,7 @@ interface UseFeedInfiniteScrollResult {
   removePost: (postId: string) => void;
 }
 
-function convertToPostData(post: PostWithUser, verifiedIds: Set<string>): PostData {
+function convertToPostData(post: FeedPost): PostData {
   const username = post.profiles?.name || post.profiles?.email?.split("@")[0] || "Unknown User";
   const mediaDisplay = parseMediaDisplay((post as any).media_display);
 
@@ -49,66 +50,65 @@ function convertToPostData(post: PostWithUser, verifiedIds: Set<string>): PostDa
     locationName: (post as any).location_name ?? undefined,
     tagged_products: (post as any).tagged_products ?? undefined,
     tagged_accounts: (post as any).tagged_accounts ?? undefined,
-    isVerified: verifiedIds.has(post.user_id),
+    isVerified: !!post.is_verified,
     contentRating: (post as any).content_rating ?? "general",
     moderationStatus: (post as any).moderation_status ?? "approved",
     view_count: (post as any).view_count ?? 0,
   };
 }
 
-async function fetchVerifiedIds(userIds: string[]): Promise<Set<string>> {
-  if (userIds.length === 0) return new Set();
+async function withVerified(posts: PostWithUser[]): Promise<FeedPost[]> {
+  const userIds = [...new Set(posts.map((p) => p.user_id))];
+  if (userIds.length === 0) return posts;
   const { data } = await supabase
     .from("service_providers")
     .select("user_id, verification_status")
     .in("user_id", userIds);
-  return new Set((data || []).filter((sp) => sp.verification_status === "verified").map((sp) => sp.user_id));
+  const verified = new Set(
+    (data || []).filter((sp) => sp.verification_status === "verified").map((sp) => sp.user_id),
+  );
+  return posts.map((p) => ({ ...p, is_verified: verified.has(p.user_id) }));
 }
 
 export function useFeedInfiniteScroll(): UseFeedInfiniteScrollResult {
+  const { currentUser, isLoading: userLoading } = useUser();
   const [removedIds, setRemovedIds] = useState<Set<string>>(new Set());
-  const [verifiedIds, setVerifiedIds] = useState<Set<string>>(new Set());
 
-  const seedFromCache = useCallback(async () => {
-    const cached = await readCache<FeedCachePayload>(FEED_CACHE_KEY);
-    if (!cached?.data?.raw?.length) return null;
-    setVerifiedIds(new Set(cached.data.verified));
-    return cached.data.raw;
-  }, []);
-
-  const fetchPool = useCallback(async () => {
-    const fetched = await fetchAllPostsForRanking();
-    const userIds = [...new Set(fetched.map((p) => p.user_id))];
-    const verified = await fetchVerifiedIds(userIds);
-    setVerifiedIds(verified);
-    // Only the head of the pool is persisted. The cache exists to paint the
-    // first screenful instantly, not to reproduce the whole ranking
-    // offline — by the time anyone scrolls past it, this fetch has already
-    // replaced it. Caching every post would also be the one entry big
-    // enough to evict every other screen's cache (lib/queryCache.ts).
-    writeCache<FeedCachePayload>(FEED_CACHE_KEY, {
-      raw: fetched.slice(0, CACHE_SEED_LIMIT),
-      verified: [...verified],
-    });
-    return fetched;
-  }, []);
+  const fetchOrder = useCallback(
+    (seed: string) =>
+      fetchFeedOrder({
+        rpc: "feed_order_posts",
+        seed,
+        fallbackPool: fetchPostRankingPool,
+        boostSlotCount: BOOST_SLOT_COUNT,
+      }),
+    [],
+  );
+  const fetchByIds = useCallback(async (ids: string[]) => withVerified(await fetchPostsByIds(ids)), []);
+  const fetchNewSince = useCallback(
+    async (asOf: string) => withVerified(await fetchPostsCreatedSince(asOf)),
+    [],
+  );
 
   const trackImpressions = useCallback(async (ids: string[]) => {
     const { error } = await supabase.rpc("increment_impressions_posts", { ids });
     if (error) console.error("Error tracking post impressions:", error);
   }, []);
 
-  const ranked = useRankedFeed<PostWithUser>({
-    fetchPool,
+  const ranked = useRankedFeed<FeedPost>({
+    sessionKey: "posts",
+    userId: currentUser?.id,
+    enabled: !userLoading,
+    fetchOrder,
+    fetchByIds,
+    fetchNewSince,
     trackImpressions,
     pageSize: PAGE_SIZE,
-    boostSlotCount: BOOST_SLOT_COUNT,
-    seedFromCache,
   });
 
   const posts = useMemo(
-    () => ranked.items.filter((p) => !removedIds.has(p.id)).map((p) => convertToPostData(p, verifiedIds)),
-    [ranked.items, verifiedIds, removedIds],
+    () => ranked.items.filter((p) => !removedIds.has(p.id)).map(convertToPostData),
+    [ranked.items, removedIds],
   );
 
   const removePost = useCallback((postId: string) => {
@@ -119,9 +119,10 @@ export function useFeedInfiniteScroll(): UseFeedInfiniteScrollResult {
     });
   }, []);
 
+  const { loadMore: rankedLoadMore } = ranked;
   const loadMore = useCallback(async () => {
-    ranked.loadMore();
-  }, [ranked]);
+    rankedLoadMore();
+  }, [rankedLoadMore]);
 
   return {
     posts,

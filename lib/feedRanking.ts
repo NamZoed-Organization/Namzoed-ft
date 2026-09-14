@@ -1,15 +1,16 @@
 /**
- * Client-side feed randomization + boost ranking — implements the algorithm
- * from feed-randomization-and-boost-algorithm.md, run once per session
- * (screen mount / pull-to-refresh) rather than server-side: at this app's
- * scale, fetching the eligible pool and ranking it in JS is simpler than
- * standing up a server-side session cache, and produces the same "different
- * order every fresh visit, stable order within one scroll session" result.
+ * Feed fairness + boost ranking — the algorithm from
+ * feed-randomization-and-boost-algorithm.md.
+ *
+ * The ranking normally runs on the server
+ * (supabase/migrations/20260914120000_seeded_feed_order.sql, `feed_order_*`),
+ * which returns one day's order as a list of ids. This copy is the fallback
+ * when those functions are not deployed (lib/feedSession.ts): the same rules,
+ * seeded the same way in spirit — one seed, one order — though the hash
+ * differs, so the two never have to agree item for item.
  *
  * Shared across all four content types (posts, products, marketplace,
- * provider_services) via the generic RankableItem shape — see
- * hooks/useRankedFeed.ts for the per-screen wiring (fetch pool once, cache
- * the computed order, paginate by slicing, track impressions per page).
+ * provider_services) via the generic RankableItem shape.
  */
 
 export interface RankableItem {
@@ -19,53 +20,62 @@ export interface RankableItem {
   boost_expires_at?: string | null;
 }
 
-/** weight = 1 / (impressions_shown + 1) — never-shown items get the max
- * weight (1); the more a post has already been served, the less likely it
- * is to keep winning the draw, until it's finally had its turn. */
-const fairnessWeight = (impressionsShown: number): number => 1 / (impressionsShown + 1);
+/**
+ * A number in (0, 1] that depends only on the seed and the id.
+ *
+ * Per item rather than a seeded stream, so an item draws the same number for
+ * the same seed whatever else is in the pool and in whatever order the pool
+ * arrived. FNV-1a, then murmur3's finaliser, because FNV alone barely mixes
+ * the ids' shared prefixes.
+ */
+export function seededUnit(seed: string, id: string): number {
+  const s = `${seed}:${id}`;
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  h ^= h >>> 16;
+  h = Math.imul(h, 0x85ebca6b);
+  h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2ae35);
+  h ^= h >>> 16;
+  return ((h >>> 0) + 1) / 4294967297;
+}
 
-/** Efraimidis-Spirakis weighted-random key: random() ** (1/weight). Sorting
- * by this descending gives a full weighted-random ordering without
- * replacement in one pass — every item still has a nonzero chance of
- * landing anywhere, just skewed toward higher weight, which is what makes
- * this "randomized but fair" rather than a plain sort by impression count. */
-const rankingKey = (weight: number): number => Math.random() ** (1 / weight);
+/** Efraimidis-Spirakis key u ** (1/weight), with weight = 1 / (impressions_shown + 1):
+ * never-shown items get the max weight; the more an item has already been
+ * served, the less likely it is to keep winning the draw. Every item still
+ * has a nonzero chance of landing anywhere — "randomized but fair" rather
+ * than a plain sort by impression count. */
+const rankingKey = (seed: string, item: RankableItem): number =>
+  seededUnit(seed, item.id) ** ((item.impressions_shown ?? 0) + 1);
 
-function weightedShuffle<T extends RankableItem>(items: T[]): T[] {
+function weightedShuffle<T extends RankableItem>(items: T[], seed: string): T[] {
   return items
-    .map((item) => ({ item, key: rankingKey(fairnessWeight(item.impressions_shown ?? 0)) }))
-    .sort((a, b) => b.key - a.key)
+    .map((item) => ({ item, key: rankingKey(seed, item) }))
+    .sort((a, b) => b.key - a.key || (a.item.id < b.item.id ? -1 : 1))
     .map((entry) => entry.item);
 }
 
 const isBoostActive = (item: RankableItem, now: number): boolean =>
   !!item.boost_expires_at && new Date(item.boost_expires_at).getTime() > now;
 
-export interface BuildSessionOrderOptions {
-  /** Fixed boost-slot count for this session — 2-3 per the algorithm doc. */
-  boostSlotCount?: number;
-}
-
 /**
- * Computes one full session ordering: boost slots first (drawn from the
- * currently-active boost pool), then a fairness-weighted shuffle of
- * everything else. Call this ONCE per session and cache the result —
- * recomputing per page request breaks pagination (the order would shift
- * under the user mid-scroll). See hooks/useRankedFeed.ts, which does this
- * caching for you.
+ * One full ordering: boost slots first (drawn from the currently-active boost
+ * pool), then a fairness-weighted shuffle of everything else. The same seed
+ * gives the same order, which is what lets a feed keep its order all day.
  *
- * Boost-pool ordering scores on `impressions_shown` too, not lifetime
- * impressions elsewhere — by convention, impressions_shown is reset to 0
- * whenever a boost activates (see the future boost-purchase/activation
- * flow), so for a currently-boosted row it already reads as "impressions
- * since the boost started," which is what keeps a brand-new boost from
- * always losing to one that's been running for days.
+ * Boost-pool ordering scores on `impressions_shown` too — by convention it is
+ * reset to 0 whenever a boost activates, so for a boosted row it reads as
+ * "impressions since the boost started", which keeps a brand-new boost from
+ * always losing to one that has been running for days.
  */
 export function buildSessionOrder<T extends RankableItem>(
   allItems: T[],
-  options: BuildSessionOrderOptions = {},
+  seed: string,
+  boostSlotCount = 2,
 ): T[] {
-  const slotCount = options.boostSlotCount ?? 2;
   const now = Date.now();
 
   const boosted: T[] = [];
@@ -74,14 +84,14 @@ export function buildSessionOrder<T extends RankableItem>(
     (isBoostActive(item, now) ? boosted : regular).push(item);
   }
 
-  const orderedBoosted = weightedShuffle(boosted);
-  const chosenBoosted = orderedBoosted.slice(0, slotCount);
+  const orderedBoosted = weightedShuffle(boosted, seed);
+  const chosenBoosted = orderedBoosted.slice(0, boostSlotCount);
   // A boost means "in contention for a priority slot," not "guaranteed
-  // visible every load" — anything that didn't make the cut this session
-  // just falls back into the regular pool alongside everyone else.
-  const overflowBoosted = orderedBoosted.slice(slotCount);
+  // visible every load" — anything that didn't make the cut just falls back
+  // into the regular pool alongside everyone else.
+  const overflowBoosted = orderedBoosted.slice(boostSlotCount);
 
-  const orderedRegular = weightedShuffle([...regular, ...overflowBoosted]);
+  const orderedRegular = weightedShuffle([...regular, ...overflowBoosted], seed);
 
   return [...chosenBoosted, ...orderedRegular];
 }

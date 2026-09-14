@@ -9,12 +9,11 @@
  */
 
 import PostGridReportOverlay from "@/components/modals/PostGridReportOverlay";
-import ProgressiveImage from "@/components/ui/ProgressiveImage";
+import GridThumbnail from "@/components/ui/GridThumbnail";
 import { clampMediaRatio } from "@/lib/postMediaDisplay";
 import { feedEvents } from "@/utils/feedEvents";
 import * as Haptics from "expo-haptics";
 import { BlurView } from "expo-blur";
-import { useVideoPlayer, VideoView } from "expo-video";
 import { Play } from "lucide-react-native";
 import React from "react";
 import { Image, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
@@ -51,15 +50,6 @@ export interface GridCardSourceRect {
   y: number;
   width: number;
   height: number;
-}
-
-/** Renders a video paused on its first frame — never calls .play(), so it acts as a thumbnail. */
-function VideoFrameThumbnail({ uri }: { uri: string }) {
-  const player = useVideoPlayer({ uri, useCaching: true }, (p) => {
-    p.muted = true;
-    p.loop = false;
-  });
-  return <VideoView player={player} style={{ width: "100%", height: "100%" }} nativeControls={false} contentFit="cover" />;
 }
 
 export interface GridCardProps {
@@ -196,10 +186,8 @@ function GridCard({
           backgroundColor: "#f3f4f6",
         }}
       >
-        {deferred ? null : isVideo ? (
-          <VideoFrameThumbnail uri={imageUri} />
-        ) : (
-          <ProgressiveImage uri={imageUri} blurhash={blurhash} style={{ width: "100%", height: "100%" }} showProgress={false} recyclingKey={id} priority={priority} />
+        {deferred ? null : (
+          <GridThumbnail uri={imageUri} isVideo={isVideo} width={width} blurhash={blurhash} recyclingKey={id} priority={priority} />
         )}
         {!deferred && isVideo && !badge && (
           <View

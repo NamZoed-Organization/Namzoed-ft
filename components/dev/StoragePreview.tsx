@@ -11,9 +11,12 @@
  *
  * Three states, because they are the three that look different:
  * a well-used phone, a fresh install, and one store dwarfing the rest.
+ * Plus the connection, because the data saver row's description changes
+ * with it — "On now" on mobile data, "Off now" on Wi-Fi.
  */
 
 import { DataStorageView } from "@/components/settings/DataStorage";
+import type { DataSaverMode, DataSaverState } from "@/lib/dataSaver";
 import type { StorageKey, StorageReport } from "@/lib/storageManager";
 import React, { useState } from "react";
 import { Modal, Text, TouchableOpacity, View } from "react-native";
@@ -60,6 +63,33 @@ const PRESETS = {
 
 type Preset = keyof typeof PRESETS;
 
+const saverState = (mode: DataSaverMode, meteredConnection: boolean): DataSaverState => ({
+  mode,
+  meteredConnection,
+  active: mode === "on" || (mode === "auto" && meteredConnection),
+});
+
+function Chip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      style={{
+        paddingHorizontal: 12,
+        paddingVertical: 7,
+        borderRadius: 999,
+        borderCurve: "continuous",
+        marginRight: 8,
+        marginBottom: 8,
+        backgroundColor: selected ? "#094569" : "#F5F5F5",
+      }}
+    >
+      <Text style={{ fontSize: 13, fontWeight: "600", color: selected ? "#fff" : "#6B7280" }}>
+        {label}
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
 export default function StoragePreview({
   visible,
   onClose,
@@ -70,6 +100,7 @@ export default function StoragePreview({
   const [preset, setPreset] = useState<Preset>("used");
   const [limits, setLimits] = useState({ photos: 512 * MB, videos: 512 * MB });
   const [busy, setBusy] = useState<StorageKey | "all" | null>(null);
+  const [dataSaver, setDataSaver] = useState<DataSaverState>(saverState("auto", true));
 
   return (
     <Modal
@@ -85,6 +116,10 @@ export default function StoragePreview({
           report={PRESETS[preset]}
           limits={limits}
           busy={busy}
+          dataSaver={dataSaver}
+          onSetDataSaverMode={(mode) =>
+            setDataSaver((prev) => saverState(mode, prev.meteredConnection))
+          }
           onClose={onClose}
           onSetLimit={(key, bytes) =>
             setLimits((prev) => ({ ...prev, [key]: bytes }))
@@ -97,31 +132,29 @@ export default function StoragePreview({
           }}
         />
 
-        <View className="border-t border-gray-100 bg-white px-3 pt-2.5 pb-6 flex-row flex-wrap">
-          {(Object.keys(PRESETS) as Preset[]).map((key) => (
-            <TouchableOpacity
-              key={key}
-              onPress={() => setPreset(key)}
-              style={{
-                paddingHorizontal: 12,
-                paddingVertical: 7,
-                borderRadius: 999,
-                borderCurve: "continuous",
-                marginRight: 8,
-                backgroundColor: preset === key ? "#094569" : "#F5F5F5",
-              }}
-            >
-              <Text
-                style={{
-                  fontSize: 13,
-                  fontWeight: "600",
-                  color: preset === key ? "#fff" : "#6B7280",
-                }}
-              >
-                {key === "used" ? "Well used" : key === "fresh" ? "Fresh install" : "One store dominates"}
-              </Text>
-            </TouchableOpacity>
-          ))}
+        <View className="border-t border-gray-100 bg-white px-3 pt-2.5 pb-6">
+          <View className="flex-row flex-wrap">
+            {(Object.keys(PRESETS) as Preset[]).map((key) => (
+              <Chip
+                key={key}
+                label={key === "used" ? "Well used" : key === "fresh" ? "Fresh install" : "One store dominates"}
+                selected={preset === key}
+                onPress={() => setPreset(key)}
+              />
+            ))}
+          </View>
+          <View className="flex-row flex-wrap">
+            <Chip
+              label="On mobile data"
+              selected={dataSaver.meteredConnection}
+              onPress={() => setDataSaver((prev) => saverState(prev.mode, true))}
+            />
+            <Chip
+              label="On Wi-Fi"
+              selected={!dataSaver.meteredConnection}
+              onPress={() => setDataSaver((prev) => saverState(prev.mode, false))}
+            />
+          </View>
         </View>
       </View>
     </Modal>

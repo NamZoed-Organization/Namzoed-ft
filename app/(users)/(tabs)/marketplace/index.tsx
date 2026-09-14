@@ -12,20 +12,25 @@ import MasonryGrid from "@/components/MasonryGrid";
 import GridSkeleton from "@/components/ui/GridSkeleton";
 import TopNavbar from "@/components/ui/TopNavbar";
 import { useTabBarScroll } from "@/contexts/TabBarScrollContext";
+import { useUser } from "@/contexts/UserContext";
 import { useRankedFeed } from "@/hooks/useRankedFeed";
 import { useScreenAnalytics } from "@/hooks/useAnalytics";
 import { Screens } from "@/lib/analyticsService";
+import { fetchFeedOrder } from "@/lib/feedSession";
 import {
-  fetchMarketplaceForRanking,
+  fetchMarketplaceByIds,
+  fetchMarketplaceCreatedSince,
+  fetchMarketplaceRankingPool,
   MarketplaceItemWithUser,
 } from "@/lib/postMarketPlace";
-import { CACHE_SEED_LIMIT, readCache, writeCache } from "@/lib/queryCache";
 import { supabase } from "@/lib/supabase";
 import MarketplaceDetailOverlay from "@/components/MarketplaceDetailOverlay";
 import PullToRefresh from "@/components/ui/PullToRefresh";
 import { MapPin, Plus } from "lucide-react-native";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   ScrollView,
   Text,
   TouchableOpacity,
@@ -35,6 +40,10 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useViewableContent } from "@/hooks/useViewableContent";
 import { useAppRouter } from "@/utils/navigation";
+
+const PAGE_SIZE = 20;
+/** A tab showing fewer listings than this keeps loading pages for itself. */
+const MIN_TAB_ITEMS = 10;
 
 export default function MarketplaceScreen() {
   const insets = useSafeAreaInsets();
@@ -46,37 +55,35 @@ export default function MarketplaceScreen() {
   // plain router.push, same hero-grow treatment Home's post grid uses.
   const [marketplaceOverlay, setMarketplaceOverlay] = useState<{ item: MarketplaceItemWithUser; rect: GridCardSourceRect } | null>(null);
 
-  // Fetches the whole marketplace pool once per session — ranked/randomized
-  // client-side (see lib/feedRanking.ts) — then tab switches just re-filter
-  // the same pool client-side (matching the old single-fetch-then-filter
-  // pattern, which is what keeps the swipe-between-tabs gesture instant).
-  const MARKETPLACE_CACHE_KEY = "marketplace:pool";
-  // Same stale-while-revalidate seed as the "For You" feed
-  // (hooks/useFeedInfiniteScroll.ts) — lets the grid paint instantly from
-  // the last session's pool instead of a full-page skeleton, then silently
-  // refreshes in the background.
-  const seedFromCache = useCallback(
-    async () => (await readCache<MarketplaceItemWithUser[]>(MARKETPLACE_CACHE_KEY))?.data ?? null,
+  // One order for the whole marketplace, per person, per day, fetched a page
+  // at a time (hooks/useRankedFeed.ts). Tabs filter the rows already loaded,
+  // which keeps the swipe between them instant; a tab that comes up short
+  // loads further pages for itself (below).
+  const { currentUser, isLoading: userLoading } = useUser();
+  const fetchOrder = useCallback(
+    (seed: string) =>
+      fetchFeedOrder({
+        rpc: "feed_order_marketplace",
+        seed,
+        fallbackPool: fetchMarketplaceRankingPool,
+        boostSlotCount: 2,
+      }),
     [],
   );
-  const fetchPool = useCallback(async () => {
-    const fetched = await fetchMarketplaceForRanking();
-    // Head of the pool only — enough to paint instantly, small enough not
-    // to crowd out every other screen's cache (lib/queryCache.ts).
-    writeCache(MARKETPLACE_CACHE_KEY, fetched.slice(0, CACHE_SEED_LIMIT));
-    return fetched;
-  }, []);
   const trackImpressions = useCallback(async (ids: string[]) => {
     const { error } = await supabase.rpc("increment_impressions_marketplace", { ids });
     if (error) console.error("Error tracking marketplace impressions:", error);
   }, []);
 
   const ranked = useRankedFeed<MarketplaceItemWithUser>({
-    fetchPool,
+    sessionKey: "marketplace",
+    userId: currentUser?.id,
+    enabled: !userLoading,
+    fetchOrder,
+    fetchByIds: fetchMarketplaceByIds,
+    fetchNewSince: fetchMarketplaceCreatedSince,
     trackImpressions,
-    pageSize: 1000, // this screen has never paginated — one session, whole pool
-    boostSlotCount: 2,
-    seedFromCache,
+    pageSize: PAGE_SIZE,
   });
   /**
    * Safe View, an unverified age and being under 18 apply here exactly as
@@ -94,6 +101,33 @@ export default function MarketplaceScreen() {
     [filterViewable, ranked.items],
   );
   const isLoading = ranked.loading;
+  const { hasMore, loadingMore, loadMore } = ranked;
+
+  // A narrow tab ("Free", "Swap") over a paged order can come up nearly empty
+  // until more of the order is loaded — keep loading pages while it is short
+  // and there is more. Only the tab being looked at spends anything.
+  const activeTabCount = useMemo(
+    () =>
+      activeTab === "all"
+        ? marketplaceItems.length
+        : marketplaceItems.filter((item) => item.type === activeTab).length,
+    [activeTab, marketplaceItems],
+  );
+  useEffect(() => {
+    if (activeTab === "bidding" || isLoading || loadingMore || !hasMore) return;
+    if (activeTabCount < MIN_TAB_ITEMS) loadMore();
+  }, [activeTab, activeTabCount, isLoading, loadingMore, hasMore, loadMore]);
+
+  const handleLoadMoreScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      if (activeTab === "bidding" || isLoading || !hasMore) return;
+      const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+      if (layoutMeasurement.height + contentOffset.y >= contentSize.height - 400) {
+        loadMore();
+      }
+    },
+    [activeTab, isLoading, hasMore, loadMore],
+  );
 
   const onRefresh = useCallback(async () => {
     await ranked.refresh();
@@ -267,6 +301,7 @@ export default function MarketplaceScreen() {
                 onScroll={(e) => {
                   onScroll(e);
                   onTabBarScroll(e);
+                  handleLoadMoreScroll(e);
                 }}
                 scrollEventThrottle={16}
                 scrollEnabled={scrollEnabled}

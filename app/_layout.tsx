@@ -22,6 +22,7 @@ import * as Linking from "expo-linking";
 import { Stack, useRouter } from "expo-router";
 import { pruneQueryCache } from "@/lib/queryCache";
 import { applyStorageLimits } from "@/lib/storageManager";
+import { startDataSaver } from "@/lib/dataSaver";
 import { pruneMediaCache } from "@/lib/setlogMediaCache";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect, useRef } from "react";
@@ -81,7 +82,11 @@ export default function RootLayout() {
     }
   }, [fontsLoaded, fontError]);
 
-  // Bound both media caches to whatever Settings › Storage says, defaults
+  // Data saver follows the connection from launch (lib/dataSaver.ts), before
+  // any grid asks what size of picture to load.
+  useEffect(() => startDataSaver(), []);
+
+  // Bound both media caches to whatever Settings › Data and storage says, defaults
   // included. The video one was already capped here; the *image* cache was
   // not capped at all — expo-image defaults to unlimited, which in a mostly
   // -pictures app means it grows until iOS decides the phone is full, and iOS

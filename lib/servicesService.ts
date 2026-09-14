@@ -1,4 +1,5 @@
 // lib/servicesService.ts
+import type { RankableItem } from './feedRanking';
 import { supabase } from './supabase';
 import { uploadFileToSupabase } from './uploadFile';
 
@@ -194,36 +195,77 @@ export const fetchUserProviderServices = async (userId: string): Promise<Provide
   return (data || []) as ProviderServiceWithDetails[];
 };
 
+const SERVICE_WITH_DETAILS_SELECT = `
+  *,
+  service_categories!inner (
+    id,
+    name,
+    slug
+  ),
+  service_providers (
+    id,
+    user_id,
+    master_bio,
+    profile_url,
+    name,
+    email,
+    contact,
+    email_active,
+    contact_active,
+    verification_status,
+    profiles (
+      name,
+      email,
+      phone,
+      avatar_url
+    )
+  )`;
+
+// ─── Ranked list (service category screen) ──────────────────────────────
+// The order comes from feed_order_provider_services (lib/feedSession.ts);
+// these fetch its rows by id, and the services newer than it.
+export const fetchProviderServicesByIds = async (ids: string[]): Promise<ProviderServiceWithDetails[]> => {
+  if (ids.length === 0) return [];
+  const { data, error } = await supabase
+    .from('provider_services')
+    .select(SERVICE_WITH_DETAILS_SELECT)
+    .in('id', ids);
+  if (error) throw error;
+  return (data || []) as ProviderServiceWithDetails[];
+};
+
+/** Services in a category created after `asOf`, newest first — what a refresh adds. */
+export const fetchProviderServicesCreatedSince = async (
+  asOf: string,
+  categorySlug: string,
+  limit = 30,
+): Promise<ProviderServiceWithDetails[]> => {
+  const { data, error } = await supabase
+    .from('provider_services')
+    .select(SERVICE_WITH_DETAILS_SELECT)
+    .eq('service_categories.slug', categorySlug)
+    .gt('created_at', asOf)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data || []) as ProviderServiceWithDetails[];
+};
+
+/** Id-only candidates, ranked on the device when feed_order_provider_services isn't deployed. */
+export const fetchProviderServiceRankingPool = async (categorySlug: string): Promise<RankableItem[]> => {
+  const { data, error } = await supabase
+    .from('provider_services')
+    .select('id, impressions_shown, boost_expires_at, service_categories!inner ( slug )')
+    .eq('service_categories.slug', categorySlug);
+  if (error) throw error;
+  return (data || []) as RankableItem[];
+};
+
 // Fetch provider services by category slug
 export const fetchProviderServicesByCategory = async (categorySlug: string): Promise<ProviderServiceWithDetails[]> => {
   const { data, error } = await supabase
     .from('provider_services')
-    .select(`
-      *,
-      service_categories!inner (
-        id,
-        name,
-        slug
-      ),
-      service_providers (
-        id,
-        user_id,
-        master_bio,
-        profile_url,
-        name,
-        email,
-        contact,
-        email_active,
-        contact_active,
-        verification_status,
-        profiles (
-          name,
-          email,
-          phone,
-          avatar_url
-        )
-      )
-    `)
+    .select(SERVICE_WITH_DETAILS_SELECT)
     .eq('service_categories.slug', categorySlug)
     .order('created_at', { ascending: false });
 
@@ -465,7 +507,7 @@ export const uploadProviderAvatar = async (imageUri: string, userId: string): Pr
     const fileName = `provider_${userId}_${Date.now()}.${fileExt}`;
     const filePath = `avatars/${fileName}`;
 
-    await uploadFileToSupabase(imageUri, 'service-profile', filePath, `image/${fileExt}`, true);
+    await uploadFileToSupabase(imageUri, 'service-profile', filePath, `image/${fileExt}`, true, { image: 'avatar' });
 
     const { data: { publicUrl } } = supabase.storage
       .from('service-profile')
@@ -514,7 +556,8 @@ export const uploadLicenseImage = async (imageUri: string, userId: string): Prom
     const fileName = `license_${userId}_${Date.now()}.${fileExt}`;
     const filePath = `licenses/${fileName}`;
 
-    await uploadFileToSupabase(imageUri, 'service-license', filePath, `image/${fileExt}`, true);
+    // A licence is read for its small print during verification — kept sharper than a photo.
+    await uploadFileToSupabase(imageUri, 'service-license', filePath, `image/${fileExt}`, true, { image: 'document' });
 
     const { data: { publicUrl } } = supabase.storage
       .from('service-license')

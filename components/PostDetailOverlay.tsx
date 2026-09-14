@@ -63,6 +63,7 @@ import ContextDrop, {
   ContextDropTarget,
 } from "@/components/ContextDrop";
 import { isVideoUrl } from "@/components/PostGridCard";
+import GridThumbnail from "@/components/ui/GridThumbnail";
 import FeedPost from "@/components/FeedPost";
 import { useOptionalTabBarScroll } from "@/contexts/TabBarScrollContext";
 import { useUser } from "@/contexts/UserContext";
@@ -73,8 +74,6 @@ import { PostData } from "@/types/post";
 import { useAppRouter } from "@/utils/navigation";
 import { beginNavHandoff } from "@/utils/navHandoff";
 import { feedEvents } from "@/utils/feedEvents";
-import { Image } from "expo-image";
-import { useVideoPlayer, VideoView } from "expo-video";
 import { MessageCircle } from "lucide-react-native";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BackHandler, Dimensions, Platform, StyleSheet, View } from "react-native";
@@ -129,30 +128,19 @@ const HERO_FADE_OUT = [0.62, 0.92];
 // popping in from nowhere.
 const GRID_CARD_RADIUS = 4;
 
-function HeroFrame({ uri, blurhash }: { uri: string; blurhash?: string | null }) {
-  const isVideo = isVideoUrl(uri);
-  const player = useVideoPlayer({ uri, useCaching: true }, (p) => {
-    p.muted = true;
-    p.loop = false;
-  });
-  if (isVideo) {
-    return <VideoView player={player} style={{ width: "100%", height: "100%" }} nativeControls={false} contentFit="cover" />;
-  }
-  // Same uri the grid thumbnail (ProgressiveImage) just painted a frame ago —
-  // matching its cachePolicy/recyclingKey means this fresh <Image> mount hits
-  // the already-warm memory cache instead of re-decoding, and the blurhash
-  // placeholder covers the gap if it somehow doesn't. transition={0} because
-  // the hero/content crossfade already drives the fade; letting expo-image
-  // fade in on top of that read as the image "reloading" mid-grow.
+function HeroFrame({ uri, blurhash, width }: { uri: string; blurhash?: string | null; width: number }) {
+  // The same component the tapped tile drew, at the tile's own width — so the
+  // same resized URL (or poster), which the memory cache already holds. The
+  // grow costs no download, and a video hero no longer spins up a second
+  // player. transition={0} because the hero/content crossfade already drives
+  // the fade; letting expo-image fade in on top of that read as the image
+  // "reloading" mid-grow.
   return (
-    <Image
-      source={{ uri }}
-      placeholder={blurhash ? { blurhash } : undefined}
-      placeholderContentFit="cover"
-      style={{ width: "100%", height: "100%" }}
-      contentFit="cover"
-      cachePolicy="memory-disk"
-      recyclingKey={uri}
+    <GridThumbnail
+      uri={uri}
+      isVideo={isVideoUrl(uri)}
+      width={width}
+      blurhash={blurhash}
       transition={0}
     />
   );
@@ -502,7 +490,7 @@ export default function PostDetailOverlay({ visible, onClose, post, sourceRect }
           ]}
         >
           <Animated.View style={[{ width: "100%", height: "100%" }, heroImageStyle]}>
-            <HeroFrame uri={heroUri} blurhash={post?.blurHashes?.[0]} />
+            <HeroFrame uri={heroUri} blurhash={post?.blurHashes?.[0]} width={rect.width} />
           </Animated.View>
         </Animated.View>
       )}

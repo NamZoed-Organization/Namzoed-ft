@@ -1,5 +1,5 @@
 // lib/productsService.ts
-import * as ImageManipulator from 'expo-image-manipulator';
+import type { RankableItem } from './feedRanking';
 import { supabase } from './supabase';
 import { uploadFileToSupabase } from './uploadFile';
 
@@ -155,44 +155,60 @@ export const fetchUserProducts = async (
   return data || [];
 };
 
-// Fetches the full candidate pool for one feed-randomization session (see
-// lib/feedRanking.ts) for a given category — no pagination, ranking is done
-// client-side over the whole pool, then sliced. Mirrors
-// fetchAllPostsForRanking in lib/postsService.ts.
-export const fetchProductsForRanking = async (
-  /** Pass null to fetch across every category (e.g. an "All" browse tab). */
+// ─── Ranked grids (Shopping tab, category pages) ──────────────────────────
+// The order comes from feed_order_products (lib/feedSession.ts); these fetch
+// its rows a page of ids at a time, and the products newer than it.
+// `category` null = every category; `tag` = one tag the product must carry.
+const PRODUCT_FEED_SELECT = `
+  *,
+  profiles:user_id (
+    name,
+    email,
+    phone,
+    avatar_url
+  )`;
+
+export const fetchProductsByIds = async (ids: string[]): Promise<ProductWithUser[]> => {
+  if (ids.length === 0) return [];
+  const { data, error } = await supabase
+    .from('products_with_discounts')
+    .select(PRODUCT_FEED_SELECT)
+    .in('id', ids);
+  if (error) throw error;
+  return (data || []) as ProductWithUser[];
+};
+
+/** Products created after `asOf`, newest first — what a refresh adds. */
+export const fetchProductsCreatedSince = async (
+  asOf: string,
   category: string | null,
-  filter?: string | null,
+  tag?: string | null,
+  limit = 30,
 ): Promise<ProductWithUser[]> => {
   let query = supabase
     .from('products_with_discounts')
-    .select(`
-      *,
-      profiles:user_id (
-        name,
-        email,
-        phone,
-        avatar_url
-      )
-    `)
-    .order('created_at', { ascending: false });
+    .select(PRODUCT_FEED_SELECT)
+    .gt('created_at', asOf);
+  if (category) query = query.eq('category', category);
+  if (tag) query = query.contains('tags', [tag]);
 
-  if (category) {
-    query = query.eq('category', category);
-  }
+  const { data, error } = await query.order('created_at', { ascending: false }).limit(limit);
+  if (error) throw error;
+  return (data || []) as ProductWithUser[];
+};
 
-  if (filter) {
-    query = query.contains('tags', [filter]);
-  }
+/** Id-only candidates, ranked on the device when feed_order_products isn't deployed. */
+export const fetchProductRankingPool = async (
+  category: string | null,
+  tag?: string | null,
+): Promise<RankableItem[]> => {
+  let query = supabase.from('products').select('id, impressions_shown, boost_expires_at');
+  if (category) query = query.eq('category', category);
+  if (tag) query = query.contains('tags', [tag]);
 
   const { data, error } = await query;
-
-  if (error) {
-    console.error('Error fetching products for ranking:', error);
-    throw error;
-  }
-
-  return (data || []) as ProductWithUser[];
+  if (error) throw error;
+  return (data || []) as RankableItem[];
 };
 
 // Create a new product
@@ -251,16 +267,10 @@ export const updateProduct = async (productId: string, updates: Partial<Product>
 // Upload product image
 export const uploadProductImage = async (imageUri: string, userId: string): Promise<string> => {
   try {
-    // Compress and resize before loading into JS memory to prevent app freeze
-    const compressed = await ImageManipulator.manipulateAsync(
-      imageUri,
-      [{ resize: { width: 1080 } }],
-      { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG },
-    );
-
     const fileName = `${userId}/${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
 
-    await uploadFileToSupabase(compressed.uri, 'product-images', fileName, 'image/jpeg');
+    // Resized before it is read into memory by uploadFileToSupabase (lib/imageUpload.ts).
+    await uploadFileToSupabase(imageUri, 'product-images', fileName, 'image/jpeg');
 
     const { data: { publicUrl } } = supabase.storage
       .from('product-images')

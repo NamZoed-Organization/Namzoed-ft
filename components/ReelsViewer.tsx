@@ -1,6 +1,9 @@
 import CommentsModal from "@/components/modals/CommentsModal";
 import ShareComposerModal from "@/components/modals/ShareComposerModal";
 import HashtagText from "@/components/ui/HashtagText";
+import ProgressiveImage from "@/components/ui/ProgressiveImage";
+import { useDataSaver } from "@/lib/dataSaver";
+import { toVideoPosterUrl } from "@/lib/imagePreview";
 import BottomNavBar from "@/components/ui/BottomNavBar";
 import { useUser } from "@/contexts/UserContext";
 import { recordView } from "@/lib/historyService";
@@ -129,9 +132,20 @@ function ReelItem({
   const playOverlayOpacity = useRef(new Animated.Value(0)).current;
   const heartScale = useRef(new Animated.Value(0)).current;
 
+  // The list keeps a window of reels mounted, and every mounted player buffers
+  // ahead — up to four reels nobody has swiped to yet. On data saver only the
+  // reel on screen gets a source (lib/dataSaver.ts); the rest show their poster
+  // until they are reached. Once loaded, a reel keeps its source, so swiping
+  // back never downloads it twice.
+  const { active: dataSaver } = useDataSaver();
+  const [loadVideo, setLoadVideo] = useState(isActive || !dataSaver);
+  useEffect(() => {
+    if (isActive || !dataSaver) setLoadVideo(true);
+  }, [isActive, dataSaver]);
+
   // `useCaching` persists the download to disk (ExoPlayer SimpleCache / iOS asset
   // cache) so reopening the same reel plays instantly with no re-download.
-  const player = useVideoPlayer({ uri: reel.uri, useCaching: true }, (p) => {
+  const player = useVideoPlayer(loadVideo ? { uri: reel.uri, useCaching: true } : null, (p) => {
     p.loop = true;
     // Pre-buffer a few seconds so swiping to this reel starts without a stall.
     p.bufferOptions = { preferredForwardBufferDuration: 5, minBufferForPlayback: 1 };
@@ -393,6 +407,16 @@ function ReelItem({
               nativeControls={false}
               fullscreenOptions={{ enable: false }}
             />
+            {!loadVideo && toVideoPosterUrl(reel.uri) ? (
+              <ProgressiveImage
+                uri={toVideoPosterUrl(reel.uri)!}
+                displayWidth={WINDOW_WIDTH}
+                style={StyleSheet.absoluteFill}
+                contentFit="cover"
+                backgroundColor="#000"
+                showProgress={false}
+              />
+            ) : null}
             {/* Center play affordance when paused */}
             <Animated.View
               pointerEvents="none"

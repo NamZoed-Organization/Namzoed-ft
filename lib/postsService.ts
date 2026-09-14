@@ -5,7 +5,11 @@ import { notifyNewPost } from '@/services/notificationService';
 import { recordTrendingSignals } from '@/lib/trendingService';
 import { extractHashtags } from '@/utils/hashtags';
 import type { ContentRating, ModerationStatus } from '@/types/post';
+import { createVideoPlayer, type VideoPlayer } from 'expo-video';
+import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { canViewContent, classifyPostContent } from './contentClassifier';
+import type { RankableItem } from './feedRanking';
+import { VIDEO_POSTER_BUCKET, videoPosterPath } from './imagePreview';
 import { supabase } from './supabase';
 import { uploadFileToSupabase } from './uploadFile';
 
@@ -109,38 +113,73 @@ export const fetchPostsCursor = async (
   })) as PostWithUser[];
 };
 
-// Fetches the full candidate pool for one feed-randomization session (see
-// lib/feedRanking.ts) rather than a page — at this app's ~500-post scale a
-// single bulk fetch is simpler than a server-side ranked-session cache, and
-// lets the client compute the weighted/boosted order itself. Ordering here
-// doesn't matter since buildSessionOrder re-sorts it.
-export const fetchAllPostsForRanking = async (): Promise<PostWithUser[]> => {
+// ─── Ranked feed (hooks/useFeedInfiniteScroll.ts) ─────────────────────────
+// The feed's order comes from feed_order_posts (lib/feedSession.ts); these
+// fetch its rows a page of ids at a time, and the posts newer than it.
+//
+// The like count comes back as one number (`post_likes(count)`) rather than a
+// row per like, which on a popular post was most of the payload. If this
+// project's API won't embed a count, the old id-list form is used instead,
+// and that is remembered for the rest of the session.
+const FEED_POST_SELECT = `
+  *,
+  profiles:user_id (
+    name,
+    email,
+    avatar_url
+  )`;
+let likeCountEmbedWorks: boolean | null = null;
+
+const toFeedPosts = (data: any[] | null): PostWithUser[] =>
+  (data || []).map((post: any) => {
+    const likes = post.post_likes;
+    const count = Array.isArray(likes)
+      ? typeof likes[0]?.count === 'number'
+        ? likes[0].count
+        : likes.length
+      : 0;
+    return { ...post, likes: count };
+  }) as PostWithUser[];
+
+const selectFeedPosts = async (narrow: (query: any) => any): Promise<PostWithUser[]> => {
+  const run = (likes: string) =>
+    narrow(supabase.from('posts').select(`${FEED_POST_SELECT}, post_likes ( ${likes} )`));
+
+  if (likeCountEmbedWorks !== false) {
+    const { data, error } = await run('count');
+    if (!error) {
+      likeCountEmbedWorks = true;
+      return toFeedPosts(data);
+    }
+    if (likeCountEmbedWorks === true) throw error;
+    likeCountEmbedWorks = false;
+  }
+  const { data, error } = await run('id');
+  if (error) throw error;
+  return toFeedPosts(data);
+};
+
+export const fetchPostsByIds = async (ids: string[]): Promise<PostWithUser[]> =>
+  ids.length === 0 ? [] : selectFeedPosts((q) => q.in('id', ids));
+
+/** Approved posts created after `asOf`, newest first — what a refresh adds. */
+export const fetchPostsCreatedSince = async (asOf: string, limit = 30): Promise<PostWithUser[]> =>
+  selectFeedPosts((q) =>
+    q
+      .eq('moderation_status', 'approved')
+      .gt('created_at', asOf)
+      .order('created_at', { ascending: false })
+      .limit(limit),
+  );
+
+/** Id-only candidates, ranked on the device when feed_order_posts isn't deployed. */
+export const fetchPostRankingPool = async (): Promise<RankableItem[]> => {
   const { data, error } = await supabase
     .from('posts')
-    .select(`
-      *,
-      view_count,
-      profiles:user_id (
-        name,
-        email,
-        phone,
-        avatar_url
-      ),
-      post_likes (
-        id
-      )
-    `)
-    .order('created_at', { ascending: false });
-
-  if (error) {
-    console.error('Error fetching posts (ranking pool):', error);
-    throw error;
-  }
-
-  return (data || []).map((post: any) => ({
-    ...post,
-    likes: post.post_likes?.length || 0,
-  })) as PostWithUser[];
+    .select('id, impressions_shown, boost_expires_at')
+    .eq('moderation_status', 'approved');
+  if (error) throw error;
+  return (data || []) as RankableItem[];
 };
 
 // Cursor-based fetch of posts from a specific set of authors (the "Following"
@@ -450,6 +489,53 @@ export const uploadImages = async (
   return await Promise.all(uploadPromises);
 };
 
+// A poster is what grids draw instead of the video (components/ui/
+// GridThumbnail.tsx). 720px wide covers the detail hero at 2x; the grid asks
+// for a smaller resized copy of it.
+const POSTER_MAX_WIDTH = 720;
+const POSTER_READY_TIMEOUT_MS = 5000;
+
+// Thumbnails come from the loaded asset, so give the player a moment to load
+// the local file — but never hold the post up for it.
+const waitForPlayerReady = (player: VideoPlayer): Promise<void> =>
+  new Promise((resolve) => {
+    if (player.status === 'readyToPlay') return resolve();
+    let sub: { remove: () => void } | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const done = () => {
+      if (timer) clearTimeout(timer);
+      sub?.remove();
+      resolve();
+    };
+    timer = setTimeout(done, POSTER_READY_TIMEOUT_MS);
+    sub = player.addListener('statusChange', ({ status }) => {
+      if (status === 'readyToPlay' || status === 'error') done();
+    });
+  });
+
+// Cut the first frame from the local file — the one the grid used to show by
+// mounting a player — and store it beside the video under the path
+// toVideoPosterUrl derives. Made on the phone from the file it already has,
+// so it costs the poster's upload and nothing else. Skips image moderation:
+// it is a frame of a video that is itself being posted.
+const uploadVideoPoster = async (videoUri: string, videoFileName: string): Promise<void> => {
+  const player = createVideoPlayer(videoUri);
+  try {
+    await waitForPlayerReady(player);
+    const [frame] = await player.generateThumbnailsAsync(0, { maxWidth: POSTER_MAX_WIDTH });
+    if (!frame) return;
+    const image = await ImageManipulator.manipulate(frame).renderAsync();
+    const { uri } = await image.saveAsync({ compress: 0.75, format: SaveFormat.JPEG });
+    await uploadFileToSupabase(uri, VIDEO_POSTER_BUCKET, videoPosterPath(videoFileName), 'image/jpeg', false, {
+      skipImageModeration: true,
+      // Already made at its final size above.
+      image: false,
+    });
+  } finally {
+    player.release();
+  }
+};
+
 // Upload video to Supabase storage
 export const uploadVideo = async (videoUri: string): Promise<string> => {
   try {
@@ -458,6 +544,14 @@ export const uploadVideo = async (videoUri: string): Promise<string> => {
     const filePath = fileName;
 
     await uploadFileToSupabase(videoUri, 'post-videos', filePath, 'video/mp4');
+
+    // Awaited so the post never appears in a grid before its poster does, but
+    // best-effort: without one the grid falls back to the video's first frame.
+    try {
+      await uploadVideoPoster(videoUri, fileName);
+    } catch (e) {
+      console.warn('[postsService] video poster failed:', e);
+    }
 
     const { data: { publicUrl } } = supabase.storage
       .from('post-videos')

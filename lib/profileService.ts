@@ -77,7 +77,7 @@ export const uploadAvatar = async (imageUri: string, userId: string): Promise<st
     const fileExt = imageUri.split('.').pop()?.toLowerCase() || 'jpg';
     const fileName = `${userId}/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
 
-    await uploadFileToSupabase(imageUri, 'profile', fileName, `image/${fileExt}`, true);
+    await uploadFileToSupabase(imageUri, 'profile', fileName, `image/${fileExt}`, true, { image: 'avatar' });
 
     const { data: { publicUrl } } = supabase.storage
       .from('profile')

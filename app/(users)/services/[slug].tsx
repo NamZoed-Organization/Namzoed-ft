@@ -2,7 +2,13 @@ import CircularLoader from "@/components/ui/CircularLoader";
 import TopNavbar from "@/components/ui/TopNavbar";
 import { getServiceCategoryBySlug } from "@/data/servicecategory";
 import { useRankedFeed } from "@/hooks/useRankedFeed";
-import { fetchProviderServicesByCategory, ProviderServiceWithDetails } from "@/lib/servicesService";
+import { fetchFeedOrder } from "@/lib/feedSession";
+import {
+  fetchProviderServiceRankingPool,
+  fetchProviderServicesByIds,
+  fetchProviderServicesCreatedSince,
+  ProviderServiceWithDetails,
+} from "@/lib/servicesService";
 import { supabase } from "@/lib/supabase";
 import { useAppRouter } from "@/utils/navigation";
 import { getInitials } from "@/utils/initials";
@@ -25,7 +31,7 @@ type SortOrder = 'ranked' | 'latest' | 'oldest';
 export default function ServiceDetailScreen() {
   const router = useAppRouter();
   const { slug } = useLocalSearchParams<{ slug: string }>();
-  const { currentUser } = useUser();
+  const { currentUser, isLoading: userLoading } = useUser();
 
   const [category, setCategory] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'services' | 'providers'>('services');
@@ -47,18 +53,35 @@ export default function ServiceDetailScreen() {
     setCategory(getServiceCategoryBySlug(slug));
   }, [slug]);
 
-  const fetchPool = useCallback(() => (slug ? fetchProviderServicesByCategory(slug) : Promise.resolve([])), [slug]);
+  const fetchOrder = useCallback(
+    (seed: string) =>
+      fetchFeedOrder({
+        rpc: "feed_order_provider_services",
+        args: { p_category_slug: slug },
+        seed,
+        fallbackPool: () => fetchProviderServiceRankingPool(slug ?? ""),
+        boostSlotCount: 2,
+      }),
+    [slug],
+  );
+  const fetchNewSince = useCallback(
+    (asOf: string) => fetchProviderServicesCreatedSince(asOf, slug ?? ""),
+    [slug],
+  );
   const trackImpressions = useCallback(async (ids: string[]) => {
     const { error } = await supabase.rpc("increment_impressions_provider_services", { ids });
     if (error) console.error("Error tracking service impressions:", error);
   }, []);
 
   const ranked = useRankedFeed<ProviderServiceWithDetails>({
-    fetchPool,
+    sessionKey: `services:${slug}`,
+    userId: currentUser?.id,
+    enabled: !!slug && !userLoading,
+    fetchOrder,
+    fetchByIds: fetchProviderServicesByIds,
+    fetchNewSince,
     trackImpressions,
-    pageSize: 1000, // this screen has never paginated — one session, whole category pool
-    boostSlotCount: 2,
-    deps: [slug],
+    pageSize: 1000, // this screen has never paginated — the whole category, fetched in chunks
   });
   const services = ranked.items;
   const loading = ranked.loading;
@@ -112,7 +135,7 @@ export default function ServiceDetailScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     setShuffling(true);
     setSortOrder('ranked');
-    await ranked.refresh();
+    await ranked.reshuffle();
     setShuffling(false);
   };
 

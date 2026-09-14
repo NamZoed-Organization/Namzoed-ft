@@ -10,7 +10,7 @@
 import TaggedProductStrip from "@/components/post/TaggedProductStrip";
 import PostGridReportOverlay from "@/components/modals/PostGridReportOverlay";
 import ReportPostModal from "@/components/modals/ReportPostModal";
-import ProgressiveImage from "@/components/ui/ProgressiveImage";
+import GridThumbnail from "@/components/ui/GridThumbnail";
 import { useUser } from "@/contexts/UserContext";
 import { hasUserLikedPost, togglePostLike } from "@/lib/likesService";
 import {
@@ -22,7 +22,6 @@ import { PostData } from "@/types/post";
 import { feedEvents } from "@/utils/feedEvents";
 import * as Haptics from "expo-haptics";
 import { BlurView } from "expo-blur";
-import { useVideoPlayer, VideoView } from "expo-video";
 import { Heart, Play } from "lucide-react-native";
 import React from "react";
 import {
@@ -41,22 +40,6 @@ export function isVideoUrl(url: string): boolean {
     lower.endsWith(".mov") ||
     lower.endsWith(".m4v") ||
     lower.includes("post-videos")
-  );
-}
-
-/** Renders a video paused on its first frame — never calls .play(), so it acts as a thumbnail. */
-function VideoFrameThumbnail({ uri }: { uri: string }) {
-  const player = useVideoPlayer({ uri, useCaching: true }, (p) => {
-    p.muted = true;
-    p.loop = false;
-  });
-  return (
-    <VideoView
-      player={player}
-      style={{ width: "100%", height: "100%" }}
-      nativeControls={false}
-      contentFit="cover"
-    />
   );
 }
 
@@ -210,14 +193,12 @@ function PostGridCard({ post, width, onPress, deferred, priority = "normal" }: P
           backgroundColor: "#f3f4f6",
         }}
       >
-        {deferred ? null : isVideo ? (
-          <VideoFrameThumbnail uri={firstImage} />
-        ) : (
-          <ProgressiveImage
+        {deferred ? null : (
+          <GridThumbnail
             uri={firstImage}
+            isVideo={isVideo}
+            width={width}
             blurhash={post.blurHashes?.[0]}
-            style={{ width: "100%", height: "100%" }}
-            showProgress={false}
             recyclingKey={post.id}
             priority={priority}
           />

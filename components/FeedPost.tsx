@@ -21,6 +21,9 @@ import ProfilePreviewTrigger from "@/components/profile/ProfilePreviewTrigger";
 import { useProfilePreviewElevation } from "@/contexts/ProfilePreviewContext";
 import HashtagText from "@/components/ui/HashtagText";
 import ProgressiveImage from "@/components/ui/ProgressiveImage";
+import VideoTapToPlay from "@/components/post/VideoTapToPlay";
+import { useDataSaver } from "@/lib/dataSaver";
+import { toVideoPosterUrl } from "@/lib/imagePreview";
 import { ContentWarning } from "@/components/ContentWarning";
 import { useUser } from "@/contexts/UserContext";
 import {
@@ -388,8 +391,25 @@ const WATCHED_SECONDS = 3;
 // created fresh each time the slide re-enters view, and torn down the
 // moment it leaves — no explicit play()/pause() toggling needed for that.
 const InlineVideoPlayer = React.memo(function InlineVideoPlayer({ uri, frameWidth, slideHeight, isVisible, onDoubleTapAt, onExpand, onWatchMore, onWatched }: InlineVideoPlayerProps) {
+  const { active: dataSaver } = useDataSaver();
+  // On data saver a video waits for a tap (components/post/VideoTapToPlay.tsx).
+  // Once tapped it behaves as it always has for as long as the post is
+  // mounted — asking for a video once is asking for it.
+  const [tapped, setTapped] = useState(false);
+
   if (!isVisible) {
     return <View style={{ width: frameWidth, height: slideHeight, backgroundColor: "#000" }} />;
+  }
+  if (dataSaver && !tapped) {
+    return (
+      <VideoTapToPlay
+        key={uri}
+        posterUri={toVideoPosterUrl(uri)}
+        width={frameWidth}
+        height={slideHeight}
+        onPlay={() => setTapped(true)}
+      />
+    );
   }
   return (
     <ActiveVideoPlayer
@@ -824,6 +844,7 @@ const MediaCarousel = React.memo(
             >
               <ProgressiveImage
                 uri={item}
+                displayWidth={w}
                 blurhash={blurHashes?.[index]}
                 style={{ width: w, height: h }}
                 contentFit="cover"

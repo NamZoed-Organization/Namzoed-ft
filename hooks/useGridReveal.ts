@@ -1,3 +1,4 @@
+import { useDataSaver } from "@/lib/dataSaver";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Dimensions, View } from "react-native";
 
@@ -7,6 +8,10 @@ const SCREEN_HEIGHT = Dimensions.get("window").height;
 // downloading before they're actually scrolled into view, without mounting
 // the whole (potentially huge, e.g. marketplace's 1000-item pool) grid at once.
 const REVEAL_LOOKAHEAD = SCREEN_HEIGHT * 1.5;
+// On data saver (lib/dataSaver.ts), half a screen: usually enough for a card
+// to be ready as it arrives, without paying for pictures a quick look never
+// scrolls down to.
+const DATA_SAVER_REVEAL_LOOKAHEAD = SCREEN_HEIGHT * 0.5;
 // Re-measure position on this cadence while anything is still unrevealed —
 // cheap enough not to matter (one native measure call, a few times/sec),
 // and stops entirely once everything's been revealed (see markAllRevealed).
@@ -29,6 +34,8 @@ export function useGridReveal() {
   // would otherwise fall back outside the lookahead margin — nothing
   // already shown should pop back into a placeholder.
   const revealedIdsRef = useRef(new Set<string>());
+  const { active: dataSaver } = useDataSaver();
+  const lookahead = dataSaver ? DATA_SAVER_REVEAL_LOOKAHEAD : REVEAL_LOOKAHEAD;
 
   const measure = useCallback(() => {
     containerRef.current?.measureInWindow((_x, y) => setContainerTop(y));
@@ -57,11 +64,11 @@ export function useGridReveal() {
       if (revealedIdsRef.current.has(id)) return true;
       if (containerTop === null) return true;
       const windowTop = containerTop + top;
-      const near = windowTop < SCREEN_HEIGHT + REVEAL_LOOKAHEAD && windowTop + height > -REVEAL_LOOKAHEAD;
+      const near = windowTop < SCREEN_HEIGHT + lookahead && windowTop + height > -lookahead;
       if (near) revealedIdsRef.current.add(id);
       return near;
     },
-    [containerTop],
+    [containerTop, lookahead],
   );
 
   const isAboveFold = useCallback(

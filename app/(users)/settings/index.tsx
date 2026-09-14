@@ -470,8 +470,8 @@ export default function SettingsScreen() {
                 />
                 <SettingsRow
                   icon={HardDrive}
-                  label="Storage"
-                  description="Cached media and data use"
+                  label="Data and storage"
+                  description="Data saver and cached media"
                   onPress={() => handleNavigation("dataStorage")}
                 />
               </SettingsGroup>

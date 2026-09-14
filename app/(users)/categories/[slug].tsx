@@ -12,9 +12,12 @@ import TopNavbar from "@/components/ui/TopNavbar";
 import { useUser } from "@/contexts/UserContext";
 import { categories as categoryData, categoryNames, SubCategory } from "@/data/categories";
 import {
-  fetchProductsForRanking,
+  fetchProductRankingPool,
+  fetchProductsByIds,
+  fetchProductsCreatedSince,
   ProductWithUser,
 } from "@/lib/productsService";
+import { fetchFeedOrder } from "@/lib/feedSession";
 import { supabase } from "@/lib/supabase";
 import { useRankedFeed } from "@/hooks/useRankedFeed";
 import { useAppRouter } from "@/utils/navigation";
@@ -59,7 +62,7 @@ export default function CategoryDetailScreen() {
     filter?: string;
   }>();
 
-  const { currentUser } = useUser();
+  const { currentUser, isLoading: userLoading } = useUser();
   const [sortMode, setSortMode] = useState<SortMode>("foryou");
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [reportTarget, setReportTarget] = useState<ProductWithUser | null>(null);
@@ -88,13 +91,24 @@ export default function CategoryDetailScreen() {
   const tagline =
     categoryTaglines[categoryKey] || "Discover something amazing.";
 
-  // Fetches the whole category pool once per session — ranked/randomized
-  // client-side (see lib/feedRanking.ts) rather than the old fixed-20,
+  // The category's ranked order — per person, per day, fetched a page at a
+  // time (hooks/useRankedFeed.ts) — rather than the old fixed-20,
   // latest-first page, so products that keep getting buried under newer
   // ones eventually surface. Explicit sort modes below re-sort on top of
   // whatever's currently loaded, same as before.
-  const fetchPool = useCallback(
-    () => fetchProductsForRanking(categoryKey, activeFilter),
+  const fetchOrder = useCallback(
+    (seed: string) =>
+      fetchFeedOrder({
+        rpc: "feed_order_products",
+        args: { p_category: categoryKey, p_tag: activeFilter },
+        seed,
+        fallbackPool: () => fetchProductRankingPool(categoryKey, activeFilter),
+        boostSlotCount: BOOST_SLOT_COUNT,
+      }),
+    [categoryKey, activeFilter],
+  );
+  const fetchNewSince = useCallback(
+    (asOf: string) => fetchProductsCreatedSince(asOf, categoryKey, activeFilter),
     [categoryKey, activeFilter],
   );
   const trackImpressions = useCallback(async (ids: string[]) => {
@@ -103,11 +117,15 @@ export default function CategoryDetailScreen() {
   }, []);
 
   const ranked = useRankedFeed<ProductWithUser>({
-    fetchPool,
+    // Same key the Shopping tab uses for this category, so both share one order.
+    sessionKey: `products:${categoryKey}:${activeFilter ?? "none"}`,
+    userId: currentUser?.id,
+    enabled: !userLoading && !!categoryKey,
+    fetchOrder,
+    fetchByIds: fetchProductsByIds,
+    fetchNewSince,
     trackImpressions,
     pageSize: PAGE_SIZE,
-    boostSlotCount: BOOST_SLOT_COUNT,
-    deps: [categoryKey, activeFilter],
   });
   const loading = ranked.loading;
   const refreshing = ranked.refreshing;
@@ -138,7 +156,7 @@ export default function CategoryDetailScreen() {
     }
   }, [loading, fadeAnim]);
 
-  // Handle pull-to-refresh — draws a fresh random session, not just fresh data.
+  // Handle pull-to-refresh — adds what's been listed since, above what's already loaded.
   const onRefresh = async () => {
     Animated.timing(fadeAnim, {
       toValue: 0,

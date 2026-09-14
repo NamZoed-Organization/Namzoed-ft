@@ -18,6 +18,7 @@ import AppearancePreview from "@/components/dev/AppearancePreview";
 import CollagePreview from "@/components/dev/CollagePreview";
 import BusinessProfilePreview from "@/components/dev/BusinessProfilePreview";
 import StoragePreview from "@/components/dev/StoragePreview";
+import VideoTapToPlay from "@/components/post/VideoTapToPlay";
 import SellerRatingSheet from "@/components/SellerRatingSheet";
 import MessagesListPreview from "@/components/dev/MessagesListPreview";
 import SetlogPreview from "@/components/dev/SetlogPreview";
@@ -805,6 +806,21 @@ export default function DevComponents({ onClose }: Props) {
             label="Privacy Policy"
             onPress={() => setLegalDoc("privacy")}
           />
+        </View>
+
+        {/* ── Video on data saver ──────────────────────────── */}
+        <SectionHeader
+          title="FEED — VIDEO ON DATA SAVER"
+          subtitle="An inline video until it is tapped while data saver is on: its poster and the play button, and no player. Right is a video posted before posters existed — it stays black rather than downloading its first frame."
+        />
+        <View style={{ flexDirection: "row", gap: 8, marginBottom: 12 }}>
+          <VideoTapToPlay
+            posterUri="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=600"
+            width={160}
+            height={200}
+            onPlay={() => {}}
+          />
+          <VideoTapToPlay width={160} height={200} onPlay={() => {}} />
         </View>
 
         {/* ── Post overlays ────────────────────────────────── */}

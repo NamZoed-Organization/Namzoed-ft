@@ -55,6 +55,8 @@ export const uploadStoryImage = async (
       // (before crop/design), so a redundant re-scan of the flattened final
       // image is skipped — same convention as the post-creation flow.
       skipImageModeration: true,
+      // Fills a tall screen with text drawn into it — lib/imageUpload.ts.
+      image: 'fullscreen',
     });
 
     const {

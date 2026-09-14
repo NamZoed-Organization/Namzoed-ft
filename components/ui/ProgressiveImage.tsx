@@ -1,5 +1,5 @@
 import CircularProgress from "@/components/ui/CircularProgress";
-import { toLowResPreviewUrl } from "@/lib/imagePreview";
+import { toLowResPreviewUrl, toSizedImageUrl } from "@/lib/imagePreview";
 import { Image, type ImageContentFit } from "expo-image";
 import React, { useCallback, useMemo, useState } from "react";
 import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
@@ -25,6 +25,13 @@ interface ProgressiveImageProps {
   /** expo-image recyclingKey — pass a stable per-item key in lists. */
   recyclingKey?: string;
   priority?: "low" | "normal" | "high";
+  /** Width (pt) the image is drawn at. When set, a resized copy is requested
+   *  instead of the original upload (lib/imagePreview.ts toSizedImageUrl);
+   *  if that request fails, the original is loaded instead. */
+  displayWidth?: number;
+  /** Called when the image can't be loaded at all — after the original has
+   *  also failed, if a resized copy was tried first. */
+  onError?: () => void;
 }
 
 /**
@@ -47,10 +54,29 @@ export default function ProgressiveImage({
   backgroundColor = "#0b0b0c",
   recyclingKey,
   priority = "normal",
+  displayWidth,
+  onError,
 }: ProgressiveImageProps) {
   const progress = useSharedValue(0); // 0..1 download fraction
   const ringOpacity = useSharedValue(0);
   const [ringMounted, setRingMounted] = useState(showProgress);
+
+  // Remembered per URL rather than as a boolean, so a recycled list cell
+  // showing a different image starts by trying its resized copy again.
+  const sizedUri = useMemo(
+    () => (displayWidth ? toSizedImageUrl(uri, displayWidth) : undefined),
+    [uri, displayWidth],
+  );
+  const [failedSizedUri, setFailedSizedUri] = useState<string | null>(null);
+  const sourceUri = sizedUri && failedSizedUri !== sizedUri ? sizedUri : uri;
+
+  const handleError = useCallback(() => {
+    if (sizedUri && sourceUri === sizedUri) {
+      setFailedSizedUri(sizedUri);
+      return;
+    }
+    onError?.();
+  }, [sizedUri, sourceUri, onError]);
 
   const unmountRing = useCallback(() => setRingMounted(false), []);
 
@@ -89,7 +115,7 @@ export default function ProgressiveImage({
     <View style={[styles.wrap, { backgroundColor }, style]}>
       <Image
         style={StyleSheet.absoluteFill}
-        source={{ uri }}
+        source={{ uri: sourceUri }}
         placeholder={placeholder}
         placeholderContentFit={contentFit}
         contentFit={contentFit}
@@ -99,6 +125,7 @@ export default function ProgressiveImage({
         priority={priority}
         onProgress={handleProgress}
         onLoad={handleLoad}
+        onError={handleError}
       />
       {showProgress && ringMounted ? (
         <CircularProgress progress={progress} opacity={ringOpacity} />

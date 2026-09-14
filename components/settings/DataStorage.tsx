@@ -27,6 +27,12 @@
  * exists): the numbers come from four different libraries and a phone with
  * nothing cached shows an empty screen, so the preview in Dev Components
  * drives the same view from fixtures.
+ *
+ * **Data saver sits first**, above the storage it has nothing to do with,
+ * because it is the one control on this screen that decides what people pay
+ * for (lib/dataSaver.ts). Its description says what it is doing *now* — on
+ * because this is mobile data, off because this is Wi-Fi — since a mode
+ * called "On mobile data" otherwise leaves you guessing which one you're on.
  */
 
 import {
@@ -37,6 +43,13 @@ import {
 import ChoiceSheet from "@/components/ui/ChoiceSheet";
 import CircularLoader from "@/components/ui/CircularLoader";
 import DialogCard from "@/components/ui/DialogCard";
+import {
+  DATA_SAVER_OPTIONS,
+  setDataSaverMode,
+  useDataSaver,
+  type DataSaverMode,
+  type DataSaverState,
+} from "@/lib/dataSaver";
 import {
   CACHE_LIMIT_OPTIONS,
   clearAllCaches,
@@ -86,6 +99,7 @@ export default function DataStorage({ onClose }: DataStorageProps) {
     videos: DEFAULT_VIDEO_LIMIT,
   });
   const [busy, setBusy] = useState<StorageKey | "all" | null>(null);
+  const dataSaver = useDataSaver();
 
   const refresh = useCallback(async () => {
     const [next, storedLimits] = await Promise.all([
@@ -130,6 +144,8 @@ export default function DataStorage({ onClose }: DataStorageProps) {
       report={report}
       limits={limits}
       busy={busy}
+      dataSaver={dataSaver}
+      onSetDataSaverMode={setDataSaverMode}
       onClear={handleClear}
       onSetLimit={handleLimit}
       onClose={onClose}
@@ -137,10 +153,24 @@ export default function DataStorage({ onClose }: DataStorageProps) {
   );
 }
 
+/** What data saver is doing on this connection, in one sentence. */
+const dataSaverDescription = ({ mode, active }: DataSaverState): string => {
+  if (active) {
+    return mode === "on"
+      ? "On. Pictures load smaller, videos wait for a tap, and less is loaded ahead of you."
+      : "On now — you're on mobile data. Pictures load smaller, videos wait for a tap, and less is loaded ahead of you.";
+  }
+  return mode === "off"
+    ? "Off. Pictures and videos load normally on every connection."
+    : "Off now — you're on Wi-Fi. Turns on by itself on mobile data.";
+};
+
 export function DataStorageView({
   report,
   limits,
   busy,
+  dataSaver,
+  onSetDataSaverMode,
   onClear,
   onSetLimit,
   onClose,
@@ -148,20 +178,51 @@ export function DataStorageView({
   report: StorageReport | null;
   limits: { photos: number; videos: number };
   busy: StorageKey | "all" | null;
+  dataSaver: DataSaverState;
+  onSetDataSaverMode: (mode: DataSaverMode) => void;
   onClear: (key: StorageKey | "all") => void;
   onSetLimit: (key: "photos" | "videos", bytes: number) => void;
   onClose?: () => void;
 }) {
   const [limitSheet, setLimitSheet] = useState<"photos" | "videos" | null>(null);
+  const [dataSaverSheet, setDataSaverSheet] = useState(false);
   const [confirm, setConfirm] = useState<StorageKey | "all" | null>(null);
 
   const limitLabel = (bytes: number) =>
     CACHE_LIMIT_OPTIONS.find((o) => o.value === String(bytes))?.label ??
     formatBytes(bytes);
 
+  // Shown whether or not the storage figures have been measured yet — it
+  // doesn't depend on them, and it is the row most people come here for.
+  const dataSaverControls = (
+    <>
+      <SettingsGroup label="Mobile data">
+        <SettingsRow
+          first
+          label="Data saver"
+          description={dataSaverDescription(dataSaver)}
+          value={DATA_SAVER_OPTIONS.find((o) => o.value === dataSaver.mode)?.label}
+          onPress={() => setDataSaverSheet(true)}
+        />
+      </SettingsGroup>
+      <ChoiceSheet
+        visible={dataSaverSheet}
+        title="Data saver"
+        options={DATA_SAVER_OPTIONS.map((o) => ({ ...o }))}
+        selected={dataSaver.mode}
+        onSelect={(value) => {
+          onSetDataSaverMode(value as DataSaverMode);
+          setDataSaverSheet(false);
+        }}
+        onClose={() => setDataSaverSheet(false)}
+      />
+    </>
+  );
+
   if (!report) {
     return (
-      <SettingsScreen title="Storage" onClose={onClose}>
+      <SettingsScreen title="Data and storage" onClose={onClose}>
+        {dataSaverControls}
         <View style={{ paddingVertical: 48, alignItems: "center" }}>
           <CircularLoader size="small" color="#094569" />
         </View>
@@ -173,7 +234,9 @@ export function DataStorageView({
   const confirmCategory = categories.find((c) => c.key === confirm);
 
   return (
-    <SettingsScreen title="Storage" onClose={onClose}>
+    <SettingsScreen title="Data and storage" onClose={onClose}>
+      {dataSaverControls}
+
       {/* The total, and what it is made of. */}
       <View
         style={{

@@ -1,3 +1,4 @@
+import type { RankableItem } from './feedRanking';
 import { supabase } from './supabase';
 import { uploadFileToSupabase } from './uploadFile';
 
@@ -66,37 +67,50 @@ export const fetchMarketplaceItems = async (page: number = 0, pageSize: number =
   return { items: (data || []) as MarketplaceItemWithUser[], totalCount: count || 0 };
 };
 
-// Fetches the full candidate pool for one feed-randomization session (see
-// lib/feedRanking.ts), optionally scoped to a type — no pagination, ranking
-// is done client-side over the whole pool, then sliced.
-export const fetchMarketplaceForRanking = async (
-  type?: 'rent' | 'swap' | 'second_hand' | 'free' | 'job_vacancy' | null,
-): Promise<MarketplaceItemWithUser[]> => {
-  let query = supabase
+// ─── Ranked grid (Marketplace tab) ───────────────────────────────────────
+// The order comes from feed_order_marketplace (lib/feedSession.ts); these
+// fetch its rows a page of ids at a time, and the listings newer than it.
+const MARKETPLACE_FEED_SELECT = `
+  *,
+  profiles:user_id (
+    name,
+    email,
+    phone,
+    avatar_url
+  )`;
+
+export const fetchMarketplaceByIds = async (ids: string[]): Promise<MarketplaceItemWithUser[]> => {
+  if (ids.length === 0) return [];
+  const { data, error } = await supabase
     .from('marketplace')
-    .select(`
-      *,
-      profiles:user_id (
-        name,
-        email,
-        phone,
-        avatar_url
-      )
-    `)
-    .order('created_at', { ascending: false });
-
-  if (type) {
-    query = query.eq('type', type);
-  }
-
-  const { data, error } = await query;
-
-  if (error) {
-    console.error('Error fetching marketplace items for ranking:', error);
-    throw error;
-  }
-
+    .select(MARKETPLACE_FEED_SELECT)
+    .in('id', ids);
+  if (error) throw error;
   return (data || []) as MarketplaceItemWithUser[];
+};
+
+/** Listings created after `asOf`, newest first — what a refresh adds. */
+export const fetchMarketplaceCreatedSince = async (
+  asOf: string,
+  limit = 30,
+): Promise<MarketplaceItemWithUser[]> => {
+  const { data, error } = await supabase
+    .from('marketplace')
+    .select(MARKETPLACE_FEED_SELECT)
+    .gt('created_at', asOf)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data || []) as MarketplaceItemWithUser[];
+};
+
+/** Id-only candidates, ranked on the device when feed_order_marketplace isn't deployed. */
+export const fetchMarketplaceRankingPool = async (): Promise<RankableItem[]> => {
+  const { data, error } = await supabase
+    .from('marketplace')
+    .select('id, impressions_shown, boost_expires_at');
+  if (error) throw error;
+  return (data || []) as RankableItem[];
 };
 
 // Fetch marketplace items by user ID

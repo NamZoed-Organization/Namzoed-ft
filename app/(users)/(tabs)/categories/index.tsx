@@ -29,11 +29,13 @@ import { useUser } from "@/contexts/UserContext";
 import { useTabBarScroll } from "@/contexts/TabBarScrollContext";
 import { categories as categoryData, categoryNames } from "@/data/categories";
 import {
-    fetchProductsForRanking,
+    fetchProductRankingPool,
+    fetchProductsByIds,
+    fetchProductsCreatedSince,
     ProductWithUser,
 } from "@/lib/productsService";
 import { useRankedFeed } from "@/hooks/useRankedFeed";
-import { CACHE_SEED_LIMIT, readCache, writeCache } from "@/lib/queryCache";
+import { fetchFeedOrder } from "@/lib/feedSession";
 import { supabase } from "@/lib/supabase";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -42,7 +44,7 @@ const BOOST_SLOT_COUNT = 2;
 
 export default function CategoriesScreen() {
   const insets = useSafeAreaInsets();
-  const { currentUser } = useUser();
+  const { currentUser, isLoading: userLoading } = useUser();
   const { trackTap } = useScreenAnalytics(Screens.CATEGORIES);
   const { onTabBarScroll } = useTabBarScroll();
 
@@ -76,28 +78,26 @@ export default function CategoriesScreen() {
     [trackTap],
   );
 
-  // Product pool for whatever's currently selected — fetched once per
-  // category+subcategory combo, ranked/randomized client-side (see
-  // lib/feedRanking.ts), same pattern the old per-category detail screen used.
-  const productsCacheKey = `products:pool:${activeCategory}:${activeSubcategory ?? "none"}`;
-  // Same stale-while-revalidate seed as the "For You" feed
-  // (hooks/useFeedInfiniteScroll.ts) — lets the grid paint instantly from
-  // this category's last-fetched pool instead of a full-page skeleton every
-  // time the category/subcategory changes, then silently refreshes.
-  const seedFromCache = useCallback(
-    async () => (await readCache<ProductWithUser[]>(productsCacheKey))?.data ?? null,
-    [productsCacheKey],
+  // Product order for whatever's selected — one per category + subcategory,
+  // per person, per day (hooks/useRankedFeed.ts), so coming back to a
+  // category shows the grid you left rather than a reshuffle. The session
+  // key matches the category page's, so the two share one order.
+  const categoryFilter = activeCategory === "all" ? null : activeCategory;
+  const fetchOrder = useCallback(
+    (seed: string) =>
+      fetchFeedOrder({
+        rpc: "feed_order_products",
+        args: { p_category: categoryFilter, p_tag: activeSubcategory },
+        seed,
+        fallbackPool: () => fetchProductRankingPool(categoryFilter, activeSubcategory),
+        boostSlotCount: BOOST_SLOT_COUNT,
+      }),
+    [categoryFilter, activeSubcategory],
   );
-  const fetchPool = useCallback(async () => {
-    const fetched = await fetchProductsForRanking(
-      activeCategory === "all" ? null : activeCategory,
-      activeSubcategory,
-    );
-    // Head of the pool only — and there is a cache key per category, so
-    // this is the screen most able to fill the budget on its own.
-    writeCache(productsCacheKey, fetched.slice(0, CACHE_SEED_LIMIT));
-    return fetched;
-  }, [activeCategory, activeSubcategory, productsCacheKey]);
+  const fetchNewSince = useCallback(
+    (asOf: string) => fetchProductsCreatedSince(asOf, categoryFilter, activeSubcategory),
+    [categoryFilter, activeSubcategory],
+  );
   const trackImpressions = useCallback(async (ids: string[]) => {
     const { error } = await supabase.rpc("increment_impressions_products", {
       ids,
@@ -106,12 +106,14 @@ export default function CategoriesScreen() {
   }, []);
 
   const ranked = useRankedFeed<ProductWithUser>({
-    fetchPool,
+    sessionKey: `products:${categoryFilter ?? "all"}:${activeSubcategory ?? "none"}`,
+    userId: currentUser?.id,
+    enabled: !userLoading,
+    fetchOrder,
+    fetchByIds: fetchProductsByIds,
+    fetchNewSince,
     trackImpressions,
     pageSize: PAGE_SIZE,
-    boostSlotCount: BOOST_SLOT_COUNT,
-    deps: [activeCategory, activeSubcategory],
-    seedFromCache,
   });
 
   /** The same gate the feed uses — a product photograph is a photograph
